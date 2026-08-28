@@ -9258,7 +9258,7 @@ function ToggleSwitch({ on, onClick, darkMode, disabled = false, style = {} }) {
 function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReLogin, ensureValidToken, theme, darkMode, t, userOrg }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
-  const [viewMode, setViewMode] = useState("month"); // "month" | "week" | "day"
+  const [viewMode, setViewMode] = useState("week"); // "month" | "week" | "day"
   const [navDirection, setNavDirection] = useState(0); // -1 = prev, 1 = next, for animation
   const [navKey, setNavKey] = useState(0); // force re-render for animation
   const [googleEvents, setGoogleEvents] = useState([]);
@@ -9957,13 +9957,13 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             style={{ flex: 1, display: "flex", flexDirection: "column" }}
           >
             {/* Weekday headers */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4, background: darkMode ? "rgba(20,18,30,0.5)" : "rgba(0,0,0,0.03)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "2px 0" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 2, marginBottom: 4, background: darkMode ? "rgba(20,18,30,0.5)" : "rgba(0,0,0,0.03)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "2px 0" }}>
               {WEEKDAYS.map((d, di) => (
                 <div key={d} style={{ textAlign: "center", fontSize: 13, fontFamily: FONT, color: di >= 5 ? theme.textFaint : theme.textDim, padding: "6px 0", fontWeight: 500 }}>{d}</div>
               ))}
             </div>
             {/* Day cells */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gridTemplateRows: `repeat(${weekRows}, 1fr)`, gap: 2, flex: 1, minHeight: 0 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gridTemplateRows: `repeat(${weekRows}, 1fr)`, gap: 2, flex: 1, minHeight: 0 }}>
               {calendarDays.map((dayObj, i) => {
                 const events = getEventsForDay(dayObj);
                 const isSelected = selectedDay && selectedDay.day === dayObj.day && selectedDay.month === dayObj.month && !dayObj.isOtherMonth;
@@ -9986,7 +9986,8 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                       background: baseBg,
                       backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
                       border: isSelected ? `1px solid ${darkMode ? "rgba(255,255,255,0.2)" : "rgba(21,21,28,0.18)"}` : todayHighlight ? `1px solid ${darkMode ? "rgba(255,255,255,0.1)" : "rgba(21,21,28,0.1)"}` : "1px solid transparent",
-                      display: "flex", flexDirection: "column", minHeight: 54, transition: "background-color 0.8s ease, border-color 0.15s ease",
+                      display: "flex", flexDirection: "column", minHeight: 54, minWidth: 0, overflow: "hidden",
+                      transition: "background-color 0.8s ease, border-color 0.15s ease",
                       opacity: dayObj.isOtherMonth ? 0.25 : 1,
                     }}
                   >
@@ -10032,7 +10033,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             style={{ flex: 1, display: "flex", flexDirection: "column" }}
           >
             {/* Weekday headers with dates */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4, background: darkMode ? "rgba(20,18,30,0.5)" : "rgba(0,0,0,0.03)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "6px 0" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 2, marginBottom: 4, background: darkMode ? "rgba(20,18,30,0.5)" : "rgba(0,0,0,0.03)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "6px 0" }}>
               {getWeekDays().map((d, di) => {
                 const isTd = d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
                 return (
@@ -10044,7 +10045,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               })}
             </div>
             {/* Week day columns */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, flex: 1, overflow: "hidden" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 2, flex: 1, overflow: "hidden" }}>
               {getWeekDays().map((d, di) => {
                 const events = getEventsForDate(d);
                 const hol = getHolidayForDate(d);
@@ -10086,7 +10087,10 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                         {e.allDay && <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint }}>Ganztägig</div>}
                         {e.hangoutLink && (
                           <div onClick={(ev) => { ev.stopPropagation(); openMeetCall(e.hangoutLink, e.title); }}
-                            style={{ fontSize: 9, fontFamily: FONT, color: "#00B894", cursor: "pointer", marginTop: 2 }}>🔗 Meet</div>
+                            style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, fontFamily: FONT, color: "#00B894", cursor: "pointer", marginTop: 2 }}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                            Meet
+                          </div>
                         )}
                       </motion.div>
                     ))}
@@ -10130,7 +10134,11 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
 
                   {dayEvents.length === 0 && (
                     <div style={{ padding: "60px 20px", textAlign: "center" }}>
-                      <div style={{ fontSize: 32, marginBottom: 12 }}>✦</div>
+                      <div style={{ display: "flex", justifyContent: "center", marginBottom: 12, color: theme.textFaint }}>
+                        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>
+                        </svg>
+                      </div>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textFaint }}>Freier Tag</div>
                     </div>
                   )}
@@ -10179,14 +10187,24 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                             <span style={{ fontSize: 10, fontFamily: FONT, color: "#64748B", padding: "2px 8px", borderRadius: 4, background: "rgba(100,116,139,0.12)" }}>Aufgabe</span>
                           )}
                           {e.project && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>{e.project}</span>}
-                          {e.location && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>📍 {e.location}</span>}
+                          {e.location && (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="2.6"/></svg>
+                              {e.location}
+                            </span>
+                          )}
                         </div>
                         {e.hangoutLink && (
                           <motion.div
                             whileHover={{ scale: 1.02 }}
                             onClick={() => openMeetCall(e.hangoutLink, e.title)}
                             style={{ display: "inline-block", fontSize: 11, fontFamily: FONT, color: "#00B894", marginTop: 6, cursor: "pointer", padding: "3px 10px", borderRadius: 6, background: "rgba(0,184,148,0.08)", border: "1px solid rgba(0,184,148,0.15)" }}
-                          >🔗 Google Meet beitreten</motion.div>
+                          >
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                              Google Meet beitreten
+                            </span>
+                          </motion.div>
                         )}
                       </div>
                       {/* Delete button for Google events or own team events */}
@@ -10195,9 +10213,14 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                           whileHover={{ scale: 1.15, background: "rgba(232,67,67,0.15)" }}
                           whileTap={{ scale: 0.9 }}
                           onClick={() => setConfirmDeleteEvent(e)}
-                          style={{ cursor: "pointer", width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: theme.textFaint, flexShrink: 0, transition: "all 0.15s" }}
+                          // alignSelf, not the row's alignItems: centring the
+                          // row would drag the time column down beside a long
+                          // description. Only this moves.
+                          style={{ cursor: "pointer", width: 28, height: 28, borderRadius: 8, alignSelf: "center", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textFaint, flexShrink: 0, transition: "all 0.15s" }}
                           title="Event absagen"
-                        >✕</motion.div>
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        </motion.div>
                       )}
                     </motion.div>
                   ))}
@@ -10240,13 +10263,13 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                   whileHover={{ scale: 1.15, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" }}
                   whileTap={{ scale: 0.9 }}
                   onClick={() => setSelectedDay(null)}
-                  style={{ cursor: "pointer", width: 24, height: 24, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: theme.textDim, flexShrink: 0, transition: "all 0.15s" }}
-                >✕</motion.div>
+                  style={{ cursor: "pointer", width: 24, height: 24, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, flexShrink: 0, transition: "all 0.15s" }}
+                ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></motion.div>
               </div>
               <div style={{ flex: 1, overflowY: "auto", padding: "8px 10px" }}>
                 {selectedEvents.length === 0 && (
                   <div style={{ padding: "24px 8px", textAlign: "center", fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>
-                    Freier Tag ✦
+                    Freier Tag
                   </div>
                 )}
                 {selectedEvents.map((e, i) => (
@@ -10267,9 +10290,9 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                           whileHover={{ scale: 1.15, background: "rgba(232,67,67,0.15)" }}
                           whileTap={{ scale: 0.9 }}
                           onClick={() => setConfirmDeleteEvent(e)}
-                          style={{ cursor: "pointer", width: 22, height: 22, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: theme.textFaint, flexShrink: 0, transition: "all 0.15s" }}
+                          style={{ cursor: "pointer", width: 22, height: 22, borderRadius: 6, alignSelf: "center", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textFaint, flexShrink: 0, transition: "all 0.15s" }}
                           title="Event absagen"
-                        >✕</motion.div>
+                        ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></motion.div>
                       )}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -10291,14 +10314,14 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                       )}
                     </div>
                     {e.location && (
-                      <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 4 }}>📍 {e.location}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="2.6"/></svg>{e.location}</div>
                     )}
                     {e.hangoutLink && (
                       <motion.div
                         whileHover={{ scale: 1.02 }}
                         onClick={() => openMeetCall(e.hangoutLink, e.title)}
-                        style={{ display: "inline-block", fontSize: 11, fontFamily: FONT, color: "#00B894", marginTop: 6, cursor: "pointer", padding: "3px 10px", borderRadius: 6, background: "rgba(0,184,148,0.08)", border: "1px solid rgba(0,184,148,0.15)" }}
-                      >🔗 Google Meet beitreten</motion.div>
+                        style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontFamily: FONT, color: "#00B894", marginTop: 6, cursor: "pointer", padding: "3px 10px", borderRadius: 6, background: "rgba(0,184,148,0.08)", border: "1px solid rgba(0,184,148,0.15)" }}
+                      ><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Google Meet beitreten</motion.div>
                     )}
                   </motion.div>
                 ))}
@@ -10388,7 +10411,9 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 exit={{ opacity: 0, height: 0 }}
                 style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(0,184,148,0.08)", border: "1px solid rgba(0,184,148,0.2)", display: "flex", alignItems: "center", gap: 10 }}
               >
-                <span style={{ fontSize: 14 }}>📹</span>
+                <span style={{ display: "flex", color: "#00B894", flexShrink: 0 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 10.5l6-3.2v9.4l-6-3.2z"/></svg>
+                </span>
                 <a href={meetLink} target="_blank" rel="noopener noreferrer"
                   style={{ flex: 1, fontSize: 12, fontFamily: FONT, color: "#00B894", textDecoration: "none", wordBreak: "break-all" }}>
                   {meetLink}
@@ -10399,7 +10424,12 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                   onClick={() => { navigator.clipboard.writeText(meetLink); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); }}
                   style={{ cursor: "pointer", padding: "5px 12px", borderRadius: 8, fontSize: 11, fontFamily: FONT, fontWeight: 500, color: linkCopied ? "#00B894" : theme.text, background: linkCopied ? "rgba(0,184,148,0.15)" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"), border: `1px solid ${linkCopied ? "rgba(0,184,148,0.3)" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)")}`, transition: "all 0.2s", whiteSpace: "nowrap" }}
                 >
-                  {linkCopied ? "✓ Kopiert" : "Kopieren"}
+                  {linkCopied ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                      Kopiert
+                    </span>
+                  ) : "Kopieren"}
                 </motion.div>
               </motion.div>
             )}
@@ -10532,7 +10562,9 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             style={{ width: 380, background: darkMode ? "rgba(28,26,42,0.95)" : "rgba(255,255,255,0.97)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, borderRadius: 20, padding: "28px 28px 24px", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
           >
             {/* Warning icon */}
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(232,67,67,0.12)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16, fontSize: 22 }}>⚠️</div>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(232,67,67,0.12)", color: "#E84343", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3.6L1.8 20.4h20.4z"/><path d="M12 10v4.4M12 17.6h.01"/></svg>
+            </div>
 
             <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8, letterSpacing: -0.3 }}>{t("cal.cancelEvent")}</div>
 
