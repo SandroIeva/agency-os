@@ -20,7 +20,7 @@ import { createClient } from "@supabase/supabase-js";
 import { notifLines } from "../src/notificationText.js";
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
-  splitDraft, workspacesFor, projectsFor, createTask, describeTask,
+  splitDraft, workspacesFor, projectsFor, createTask, describeTask, addChecklist,
   nextQuestion, PRIORITY_CODES, dueDateFor, timezoneOf,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
@@ -80,6 +80,7 @@ const T = {
     btnSkip: "Ohne",
     describeTitle: "Beschreibung",
     describeLabel: "Was ist zu tun?",
+    checklistLabel: "Checkliste, eine Zeile pro Punkt",
     described: "Beschreibung gespeichert.",
   },
   en: {
@@ -121,6 +122,7 @@ const T = {
     btnSkip: "Skip",
     describeTitle: "Description",
     describeLabel: "What needs doing?",
+    checklistLabel: "Checklist, one line per item",
     described: "Description saved.",
   },
 };
@@ -260,6 +262,9 @@ const finishTask = async (db, botToken, link, t, appUrl, st, fallbackChannel) =>
     return { ok: false, msg: made.reason === "read_only" ? t.newReadOnly
       : made.reason === "denied" ? t.newDenied : t.newFailed };
   }
+
+  // Straight after the task, so the message built below already counts them.
+  if (st.c) await addChecklist(db, link.user_id, made.task.id, st.c);
 
   // A real message, not the ephemeral form: only a real one can be edited
   // later, which is what makes its buttons work like every other card's.
@@ -522,9 +527,13 @@ export default async function handler(req) {
       .select("user_id, lang, chat_id").eq("provider", "slack")
       .eq("slack_team_id", p.team?.id).eq("slack_user_id", p.user?.id).maybeSingle();
     const mt = T[mlink?.lang === "en" ? "en" : "de"];
-    const field = Object.values(p.view?.state?.values || {})[0];
-    const typed = field ? Object.values(field)[0]?.value : "";
-    const blockId = Object.keys(p.view?.state?.values || { d: 1 })[0];
+    // By block_id, not by position: the modal has two fields now, and reading
+    // "the first one" would silently swap them the day a third is added.
+    const values = p.view?.state?.values || {};
+    const fieldOf = (id) => Object.values(values[id] || {})[0]?.value || "";
+    const typed = fieldOf("d");
+    const listed = fieldOf("c");
+    const blockId = Object.keys(values)[0] || "d";
     // An empty response closes the modal. An error string puts the message
     // under the field instead, which is where somebody is already looking.
     const fail = (msg) => json({ response_action: "errors", errors: { [blockId]: msg } });
@@ -537,11 +546,20 @@ export default async function handler(req) {
       const { data: inst2 } = await db.from("slack_installations")
         .select("bot_token").eq("team_id", p.team?.id).maybeSingle();
       if (!inst2?.bot_token) return fail(mt.newFailed);
-      const done = await finishTask(db, inst2.bot_token, mlink, mt, appUrl, { ...st, d: typed || "-" }, null);
+      const done = await finishTask(db, inst2.bot_token, mlink, mt, appUrl,
+        { ...st, d: typed || "-", c: listed || "" }, null);
       return done.ok ? new Response("", { status: 200 }) : fail(done.msg);
     }
 
-    const done = await describeTask(db, mlink.user_id, p.view?.private_metadata, typed);
+    const taskId = p.view?.private_metadata;
+    const done = typed
+      ? await describeTask(db, mlink.user_id, taskId, typed)
+      : { ok: true };
+    if (done.ok && listed) {
+      const list = await addChecklist(db, mlink.user_id, taskId, listed);
+      if (!list.ok) return fail(list.reason === "read_only" ? mt.newReadOnly
+        : list.reason === "denied" ? mt.newDenied : mt.newFailed);
+    }
     if (done.ok) return new Response("", { status: 200 });
     return fail(done.reason === "read_only" ? mt.newReadOnly
       : done.reason === "denied" ? mt.newDenied : mt.newFailed);
@@ -628,11 +646,17 @@ export default async function handler(req) {
           private_metadata: JSON.stringify({ ...st, d: undefined }).slice(0, 2900),
           title: { type: "plain_text", text: t.describeTitle.slice(0, 24) },
           submit: { type: "plain_text", text: "OK" },
-          blocks: [{
-            type: "input", block_id: "d", optional: true,
-            label: { type: "plain_text", text: t.describeLabel.slice(0, 2000) },
-            element: { type: "plain_text_input", action_id: "v", multiline: true },
-          }],
+          // Two fields, both optional: the modal is already open, and a
+          // checklist is the same gesture as a description, so asking for it
+          // separately would be a step for nothing.
+          blocks: [
+            { type: "input", block_id: "d", optional: true,
+              label: { type: "plain_text", text: t.describeLabel.slice(0, 2000) },
+              element: { type: "plain_text_input", action_id: "v", multiline: true } },
+            { type: "input", block_id: "c", optional: true,
+              label: { type: "plain_text", text: t.checklistLabel.slice(0, 2000) },
+              element: { type: "plain_text_input", action_id: "v", multiline: true } },
+          ],
         },
       });
       return json({ ok: true });

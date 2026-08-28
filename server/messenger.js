@@ -314,14 +314,18 @@ export const timezoneOf = async (db, userId) => {
 // which is a useful link in its own right, and the id is read back out of the
 // entity rather than out of anything we had to store.
 export const TASK_LINK_RE = /[?&]task=([0-9a-f-]{36})/i;
-export const taskIdFromReply = (replied) => {
+// Which task, and which question. Two of the bot's questions are answered the
+// same way, by replying, so the link that carries the task carries the question
+// too: list=1 means the reply is a checklist rather than a description.
+export const replyTarget = (replied) => {
   const entities = replied?.entities || replied?.caption_entities || [];
   for (const e of entities) {
     const m = e?.url && TASK_LINK_RE.exec(e.url);
-    if (m) return m[1];
+    if (m) return { taskId: m[1], checklist: /[?&]list=1/.test(e.url) };
   }
   return null;
 };
+export const taskIdFromReply = (replied) => replyTarget(replied)?.taskId || null;
 
 export const describeTask = async (db, userId, taskId, text) => {
   const description = String(text || "").trim();
@@ -348,4 +352,36 @@ export const nextQuestion = (st) => {
   if (!st?.u) return "due";
   if (!st?.a) return "assignee";
   return null;
+};
+
+// ── Checklists ──────────────────────────────────────────────────────────────
+// One line, one item. Numbering, dashes and bullets are stripped, because
+// people type them without thinking and nobody wants "1. 1. Preise prüfen".
+export const CHECKLIST_LINES_MAX = 30;
+export const splitChecklist = (text) => String(text || "")
+  .replace(/\r/g, "")
+  .split("\n")
+  .map(l => l.replace(/^\s*(?:[-*•]|\[[ xX]?\]|\d+[.)])\s*/, "").trim())
+  .filter(Boolean)
+  .slice(0, CHECKLIST_LINES_MAX)
+  .map(t => t.slice(0, 300));
+
+export const addChecklist = async (db, userId, taskId, text) => {
+  const items = splitChecklist(text);
+  if (!items.length) return { ok: true, added: 0 };
+  const { data: task } = await db.from("tasks")
+    .select("id, org_id, project_id").eq("id", taskId).maybeSingle();
+  if (!task) return { ok: false, reason: "gone" };
+  // The same two gates as every other write from a server.
+  if (!(await mayTouchTask(db, userId, task))) return { ok: false, reason: "denied" };
+  if (await orgIsReadOnly(db, task.org_id)) return { ok: false, reason: "read_only" };
+  // Appended, not replacing: a task may already have items, and position is
+  // what the board orders by.
+  const { data: existing } = await db.from("task_checklist_items")
+    .select("position").eq("task_id", taskId).order("position", { ascending: false }).limit(1);
+  const from = (existing?.[0]?.position ?? -1) + 1;
+  const { error } = await db.from("task_checklist_items").insert(
+    items.map((t, i) => ({ task_id: taskId, text: t, checked: false, position: from + i })));
+  if (error) return { ok: false, reason: "failed" };
+  return { ok: true, added: items.length };
 };

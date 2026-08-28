@@ -21,7 +21,7 @@ import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
   splitDraft, workspacesFor, projectsFor, createTask,
   draftStep, draftDone, PRIORITY_CODES, dueDateFor, timezoneOf,
-  taskIdFromReply, describeTask,
+  replyTarget, describeTask, addChecklist,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
 } from "../server/messenger.js";
@@ -76,6 +76,9 @@ const T = {
     due: { "0": "Keine Frist", t: "Heute", m: "Morgen", f: "Freitag", w: "In einer Woche" },
     forMe: "Für mich",
     btnDescribe: "Beschreibung hinzufügen",
+    btnChecklist: "Checkliste hinzufügen",
+    askChecklist: (title) => `Checkliste für ${title}? Eine Zeile pro Punkt, als Antwort auf diese Nachricht.`,
+    listed: (n) => `${n} ${n === 1 ? "Punkt" : "Punkte"} hinzugefügt.`,
     askDescribe: (title) => `Beschreibung für ${title}? Antworte einfach auf diese Nachricht.`,
     described: "Beschreibung gespeichert.",
     describeGone: "Diese Aufgabe gibt es nicht mehr.",
@@ -121,6 +124,9 @@ const T = {
     due: { "0": "No date", t: "Today", m: "Tomorrow", f: "Friday", w: "In a week" },
     forMe: "For me",
     btnDescribe: "Add a description",
+    btnChecklist: "Add a checklist",
+    askChecklist: (title) => `A checklist for ${title}? One line per item, as a reply to this message.`,
+    listed: (n) => `${n} ${n === 1 ? "item" : "items"} added.`,
     askDescribe: (title) => `A description for ${title}? Just reply to this message.`,
     described: "Description saved.",
     describeGone: "That task is gone.",
@@ -525,7 +531,7 @@ export default async function handler(req) {
     // n and w belong to a NEW task and carry a workspace id where the others
     // carry a notification id, so they are handled before anything tries to
     // load a notification that was never involved.
-    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w", "x"].includes(action)) return answer("");
+    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w", "x", "y"].includes(action)) return answer("");
 
     // The chat is the identity. A button is only ever pressed in the chat the
     // message was sent to, so nobody else can reach this task through it.
@@ -534,7 +540,8 @@ export default async function handler(req) {
     const t = T[link?.lang === "en" ? "en" : "de"];
     if (!link?.active || !link.user_id) return answer(t.notLinked, true);
 
-    if (action === "x") {
+    if (action === "x" || action === "y") {
+      const wantsList = action === "y";
       // force_reply puts the keyboard straight into the reply box. The task
       // travels as a text_link on its own title: Telegram returns the message
       // being replied to, but only one level deep, so the question has to carry
@@ -545,7 +552,10 @@ export default async function handler(req) {
       if (!task) return answer(t.describeGone, true);
       await api(botToken, "sendMessage", {
         chat_id: cbChat,
-        text: t.askDescribe(`<a href="${appUrl}/?task=${encodeURIComponent(task.id)}">${esc(task.title || "")}</a>`),
+        // list=1 rides in the link, which is how the reply that comes back
+        // says which of the two questions it is answering.
+        text: (wantsList ? t.askChecklist : t.askDescribe)(
+          `<a href="${appUrl}/?task=${encodeURIComponent(task.id)}${wantsList ? "&list=1" : ""}">${esc(task.title || "")}</a>`),
         parse_mode: "HTML",
         reply_markup: { force_reply: true, selective: true },
       });
@@ -648,6 +658,7 @@ export default async function handler(req) {
           // Only when the message did not already carry one. A description
           // typed as line two needs no second asking.
           ...(description ? [] : [[{ text: t.btnDescribe, callback_data: `x:${made.task.id}` }]]),
+          [{ text: t.btnChecklist, callback_data: `y:${made.task.id}` }],
           ...taskKeyboard(t, appUrl, { id: made.task.id, metadata: { task_id: made.task.id } }, true),
         ] },
       });
@@ -830,11 +841,13 @@ export default async function handler(req) {
 
   // A reply to the bot's description question belongs to the task that
   // question linked to, and is not a new task.
-  const describing = taskIdFromReply(msg.reply_to_message);
-  if (describing) {
+  const answering = replyTarget(msg.reply_to_message);
+  if (answering) {
     if (!link?.user_id) return reply(t.notLinked);
-    const done = await describeTask(db, link.user_id, describing, text);
-    return reply(done.ok ? t.described
+    const done = answering.checklist
+      ? await addChecklist(db, link.user_id, answering.taskId, text)
+      : await describeTask(db, link.user_id, answering.taskId, text);
+    return reply(done.ok ? (answering.checklist ? t.listed(done.added) : t.described)
       : done.reason === "read_only" ? t.newReadOnly
       : done.reason === "denied" ? t.newDenied
       : done.reason === "gone" ? t.describeGone : t.newFailed);
