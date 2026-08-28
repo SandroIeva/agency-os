@@ -443,6 +443,11 @@ function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, fallback = null }
   const speedRef = useRef(speed);
   speedRef.current = hover ? hoverSpeed : speed;
 
+  // uv spans [-1, 1] across the canvas and the ball's edge sits at the radius
+  // uniform, so the ball is that fraction of the canvas. Read from the same
+  // array the shader gets, so the glow cannot drift away from the ball.
+  const ball = size * ORB_UNIFORMS[4];
+
   // The lean. Proportional to how far off centre the cursor is, capped at a
   // seventh of the orb, and it snaps back on leave rather than sticking.
   const onMove = (e) => {
@@ -474,9 +479,16 @@ function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, fallback = null }
         layout: pipeline.getBindGroupLayout(0),
         entries: [{ binding: 0, resource: { buffer: buf } }],
       });
-      const started = performance.now();
+      let last = performance.now();
+      let clock = 0;        // shader time, accumulated at the current rate
+      let rate = speedRef.current;
       const frame = (now) => {
         if (!alive) return;
+        const dt = Math.min((now - last) / 1000, 0.1);   // a tab that was away must not lurch
+        last = now;
+        // The rate itself eases, so hover is a swell rather than a step.
+        rate += (speedRef.current - rate) * Math.min(1, dt * 3.2);
+        clock += dt * rate;
         // Two device pixels per CSS pixel is where this stops being visible and
         // starts being a bigger render for nothing.
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -484,8 +496,8 @@ function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, fallback = null }
         if (canvas.width !== px || canvas.height !== px) { canvas.width = px; canvas.height = px; }
         values[0] = px;
         values[1] = px;
-        values[2] = (now - started) / 1000;
-        values[3] = speedRef.current;
+        values[2] = clock;
+        values[3] = 1;        // the rate is in the clock, not in the shader
         device.queue.writeBuffer(buf, 0, values);
         const enc = device.createCommandEncoder();
         const pass = enc.beginRenderPass({
@@ -519,15 +531,19 @@ function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, fallback = null }
       animate={{ x: pull.x, y: pull.y }}
       transition={{ type: "spring", stiffness: 210, damping: 17, mass: 0.5 }}
       style={{ width: size, height: size, borderRadius: "50%", position: "relative" }}>
+      {/* The glow, on a disc exactly as big as the ball the shader draws, and
+          behind it. A glow, not a halo: two soft shadows in the orb's own
+          violet, and the transition is what makes hover a response rather
+          than a switch. */}
+      <div style={{ position: "absolute", left: "50%", top: "50%",
+        width: ball, height: ball, marginLeft: -ball / 2, marginTop: -ball / 2,
+        borderRadius: "50%", pointerEvents: "none",
+        boxShadow: hover
+          ? `0 0 ${ball * 0.62}px rgba(139,122,255,0.38), 0 0 ${ball * 0.26}px rgba(180,200,255,0.26)`
+          : `0 0 ${ball * 0.40}px rgba(139,122,255,0.18), 0 0 ${ball * 0.16}px rgba(180,200,255,0.12)`,
+        transition: "box-shadow 0.5s cubic-bezier(0.22, 1, 0.36, 1)" }} />
       <canvas ref={canvasRef}
-        style={{ width: size, height: size, display: "block", borderRadius: "50%",
-          // A glow, not a halo: two soft shadows in the orb's own violet, and
-          // the transition is what makes hover feel like a response instead of
-          // a switch.
-          boxShadow: hover
-            ? `0 0 ${size * 0.55}px rgba(139,122,255,0.34), 0 0 ${size * 0.22}px rgba(180,200,255,0.22)`
-            : `0 0 ${size * 0.34}px rgba(139,122,255,0.16), 0 0 ${size * 0.14}px rgba(180,200,255,0.10)`,
-          transition: "box-shadow 0.45s cubic-bezier(0.22, 1, 0.36, 1)" }} />
+        style={{ position: "relative", width: size, height: size, display: "block" }} />
     </motion.div>
   );
 }
@@ -51213,7 +51229,7 @@ export default function CircularMenu() {
         {/* Sphere — right third (stays visible & clickable in document fullscreen) */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "flex-end", pointerEvents: "auto" }}>
           <div style={{ cursor: "pointer" }} onClick={startVoice}>
-            <LiquidOrb size={70} fallback={<AISphere darkMode={darkMode} />} />
+            <LiquidOrb size={64} fallback={<AISphere darkMode={darkMode} />} />
           </div>
         </div>
       </div>
