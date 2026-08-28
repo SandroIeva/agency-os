@@ -30,6 +30,12 @@ const HEADERS = {
   "x-robots-tag": "noindex, nofollow",
   "access-control-allow-origin": "*",
   "cache-control": "public, max-age=60",
+  // One address answering three ways is cached by what was ASKED for, not by
+  // the address alone. Without this the CDN kept the first answer and handed
+  // it to everybody: an agent fetched the json, and the next person to open
+  // the link in a browser was served that json as their page. Seen live,
+  // x-vercel-cache: HIT, before this line existed.
+  "vary": "accept",
 };
 
 const notFound = (format) => {
