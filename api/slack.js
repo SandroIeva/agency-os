@@ -365,13 +365,21 @@ export default async function handler(req) {
     // through response_url, and only the message at the end fails. auth.test
     // needs no scope and reveals nothing.
     const { data: inst } = await db.from("slack_installations")
-      .select("team_id, bot_token").limit(1).maybeSingle();
+      .select("team_id, bot_token, scopes").limit(1).maybeSingle();
     let tokenOk = null;
     if (inst?.bot_token) {
       const who = await slack(inst.bot_token, "auth.test", {});
       tokenOk = !!who?.ok;
     }
+    // A reinstall from Slack's own dashboard never passes through our OAuth
+    // callback, so the token we hold keeps the scopes it was issued with. It
+    // still works, which is the trap: auth.test passes and files.info does not.
+    // Reconnecting from inside i7OS is what fetches a token with the new ones.
+    const held = (inst?.scopes || "").split(",").map(x => x.trim()).filter(Boolean);
+    const stale = SCOPES.split(",").filter(x => !held.includes(x));
     return json({
+      scopes_current: inst ? stale.length === 0 : null,
+      scopes_missing: stale.length ? stale : undefined,
       bot_token_valid: tokenOk,
       // Which commit is actually answering. Vercel sets this on every build, so
       // "is my fix live yet" stops being a guess: compare it with git log.

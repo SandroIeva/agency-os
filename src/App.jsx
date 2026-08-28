@@ -43316,6 +43316,7 @@ export default function CircularMenu() {
   const [slackLink, setSlackLink] = useState(null);
   const [slackBusy, setSlackBusy] = useState(false);
   const [slackErr, setSlackErr] = useState("");
+  const [slackStale, setSlackStale] = useState(false);
 
   const readSlackLink = useCallback(async () => {
     if (!session?.user?.id) return null;
@@ -43331,7 +43332,15 @@ export default function CircularMenu() {
     (async () => {
       try {
         const r = await fetch("/api/slack?check=1");
-        if (alive) setSlackReady(r.ok);
+        const info = r.ok ? await r.json().catch(() => null) : null;
+        if (alive) {
+          setSlackReady(r.ok);
+          // A reinstall from Slack's dashboard leaves us holding a token with
+          // the old permissions. It keeps working for what it could already do,
+          // so nothing looks wrong until the new thing quietly fails. Only
+          // reconnecting from here fetches a current one.
+          setSlackStale(info?.scopes_current === false);
+        }
       } catch { if (alive) setSlackReady(false); }
       const row = await readSlackLink();
       if (alive) setSlackLink(row);
@@ -49362,6 +49371,13 @@ export default function CircularMenu() {
                         : (appLanguage === "de" ? "Verbinden" : "Connect")}
                     </motion.button>
                   </div>
+                  )}
+                  {slackStale && slackLink && !slackErr && (
+                    <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
+                      {appLanguage === "de"
+                        ? "Die App in Slack hat neue Berechtigungen. Einmal trennen und neu verbinden, damit sie hier ankommen."
+                        : "The Slack app has new permissions. Disconnect and connect again so they reach us."}
+                    </div>
                   )}
                   {slackLink?.last_error && !slackErr && (
                     <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
