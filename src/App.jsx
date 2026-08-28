@@ -38529,8 +38529,14 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
                   const on = shown.includes(w);
                   return (
                     <div key={w} onClick={() => toggleWeight(w)}
+                      // The selected pill the rest of the app uses: anthracite
+                      // on light, inverted on dark, the way the nav does it.
+                      // This was a tinted accent, which is the lilac the design
+                      // dropped wearing a lower opacity.
                       style={{ padding: "6px 11px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: on ? 600 : 500,
-                        background: on ? theme.accent + "1f" : "transparent", color: on ? theme.accent : theme.textDim, border: `1px solid ${on ? theme.accent + "55" : theme.borderFaint}` }}>
+                        background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
+                        color: on ? (darkMode ? "#15151c" : "#fff") : theme.textDim,
+                        border: `1px solid ${on ? "transparent" : theme.borderFaint}` }}>
                       {TYPO_WEIGHT_LABELS[w]} {w}
                     </div>
                   );
@@ -38812,7 +38818,7 @@ Write it as ONE flowing, highly vivid and detailed prompt (about 5–8 sentences
                 <div style={{ fontSize: 12.5, fontFamily: FONT }}>{appLanguage === "de" ? "Wird hochgeladen…" : "Uploading…"}</div>
               ) : (
                 <>
-                  <div style={{ width: 44, height: 44, borderRadius: 13, background: accent + "1f", display: "flex", alignItems: "center", justifyContent: "center", color: accent }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 13, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text }}>
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   </div>
                   <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{appLanguage === "de" ? "Bilder hinzufügen" : "Add images"}</div>
@@ -38988,7 +38994,9 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
           onChange={e => { uploadAsset(slotKey, fmt, e.target.files?.[0]); e.target.value = ""; }} />
         <motion.div whileTap={{ scale: 0.95 }} onClick={() => assetInputRefs.current[slotKey + fmt]?.click()}
           style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 9px", borderRadius: 8, cursor: "pointer", fontSize: 11.5, fontFamily: FONT, fontWeight: 600,
-            background: present ? accent + "1f" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"), color: present ? accent : theme.textSub, border: `1px solid ${present ? accent + "55" : theme.borderFaint}` }}>
+            background: present ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
+            color: present ? (darkMode ? "#15151c" : "#fff") : theme.textSub,
+            border: `1px solid ${present ? "transparent" : theme.borderFaint}` }}>
           {busy ? "…" : <>{present ? checkIcon : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>}{fmt.toUpperCase()}</>}
         </motion.div>
         {present && (
@@ -39174,7 +39182,9 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
                   const on = cfg.cells[pickerCellId]?.slot === slot.key;
                   return (
                     <motion.div key={slot.key} whileTap={{ scale: 0.99 }} onClick={() => { setCellSlot(pickerCellId, slot.key); setPickerCellId(null); }}
-                      style={{ display: "flex", alignItems: "center", gap: 12, padding: 10, borderRadius: 12, cursor: "pointer", border: `1px solid ${on ? accent : theme.borderFaint}`, background: on ? accent + "12" : "transparent" }}>
+                      style={{ display: "flex", alignItems: "center", gap: 12, padding: 10, borderRadius: 12, cursor: "pointer",
+                        border: `1px solid ${on ? theme.text : theme.borderFaint}`,
+                        background: on ? (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)") : "transparent" }}>
                       <div style={{ width: 46, height: 46, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 7, background: slot.inv ? "#1a1a2e" : "#f4f4f6" }}>
                         <img src={assetUrl(slot.key)} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
                       </div>
