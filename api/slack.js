@@ -213,8 +213,12 @@ const draftBlocks = (t, st, question, options) => ([
     text: `*${esc(t.newTask)}*\n${esc(st.t)}${st.chosen ? `\n\n_${esc(st.chosen)}_` : ""}` } },
   { type: "section", text: { type: "mrkdwn", text: `*${esc(question)}*` } },
   // Slack allows 25 elements in an actions block and wraps them itself.
-  { type: "actions", elements: options.slice(0, 25).map(o => ({
-    type: "button", action_id: `draft_${o.key}`,
+  // action_id has to be unique within the block. Built from the field alone it
+  // was the same on every button of a step, which makes the block invalid and
+  // is what Slack reports as invalid_command_response. The handler only looks
+  // at the "draft_" prefix, so the index costs nothing.
+  { type: "actions", elements: options.slice(0, 25).map((o, i) => ({
+    type: "button", action_id: `draft_${o.key}_${i}`,
     text: { type: "plain_text", text: String(o.label).slice(0, 75) },
     value: JSON.stringify({ ...st, chosen: undefined, ...o.set }).slice(0, 1990),
   })) },
@@ -608,8 +612,11 @@ export default async function handler(req) {
     blocks[blocks.length - 1] = {
       type: "actions",
       elements: [
-        ...people.slice(0, 8).map(pr => ({
-          type: "button", action_id: `pick_${pr.id.slice(0, ID_HINT)}`,
+        // Indexed, like every other list here: two people whose ids share
+        // eight characters would otherwise produce two buttons with the same
+        // action_id, which makes the whole block invalid.
+        ...people.slice(0, 8).map((pr, i) => ({
+          type: "button", action_id: `pick_${i}_${pr.id.slice(0, ID_HINT)}`,
           text: { type: "plain_text", text: pr.name.slice(0, 70) },
           value: `${n.id}:${pr.id.slice(0, ID_HINT)}`,
         })),
