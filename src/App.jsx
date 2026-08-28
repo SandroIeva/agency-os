@@ -2172,6 +2172,11 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef(null);
   const descRef = useRef(null);
+  // A description is a text field, so a url in it was dead text. It reads as
+  // rendered text with working links until somebody actually wants to type,
+  // which is the only moment a field has to be a field.
+  // editingDesc already existed here, declared and reset when a task opens but
+  // never read. It is what decides between the two now.
   const dragItem = useRef(null);
 
   // Always use these columns
@@ -2941,8 +2946,31 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
 
                   {/* Description */}
                   <div style={{ position: "relative" }}>
+                    {(!editingDesc || !isTaskOwner) && taskForm.description ? (
+                      <div
+                        onClick={(e) => {
+                          // Not when the click was the link itself, which is
+                          // the whole point of showing it.
+                          if (e.target.closest("a")) return;
+                          if (!isTaskOwner) return;
+                          setEditingDesc(true);
+                          setTimeout(() => descRef.current?.focus(), 0);
+                        }}
+                        style={{
+                          background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                          border: "1px solid transparent",
+                          borderRadius: 16, padding: "14px 52px 14px 18px", fontSize: 14, fontFamily: FONT, lineHeight: 1.6,
+                          color: theme.text, width: "100%", height: 120, boxSizing: "border-box",
+                          overflowY: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word",
+                          cursor: isTaskOwner ? "text" : "default",
+                        }}
+                      >
+                        {renderTextWithLinks(taskForm.description, false, theme.accent)}
+                      </div>
+                    ) : (
                     <textarea
                       ref={descRef}
+                      onBlur={() => setEditingDesc(false)}
                       value={taskForm.description}
                       onChange={e => { if (isTaskOwner) setTaskForm(p => ({ ...p, description: e.target.value })); }}
                       placeholder={isTaskOwner ? "Beschreibung hinzufügen..." : "Keine Beschreibung"}
@@ -2957,6 +2985,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                         transition: "border-color 0.2s ease",
                       }}
                     />
+                    )}
                     {/* Dictation mic — round bubble in the textarea's bottom-right corner */}
                     {isTaskOwner && (
                       <motion.div whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.9 }} onClick={startDictation}
