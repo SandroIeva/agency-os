@@ -337,3 +337,15 @@ export const describeTask = async (db, userId, taskId, text) => {
   if (error) return { ok: false, reason: "failed" };
   return { ok: true, task };
 };
+
+// The same four questions, asked of a state OBJECT rather than of Telegram's
+// positional callback_data. Slack has room for a proper payload in a button, so
+// it carries one. A test pins the two orders together, because the rule is the
+// rule and only the transport differs.
+export const nextQuestion = (st) => {
+  if (st?.p === undefined) return "project";
+  if (!st?.r) return "priority";
+  if (!st?.u) return "due";
+  if (!st?.a) return "assignee";
+  return null;
+};

@@ -20,6 +20,8 @@ import { createClient } from "@supabase/supabase-js";
 import { notifLines } from "../src/notificationText.js";
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
+  splitDraft, workspacesFor, projectsFor, createTask, describeTask,
+  nextQuestion, PRIORITY_CODES, dueDateFor, timezoneOf,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
 } from "../server/messenger.js";
@@ -33,7 +35,10 @@ const json = (obj, status = 200) =>
 // no channel history, nothing that reads. A Slack admin looks at this list
 // before approving an install, and a short list is the difference between
 // approved and ignored.
-const SCOPES = "chat:write,im:write";
+// commands is what a slash command needs. Reading direct messages instead
+// would mean im:history, and an app that asks to read every DM sent to it is
+// an app a Slack admin declines.
+const SCOPES = "chat:write,im:write,commands";
 
 const T = {
   de: {
@@ -53,6 +58,26 @@ const T = {
     cbReadOnly: "Dieses Konto hat keinen aktiven Plan. Zum Ändern wird einer gebraucht.",
     cbFailed: "Hat nicht geklappt. Versuch es in der App.",
     connected: "Verbunden. Deine i7OS-Benachrichtigungen kommen ab jetzt hier an.",
+    askProject: "Projekt?",
+    askPriority: "Priorität?",
+    askDue: "Frist?",
+    askAssignee: "Für wen?",
+    prio: { h: "Hoch", m: "Mittel", l: "Niedrig" },
+    dueLabels: { "0": "Keine Frist", t: "Heute", m: "Morgen", f: "Freitag", w: "In einer Woche" },
+    noProject: "Kein Projekt",
+    forMe: "Für mich",
+    newTask: "Neue Aufgabe",
+    newNoWorkspace: "Du bist in keinem Workspace.",
+    newEmpty: "Schreib dazu, was zu tun ist: /i7os Angebot schreiben",
+    newMade: "Angelegt.",
+    newDenied: "Auf diesen Workspace hast du keinen Zugriff.",
+    newReadOnly: "Dieses Konto hat keinen aktiven Plan. Zum Anlegen wird einer gebraucht.",
+    newFailed: "Konnte nicht angelegt werden. Versuch es in der App.",
+    notConnected: "Verbinde Slack zuerst in i7OS unter Einstellungen, Workspace, Integrationen.",
+    btnDescribe: "Beschreibung hinzufügen",
+    describeTitle: "Beschreibung",
+    describeLabel: "Was ist zu tun?",
+    described: "Beschreibung gespeichert.",
   },
   en: {
     lang: "en",
@@ -71,6 +96,26 @@ const T = {
     cbReadOnly: "This account has no active plan. Changes need one.",
     cbFailed: "That did not work. Try it in the app.",
     connected: "Connected. Your i7OS notifications arrive here from now on.",
+    askProject: "Project?",
+    askPriority: "Priority?",
+    askDue: "Due?",
+    askAssignee: "For whom?",
+    prio: { h: "High", m: "Medium", l: "Low" },
+    dueLabels: { "0": "No date", t: "Today", m: "Tomorrow", f: "Friday", w: "In a week" },
+    noProject: "No project",
+    forMe: "For me",
+    newTask: "New task",
+    newNoWorkspace: "You are not in any workspace.",
+    newEmpty: "Say what needs doing: /i7os write the proposal",
+    newMade: "Created.",
+    newDenied: "You do not have access to that workspace.",
+    newReadOnly: "This account has no active plan. Creating needs one.",
+    newFailed: "Could not create it. Try the app.",
+    notConnected: "Connect Slack first in i7OS under Settings, Workspace, Integrations.",
+    btnDescribe: "Add a description",
+    describeTitle: "Description",
+    describeLabel: "What needs doing?",
+    described: "Description saved.",
   },
 };
 
@@ -159,6 +204,21 @@ const buildBlocks = async (db, workspace, n, lang, appUrl, taskId, footer) => {
   // The fallback line is what a push notification and a screen reader get.
   return { blocks, text: `${title}${body ? " — " + body : ""}` };
 };
+
+// The wizard, as one ephemeral message that replaces itself. The whole state
+// travels in each button's value: Slack allows 2000 characters there, so unlike
+// Telegram it can simply carry the text instead of reaching back for it.
+const draftBlocks = (t, st, question, options) => ([
+  { type: "section", text: { type: "mrkdwn",
+    text: `*${esc(t.newTask)}*\n${esc(st.t)}${st.chosen ? `\n\n_${esc(st.chosen)}_` : ""}` } },
+  { type: "section", text: { type: "mrkdwn", text: `*${esc(question)}*` } },
+  // Slack allows 25 elements in an actions block and wraps them itself.
+  { type: "actions", elements: options.slice(0, 25).map(o => ({
+    type: "button", action_id: `draft_${o.key}`,
+    text: { type: "plain_text", text: String(o.label).slice(0, 75) },
+    value: JSON.stringify({ ...st, chosen: undefined, ...o.set }).slice(0, 1990),
+  })) },
+]);
 
 export default async function handler(req) {
   const url = new URL(req.url);
@@ -333,6 +393,43 @@ export default async function handler(req) {
   if (!okSig) return json({ error: "Unauthorized" }, 401);
 
   const params = new URLSearchParams(raw);
+
+  // ── /i7os <what needs doing> ──────────────────────────────────────────────
+  // A slash command, not a message: the intent is explicit and we never ask to
+  // read anybody's direct messages. Slack wants an answer within three seconds,
+  // so the reply IS the response body.
+  if (params.get("command")) {
+    const teamId = params.get("team_id");
+    const slackUserId = params.get("user_id");
+    const { data: link } = await db.from("messenger_links")
+      .select("user_id, lang").eq("provider", "slack")
+      .eq("slack_team_id", teamId).eq("slack_user_id", slackUserId).maybeSingle();
+    const t = T[link?.lang === "en" ? "en" : "de"];
+    const ephemeral = (text, blocks) =>
+      json({ response_type: "ephemeral", text, ...(blocks ? { blocks } : {}) });
+    if (!link?.user_id) return ephemeral(t.notConnected);
+
+    const { title } = splitDraft(params.get("text") || "");
+    if (!title) return ephemeral(t.newEmpty);
+
+    const orgs = await workspacesFor(db, link.user_id);
+    if (!orgs.length) return ephemeral(t.newNoWorkspace);
+
+    // One workspace is the normal case, and asking about it would be a question
+    // with one answer.
+    if (orgs.length > 1) {
+      return ephemeral(t.newTask, draftBlocks(t, { t: title }, t.askProject,
+        orgs.map(o => ({ key: "o", label: o.name, set: { o: o.id.slice(0, ID_HINT) } }))));
+    }
+    const org = orgs[0];
+    const projects = await projectsFor(db, link.user_id, org.id);
+    const st = { t: title, o: org.id.slice(0, ID_HINT), chosen: org.name };
+    return ephemeral(t.newTask, draftBlocks(t, st, t.askProject, [
+      { key: "p", label: t.noProject, set: { p: "-" } },
+      ...projects.map(pr => ({ key: "p", label: pr.name, set: { p: pr.id.slice(0, ID_HINT) } })),
+    ]));
+  }
+
   // Slack pings a new Request URL once with a url_verification challenge.
   if (!params.get("payload")) {
     try {
@@ -343,6 +440,27 @@ export default async function handler(req) {
   }
 
   let p; try { p = JSON.parse(params.get("payload")); } catch { return json({ ok: true }); }
+
+  // ── The description modal came back ───────────────────────────────────────
+  // private_metadata is Slack's own way to carry an id through a modal, so no
+  // trick is needed here: the task travels with the view.
+  if (p?.type === "view_submission") {
+    const { data: mlink } = await db.from("messenger_links")
+      .select("user_id, lang").eq("provider", "slack")
+      .eq("slack_team_id", p.team?.id).eq("slack_user_id", p.user?.id).maybeSingle();
+    const mt = T[mlink?.lang === "en" ? "en" : "de"];
+    const text = Object.values(p.view?.state?.values || {})[0];
+    const value = text ? Object.values(text)[0]?.value : "";
+    const done = await describeTask(db, mlink?.user_id, p.view?.private_metadata, value);
+    // An empty response closes the modal. An error string puts the message
+    // under the field instead, which is where somebody is already looking.
+    if (done.ok) return new Response("", { status: 200 });
+    return json({ response_action: "errors", errors: {
+      [Object.keys(p.view?.state?.values || { d: 1 })[0]]:
+        done.reason === "read_only" ? mt.newReadOnly : done.reason === "denied" ? mt.newDenied : mt.newFailed,
+    } });
+  }
+
   const action = p?.actions?.[0];
   if (!action || action.action_id === "open_app") return json({ ok: true });
 
@@ -352,7 +470,7 @@ export default async function handler(req) {
   const ts = p.message?.ts || p.container?.message_ts;
 
   const { data: link } = await db.from("messenger_links")
-    .select("user_id, lang").eq("provider", "slack")
+    .select("user_id, lang, chat_id").eq("provider", "slack")
     .eq("slack_team_id", teamId).eq("slack_user_id", slackUserId).maybeSingle();
   const t = T[link?.lang === "en" ? "en" : "de"];
   const { data: inst } = await db.from("slack_installations").select("bot_token").eq("team_id", teamId).maybeSingle();
@@ -362,6 +480,98 @@ export default async function handler(req) {
   // channel the way a second message would.
   const say = (msg) => slack(inst.bot_token, "chat.postEphemeral", { channel, user: slackUserId, text: msg })
     .then(() => json({ ok: true }));
+
+  // ── A step of the new-task wizard ─────────────────────────────────────────
+  if (action.action_id.startsWith("draft_")) {
+    let st; try { st = JSON.parse(action.value); } catch { return json({ ok: true }); }
+    // The ephemeral message can only be changed through the url Slack sends
+    // with the press; chat.update does not reach one.
+    const replace = (text, blocks) => fetch(p.response_url, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ replace_original: true, text, ...(blocks ? { blocks } : {}) }),
+    }).then(() => json({ ok: true }));
+
+    const orgs = await workspacesFor(db, link.user_id);
+    const org = resolveHint(orgs, st.o);
+    if (!org) return replace(t.newDenied);
+    const projects = await projectsFor(db, link.user_id, org.id);
+    const project = st.p && st.p !== "-" ? resolveHint(projects, st.p) : null;
+    st.chosen = [org.name, st.p === undefined ? null : (project?.name || t.noProject),
+                 t.prio[st.r], t.dueLabels[st.u]].filter(Boolean).join(" · ");
+
+    const step = nextQuestion(st);
+    if (step === "project") {
+      return replace(t.newTask, draftBlocks(t, st, t.askProject, [
+        { key: "p", label: t.noProject, set: { p: "-" } },
+        ...projects.map(pr => ({ key: "p", label: pr.name, set: { p: pr.id.slice(0, ID_HINT) } })),
+      ]));
+    }
+    if (step === "priority") {
+      return replace(t.newTask, draftBlocks(t, st, t.askPriority,
+        Object.keys(PRIORITY_CODES).map(k => ({ key: "r", label: t.prio[k], set: { r: k } }))));
+    }
+    if (step === "due") {
+      return replace(t.newTask, draftBlocks(t, st, t.askDue,
+        Object.keys(t.dueLabels).map(k => ({ key: "u", label: t.dueLabels[k], set: { u: k } }))));
+    }
+    if (step === "assignee") {
+      const people = await handoverCandidates(db, { org_id: org.id, project_id: null }, link.user_id);
+      return replace(t.newTask, draftBlocks(t, st, t.askAssignee, [
+        { key: "a", label: t.forMe, set: { a: "-" } },
+        ...people.map(pr => ({ key: "a", label: pr.name, set: { a: pr.id.slice(0, ID_HINT) } })),
+      ]));
+    }
+
+    let assigneeId = link.user_id;
+    if (st.a && st.a !== "-") {
+      const person = resolveHint(await handoverCandidates(db, { org_id: org.id, project_id: null }, link.user_id), st.a);
+      if (!person) return replace(t.cbGone);
+      assigneeId = person.id;
+    }
+    const made = await createTask(db, {
+      userId: link.user_id, orgId: org.id, projectName: project?.name || null,
+      title: st.t, description: null,
+      priority: PRIORITY_CODES[st.r] || "medium",
+      dueDate: dueDateFor(st.u, await timezoneOf(db, link.user_id)),
+      assigneeId,
+    });
+    if (!made.ok) {
+      return replace(made.reason === "read_only" ? t.newReadOnly
+        : made.reason === "denied" ? t.newDenied : t.newFailed);
+    }
+
+    // The ephemeral message is a form and disappears with the answer. What the
+    // task deserves is a real message, because a real message can be edited,
+    // and its buttons therefore work like every other card's.
+    const asTask = { id: made.task.id, org_id: org.id, type: "task_created",
+                     title: st.t, body: null, metadata: { task_id: made.task.id } };
+    // org.name alone: buildBlocks reads the card and adds the project itself.
+    const built = await buildBlocks(db, org.name, asTask, link.lang, appUrl, made.task.id, null);
+    built.blocks.splice(built.blocks.length - 1, 0, { type: "actions", elements: [{
+      type: "button", action_id: "describe", value: made.task.id,
+      text: { type: "plain_text", text: t.btnDescribe },
+    }] });
+    await slack(inst.bot_token, "chat.postMessage", { channel: link.chat_id || channel, ...built });
+    return replace(t.newMade);
+  }
+
+  // ── The description button on a created task ──────────────────────────────
+  if (action.action_id === "describe") {
+    await slack(inst.bot_token, "views.open", {
+      trigger_id: p.trigger_id,
+      view: {
+        type: "modal", private_metadata: action.value,
+        title: { type: "plain_text", text: t.describeTitle.slice(0, 24) },
+        submit: { type: "plain_text", text: "OK" },
+        blocks: [{
+          type: "input", block_id: "d",
+          label: { type: "plain_text", text: t.describeLabel.slice(0, 2000) },
+          element: { type: "plain_text_input", action_id: "v", multiline: true },
+        }],
+      },
+    });
+    return json({ ok: true });
+  }
 
   const [notifId, arg] = String(action.value || "").split(":");
   const { data: n } = await db.from("notifications")

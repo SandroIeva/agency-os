@@ -8,7 +8,16 @@
     "bot_user": {
       "display_name": "i7OS",
       "always_online": true
-    }
+    },
+    "slash_commands": [
+      {
+        "command": "/i7os",
+        "url": "https://app.i7os.com/api/slack",
+        "description": "Create a task in i7OS",
+        "usage_hint": "what needs doing",
+        "should_escape": false
+      }
+    ]
   },
   "oauth_config": {
     "redirect_urls": [
@@ -17,7 +26,8 @@
     "scopes": {
       "bot": [
         "chat:write",
-        "im:write"
+        "im:write",
+        "commands"
       ]
     }
   },
