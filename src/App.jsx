@@ -35943,7 +35943,10 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
     const OptCard = ({ icon, title, desc, onClick }) => (
       <motion.div whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }} onClick={onClick}
         style={{ flex: 1, minWidth: 220, cursor: "pointer", padding: 24, borderRadius: 18, background: cardBg, border: `1px solid ${theme.borderFaint}`, display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 13, background: "#fff", color: "#15151c", display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</div>
+        <div style={{ width: 44, height: 44, borderRadius: 13,
+          background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+          color: darkMode ? "#fff" : "#15151c",
+          display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</div>
         <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{title}</div>
         <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>{desc}</div>
       </motion.div>
@@ -35961,18 +35964,19 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
           <OptCard
             icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="9.75" cy="8" r="3.25"/>
-              <path d="M15.5 20v-1.6a3.4 3.4 0 0 0-3.4-3.4H7.4A3.4 3.4 0 0 0 4 18.4V20"/>
-              <path d="M18.6 3.6l.85 2.15 2.15.85-2.15.85-.85 2.15-.85-2.15-2.15-.85 2.15-.85z"/>
+              <rect x="3.2" y="4.5" width="17.6" height="12" rx="3"/>
+              <path d="M9 16.5L7.2 20.2l4.6-3.7"/>
+              <path d="M12 7.4l.8 2.05 2.05.8-2.05.8-.8 2.05-.8-2.05-2.05-.8 2.05-.8z"/>
             </svg>}
             title="Persona beschreiben" desc="Beschreibe die Persona in ein paar Sätzen. Die KI füllt Name, Beruf, Motivations, Goals und Pains automatisch aus."
             onClick={() => { setManualText(""); setGenError(""); setScreen("manual"); }} />
           <OptCard
             icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3.5" y="3.5" width="17" height="17" rx="3"/>
-              <line x1="7.5" y1="9.5" x2="16.5" y2="9.5"/>
-              <line x1="7.5" y1="13.5" x2="16.5" y2="13.5"/>
-              <line x1="7.5" y1="17.5" x2="12.5" y2="17.5"/>
+              <rect x="2.8" y="4.5" width="18.4" height="15" rx="3"/>
+              <circle cx="8.6" cy="10.6" r="2"/>
+              <path d="M5.9 15.9a2.9 2.9 0 0 1 5.4 0"/>
+              <line x1="14.4" y1="10" x2="18.2" y2="10"/>
+              <line x1="14.4" y1="13.6" x2="18.2" y2="13.6"/>
             </svg>}
             title="Vorlage nutzen" desc="Starte mit einer leeren Persona-Karte und trage alle Felder selbst ein."
             onClick={startTemplate} />
