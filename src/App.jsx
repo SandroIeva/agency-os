@@ -27436,8 +27436,16 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
 }
 
 // ── Erstellen → Social Media Post — composer, publishes via Zernio ──────────
-// 4-step wizard in the Brand-Avatar style (numbered tab bar, grey box, live
-// preview card on the right): 01 Kanäle · 02 Visual · 03 Text · 04 Veröffentlichen.
+// Three steps: 01 Text · 02 Visual · 03 Kanäle, and the last one publishes.
+//
+// It was four, and the first of them did nothing but tick channels, which is
+// not a step, it is a question. Picking the channels also belongs at the END:
+// what you write is what decides where it fits, not the other way round, and
+// the character limit is only interesting once there is text to measure.
+//
+// The live preview used to stand beside every step. A preview of a post with
+// no text and no picture previews nothing, so it is shown where it is worth
+// looking at: on the last step, next to the button that publishes.
 // The Visual step is a mini creator tool: upload an image and place editable,
 // draggable TEXT OVERLAYS on it; at publish time the composition is rendered to a
 // JPEG via <canvas> and uploaded through Zernio's presigned direct upload.
@@ -27448,7 +27456,8 @@ const POST_OVERLAY_COLORS = ["#FFFFFF", "#15151c", "#F5C518", "#E86767", "#4D9FF
 function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage = "de", onOpenAudience, incomingVisual = null }) {
   const de = appLanguage === "de";
   const L = (o) => (de ? o.de : o.en);
-  const steps = [{ de: "Kanäle", en: "Channels" }, { de: "Visual", en: "Visual" }, { de: "Text", en: "Text" }, { de: "Veröffentlichen", en: "Publish" }];
+  const steps = [{ de: "Text", en: "Text" }, { de: "Visual", en: "Visual" }, { de: "Kanäle", en: "Channels" }];
+  const LAST = steps.length - 1;
   const [stepIdx, setStepIdx] = useState(0);
   const [hoverTab, setHoverTab] = useState(null);
 
@@ -27460,6 +27469,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const imageFileRef = useRef(null);
   const [overlays, setOverlays] = useState([]);     // [{ id, text, x, y, size, color, bold }] — x/y/size relative to image
   const [selOverlay, setSelOverlay] = useState(null);
+  const [assetOpen, setAssetOpen] = useState(false);   // the shared asset browser
+  const [assetBusy, setAssetBusy] = useState(false);
   const [stageW, setStageW] = useState(0);
   const stageRef = useRef(null);
   const overlayDragRef = useRef(null);
@@ -27520,6 +27531,28 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     }
     e.target.value = "";
   };
+  // A picture chosen from Assets arrives as a url, and everything downstream
+  // wants a File: the canvas export reads one, and the upload to Zernio needs
+  // its size and type. So it is fetched once, here, and from that point on it
+  // is indistinguishable from a file that was dragged in. Storage answers with
+  // access-control-allow-origin: *, so the fetch is allowed and the canvas it
+  // ends up on is not tainted.
+  const adoptAssetUrl = async (url) => {
+    if (!url) return;
+    setAssetOpen(false); setAssetBusy(true); setError(null);
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(de ? "Bild konnte nicht geladen werden." : "Could not load that image.");
+      const blob = await res.blob();
+      const name = (url.split("?")[0].split("/").pop() || "bild.jpg");
+      imageFileRef.current = new File([blob], name, { type: blob.type || "image/jpeg" });
+      const objUrl = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => setVisual({ url: objUrl, w: img.naturalWidth, h: img.naturalHeight });
+      img.src = objUrl;
+    } catch (e) { setError(e); }
+    setAssetBusy(false);
+  };
   const clearVisual = () => { imageFileRef.current = null; setVisual(null); setOverlays([]); setSelOverlay(null); };
   const addOverlay = () => {
     const id = crypto.randomUUID();
@@ -27577,9 +27610,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     if (busy) return;
     setError(null); setResult(null);
     const isDraft = kind === "draft";
-    if (!isDraft && selected.length === 0) { setError(new Error(de ? "Wähle in Schritt 1 mindestens einen Account." : "Select at least one account in step 1.")); setStepIdx(0); return; }
+    if (!isDraft && selected.length === 0) { setError(new Error(de ? "Wähle mindestens einen Kanal." : "Pick at least one channel.")); setStepIdx(2); return; }
     if (!text.trim() && !imageFileRef.current) { setError(new Error(de ? "Text oder Visual fehlt." : "Text or visual required.")); return; }
-    if (overLimit) { setError(new Error(de ? `Text zu lang (max. ${charLimit} Zeichen für die gewählten Kanäle).` : `Text too long (max ${charLimit} chars for the selected channels).`)); setStepIdx(2); return; }
+    if (overLimit) { setError(new Error(de ? `Text zu lang (max. ${charLimit} Zeichen für die gewählten Kanäle).` : `Text too long (max ${charLimit} chars for the selected channels).`)); setStepIdx(0); return; }
     setBusy(kind);
     try {
       let mediaItems;
@@ -27612,12 +27645,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const stepHead = (title, desc, mb = 18) => (
     <div style={{ marginBottom: mb }}>
       <div style={{ fontSize: 23, fontFamily: FONT, fontWeight: 500, letterSpacing: -0.3, color: theme.text }}>{title}</div>
-      {desc && <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55, marginTop: 8, maxWidth: 340 }}>{desc}</div>}
+      {desc && <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55, marginTop: 8, maxWidth: 520 }}>{desc}</div>}
     </div>
   );
   const label = { fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 10 };
   const nextBtn = (labelText) => (
-    <motion.button whileTap={{ scale: 0.97 }} onClick={() => setStepIdx(i => Math.min(3, i + 1))}
+    <motion.button whileTap={{ scale: 0.97 }} onClick={() => setStepIdx(i => Math.min(LAST, i + 1))}
       style={{ marginTop: 22, padding: "11px 24px", borderRadius: 999, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600, cursor: "pointer", alignSelf: "flex-start" }}>
       {labelText || (de ? "Weiter" : "Next")}
     </motion.button>
@@ -27668,7 +27701,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97, y: 10, filter: "blur(4px)" }} transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}
       style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 40px 80px" }}>
-      <div style={{ width: "100%", maxWidth: 880, height: "100%", ...frostedPanelStyle(darkMode), borderRadius: 26, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <div style={{ width: "100%", maxWidth: 1120, height: "100%", ...frostedPanelStyle(darkMode), borderRadius: 26, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         {/* Header — back + title */}
         <div style={{ padding: "16px 24px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${theme.borderFaint}` }}>
           <motion.div whileTap={{ scale: 0.92 }} onClick={onBack} style={{ cursor: "pointer", color: theme.textDim, display: "flex", flexShrink: 0 }}>
@@ -27678,7 +27711,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>Social Media Post</span>
         </div>
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 24 }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 30 }}>
           {error && (
             <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 12, background: "rgba(232,103,103,.08)", border: "1px solid rgba(232,103,103,.16)", color: "#E86767", fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
               {zernioErrorText(error, de)}
@@ -27698,20 +27731,22 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     color: active ? "#fff" : theme.text, transition: "background .38s cubic-bezier(0.33, 1, 0.68, 1)" }}>
                   <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.5)" : theme.textDim }}>{String(i + 1).padStart(2, "0")}</span>
                   <span style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{L(s)}</span>
-                  {i === 0 && selected.length > 0 && <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.6)" : theme.textDim }}>{selected.length}</span>}
+                  {i === 2 && selected.length > 0 && <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.6)" : theme.textDim }}>{selected.length}</span>}
                 </div>
               );
             })}
           </div>
 
-          {/* Grey box: left = step content, right = live preview (constant) */}
-          <div style={{ background: darkMode ? "rgba(255,255,255,0.03)" : "#f3f3f5", borderRadius: 22, padding: 26 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.78fr)", gap: 26, alignItems: "start" }}>
+          {/* Grey box. Text and Visual get the whole width; the last step
+              splits it, because that is where a preview means something. */}
+          <div style={{ background: darkMode ? "rgba(255,255,255,0.03)" : "#f3f3f5", borderRadius: 22, padding: 30 }}>
+            <div style={{ display: "grid", gap: 30, alignItems: "start",
+              gridTemplateColumns: stepIdx === LAST ? "minmax(0, 1fr) minmax(0, 0.7fr)" : "minmax(0, 1fr)" }}>
               <div style={{ display: "flex", flexDirection: "column" }}>
 
-                {/* ── 01 Kanäle ── */}
-                {stepIdx === 0 && (<>
-                  {stepHead(de ? "Kanäle" : "Channels", de ? "Wähle die verbundenen Accounts, auf denen dieser Post erscheinen soll." : "Pick the connected accounts this post should go to.")}
+                {/* ── 03 Kanäle, and publishing ── */}
+                {stepIdx === 2 && (<>
+                  {stepHead(de ? "Kanäle" : "Channels", de ? "Wohin soll der Post? Rechts siehst du, wie er ankommt." : "Where should this post go? On the right you see how it arrives.")}
                   {accounts == null ? (
                     <div style={{ color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{de ? "Lädt…" : "Loading…"}</div>
                   ) : accounts.length === 0 ? (
@@ -27743,27 +27778,42 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         );
                       })}
                     </div>
-                    {nextBtn()}
                   </>)}
                 </>)}
 
                 {/* ── 02 Visual — mini creator: image + draggable text overlays ── */}
                 {stepIdx === 1 && (<>
-                  {stepHead("Visual", de ? "Lade ein Bild hoch und platziere Text direkt auf der Grafik. Beim Posten wird alles als ein Bild gerendert." : "Upload an image and place text right on the graphic. It's rendered as one image when you post.")}
+                  {stepHead("Visual", de ? "Ein Bild hochladen oder eines aus den Assets nehmen. Text lässt sich direkt darauf platzieren, beim Posten wird beides als ein Bild gerendert." : "Upload an image or take one from Assets. Text can go right on it, and both are rendered as one image when you post.")}
                   <input ref={fileRef} type="file" accept="image/*" onChange={onPickImage} style={{ display: "none" }} />
                   {!visual ? (
-                    <motion.div whileTap={{ scale: 0.99 }} onClick={() => fileRef.current?.click()}
-                      style={{ padding: "34px 18px", borderRadius: 16, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", cursor: "pointer" }}>
-                      <div style={{ width: 38, height: 38, borderRadius: 12, margin: "0 auto 10px", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text }}>
-                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="3.5"/><circle cx="8.5" cy="8.5" r="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></svg>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                      {[
+                        { key: "upload", label: de ? "Bild hochladen" : "Upload image",
+                          sub: de ? "PNG oder JPG von diesem Rechner" : "PNG or JPG from this machine",
+                          icon: <><rect x="3" y="3" width="18" height="18" rx="3.5"/><circle cx="8.5" cy="8.5" r="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></>,
+                          onClick: () => fileRef.current?.click() },
+                        { key: "assets", label: de ? "Aus den Assets" : "From Assets",
+                          sub: de ? "Was in diesem Workspace schon liegt" : "What this workspace already has",
+                          icon: <><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2.5h7A2.5 2.5 0 0 1 21 10v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17z"/></>,
+                          onClick: () => setAssetOpen(true) },
+                      ].map(o => (
+                        <motion.div key={o.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.99 }} onClick={o.onClick}
+                          style={{ padding: "44px 22px", borderRadius: 18, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", cursor: assetBusy ? "wait" : "pointer", opacity: assetBusy ? 0.6 : 1 }}>
+                          <div style={{ width: 46, height: 46, borderRadius: 14, margin: "0 auto 12px", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text }}>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{o.icon}</svg>
+                          </div>
+                          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{o.label}</div>
+                          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>{o.sub}</div>
+                        </motion.div>
+                      ))}
+                      <div style={{ gridColumn: "1 / -1", fontSize: 12, fontFamily: FONT, color: theme.textDim, textAlign: "center" }}>
+                        {de ? "Oder ohne Visual weiter, dann wird es ein reiner Textpost." : "Or continue without one, and it stays a text post."}
                       </div>
-                      <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{de ? "Bild hochladen" : "Upload image"}</div>
-                      <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>{de ? "PNG, JPG — oder ohne Visual weiter (reiner Textpost)" : "PNG, JPG — or continue without a visual (text-only post)"}</div>
-                    </motion.div>
+                    </div>
                   ) : (<>
                     {/* Editor stage — overlays are draggable; click empty space deselects */}
                     <div ref={stageRef} onPointerDown={() => setSelOverlay(null)}
-                      style={{ position: "relative", borderRadius: 14, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, userSelect: "none", touchAction: "none" }}>
+                      style={{ position: "relative", width: "100%", maxWidth: 620, margin: "0 auto", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, userSelect: "none", touchAction: "none" }}>
                       <img src={visual.url} alt="" draggable={false} style={{ display: "block", width: "100%" }} />
                       {overlays.map(o => (
                         <div key={o.id} onPointerDown={(e) => onOverlayDown(e, o)}
@@ -27779,7 +27829,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       </motion.div>
                     </div>
                     {/* Editor toolbar */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, flexWrap: "wrap", width: "100%", maxWidth: 620, margin: "14px auto 0" }}>
                       <motion.button whileTap={{ scale: 0.97 }} onClick={addOverlay}
                         style={{ padding: "8px 15px", borderRadius: 999, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
                         + {de ? "Text hinzufügen" : "Add text"}
@@ -27790,7 +27840,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     </div>
                     {/* Selected-overlay properties */}
                     {selectedOverlayObj && (
-                      <div style={{ marginTop: 14, borderRadius: 14, border: `1px solid ${theme.borderFaint}`, background: theme.cardBg, padding: 14 }}>
+                      <div style={{ width: "100%", maxWidth: 620, margin: "14px auto 0", borderRadius: 14, border: `1px solid ${theme.borderFaint}`, background: theme.cardBg, padding: 14 }}>
                         <textarea value={selectedOverlayObj.text} onChange={e => patchOverlay(selectedOverlayObj.id, { text: e.target.value })} rows={2}
                           style={{ width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", resize: "none", caretColor: theme.text, marginBottom: 12 }} />
                         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
@@ -27816,25 +27866,42 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   {nextBtn()}
                 </>)}
 
-                {/* ── 03 Text ── */}
-                {stepIdx === 2 && (<>
-                  {stepHead(de ? "Text" : "Text", de ? "Schreibe die Caption. Das Limit richtet sich nach dem strengsten gewählten Kanal." : "Write the caption. The limit follows the strictest selected channel.")}
+                {/* ── 01 Text ── */}
+                {stepIdx === 0 && (<>
+                  {stepHead(de ? "Text" : "Text", de ? "Schreib, was du teilen willst. Die Kanäle kommen zum Schluss, dann steht auch das Zeichenlimit fest." : "Write what you want to share. Channels come last, and so does the character limit.")}
                   <div style={{ position: "relative" }}>
-                    <textarea value={text} onChange={e => setText(e.target.value)}
+                    <textarea value={text} onChange={e => setText(e.target.value)} autoFocus
                       placeholder={de ? "Was möchtest du teilen?" : "What do you want to share?"}
-                      style={{ width: "100%", minHeight: 190, boxSizing: "border-box", padding: "14px 16px 34px", borderRadius: 16,
+                      style={{ width: "100%", minHeight: 320, boxSizing: "border-box", padding: "18px 20px 40px", borderRadius: 18,
                         border: `1px solid ${overLimit ? "#E86767" : theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.6)",
-                        color: theme.text, fontSize: 14, fontFamily: FONT, lineHeight: 1.6, outline: "none", resize: "vertical", caretColor: theme.text }} />
-                    <div style={{ position: "absolute", right: 14, bottom: 12, fontSize: 11, fontFamily: FONT, color: overLimit ? "#E86767" : theme.textFaint }}>
-                      {text.length} / {charLimit}
+                        color: theme.text, fontSize: 15, fontFamily: FONT, lineHeight: 1.65, outline: "none", resize: "vertical", caretColor: theme.text }} />
+                    {/* Before a channel is chosen there is no limit to be over,
+                        so the number is a count and says so, rather than
+                        measuring against a 3000 nobody picked. */}
+                    <div style={{ position: "absolute", right: 18, bottom: 14, fontSize: 11.5, fontFamily: FONT, color: overLimit ? "#E86767" : theme.textFaint }}>
+                      {selected.length
+                        ? `${text.length} / ${charLimit}`
+                        : `${text.length} ${de ? "Zeichen" : "characters"}`}
                     </div>
                   </div>
                   {nextBtn()}
                 </>)}
 
-                {/* ── 04 Veröffentlichen ── */}
-                {stepIdx === 3 && (<>
-                  {stepHead(de ? "Veröffentlichen" : "Publish", de ? "Prüfe die Vorschau rechts — dann direkt posten, planen oder als Entwurf speichern." : "Check the preview on the right — then post now, schedule, or save as draft.")}
+                {/* ── Publishing, on the same screen as the channels: they are
+                       one decision, and splitting them made a step out of a
+                       tick box. ── */}
+                {stepIdx === 2 && (<>
+                  {/* Over the limit is only knowable once the channels are
+                      chosen, which is here, so it is said here. */}
+                  {overLimit && (
+                    <div style={{ marginTop: 20, padding: "11px 15px", borderRadius: 12, background: "rgba(232,103,103,.08)", border: "1px solid rgba(232,103,103,.16)", color: "#E86767", fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
+                      {de ? `Der Text ist ${text.length - charLimit} Zeichen zu lang für die gewählten Kanäle (max. ${charLimit}).`
+                          : `The text is ${text.length - charLimit} characters too long for the chosen channels (max ${charLimit}).`}
+                      {" "}
+                      <span onClick={() => setStepIdx(0)} style={{ textDecoration: "underline", cursor: "pointer" }}>{de ? "Kürzen" : "Shorten it"}</span>
+                    </div>
+                  )}
+                  <div style={{ height: 26 }} />
                   <div style={label}>{de ? "Planen (optional)" : "Schedule (optional)"}</div>
                   <input type="datetime-local" value={schedule} onChange={e => setSchedule(e.target.value)}
                     style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.6)",
@@ -27874,12 +27941,25 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 </>)}
               </div>
 
-              {/* Right — live preview, constant across steps (like the avatar card) */}
-              {previewCard}
+              {/* The preview, on the step that publishes */}
+              {stepIdx === LAST && previewCard}
             </div>
           </div>
         </div>
       </div>
+
+      {/* The same asset browser the documents and the canvas use. It hands back
+          a url; adoptAssetUrl turns that into the File the rest of this view
+          already knows how to handle. Its own upload tab is answered with an
+          object url for the same reason: one path in, one path out. */}
+      {assetOpen && (
+        <ImageInsertModal
+          orgId={orgId} session={session} userOrg={userOrg} appLanguage={appLanguage}
+          uploadFile={async (file) => URL.createObjectURL(file)}
+          theme={theme} darkMode={darkMode} accent={theme.accent}
+          onPick={(url) => adoptAssetUrl(url)}
+          onClose={() => setAssetOpen(false)} />
+      )}
     </motion.div>
   );
 }

@@ -93,27 +93,38 @@ einfach den Array erweitern).
    Engagement (klickbar → Original-Post), verbundene Accounts (mit Trennen) und
    "Weitere verbinden".
 
-**Posten (Erstellen → Social Media Post) — 4-Step-Wizard im Brand-Avatar-Stil**
-(nummerierte Step-Tabs, graue Box, Live-Vorschau-Karte rechts über alle Steps):
+**Posten (Erstellen → Social Media Post) — 3-Step-Wizard im Brand-Avatar-Stil**
+(nummerierte Step-Tabs, graue Box; die Vorschau steht NUR auf dem letzten Step):
 
-1. **01 Kanäle** — verbundene Accounts als Chips (Mehrfachauswahl); keine →
-   Hinweis + Button zu Audience → Analytics.
-2. **02 Visual** — Mini-Creator-Tool: Bild hochladen + **Text-Overlays direkt auf
-   der Grafik** platzieren (draggen zum Positionieren, Größen-Slider, 5 Farben,
-   Bold-Toggle, mehrzeilig). Koordinaten/Größe sind relativ (0–1) gespeichert.
-   Beim Posten wird die Komposition per `<canvas>` in **nativer Bildauflösung als
-   JPEG gerendert** (`exportVisual()` in CreatePostView; ohne Overlays wird das
-   Original unverändert hochgeladen). "Vorlagen — bald"-Platzhalter für das
-   geplante Template-System.
-3. **03 Text** — Caption mit Zeichenlimit (Minimum der gewählten Plattformen:
-   X 280 · Threads/Pinterest 500 · Instagram 2200 · LinkedIn 3000).
-4. **04 Veröffentlichen** — optionaler Zeitplan (datetime-local, Browser-Zeitzone),
-   dann Posten/Planen (anthrazit) oder Entwurf (`isDraft:true`). Ablauf: ggf.
-   `presign` + direkter PUT-Upload des gerenderten JPEGs, dann `mode:"post"`.
-   Ergebnisbox zeigt Status pro Plattform mit Link ("Ansehen ↗") bzw. Fehler.
+1. **01 Text** — Caption, großes Feld, Autofokus. Solange kein Kanal gewählt ist,
+   zählt die Anzeige nur Zeichen, statt gegen ein Limit zu messen, das niemand
+   gesetzt hat.
+2. **02 Visual** — hochladen ODER aus den Assets nehmen (derselbe
+   `ImageInsertModal`, den Dokumente und Canvas benutzen; die gewählte URL wird
+   einmal geholt und ab da wie eine hochgeladene Datei behandelt). Danach das
+   Mini-Creator-Tool: **Text-Overlays direkt auf der Grafik** (draggen,
+   Größen-Slider, 5 Farben, Bold, mehrzeilig), Koordinaten relativ (0–1)
+   gespeichert. Beim Posten wird die Komposition per `<canvas>` in **nativer
+   Bildauflösung als JPEG gerendert** (`exportVisual()`; ohne Overlays geht das
+   Original unverändert hoch). "Vorlagen — bald"-Platzhalter.
+3. **03 Kanäle** — verbundene Accounts als Chips (Mehrfachauswahl); keine →
+   Hinweis + Button zu Audience → Analytics. Hier steht auch die Vorschau
+   (rechte Spalte), das Zeichenlimit (Minimum der gewählten Plattformen:
+   X 280 · Threads/Pinterest 500 · Instagram 2200 · LinkedIn 3000) mit
+   Link zurück in den Text, der optionale Zeitplan (datetime-local,
+   Browser-Zeitzone) und Posten/Planen bzw. Entwurf (`isDraft:true`).
+   Ablauf: ggf. `presign` + direkter PUT-Upload des gerenderten JPEGs, dann
+   `mode:"post"`. Ergebnisbox zeigt Status pro Plattform mit Link
+   ("Ansehen ↗") bzw. Fehler.
 
-Die Vorschau-Karte rechts zeigt Caption + komponiertes Visual live (Overlay-Skalierung
-über CSS-Container-Queries, `cqw`-Einheiten — gleiche Relativkoordinaten wie Editor
+Warum drei und nicht vier: der erste Step hakte nur Kanäle an, und das ist kein
+Schritt, sondern eine Frage. Die Kanäle gehören ans Ende, weil der Text
+entscheidet, wohin er passt, und das Limit erst interessant ist, wenn Text da
+ist. Die Vorschau stand vorher neben jedem Step und zeigte auf Step 1 einen
+leeren Post.
+
+Die Vorschau-Karte zeigt Caption + komponiertes Visual (Overlay-Skalierung über
+CSS-Container-Queries, `cqw`-Einheiten — gleiche Relativkoordinaten wie Editor
 und Canvas-Export).
 
 ## Wichtige Zernio-Eigenheiten
