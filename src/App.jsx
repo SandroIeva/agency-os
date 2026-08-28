@@ -28716,7 +28716,9 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           <div style={{ flex: 1 }} />
           {/* Primary action in the top-right header slot, where this app keeps it */}
           {section === "moodboards" ? (
-            <div ref={moodSlot} style={{ display: "flex", alignItems: "center", gap: 10 }} />
+            /* A floor as tall as the button that portals in here, so the header
+               does not stand shorter for the frame before it arrives. */
+            <div ref={moodSlot} style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 34 }} />
           ) : canEdit && (
             <div style={{ position: "relative" }}>
               <motion.div whileTap={{ scale: 0.96 }}
@@ -30634,17 +30636,19 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     // are. The tab still EXISTS and still renders, because Creations asks for
     // it by name through soloTab.
     const ASSET_TABS = [
-      // Labelled "Assets", not "Creations": Creations is now a Brand section of
-      // its own, and one word cannot mean two places.
-      { id: "creations",    label: "Assets" },
+      // Not "Assets": that is what we call the table, not what somebody is
+      // looking for. And not "Creations" either, which is a Brand section of
+      // its own now, and one word cannot mean two places.
+      { id: "creations",    label: "Media Files" },
       { id: "docs",         label: t("assets.docs") || "Docs" },
     ];
     const headerActions = (<>
             {tab === "moodboards" && (
-              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setCreating(true)}
-                style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                {t("moodboard.new") || "Neues Board"}
+              <motion.div whileTap={{ scale: 0.96 }} onClick={() => setCreating(true)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 7,
+                  padding: "9px 18px", borderRadius: 999, background: "#15151c", color: "#fff",
+                  fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                {appLanguage === "de" ? "Neu erstellen" : "Create new"}
               </motion.div>
             )}
             {tab === "creations" && (
