@@ -21,7 +21,7 @@ import { notifLines } from "../src/notificationText.js";
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
   splitDraft, workspacesFor, projectsFor, createTask, describeTask, addChecklist, commentOnTask,
-  typeWanted,
+  typeWanted, attachedImage,
   nextQuestion, PRIORITY_CODES, dueDateFor, timezoneOf,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
@@ -198,6 +198,12 @@ const buildBlocks = async (db, workspace, n, lang, appUrl, taskId, footer) => {
     if (c.more) rows.push(esc(c.moreLabel(c.more)));
     blocks.push({ type: "section", text: { type: "mrkdwn", text: `*${esc(c.label)} ${c.done}/${c.total}*\n${rows.join("\n")}` } });
   }
+  // A picture in a chat message shows as a picture. alt_text is required and
+  // must not be empty, so the file's name stands in when it has none.
+  const photo = attachedImage(n);
+  if (photo) blocks.push({ type: "image", image_url: photo.url,
+    alt_text: (photo.name || "Bild").slice(0, 2000) });
+
   if (footer) blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: `_${esc(footer)}_` }] });
 
   const t = T[lang === "en" ? "en" : "de"];

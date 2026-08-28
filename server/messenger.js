@@ -448,3 +448,17 @@ export const DEFAULT_TYPES = {
 };
 export const typeWanted = (link, type) =>
   ({ ...DEFAULT_TYPES, ...(link?.types || {}) })[type] !== false;
+
+// A picture in a chat message, when there is one. Only images: a PDF or a zip
+// is a link, not something to render, and a messenger that tries to show one
+// just fails quietly.
+export const IMAGE_MIME = /^image\/(png|jpe?g|gif|webp)$/i;
+export const IMAGE_EXT = /\.(png|jpe?g|gif|webp)(\?|$)/i;
+export const attachedImage = (n) => {
+  const m = n?.metadata || {};
+  if (!m.attachment_url) return null;
+  const looksRight = m.attachment_type
+    ? IMAGE_MIME.test(m.attachment_type)
+    : IMAGE_EXT.test(m.attachment_url);
+  return looksRight ? { url: m.attachment_url, name: m.attachment_name || "" } : null;
+};

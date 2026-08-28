@@ -13371,9 +13371,12 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       const myName = memberMap[myId]?.display_name || "Jemand";
       const { data: parts } = await supabase.from("chat_participants").select("user_id").eq("conversation_id", activeConvId);
       const recipientIds = (parts || []).map(p => p.user_id).filter(uid => uid !== myId);
+      // The paperclip was an emoji standing in for a picture nobody could see.
+      // The file's name says the same thing, and the messengers now get the
+      // picture itself.
       const notifBody = text
         ? (text.length > 80 ? text.slice(0, 80) + "…" : text)
-        : (attachment ? `📎 ${attachment.name}` : "Neue Nachricht");
+        : (attachment ? attachment.name : "Neue Nachricht");
       recipientIds.forEach(uid => {
         createNotification({
           userId: uid,
@@ -13381,8 +13384,17 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
           title: `Neue Nachricht von ${myName}`,
           body: notifBody,
           // No subject: the body IS the message somebody typed, and that is not
-          // ours to translate.
-          metadata: { conversation_id: activeConvId, actor: myName },
+          // ours to translate. The attachment rides along so a messenger can
+          // show the picture rather than describe it; chat-attachments is a
+          // public bucket, so the url needs no signing and no expiry.
+          metadata: {
+            conversation_id: activeConvId, actor: myName,
+            ...(attachment ? {
+              attachment_url: attachment.url,
+              attachment_name: attachment.name,
+              attachment_type: attachment.type || null,
+            } : {}),
+          },
         });
       });
     }

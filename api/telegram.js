@@ -19,7 +19,7 @@ import { notifLines } from "../src/notificationText.js";
 // formatting below is Telegram's: HTML, and an inline_keyboard.
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
-  splitDraft, workspacesFor, projectsFor, createTask, DEFAULT_TYPES, typeWanted,
+  splitDraft, workspacesFor, projectsFor, createTask, DEFAULT_TYPES, typeWanted, attachedImage,
   draftStep, draftDone, PRIORITY_CODES, dueDateFor, timezoneOf,
   replyTarget, describeTask, addChecklist, commentOnTask,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
@@ -456,13 +456,22 @@ export default async function handler(req) {
     // fits Telegram's 64-byte callback_data where two would not.
     const taskId = n.metadata?.task_id;
     const card = taskId ? await taskBlock(db, taskId, link.lang) : { extra: "", project: "" };
-    const res = await api(botToken, "sendMessage", {
-      chat_id: link.chat_id,
-      text: notifText(headLine(workspace, card.project), n, link.lang, card.extra),
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-      reply_markup: { inline_keyboard: taskKeyboard(t, appUrl, n, !!taskId) },
-    });
+    // A picture goes as a picture. Telegram fetches the url itself, which the
+    // public chat-attachments bucket allows, and the message becomes the
+    // caption. Captions cap at 1024 where a message caps at 4096, so anything
+    // longer falls back to a plain message rather than being cut in half.
+    const photo = attachedImage(n);
+    const message = notifText(headLine(workspace, card.project), n, link.lang, card.extra);
+    const keyboard = { inline_keyboard: taskKeyboard(t, appUrl, n, !!taskId) };
+    const res = photo && message.length <= 1024
+      ? await api(botToken, "sendPhoto", {
+          chat_id: link.chat_id, photo: photo.url,
+          caption: message, parse_mode: "HTML", reply_markup: keyboard,
+        })
+      : await api(botToken, "sendMessage", {
+          chat_id: link.chat_id, text: message, parse_mode: "HTML",
+          disable_web_page_preview: !photo, reply_markup: keyboard,
+        });
 
     if (res?.ok) {
       await db.from("messenger_links").update({ last_sent_at: new Date().toISOString(), last_error: null })
