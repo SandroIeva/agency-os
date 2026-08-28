@@ -255,7 +255,20 @@ export default async function handler(req) {
     const { count } = await db.from("slack_installations").select("team_id", { count: "exact", head: true });
     const { count: links } = await db.from("messenger_links")
       .select("id", { count: "exact", head: true }).eq("provider", "slack");
+    // Whether the stored bot token still works. Reinstalling from Slack's own
+    // UI issues a NEW token and never touches our OAuth callback, so the row
+    // here goes stale silently: the wizard keeps working, because it answers
+    // through response_url, and only the message at the end fails. auth.test
+    // needs no scope and reveals nothing.
+    const { data: inst } = await db.from("slack_installations")
+      .select("team_id, bot_token").limit(1).maybeSingle();
+    let tokenOk = null;
+    if (inst?.bot_token) {
+      const who = await slack(inst.bot_token, "auth.test", {});
+      tokenOk = !!who?.ok;
+    }
     return json({
+      bot_token_valid: tokenOk,
       // Which commit is actually answering. Vercel sets this on every build, so
       // "is my fix live yet" stops being a guess: compare it with git log.
       commit: (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || null,
