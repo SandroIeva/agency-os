@@ -80,7 +80,7 @@ not be created from the UI at all.
 | **Task** | `KanbanBoard` — created inline in the column composer | App.jsx |
 | **Whiteboard** | `createBoard` in `IdeasTab`, plus `openBrainstorm` in the App root (Erstellen → Brainstorm) | App.jsx |
 | **Document** | `createDoc` | App.jsx |
-| **Moodboard** | `createBoard` in the assets area | App.jsx |
+| **Moodboard** | `createBoard` in the assets area (the moodboards tab of `AssetsView`, now rendered inside **Brand → Creations** via `soloTab="moodboards"`, not in the file manager) | App.jsx |
 | **Note** | `createNote` | App.jsx |
 | **Calendar event** | `createTeamEvent` | App.jsx |
 | **Chat conversation** | `startConversation` (1:1) and the group-creation modal | App.jsx |

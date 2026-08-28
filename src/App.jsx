@@ -28220,10 +28220,17 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 // the same shelf four ways and asked a question — "what kind of thing is this?"
 // — at the moment of creating, when nobody knows yet. What actually differs is
 // the medium: a board you think on, and a canvas you design on.
+// Three things you make, in one place. Moodboards used to live in the file
+// manager, beside files and documents, which put "the thing I collect
+// references on" next to "the folder my PDFs are in". It is a board, like the
+// two beside it here.
+//
+// The keys stay what they were: they are the section's identity in state, and
+// "ideas" is the whiteboards tab whatever its label says. Renaming a key would
+// touch every comparison for no gain.
 const CREATION_SECTIONS = [
-  { key: "ideas",  de: "Ideen",  en: "Ideas" },
-  // The key stays "canvas" — it is the section's identity in state, not a
-  // label, and renaming it would touch every comparison for no gain.
+  { key: "moodboards", de: "Moodboards", en: "Moodboards" },
+  { key: "ideas",  de: "Whiteboards",  en: "Whiteboards" },
   { key: "canvas", de: "Artboards", en: "Artboards" },
 ];
 
@@ -28393,7 +28400,12 @@ const FORMAT_TABS = (de) => [
 
 function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, appLanguage = "de",
                          canEdit = true, projectId = null, onPublish = null,
-                         orgMembers = [], onOpenBoard = null }) {
+                         orgMembers = [], onOpenBoard = null,
+                         // Everything below is for the moodboards, which are a
+                         // whole tab of AssetsView rendered inside this one.
+                         onUploadStorage = null, onUploadDrive = null, createNotification = null,
+                         getProviderToken = null, ensureValidToken = null, autoReLogin = null,
+                         llmProvider = null, llmKeys = null }) {
   const de = appLanguage === "de";
   // A canvas is any shape; the tile it sits in is not. Fitting is a choice of
   // which side touches the edge, and the aspect decides it.
@@ -28408,6 +28420,10 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   // cannot leak into the database any more.
   const [section, setSection] = useState("ideas");
   const ideasCreate = useRef(null);      // IdeasTab registers its "new board" fn
+  // Where the moodboards tab puts its own header buttons. It portals into this
+  // rather than being told what to draw, which is how the project brand embeds
+  // the same view already.
+  const moodSlot = useRef(null);
   const ideasNewFolder = useRef(null);   // …and its "create folder" fn
   const [rows, setRows] = useState(null);          // null = loading
   const [folders, setFolders] = useState([]);
@@ -28699,7 +28715,9 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           </div>
           <div style={{ flex: 1 }} />
           {/* Primary action in the top-right header slot, where this app keeps it */}
-          {canEdit && (
+          {section === "moodboards" ? (
+            <div ref={moodSlot} style={{ display: "flex", alignItems: "center", gap: 10 }} />
+          ) : canEdit && (
             <div style={{ position: "relative" }}>
               <motion.div whileTap={{ scale: 0.96 }}
                 onClick={() => section === "ideas" ? ideasCreate.current?.() : setNewMenuOpen(o => !o)}
@@ -28783,9 +28801,19 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           <TabUnderline box={ind.box} darkMode={darkMode} />
         </div>
 
-        {/* Ideas brings its own toolbar, folders and list — it is a whole tab,
-            not a filter over this one. */}
-        {section === "ideas" ? (
+        {/* Moodboards are a whole tab of the file manager, asked for by name.
+            Rendering them here rather than copying them keeps one moodboard:
+            the same boards, the same share links, the same realtime. */}
+        {section === "moodboards" ? (
+          <AssetsView embedded soloTab="moodboards" headerSlotRef={moodSlot}
+            session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t}
+            appLanguage={appLanguage} projectId={projectId} orgMembers={orgMembers}
+            onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive}
+            createNotification={createNotification} getProviderToken={getProviderToken}
+            ensureValidToken={ensureValidToken} autoReLogin={autoReLogin}
+            llmProvider={llmProvider} llmKeys={llmKeys}
+            onOpenWhiteboard={onOpenBoard} onBack={onBack} />
+        ) : section === "ideas" ? (
           <IdeasTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode}
             appLanguage={appLanguage} orgMembers={orgMembers} projectId={projectId}
             createRef={ideasCreate} newFolderRef={ideasNewFolder} onOpenBoard={onOpenBoard} />
@@ -30082,13 +30110,16 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
 // a Grid (overview of everything) and a freeform Canvas (drag images around).
 // Images upload to the public brand-assets bucket so their URLs can later be
 // reused as reference inputs for image/video generation (Higgsfield etc.).
-function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, assetDeepLink, openTab = null, openWebImport = null, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, embedded = false, headerSlotRef = null, projectName = "", projectLogoUrl = "", projectColor = "", onOpenWhiteboard = null }) {
+// soloTab: render exactly one of its tabs and no tab bar at all. Creations
+// shows the moodboards this way, under its own tabs, and two rows of tabs for
+// one screen is one row too many.
+function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, assetDeepLink, openTab = null, openWebImport = null, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, embedded = false, headerSlotRef = null, projectName = "", projectLogoUrl = "", projectColor = "", onOpenWhiteboard = null, soloTab = null }) {
   // Embedded: action buttons portal into BrandView's header slot once it exists.
   const [assetSlotReady, setAssetSlotReady] = useState(false);
   useEffect(() => { setAssetSlotReady(true); }, []);
   // Assets has three tabs: Moodboards (curated boards), Creations (your generated
   // outputs) and Inspirations (saved references).
-  const [tab, setTab] = useState("moodboards");
+  const [tab, setTab] = useState(soloTab || "creations");
   const tabInd = useTabIndicator(tab, [appLanguage]); // sliding underline for the tab switcher
   const [docOpen, setDocOpen] = useState(false); // a document is open in the editor → hide header/tabs
   // A notification deep-link → jump to the Documents tab so DocsTab can open it.
@@ -30598,8 +30629,11 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 
   // ════════════════════════ ASSETS (tabbed: Moodboards / Creations / Inspirations) ════════════════════════
   if (!activeBoard) {
+    // Moodboards are not listed here any more: they live under Brand →
+    // Creations, beside the whiteboards and the artboards, which is what they
+    // are. The tab still EXISTS and still renders, because Creations asks for
+    // it by name through soloTab.
     const ASSET_TABS = [
-      { id: "moodboards",   label: t("assets.moodboards") || "Moodboards" },
       // Labelled "Assets", not "Creations": Creations is now a Brand section of
       // its own, and one word cannot mean two places.
       { id: "creations",    label: "Assets" },
@@ -30772,7 +30806,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           </div>
           </>) : (assetSlotReady && headerSlotRef?.current ? createPortal(<div style={{ display: "flex", alignItems: "center", gap: 10 }}>{headerActions}</div>, headerSlotRef.current) : null)}
 
-          {/* Tab switcher — text only, solid anthracite underline (no gradient, no icons) */}
+          {/* Tab switcher — text only, solid anthracite underline (no gradient,
+              no icons). Absent when the caller asked for a single tab. */}
+          {!soloTab && (
           <div ref={tabInd.containerRef} style={{ padding: "14px 26px 0", display: "flex", gap: 4, borderBottom: `1px solid ${theme.borderFaint}`, position: "relative" }}>
             {ASSET_TABS.map(tb => {
               const active = tab === tb.id;
@@ -30786,6 +30822,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             })}
             <TabUnderline box={tabInd.box} darkMode={darkMode} />
           </div>
+          )}
           </>)}
 
           {/* Inline create (moodboards only) */}
@@ -46900,6 +46937,10 @@ export default function CircularMenu() {
           {currentView === "creations" && (
             <CreationsView session={session} userOrg={userOrg} brand={brandProfile} theme={theme} darkMode={darkMode}
               t={t} appLanguage={appLanguage} canEdit={canEditBrand}
+              onUploadStorage={uploadImageToStorage} onUploadDrive={uploadImageToDrive}
+              createNotification={createNotification} getProviderToken={getProviderToken}
+              ensureValidToken={ensureValidToken} autoReLogin={autoReLogin}
+              llmProvider={llmProvider} llmKeys={llmKeys}
               orgMembers={orgMembers} onOpenBoard={(id) => openWhiteboardFrom(id, "creations")}
               onPublish={(file) => { setPostVisual({ file, ts: Date.now() }); setCurrentView("createpost"); }}
               onBack={() => setCurrentView("dashboard")} />
