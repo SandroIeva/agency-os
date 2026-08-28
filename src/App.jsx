@@ -30122,6 +30122,10 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [selectedItem, setSelectedItem] = useState(null); // item open in the detail/lightbox
+  // The board's title: a heading until it is double-clicked. It was a bare
+  // input styled exactly like a heading, so nothing said it could be typed
+  // in, and every keystroke wrote a row to the database.
+  const [titleEdit, setTitleEdit] = useState(null);   // null = not renaming
   // ── Public link to a board ──
   // The link is a row in public_shares, not a snapshot: it shows the board as
   // it is, which is the point of handing it over and carrying on adding to it.
@@ -30164,7 +30168,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     setLoadingItems(false);
   };
 
-  const closeBoard = () => { setBoardFullscreen(false); setZoom(1); setTagFilter(null); setColorFilter(null); setActiveBoard(null); setItems([]); setSelectedItem(null); setShareOpen(false); setShareToken(null); setShareError(""); loadBoards(); };
+  const closeBoard = () => { setBoardFullscreen(false); setZoom(1); setTagFilter(null); setColorFilter(null); setActiveBoard(null); setItems([]); setSelectedItem(null); setShareOpen(false); setShareToken(null); setShareError(""); setTitleEdit(null); loadBoards(); };
 
   // ── The board's public link ──
   const shareUrl = shareToken
@@ -30865,8 +30869,30 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             <motion.div whileTap={{ scale: 0.92 }} onClick={closeBoard} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
             </motion.div>
-            <input value={activeBoard.title} onChange={e => renameBoard(e.target.value)}
-              style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, background: "transparent", border: "none", outline: "none", letterSpacing: -0.2, minWidth: 0, maxWidth: 240 }} />
+            {titleEdit === null ? (
+              <div onDoubleClick={() => setTitleEdit(activeBoard.title || "")}
+                title={appLanguage === "de" ? "Doppelklick zum Umbenennen" : "Double-click to rename"}
+                style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.2,
+                  minWidth: 0, maxWidth: 240, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  padding: "2px 6px", marginLeft: -6, borderRadius: 7, cursor: "text" }}>
+                {activeBoard.title || "Moodboard"}
+              </div>
+            ) : (
+              /* Saved once, when the name is finished. The old field wrote a
+                 row on every keystroke. */
+              <input autoFocus value={titleEdit}
+                onChange={e => setTitleEdit(e.target.value)}
+                onFocus={e => e.target.select()}
+                onBlur={() => { const t = titleEdit.trim(); setTitleEdit(null); if (t && t !== activeBoard.title) renameBoard(t); }}
+                onKeyDown={e => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                  if (e.key === "Escape") { setTitleEdit(null); e.currentTarget.blur(); }
+                }}
+                style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.2,
+                  minWidth: 0, maxWidth: 240, padding: "2px 6px", marginLeft: -6, borderRadius: 7,
+                  background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
+                  border: `1px solid ${theme.borderFaint}`, outline: "none" }} />
+            )}
           </div>
 
           {/* Center: view toggle (same icon segmented style as Files/Assets).
