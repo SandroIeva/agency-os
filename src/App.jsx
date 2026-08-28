@@ -36341,6 +36341,10 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
   const [genError, setGenError] = useState("");
   const [genStatus, setGenStatus] = useState("");
   const [describeText, setDescribeText] = useState("");
+  // Which way of adding one is on screen. It was two cards stacked, which
+  // asks somebody to compare two blocks before doing either. One question,
+  // two answers, one of them showing.
+  const [addMode, setAddMode] = useState("url");   // url | describe
   const [listening, setListening] = useState(false);
   const recogRef = useRef(null);
   const rotateRef = useRef(null);
@@ -36451,67 +36455,84 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
     const SubmitBtn = ({ ok, onClick, label = "Analysieren" }) => (
       <motion.button whileTap={{ scale: 0.97 }} onClick={onClick} disabled={!ok}
         style={{ height: 44, padding: "0 22px", borderRadius: 11, border: "none", cursor: ok ? "pointer" : "default", boxSizing: "border-box",
-          background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: ok ? 1 : 0.45, flexShrink: 0 }}>
+          background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
+          fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: ok ? 1 : 0.45, flexShrink: 0 }}>
         {generating ? "Analysiere…" : label}
       </motion.button>
     );
+    // The same bar the post composer uses, numbers and all: two ways of saying
+    // the same thing, and the app should not have two shapes for that.
+    const MODES = [
+      { key: "url", label: "Website oder Name" },
+      { key: "describe", label: "Selbst beschreiben" },
+    ];
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 760 }}>
         {competitors.length > 0 && <div style={{ alignSelf: "flex-start" }}><BackLink theme={theme} onClick={() => setScreen("overview")} label="Zurück" /></div>}
         <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, maxWidth: 600 }}>
-          Füge einen Wettbewerber hinzu — gib direkt einen Namen bzw. eine Website ein, oder beschreibe ihn kurz. Die KI erstellt daraus ein Profil und findet ähnliche Wettbewerber.
+          Die KI macht aus beidem ein Profil und findet ähnliche Wettbewerber dazu.
         </div>
 
-        {/* Card 1: Direkter Competitor (URL / name) */}
+        <div style={{ display: "flex", gap: 10 }}>
+          {MODES.map((m, i2) => {
+            const on = addMode === m.key;
+            return (
+              <div key={m.key} onClick={() => setAddMode(m.key)}
+                style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "13.5px 16px", borderRadius: 12, cursor: "pointer",
+                  background: on ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "#f1f1f4"),
+                  color: on ? "#fff" : theme.text, transition: "background .38s cubic-bezier(0.33, 1, 0.68, 1)" }}>
+                <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: on ? "rgba(255,255,255,0.5)" : theme.textDim }}>{String(i2 + 1).padStart(2, "0")}</span>
+                <span style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.label}</span>
+              </div>
+            );
+          })}
+        </div>
+
         <div style={{ padding: 22, borderRadius: 18, background: cardBg, display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text }}>Direkter Competitor</div>
-            <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Firmenname oder Website-URL eingeben.</div>
-          </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <div style={{ flex: 1 }}>
-              <input value={inputText} onChange={e => setInputText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && directOk) doGenerate(inputText); }}
-                placeholder="Instagram / instagram.com"
-                style={{ ...inputStyle, height: 44, border: `1px solid ${urlError ? "#e5484d" : theme.borderFaint}` }} />
-              {urlError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT, marginTop: 6 }}>Ungültige URL — prüfe die Schreibweise (z.B. instagram.com).</div>}
+          {addMode === "url" ? (<>
+            <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>
+              Firmenname oder Website. Die Seite wird gelesen, daraus entsteht das Profil.
             </div>
-            <SubmitBtn ok={directOk} onClick={() => doGenerate(inputText)} />
-          </div>
-        </div>
-
-        {/* Card 2: Competitor beschreiben (free text + dictation above the field) */}
-        <div style={{ padding: 22, borderRadius: 18, background: cardBg, display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text }}>Competitor beschreiben</div>
-            <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Beschreibe den Wettbewerber in ein paar Sätzen — tippen oder diktieren.</div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <div style={{ flex: 1 }}>
+                <input value={inputText} onChange={e => setInputText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && directOk) doGenerate(inputText); }}
+                  placeholder="Instagram / instagram.com" autoFocus
+                  style={{ ...inputStyle, height: 44, border: `1px solid ${urlError ? "#e5484d" : theme.borderFaint}` }} />
+                {urlError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT, marginTop: 6 }}>Ungültige URL. Prüf die Schreibweise, zum Beispiel instagram.com.</div>}
+              </div>
+              <SubmitBtn ok={directOk} onClick={() => doGenerate(inputText)} />
+            </div>
+          </>) : (<>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>
+                Ein paar Sätze reichen: was sie anbieten, für wen, und was sie anders machen.
+              </div>
               {dictationSupported && (
                 <motion.div whileTap={{ scale: 0.9 }} onClick={toggleDictation}
-                  style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", color: listening ? "#EF4444" : theme.accent, fontSize: 12, fontFamily: FONT, fontWeight: 500 }}>
+                  style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", flexShrink: 0,
+                    color: listening ? "#EF4444" : theme.textDim, fontSize: 12, fontFamily: FONT, fontWeight: 500 }}>
                   {listening ? (
-                    <><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="6" y="6" width="12" height="12" rx="2" fill="#EF4444"/></svg> Stopp</>
+                    <><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="6" y="6" width="12" height="12" rx="2" fill="#EF4444"/></svg> Stopp</>
                   ) : (
-                    <><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M5 10a7 7 0 0014 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 17v4M8 21h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> Diktieren</>
+                    <><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M5 10a7 7 0 0014 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 17v4M8 21h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> Diktieren</>
                   )}
                 </motion.div>
               )}
             </div>
-            <textarea value={describeText} onChange={e => setDescribeText(e.target.value)} rows={5}
+            <textarea value={describeText} onChange={e => setDescribeText(e.target.value)} rows={6} autoFocus
               placeholder="Eine Social-Media-Plattform für Foto- und Video-Sharing mit Fokus auf Stories und Reels…"
               style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6, border: `1px solid ${listening ? "#EF444450" : theme.borderFaint}` }} />
-          </div>
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <SubmitBtn ok={describeOk} onClick={() => doGenerate(describeText)} label="Profil erstellen" />
-          </div>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <SubmitBtn ok={describeOk} onClick={() => doGenerate(describeText)} label="Profil erstellen" />
+            </div>
+          </>)}
         </div>
 
         {genError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT }}>{genError}</div>}
         {generating && genStatus && (
           <div style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, fontFamily: FONT, color: theme.textSub }}>
             <motion.svg animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: "linear" }}
-              width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={acc} strokeWidth="2.5" strokeLinecap="round">
+              width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.text} strokeWidth="2.5" strokeLinecap="round">
               <path d="M21 12a9 9 0 1 1-6.219-8.56" />
             </motion.svg>
             <AnimatePresence mode="wait">
