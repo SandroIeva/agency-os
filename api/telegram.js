@@ -89,6 +89,8 @@ const T = {
     noteMade: "Notiz gespeichert.",
     noteEmpty: "Schreib dazu, was du dir merken willst: /notiz Preise anheben",
     newEmptyTask: "Schreib dazu, was zu tun ist: /aufgabe Angebot schreiben",
+    noteAsk: (body) => `<b>Neue Notiz</b>\n${body}\n\nWohin?`,
+    notePrivate: "Privat",
     askChecklist: (title) => `Checkliste für ${title}? Eine Zeile pro Punkt, als Antwort auf diese Nachricht.`,
     listed: (n) => `${n} ${n === 1 ? "Punkt" : "Punkte"} hinzugefügt.`,
     askDescribe: (title) => `Beschreibung für ${title}? Antworte einfach auf diese Nachricht.`,
@@ -143,6 +145,8 @@ const T = {
     noteMade: "Note saved.",
     noteEmpty: "Say what you want to remember: /note raise the prices",
     newEmptyTask: "Say what needs doing: /task write the proposal",
+    noteAsk: (body) => `<b>New note</b>\n${body}\n\nWhere?`,
+    notePrivate: "Private",
     askChecklist: (title) => `A checklist for ${title}? One line per item, as a reply to this message.`,
     listed: (n) => `${n} ${n === 1 ? "item" : "items"} added.`,
     askDescribe: (title) => `A description for ${title}? Just reply to this message.`,
@@ -556,7 +560,7 @@ export default async function handler(req) {
     // n and w belong to a NEW task and carry a workspace id where the others
     // carry a notification id, so they are handled before anything tries to
     // load a notification that was never involved.
-    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w", "x", "y", "z"].includes(action)) return answer("");
+    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w", "x", "y", "z", "q", "v"].includes(action)) return answer("");
 
     // The chat is the identity. A button is only ever pressed in the chat the
     // message was sent to, so nobody else can reach this task through it.
@@ -585,6 +589,44 @@ export default async function handler(req) {
         reply_markup: { force_reply: true, selective: true },
       });
       return answer("");
+    }
+
+    if (action === "q" || action === "v") {
+      // The note's own text, from the message this one replies to, with the
+      // command stripped the same way it was when the question was asked.
+      const raw = (cb.message?.reply_to_message?.text || "").replace(/^\/(notiz|note)(@\S+)?\s*/i, "").trim();
+      if (!raw) return answer(t.newGone, true);
+      const orgs = await workspacesFor(db, link.user_id);
+      const org = resolveHint(orgs, notifId);
+      if (!org) return answer(t.newDenied, true);
+      const projects = await projectsFor(db, link.user_id, org.id);
+
+      if (action === "v") {
+        await api(botToken, "editMessageReplyMarkup", {
+          chat_id: cbChat, message_id: cb.message.message_id,
+          reply_markup: { inline_keyboard: [
+            [{ text: t.notePrivate, callback_data: `q:${org.id.slice(0, ID_HINT)}:-` }],
+            ...projects.map(pr => [{ text: pr.name.slice(0, 60), callback_data: `q:${org.id.slice(0, ID_HINT)}:${pr.id.slice(0, ID_HINT)}` }]),
+          ] },
+        });
+        return answer("");
+      }
+
+      const project = hint && hint !== "-" ? resolveHint(projects, hint) : null;
+      if (hint && hint !== "-" && !project) return answer(t.newGone, true);
+      const made = await createNote(db, {
+        userId: link.user_id, orgId: org.id, content: raw, projectName: project?.name || null,
+      });
+      if (!made.ok) {
+        return answer(made.reason === "read_only" ? t.newReadOnly
+          : made.reason === "denied" ? t.newDenied : t.newFailed, true);
+      }
+      await api(botToken, "editMessageText", {
+        chat_id: cbChat, message_id: cb.message.message_id,
+        text: `<b>${esc(headLine(org.name, project?.name || t.notePrivate))}</b>\n${esc(raw)}\n\n<i>${esc(t.noteMade)}</i>`,
+        parse_mode: "HTML",
+      });
+      return answer(t.noteMade);
     }
 
     if (action === "n" || action === "w") {
@@ -866,11 +908,23 @@ export default async function handler(req) {
     if (!link?.user_id) return reply(t.notLinked);
     const body = text.replace(/^\/(notiz|note)(@\S+)?\s*/i, "");
     if (!body.trim()) return reply(t.noteEmpty);
+    // A note belongs to a project or to nobody, exactly as on the board, so it
+    // gets the same question a task gets. Nothing is written until it is
+    // answered, and the text comes back with the reply rather than being stored.
     const orgs = await workspacesFor(db, link.user_id);
-    const made = await createNote(db, { userId: link.user_id, orgId: orgs[0]?.id || null, content: body });
-    return reply(made.ok ? t.noteMade
-      : made.reason === "read_only" ? t.newReadOnly
-      : made.reason === "denied" ? t.newDenied : t.newFailed);
+    if (!orgs.length) return reply(t.newNoWorkspace);
+    const ask = async (org) => {
+      const projects = org ? await projectsFor(db, link.user_id, org.id) : [];
+      const rows = org
+        ? [[{ text: t.notePrivate, callback_data: `q:${org.id.slice(0, ID_HINT)}:-` }],
+           ...projects.map(pr => [{ text: pr.name.slice(0, 60), callback_data: `q:${org.id.slice(0, ID_HINT)}:${pr.id.slice(0, ID_HINT)}` }])]
+        : orgs.map(o => [{ text: o.name.slice(0, 60), callback_data: `v:${o.id.slice(0, ID_HINT)}` }]);
+      return api(botToken, "sendMessage", {
+        chat_id: chatId, text: t.noteAsk(esc(body.trim())), parse_mode: "HTML",
+        reply_to_message_id: msg.message_id, reply_markup: { inline_keyboard: rows },
+      }).then(() => json({ ok: true }));
+    };
+    return ask(orgs.length === 1 ? orgs[0] : null);
   }
 
   if (text.startsWith("/status")) {

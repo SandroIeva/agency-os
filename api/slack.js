@@ -72,6 +72,8 @@ const T = {
     newEmpty: "Schreib dazu, was zu tun ist: /i7os Angebot schreiben",
     noteMade: "Notiz gespeichert.",
     noteEmpty: "Schreib dazu, was du dir merken willst: /i7os notiz Preise anheben",
+    noteTitle: "Neue Notiz",
+    notePrivate: "Privat",
     newMade: "Angelegt.",
     newDenied: "Auf diesen Workspace hast du keinen Zugriff.",
     newReadOnly: "Dieses Konto hat keinen aktiven Plan. Zum Anlegen wird einer gebraucht.",
@@ -119,6 +121,8 @@ const T = {
     newEmpty: "Say what needs doing: /i7os write the proposal",
     noteMade: "Note saved.",
     noteEmpty: "Say what you want to remember: /i7os note raise the prices",
+    noteTitle: "New note",
+    notePrivate: "Private",
     newMade: "Created.",
     newDenied: "You do not have access to that workspace.",
     newReadOnly: "This account has no active plan. Creating needs one.",
@@ -523,11 +527,21 @@ export default async function handler(req) {
     if (asNote) {
       const body = said.slice(asNote[0].length);
       if (!body.trim()) return ephemeral(t.noteEmpty);
+      // Same question the board answers with its filter: a project, or
+      // nobody. Nothing is written until it is answered.
       const orgs = await workspacesFor(db, link.user_id);
-      const made = await createNote(db, { userId: link.user_id, orgId: orgs[0]?.id || null, content: body });
-      return ephemeral(made.ok ? t.noteMade
-        : made.reason === "read_only" ? t.newReadOnly
-        : made.reason === "denied" ? t.newDenied : t.newFailed);
+      if (!orgs.length) return ephemeral(t.newNoWorkspace);
+      if (orgs.length > 1) {
+        return ephemeral(t.noteTitle, draftBlocks(t, { t: body.trim(), note: 1 }, t.askProject,
+          orgs.map(o => ({ key: "o", label: o.name, set: { o: o.id.slice(0, ID_HINT) } }))));
+      }
+      const org = orgs[0];
+      const projects = await projectsFor(db, link.user_id, org.id);
+      return ephemeral(t.noteTitle, draftBlocks(t,
+        { t: body.trim(), note: 1, o: org.id.slice(0, ID_HINT), chosen: org.name }, t.askProject, [
+          { key: "p", label: t.notePrivate, set: { p: "-" } },
+          ...projects.map(pr => ({ key: "p", label: pr.name, set: { p: pr.id.slice(0, ID_HINT) } })),
+        ]));
     }
 
     const { title } = splitDraft(said);
@@ -649,6 +663,24 @@ export default async function handler(req) {
     if (!org) return replace(t.newDenied);
     const projects = await projectsFor(db, link.user_id, org.id);
     const project = st.p && st.p !== "-" ? resolveHint(projects, st.p) : null;
+
+    // A note asks one question and is done. It has no owner to pick and no
+    // deadline, which is the whole reason it is not a five-step wizard.
+    if (st.note) {
+      if (st.p === undefined) {
+        return replace(t.noteTitle, draftBlocks(t, { ...st, chosen: org.name }, t.askProject, [
+          { key: "p", label: t.notePrivate, set: { p: "-" } },
+          ...projects.map(pr => ({ key: "p", label: pr.name, set: { p: pr.id.slice(0, ID_HINT) } })),
+        ]));
+      }
+      const made = await createNote(db, {
+        userId: link.user_id, orgId: org.id, content: st.t, projectName: project?.name || null,
+      });
+      return replace(made.ok ? `${headLine(org.name, project?.name || t.notePrivate)} — ${t.noteMade}`
+        : made.reason === "read_only" ? t.newReadOnly
+        : made.reason === "denied" ? t.newDenied : t.newFailed);
+    }
+
     st.chosen = [org.name, st.p === undefined ? null : (project?.name || t.noProject),
                  t.prio[st.r], t.dueLabels[st.u]].filter(Boolean).join(" · ");
 

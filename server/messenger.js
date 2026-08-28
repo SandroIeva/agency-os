@@ -499,7 +499,7 @@ export const linkify = (escaped, flavour) => String(escaped || "").replace(URL_I
 // so a test now reads the app's and compares.
 export const NOTE_COLOURS = ["sand", "rose", "mint", "sky", "lavender", "peach", "sage", "stone"];
 
-export const createNote = async (db, { userId, orgId, content }) => {
+export const createNote = async (db, { userId, orgId, content, projectName }) => {
   const body = String(content || "").trim().slice(0, 8000);
   if (!userId || !body) return { ok: false, reason: "incomplete" };
   if (orgId) {
@@ -512,6 +512,9 @@ export const createNote = async (db, { userId, orgId, content }) => {
     user_id: userId,
     org_id: orgId || null,
     content: body,
+    // null is what the board calls "privat". A name puts it under that project,
+    // the same field the board filters on.
+    project_name: projectName || null,
     // The board picks a colour at random for a new note; a note arriving from a
     // chat should not be the one that always looks the same.
     color: NOTE_COLOURS[Math.floor(Math.random() * NOTE_COLOURS.length)],
