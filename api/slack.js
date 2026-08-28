@@ -64,6 +64,7 @@ const T = {
     cbFailed: "Hat nicht geklappt. Versuch es in der App.",
     connected: "Verbunden. Deine i7OS-Benachrichtigungen kommen ab jetzt hier an.",
     askProject: "Projekt?",
+    askWorkspace: "Workspace?",
     askPriority: "Priorität?",
     askDue: "Frist?",
     askAssignee: "Für wen?",
@@ -78,6 +79,7 @@ const T = {
     noteEmpty: "Schreib dazu, was du dir merken willst: /i7os notiz Preise anheben",
     noteTitle: "Neue Notiz",
     notePrivate: "Allgemein",
+    fileTitle: "Neues Bild",
     fileAsk: "Wohin in den Assets?",
     filePrivate: "Allgemein",
     fileSaved: (name, size) => `${name} liegt in den Assets (${size}).`,
@@ -126,6 +128,7 @@ const T = {
     cbFailed: "That did not work. Try it in the app.",
     connected: "Connected. Your i7OS notifications arrive here from now on.",
     askProject: "Project?",
+    askWorkspace: "Workspace?",
     askPriority: "Priority?",
     askDue: "Due?",
     askAssignee: "For whom?",
@@ -140,6 +143,7 @@ const T = {
     noteEmpty: "Say what you want to remember: /i7os note raise the prices",
     noteTitle: "New note",
     notePrivate: "General",
+    fileTitle: "New picture",
     fileAsk: "Where in Assets?",
     filePrivate: "General",
     fileSaved: (name, size) => `${name} is in Assets (${size}).`,
@@ -282,15 +286,15 @@ const buildBlocks = async (db, workspace, n, lang, appUrl, taskId, footer) => {
     ],
   });
   // The fallback line is what a push notification and a screen reader get.
-  return { blocks, text: `${title}${body ? " — " + body : ""}` };
+  return { blocks, text: `${title}${body ? ": " + body : ""}` };
 };
 
 // The wizard, as one ephemeral message that replaces itself. The whole state
 // travels in each button's value: Slack allows 2000 characters there, so unlike
 // Telegram it can simply carry the text instead of reaching back for it.
-const draftBlocks = (t, st, question, options) => ([
+const draftBlocks = (t, st, question, options, title) => ([
   { type: "section", text: { type: "mrkdwn",
-    text: `*${esc(t.newTask)}*\n${esc(st.t)}${st.chosen ? `\n\n_${esc(st.chosen)}_` : ""}` } },
+    text: `*${esc(title || t.newTask)}*\n${esc(st.t)}${st.chosen ? `\n\n_${esc(st.chosen)}_` : ""}` } },
   { type: "section", text: { type: "mrkdwn", text: `*${esc(question)}*` } },
   // Slack allows 25 elements in an actions block and wraps them itself.
   // action_id has to be unique within the block. Built from the field alone it
@@ -586,6 +590,23 @@ export default async function handler(req) {
 
       const orgs = await workspacesFor(db, link.user_id);
       if (!orgs.length) return drop("no workspaces", link.user_id);
+
+      // Slack delivers file_shared more than once: it retries anything it
+      // considers slow, and it sends duplicates of its own accord. Both name
+      // the same FILE, which is why the file is the key and the event id is
+      // not. The row is written before the question, so the second delivery
+      // finds it there and says nothing.
+      const once = await db.from("messenger_events")
+        .insert({ key: `slack:file:${evt.event.file_id}` }).select("key").maybeSingle();
+      if (once.error) {
+        if (once.error.code === "23505") return drop("already asked about this file", evt.event.file_id);
+        console.error("[Slack] dedupe insert failed, asking anyway:", once.error.message);
+      }
+      // Old keys are of no interest to anybody: a file nobody answered about
+      // within a week is not going to be answered about now.
+      db.from("messenger_events").delete()
+        .lt("created_at", new Date(Date.now() - 7 * 864e5).toISOString()).then(() => {});
+
       const one = orgs.length === 1;
       // Assets and a moodboard are two different places, and which one is meant
       // is the first thing to ask rather than something to guess.
@@ -597,7 +618,7 @@ export default async function handler(req) {
       ];
       // The question goes to the person's own chat with the bot, because that
       // is where a file they sent it belongs.
-      const blocks = draftBlocks(t, { t: f.name || "", ...st, chosen: one ? orgs[0].name : "" }, t.fileWhat, options)
+      const blocks = draftBlocks(t, { t: f.name || "", ...st, chosen: one ? orgs[0].name : "" }, t.fileWhat, options, t.fileTitle)
         .map(b => (b.type === "actions"
           ? { ...b, elements: b.elements.map(e => ({ ...e, action_id: e.action_id.replace("draft_", "asset_") })) }
           : b));
@@ -641,8 +662,8 @@ export default async function handler(req) {
       const orgs = await workspacesFor(db, link.user_id);
       if (!orgs.length) return ephemeral(t.newNoWorkspace);
       if (orgs.length > 1) {
-        return ephemeral(t.noteTitle, draftBlocks(t, { t: body.trim(), note: 1 }, t.askProject,
-          orgs.map(o => ({ key: "o", label: o.name, set: { o: o.id.slice(0, ID_HINT) } }))));
+        return ephemeral(t.noteTitle, draftBlocks(t, { t: body.trim(), note: 1 }, t.askWorkspace,
+          orgs.map(o => ({ key: "o", label: o.name, set: { o: o.id.slice(0, ID_HINT) } })), t.noteTitle));
       }
       const org = orgs[0];
       const projects = await projectsFor(db, link.user_id, org.id);
@@ -650,7 +671,7 @@ export default async function handler(req) {
         { t: body.trim(), note: 1, o: org.id.slice(0, ID_HINT), chosen: org.name }, t.askProject, [
           { key: "p", label: t.notePrivate, set: { p: "-" } },
           ...projects.map(pr => ({ key: "p", label: pr.name, set: { p: pr.id.slice(0, ID_HINT) } })),
-        ]));
+        ], t.noteTitle));
     }
 
     const { title } = splitDraft(said);
@@ -662,7 +683,7 @@ export default async function handler(req) {
     // One workspace is the normal case, and asking about it would be a question
     // with one answer.
     if (orgs.length > 1) {
-      return ephemeral(t.newTask, draftBlocks(t, { t: title }, t.askProject,
+      return ephemeral(t.newTask, draftBlocks(t, { t: title }, t.askWorkspace,
         orgs.map(o => ({ key: "o", label: o.name, set: { o: o.id.slice(0, ID_HINT) } }))));
     }
     const org = orgs[0];
@@ -777,8 +798,8 @@ export default async function handler(req) {
 
     // Which workspace, when there is more than one.
     if (!st.o) {
-      return replace(t.fileWhat, asAsset(draftBlocks(t, st, t.fileWhat,
-        [...orgs.map(o => ({ key: "o", label: o.name, set: { o: o.id.slice(0, ID_HINT) } })), cancel])));
+      return replace(t.fileWhat, asAsset(draftBlocks(t, st, t.askWorkspace,
+        [...orgs.map(o => ({ key: "o", label: o.name, set: { o: o.id.slice(0, ID_HINT) } })), cancel], t.fileTitle)));
     }
     const org = resolveHint(orgs, st.o);
     if (!org) return replace(t.newDenied);
@@ -790,23 +811,21 @@ export default async function handler(req) {
         { key: "d", label: t.fileToAssets, set: { d: "a" } },
         { key: "d", label: t.fileToMood, set: { d: "m" } },
         cancel,
-      ])));
+      ], t.fileTitle)));
     }
     if (st.d === "m" && !st.b) {
       const boards = await moodboardsFor(db, link.user_id, org.id);
       if (!boards.length) return replace(t.fileNoBoards);
       return replace(t.moodAsk, asAsset(draftBlocks(t, { ...st, chosen: org.name }, t.moodAsk,
-        [...boards.map(b => ({ key: "b", label: b.name, set: { b: b.id.slice(0, ID_HINT) } })), cancel])));
+        [...boards.map(b => ({ key: "b", label: b.name, set: { b: b.id.slice(0, ID_HINT) } })), cancel], t.fileTitle)));
     }
 
     if (st.d === "a" && st.p === undefined) {
-      const blocks = draftBlocks(t, { ...st, chosen: org.name }, t.fileAsk, [
+      return replace(t.fileAsk, asAsset(draftBlocks(t, { ...st, chosen: org.name }, t.fileAsk, [
         { key: "p", label: t.filePrivate, set: { p: "-" } },
         ...projects.map(pr => ({ key: "p", label: pr.name, set: { p: pr.id.slice(0, ID_HINT) } })),
-      ]).map(b => (b.type === "actions"
-        ? { ...b, elements: b.elements.map(e => ({ ...e, action_id: e.action_id.replace("draft_", "asset_") })) }
-        : b));
-      return replace(t.fileAsk, blocks);
+        cancel,
+      ], t.fileTitle)));
     }
 
     const project = st.p && st.p !== "-" ? resolveHint(projects, st.p) : null;
@@ -833,8 +852,8 @@ export default async function handler(req) {
         : t.newFailed);
     }
     return replace(board
-      ? `${headLine(org.name, board.name)} — ${t.moodSaved(board.name, humanSize(saved.size))}`
-      : `${headLine(org.name, project?.name || t.filePrivate)} — ${t.fileSaved(saved.file?.name || st.n, humanSize(saved.size))}`);
+      ? `${headLine(org.name, board.name)}\n${t.moodSaved(board.name, humanSize(saved.size))}`
+      : `${headLine(org.name, project?.name || t.filePrivate)}\n${t.fileSaved(saved.file?.name || st.n, humanSize(saved.size))}`);
   }
 
   // ── A step of the new-task wizard ─────────────────────────────────────────
@@ -860,12 +879,12 @@ export default async function handler(req) {
         return replace(t.noteTitle, draftBlocks(t, { ...st, chosen: org.name }, t.askProject, [
           { key: "p", label: t.notePrivate, set: { p: "-" } },
           ...projects.map(pr => ({ key: "p", label: pr.name, set: { p: pr.id.slice(0, ID_HINT) } })),
-        ]));
+        ], t.noteTitle));
       }
       const made = await createNote(db, {
         userId: link.user_id, orgId: org.id, content: st.t, projectName: project?.name || null,
       });
-      return replace(made.ok ? `${headLine(org.name, project?.name || t.notePrivate)} — ${t.noteMade}`
+      return replace(made.ok ? `${headLine(org.name, project?.name || t.notePrivate)}\n${t.noteMade}`
         : made.reason === "read_only" ? t.newReadOnly
         : made.reason === "denied" ? t.newDenied : t.newFailed);
     }

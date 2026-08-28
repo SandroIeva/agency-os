@@ -36,6 +36,10 @@ const json = (obj, status = 200) =>
 // a note are the two things people come here to DO, so they belong in the menu
 // rather than being folklore. Telegram picks the list by the READER's Telegram
 // language, so both exist and the handler answers to either name.
+// "/notiz …", "notiz: …", "Note - …". The slash is optional because free
+// text is how this bot is used, and the word is the whole signal.
+const NOTE_PREFIX = /^\/?(notiz|note)(@\S+)?\b[\s:,-]*/i;
+
 const COMMANDS = {
   de: [
     { command: "aufgabe", description: "Neue Aufgabe anlegen" },
@@ -62,7 +66,7 @@ const T = {
     stopped: "Verbindung getrennt. Du bekommst hier keine Benachrichtigungen mehr.",
     notLinked: "Hier ist nichts verbunden.",
     status: (n) => `Verbunden. Aktive Benachrichtigungen: ${n}.`,
-    help: "Ich schicke dir Benachrichtigungen aus i7OS. Verbinden kannst du dich in der App unter Einstellungen → Konto. /stop trennt die Verbindung.",
+    help: "Ich schicke dir Benachrichtigungen aus i7OS. Schreib mir einfach, was zu tun ist, dann wird eine Aufgabe daraus. Fang mit \"Notiz\" an, dann wird eine Notiz daraus. Ein Bild kommt in die Assets oder auf ein Moodboard. /stop trennt die Verbindung.",
     open: "In i7OS öffnen",
     btnPass: "Weitergeben",
     btnBack: "Zurück",
@@ -132,7 +136,7 @@ const T = {
     stopped: "Disconnected. No more notifications here.",
     notLinked: "Nothing is connected here.",
     status: (n) => `Connected. Active notification types: ${n}.`,
-    help: "I send you notifications from i7OS. Connect in the app under Settings → Account. /stop disconnects.",
+    help: "I send you notifications from i7OS. Write what needs doing and it becomes a task. Start with \"note\" and it becomes a note. A picture goes into Assets or onto a moodboard. /stop disconnects.",
     open: "Open in i7OS",
     btnPass: "Hand over",
     btnBack: "Back",
@@ -759,7 +763,7 @@ export default async function handler(req) {
     if (action === "q" || action === "v") {
       // The note's own text, from the message this one replies to, with the
       // command stripped the same way it was when the question was asked.
-      const raw = (cb.message?.reply_to_message?.text || "").replace(/^\/(notiz|note)(@\S+)?\s*/i, "").trim();
+      const raw = (cb.message?.reply_to_message?.text || "").replace(NOTE_PREFIX, "").trim();
       if (!raw) return answer(t.newGone, true);
       const orgs = await workspacesFor(db, link.user_id);
       const org = resolveHint(orgs, notifId);
@@ -1083,9 +1087,12 @@ export default async function handler(req) {
   // /notiz, or /note. A note needs no wizard: the RLS policies on notes are all
   // "own notes", so there is nobody to ask about and nothing to choose. That is
   // why this is a command and a task is a conversation.
-  if (text.startsWith("/notiz") || text.startsWith("/note")) {
+  const answering = replyTarget(msg.reply_to_message);
+
+  const asNote = answering ? null : NOTE_PREFIX.exec(text);
+  if (asNote) {
     if (!link?.user_id) return reply(t.notLinked);
-    const body = text.replace(/^\/(notiz|note)(@\S+)?\s*/i, "");
+    const body = text.slice(asNote[0].length);
     if (!body.trim()) return reply(t.noteEmpty);
     // A note belongs to a project or to nobody, exactly as on the board, so it
     // gets the same question a task gets. Nothing is written until it is
@@ -1094,10 +1101,13 @@ export default async function handler(req) {
     if (!orgs.length) return reply(t.newNoWorkspace);
     const ask = async (org) => {
       const projects = org ? await projectsFor(db, link.user_id, org.id) : [];
-      const rows = org
-        ? [[{ text: t.notePrivate, callback_data: `q:${org.id.slice(0, ID_HINT)}:-` }],
-           ...projects.map(pr => [{ text: pr.name.slice(0, 60), callback_data: `q:${org.id.slice(0, ID_HINT)}:${pr.id.slice(0, ID_HINT)}` }])]
-        : orgs.map(o => [{ text: o.name.slice(0, 60), callback_data: `v:${o.id.slice(0, ID_HINT)}` }]);
+      const rows = [
+        ...(org
+          ? [[{ text: t.notePrivate, callback_data: `q:${org.id.slice(0, ID_HINT)}:-` }],
+             ...projects.map(pr => [{ text: pr.name.slice(0, 60), callback_data: `q:${org.id.slice(0, ID_HINT)}:${pr.id.slice(0, ID_HINT)}` }])]
+          : orgs.map(o => [{ text: o.name.slice(0, 60), callback_data: `v:${o.id.slice(0, ID_HINT)}` }])),
+        [{ text: t.cancel, callback_data: "k:x" }],
+      ];
       return api(botToken, "sendMessage", {
         chat_id: chatId, text: t.noteAsk(esc(body.trim())), parse_mode: "HTML",
         reply_to_message_id: msg.message_id, reply_markup: { inline_keyboard: rows },
@@ -1134,7 +1144,6 @@ export default async function handler(req) {
     }).then(() => json({ ok: true }));
   }
 
-  const answering = replyTarget(msg.reply_to_message);
   if (answering) {
     if (!link?.user_id) return reply(t.notLinked);
     const done = answering.kind === "checklist"
