@@ -29808,6 +29808,16 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [selectedItem, setSelectedItem] = useState(null); // item open in the detail/lightbox
+  // ── Public link to a board ──
+  // The link is a row in public_shares, not a snapshot: it shows the board as
+  // it is, which is the point of handing it over and carrying on adding to it.
+  // What answers the link is api/share.js, which sends the board as html, json
+  // or markdown, so an agent that runs no JavaScript still gets the pictures.
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareToken, setShareToken] = useState(null);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [shareError, setShareError] = useState("");
   const fileInputRef = useRef(null);
   const canvasRef = useRef(null);
   const accent = theme.accent || "#8B7AFF";
@@ -29840,7 +29850,53 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     setLoadingItems(false);
   };
 
-  const closeBoard = () => { setBoardFullscreen(false); setZoom(1); setTagFilter(null); setColorFilter(null); setActiveBoard(null); setItems([]); setSelectedItem(null); loadBoards(); };
+  const closeBoard = () => { setBoardFullscreen(false); setZoom(1); setTagFilter(null); setColorFilter(null); setActiveBoard(null); setItems([]); setSelectedItem(null); setShareOpen(false); setShareToken(null); setShareError(""); loadBoards(); };
+
+  // ── The board's public link ──
+  const shareUrl = shareToken
+    ? `${typeof window !== "undefined" && window.location?.host && !/localhost|127\.0\.0\.1/i.test(window.location.host)
+        ? window.location.origin : "https://app.i7os.com"}/s/${shareToken}`
+    : null;
+  // Whether one exists is only worth asking when somebody opens the menu.
+  const loadShare = async (boardId) => {
+    const { data } = await supabase.from("public_shares")
+      .select("token").eq("kind", "moodboard").eq("target_id", boardId).is("revoked_at", null).maybeSingle();
+    setShareToken(data?.token || null);
+  };
+  const createShare = async () => {
+    if (shareBusy || !activeBoard || !userOrg?.id) return;
+    setShareBusy(true); setShareError("");
+    // No 0/O/I/l/1: these links get read aloud and typed by hand.
+    const abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+    const slug = (activeBoard.title || "moodboard").toLowerCase().normalize("NFKD")
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 28) || "moodboard";
+    let token = null;
+    for (let i = 0; i < 3 && !token; i++) {
+      const cand = `${slug}-${Array.from({ length: 6 }, () => abc[Math.floor(Math.random() * abc.length)]).join("")}`;
+      const { error } = await supabase.from("public_shares").insert({
+        token: cand, kind: "moodboard", target_id: activeBoard.id, org_id: userOrg.id,
+        created_by: session?.user?.id || null,
+      });
+      if (!error) { token = cand; break; }
+      // One live link per board, so a second press finds the first one rather
+      // than minting a link nobody can revoke.
+      if (error.code === "23505") { await loadShare(activeBoard.id); setShareBusy(false); return; }
+      if (i === 2) setShareError(appLanguage === "de"
+        ? "Link konnte nicht erstellt werden." : "The link could not be created.");
+    }
+    if (token) setShareToken(token);
+    setShareBusy(false);
+  };
+  const revokeShare = async () => {
+    if (!shareToken) return;
+    setShareBusy(true);
+    await supabase.from("public_shares").update({ revoked_at: new Date().toISOString() }).eq("token", shareToken);
+    setShareToken(null); setShareBusy(false); setShareCopied(false);
+  };
+  const copyShareUrl = () => {
+    try { navigator.clipboard.writeText(shareUrl); } catch (_) {}
+    setShareCopied(true); setTimeout(() => setShareCopied(false), 1600);
+  };
 
   // ── Board CRUD ──
   const createBoard = async () => {
@@ -30519,6 +30575,81 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {/* Share link. Same popover pattern as the Add menu right of it:
+                relative wrapper, absolute panel, a fixed sheet to click away.
+                Not a portal, because the panel belongs to this header and the
+                header is not transformed. */}
+            <div style={{ position: "relative" }}>
+              <motion.div whileTap={{ scale: 0.92 }}
+                onClick={() => { const open = !shareOpen; setShareOpen(open); setShareError(""); if (open && activeBoard) loadShare(activeBoard.id); }}
+                title={appLanguage === "de" ? "Link teilen" : "Share link"}
+                style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${shareOpen ? accent : theme.borderFaint}`,
+                  background: shareOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent",
+                  color: shareOpen ? accent : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
+                  <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
+                </svg>
+              </motion.div>
+              <AnimatePresence>
+                {shareOpen && (
+                  <>
+                    <div onClick={() => setShareOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                    <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                      transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+                      style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, width: 320,
+                        background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
+                        boxShadow: "0 16px 44px rgba(0,0,0,0.18)", padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                        {appLanguage === "de" ? "Board teilen" : "Share this board"}
+                      </div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
+                        {shareToken
+                          ? (appLanguage === "de"
+                              ? "Wer den Link hat, sieht die Bilder, ohne Konto. Der Link zeigt immer den aktuellen Stand."
+                              : "Anyone with the link sees the images, no account needed. It always shows the current state.")
+                          : (appLanguage === "de"
+                              ? "Erzeugt einen öffentlichen Link zu diesem Board, den du auch einem KI-Agenten geben kannst."
+                              : "Creates a public link to this board, one you can also hand to an AI agent.")}
+                      </div>
+                      {shareToken ? (
+                        <>
+                          <div style={{ padding: "9px 11px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`,
+                            background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", fontSize: 11.5, fontFamily: FONT,
+                            color: theme.text, wordBreak: "break-all", lineHeight: 1.45 }}>{shareUrl}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <motion.div whileTap={{ scale: 0.97 }} onClick={copyShareUrl}
+                              style={{ flex: 1, textAlign: "center", padding: "9px 14px", borderRadius: 10, cursor: "pointer",
+                                background: "#15151c", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+                              {shareCopied ? (appLanguage === "de" ? "Kopiert" : "Copied") : (appLanguage === "de" ? "Link kopieren" : "Copy link")}
+                            </motion.div>
+                            <motion.div whileTap={{ scale: 0.97 }} onClick={revokeShare}
+                              style={{ padding: "9px 14px", borderRadius: 10, cursor: shareBusy ? "default" : "pointer", opacity: shareBusy ? 0.6 : 1,
+                                border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>
+                              {appLanguage === "de" ? "Widerrufen" : "Revoke"}
+                            </motion.div>
+                          </div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
+                            {appLanguage === "de"
+                              ? "Für Agenten liefert derselbe Link auf Wunsch Daten: ?format=json oder ?format=md."
+                              : "For agents the same link also answers with data: ?format=json or ?format=md."}
+                          </div>
+                        </>
+                      ) : (
+                        <motion.div whileTap={{ scale: 0.97 }} onClick={createShare}
+                          style={{ textAlign: "center", padding: "10px 14px", borderRadius: 10, cursor: shareBusy ? "default" : "pointer",
+                            opacity: shareBusy ? 0.6 : 1, background: "#15151c", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
+                          {appLanguage === "de" ? "Link erstellen" : "Create link"}
+                        </motion.div>
+                      )}
+                      {shareError && (
+                        <div style={{ fontSize: 11.5, fontFamily: FONT, color: "#e0645f" }}>{shareError}</div>
+                      )}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
             {/* Fullscreen toggle — same button + behaviour as the document editor */}
             <motion.div whileTap={{ scale: 0.92 }} onClick={() => setBoardFullscreen(f => !f)}
               title={boardFullscreen ? (appLanguage === "de" ? "Vollbild beenden" : "Exit fullscreen") : (appLanguage === "de" ? "Vollbild" : "Fullscreen")}

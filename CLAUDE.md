@@ -84,6 +84,7 @@ not be created from the UI at all.
 | **Note** | `createNote` | App.jsx |
 | **Calendar event** | `createTeamEvent` | App.jsx |
 | **Chat conversation** | `startConversation` (1:1) and the group-creation modal | App.jsx |
+| **Public share link** | `createShare` in `AssetsView` (moodboard header, link icon) | App.jsx |
 | **File upload** | always through `uploadTracked` — never call `supabase.storage.upload` directly, or the storage ledger drifts | App.jsx |
 
 ⚠ **Two things are created from MORE than one place**: workspaces (3) and
@@ -144,6 +145,7 @@ Multi-tenant: nearly every row carries `org_id` (workspace) and often `project_i
 - **Files/Assets:** `user_files`, `user_folders`, `user_drive_files`, `file_metadata`, `moodboards`, `moodboard_items`
 - **Whiteboard:** `whiteboards`, `whiteboard_items`, `whiteboard_shares`
 - **Chat:** `chat_conversations`, `chat_participants`, `chat_messages`
+- **Public links:** `public_shares` (token → one thing in a workspace, today only `kind: moodboard`; one live link per thing, revoked not deleted; NO public read policy, the endpoint reads it with the service key so a token cannot be used to enumerate a workspace's other links)
 - **Brand:** `brand_profile`, `brand_shares`, `brand_canvases` (ONE jsonb doc
   per canvas — see the pitfall below), `brand_canvas_versions` (the previous
   doc on every change, 20 deep, written by a `before update` trigger;
@@ -167,7 +169,7 @@ publication, so canvas collaboration rides entirely on broadcast).
 
 ## Serverless functions (`api/`)
 
-`chat-multi` (unified Claude/OpenAI/Gemini chat), `fetch-brand` (multi-mode POST/GET: brand analysis / weather / preview / **`mode:"pdf"`** brand-book PDF parse / **`mode:"zip"`** brand-package ZIP inspect), `send` (multi-mode POST, dispatched by `mode`: `"invite"` / `"project-invite"` / `"push-setup"` email via Resend, `"push"` web-push via VAPID), `google-fonts` (CORS proxy, **edge**), `img-proxy` (CORS image proxy for PDF export, **edge**), `drive-download` (**edge**), `workspace-delete` (**edge**: admin-only; wipes ALL of a workspace's storage assets via the service key — using the `org_storage_objects` RPC — then deletes the org so nothing is left on the server), `redirect` (short links `/i/:slug`), `refresh-token` (Google OAuth), `tts`,
+`chat-multi` (unified Claude/OpenAI/Gemini chat), `fetch-brand` (multi-mode POST/GET: brand analysis / weather / preview / **`mode:"pdf"`** brand-book PDF parse / **`mode:"zip"`** brand-package ZIP inspect), `send` (multi-mode POST, dispatched by `mode`: `"invite"` / `"project-invite"` / `"push-setup"` email via Resend, `"push"` web-push via VAPID), `google-fonts` (CORS proxy, **edge**), `img-proxy` (CORS image proxy for PDF export, **edge**), `drive-download` (**edge**), `workspace-delete` (**edge**: admin-only; wipes ALL of a workspace's storage assets via the service key — using the `org_storage_objects` RPC — then deletes the org so nothing is left on the server), `redirect` (short links `/i/:slug`), `share` (**edge**: `/s/<token>` public link, rewritten in vercel.json. Answers the SAME url as html, `?format=json` or `?format=md`, and embeds the json inside the html. This exists because the app's own share route is the SPA: fetched without a browser, `?b=<token>` is 1439 bytes of empty shell, so a link handed to an agent carried nothing. Reads `public_shares` with the service key), `refresh-token` (Google OAuth), `tts`,
 `slack` (**edge**: the second messenger, sharing `server/messenger.js` with
 Telegram. Verbs: `?mode=install&state=<one-time token>` sends somebody to
 Slack's consent screen, `/slack/callback` (rewritten in vercel.json) brings them
@@ -270,5 +272,6 @@ FigJam-style infinite canvas (`WhiteboardView`), reachable via Erstellen → Bra
 - **Never wrap `createPortal` in `<AnimatePresence>`.** AnimatePresence tracks its children and drops the ones it cannot, and a portal is one of those — the overlay is built and then discarded before it reaches the DOM, so the trigger looks like a dead button. Proven in an isolated repro against this React/Framer pair: wrapped → absent, direct → present. Every working overlay in the app (`ChannelPreview`, `ImageInsertModal`, the canvas editor, the whiteboard's context menu) portals directly.
 - New overlays must clear the app's real z-index ceiling: overlays reach **100002**, and the workspace-create modal alone sits at 9999. A modal placed at 4000 renders behind the very dialog that opened it (the upgrade dialog now uses 100003, the canvas editor 100004). **`ImageInsertModal` sits at 100010 on purpose** — it is opened FROM those overlays, so it has to clear all of them. It was at 100000 and opened invisibly behind the channel preview; the click worked, the modal rendered, nobody could see it.
 - Anything `position: fixed` at the top of the viewport collides with the dashboard's top-right bar (bell/weather, `top: 16`). The read-only banner shifts that bar to `top: 52` while visible.
+- **A share link that only a browser can read is not a share link.** The SPA renders `?b=` client-side; `curl` gets the shell. Anything meant for an agent, a crawler or a chat preview has to be answered by a function, not by the app.
 - Vercel Cron only fires on **production** deployments, and Hobby allows one run per day. A cron entry in `vercel.json` does nothing on Preview.
 - Trigger logic can be tested safely against production: wrap test inserts in a plpgsql `BEGIN … EXCEPTION` block that ends with `raise exception 'undo'` — the savepoint rolls everything back. To make `auth.uid()` return a user inside such a test, `perform set_config('request.jwt.claims', json_build_object('sub', <uuid>)::text, true)`.
