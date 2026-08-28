@@ -427,11 +427,34 @@ function orbDevice() {
 
 // `fallback` is what stands here when WebGPU is missing or the device is lost.
 // Not a blank hole: this orb is the only thing in that corner.
-function LiquidOrb({ size = 48, speed = 1.5, fallback = null }) {
+//
+// Three things happen on hover, and all three are small on purpose: the orb
+// leans a few pixels toward the cursor, its glow comes up, and the fluid runs
+// faster. It is a 70px ball in the corner of a quiet screen; anything louder
+// reads as a bug rather than as an invitation.
+function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, fallback = null }) {
   const canvasRef = useRef(null);
+  const wrapRef = useRef(null);
   const [failed, setFailed] = useState(false);
+  const [hover, setHover] = useState(false);
+  const [pull, setPull] = useState({ x: 0, y: 0 });
+  // Read inside the frame loop rather than closed over: the loop is started
+  // once, and a speed captured at that moment would never change again.
   const speedRef = useRef(speed);
-  speedRef.current = speed;
+  speedRef.current = hover ? hoverSpeed : speed;
+
+  // The lean. Proportional to how far off centre the cursor is, capped at a
+  // seventh of the orb, and it snaps back on leave rather than sticking.
+  const onMove = (e) => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const reach = Math.max(size, 1);
+    const dx = (e.clientX - (r.left + r.width / 2)) / reach;
+    const dy = (e.clientY - (r.top + r.height / 2)) / reach;
+    const max = size * 0.14;
+    setPull({ x: Math.max(-1, Math.min(1, dx)) * max, y: Math.max(-1, Math.min(1, dy)) * max });
+  };
 
   useEffect(() => {
     let raf = 0, alive = true;
@@ -486,8 +509,26 @@ function LiquidOrb({ size = 48, speed = 1.5, fallback = null }) {
 
   if (failed) return fallback;
   return (
-    <canvas ref={canvasRef}
-      style={{ width: size, height: size, display: "block", borderRadius: "50%" }} />
+    // The lean lives on this wrapper and nothing else does. Framer writes the
+    // whole `transform` when it animates x/y, so a positioning transform on
+    // the same element would be overwritten every frame.
+    <motion.div ref={wrapRef}
+      onPointerEnter={() => setHover(true)}
+      onPointerMove={onMove}
+      onPointerLeave={() => { setHover(false); setPull({ x: 0, y: 0 }); }}
+      animate={{ x: pull.x, y: pull.y }}
+      transition={{ type: "spring", stiffness: 210, damping: 17, mass: 0.5 }}
+      style={{ width: size, height: size, borderRadius: "50%", position: "relative" }}>
+      <canvas ref={canvasRef}
+        style={{ width: size, height: size, display: "block", borderRadius: "50%",
+          // A glow, not a halo: two soft shadows in the orb's own violet, and
+          // the transition is what makes hover feel like a response instead of
+          // a switch.
+          boxShadow: hover
+            ? `0 0 ${size * 0.55}px rgba(139,122,255,0.34), 0 0 ${size * 0.22}px rgba(180,200,255,0.22)`
+            : `0 0 ${size * 0.34}px rgba(139,122,255,0.16), 0 0 ${size * 0.14}px rgba(180,200,255,0.10)`,
+          transition: "box-shadow 0.45s cubic-bezier(0.22, 1, 0.36, 1)" }} />
+    </motion.div>
   );
 }
 
@@ -51172,7 +51213,7 @@ export default function CircularMenu() {
         {/* Sphere — right third (stays visible & clickable in document fullscreen) */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "flex-end", pointerEvents: "auto" }}>
           <div style={{ cursor: "pointer" }} onClick={startVoice}>
-            <LiquidOrb size={58} fallback={<AISphere darkMode={darkMode} />} />
+            <LiquidOrb size={70} fallback={<AISphere darkMode={darkMode} />} />
           </div>
         </div>
       </div>
