@@ -35943,7 +35943,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
     const OptCard = ({ icon, title, desc, onClick }) => (
       <motion.div whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }} onClick={onClick}
         style={{ flex: 1, minWidth: 220, cursor: "pointer", padding: 24, borderRadius: 18, background: cardBg, border: `1px solid ${theme.borderFaint}`, display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 13, background: acc + "1f", color: acc, display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</div>
+        <div style={{ width: 44, height: 44, borderRadius: 13, background: "#fff", color: "#15151c", display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</div>
         <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{title}</div>
         <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>{desc}</div>
       </motion.div>
@@ -35956,15 +35956,24 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
           </div>
         )}
         <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, maxWidth: 560 }}>
-          Lege eine Persona an — beschreibe sie kurz und lass sie von der KI ausarbeiten, oder fülle die Vorlage selbst aus.
+          Lege eine Persona an. Beschreibe sie kurz und lass sie von der KI ausarbeiten, oder fülle die Vorlage selbst aus.
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
           <OptCard
-            icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg>}
+            icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9.75" cy="8" r="3.25"/>
+              <path d="M15.5 20v-1.6a3.4 3.4 0 0 0-3.4-3.4H7.4A3.4 3.4 0 0 0 4 18.4V20"/>
+              <path d="M18.6 3.6l.85 2.15 2.15.85-2.15.85-.85 2.15-.85-2.15-2.15-.85 2.15-.85z"/>
+            </svg>}
             title="Persona beschreiben" desc="Beschreibe die Persona in ein paar Sätzen. Die KI füllt Name, Beruf, Motivations, Goals und Pains automatisch aus."
             onClick={() => { setManualText(""); setGenError(""); setScreen("manual"); }} />
           <OptCard
-            icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>}
+            icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3.5" y="3.5" width="17" height="17" rx="3"/>
+              <line x1="7.5" y1="9.5" x2="16.5" y2="9.5"/>
+              <line x1="7.5" y1="13.5" x2="16.5" y2="13.5"/>
+              <line x1="7.5" y1="17.5" x2="12.5" y2="17.5"/>
+            </svg>}
             title="Vorlage nutzen" desc="Starte mit einer leeren Persona-Karte und trage alle Felder selbst ein."
             onClick={startTemplate} />
         </div>
