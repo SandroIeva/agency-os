@@ -44995,7 +44995,7 @@ export default function CircularMenu() {
     const url = new URL(window.location.href);
     url.searchParams.delete("slack");
     window.history.replaceState({}, "", url.pathname + (url.search || ""));
-    if (status === "connected") { readSlackLink().then(setSlackLink); setSettingsTab("workspace"); setCurrentView("settings"); }
+    if (status === "connected") { readSlackLink().then(setSlackLink); setSettingsTab("account"); setCurrentView("settings"); }
     else if (status !== "cancelled") {
       setSlackErr(appLanguage === "de"
         ? "Die Verbindung zu Slack ist nicht zustande gekommen. Versuch es noch einmal."
@@ -45034,6 +45034,94 @@ export default function CircularMenu() {
     const { error } = await supabase.from("messenger_links").delete().eq("id", slackLink.id);
     if (error) setSlackErr(error.message); else setSlackLink(null);
     setSlackBusy(false);
+  };
+
+  // ── Pinterest ─────────────────────────────────────────────────────────────
+  // Asked at runtime like Slack, and for the same reason: an env var added
+  // after a build does not reach a build-time flag.
+  //
+  // The connection belongs to the WORKSPACE, not to the person, so this reloads
+  // when the workspace changes. Telegram and Slack are the other way round.
+  const [pinReady, setPinReady] = useState(false);
+  const [pinConn, setPinConn] = useState(null);   // { connected, username, needs_reconnect }
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinErr, setPinErr] = useState("");
+
+  const readPinterest = useCallback(async () => {
+    if (!userOrg?.id) return null;
+    try {
+      const r = await fetch("/api/pinterest", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "status", orgId: userOrg.id }),
+      });
+      if (!r.ok) return null;
+      const j = await r.json().catch(() => null);
+      return j?.connected ? j : null;
+    } catch { return null; }
+  }, [userOrg?.id]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/pinterest?check=1");
+        const info = r.ok ? await r.json().catch(() => null) : null;
+        if (alive) setPinReady(!!info?.configured);
+      } catch { if (alive) setPinReady(false); }
+      const row = await readPinterest();
+      if (alive) setPinConn(row);
+    })();
+    return () => { alive = false; };
+  }, [readPinterest]);
+
+  // Pinterest sends people back to /?pinterest=<status>. Read once, then taken
+  // out of the URL so a reload does not replay it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("pinterest");
+    if (!status) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("pinterest");
+    window.history.replaceState({}, "", url.pathname + (url.search || ""));
+    if (status === "connected") { readPinterest().then(setPinConn); setSettingsTab("account"); setCurrentView("settings"); }
+    else if (status !== "cancelled") {
+      setPinErr(appLanguage === "de"
+        ? "Die Verbindung zu Pinterest ist nicht zustande gekommen. Versuch es noch einmal."
+        : "The Pinterest connection did not go through. Try again.");
+    }
+  }, []); // eslint-disable-line
+
+  const startPinterestConnect = async () => {
+    setPinBusy(true); setPinErr("");
+    try {
+      // The same one-time token the messengers use. p_org is what tells the
+      // callback which workspace is being connected.
+      const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
+        p_org: userOrg?.id || null, p_kind: "pinterest", p_lang: appLanguage === "en" ? "en" : "de",
+      });
+      if (error || !token) throw error || new Error("token");
+      // Full navigation, not a popup: Pinterest's consent screen is a page, and
+      // a blocked popup would look like a dead button.
+      window.location.href = `/api/pinterest?mode=install&state=${encodeURIComponent(token)}`;
+    } catch (e) {
+      setPinErr(appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection.");
+      setPinBusy(false);
+    }
+  };
+
+  const disconnectPinterest = async () => {
+    if (!userOrg?.id) return;
+    setPinBusy(true); setPinErr("");
+    try {
+      await fetch("/api/pinterest", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "disconnect", orgId: userOrg.id }),
+      });
+      setPinConn(null);
+    } catch (e) {
+      setPinErr(appLanguage === "de" ? "Trennen hat nicht funktioniert." : "Disconnecting did not work.");
+    }
+    setPinBusy(false);
   };
 
   const disconnectTg = async () => {
@@ -51169,11 +51257,14 @@ export default function CircularMenu() {
               </div>
 
               {/* Integrations section */}
-              {/* Integrations live under Account, not under Workspace. Every
-                  row here is a link between a PERSON and a service: their
-                  Google login, their Slack, their Telegram. A messenger link
-                  belongs to the person and survives changing workspace, and
-                  looking for it under Workspace is looking in the wrong place. */}
+              {/* Integrations live under Account, not under Workspace. Most rows
+                  here are a link between a PERSON and a service: their Google
+                  login, their Slack, their Telegram. A messenger link belongs to
+                  the person and survives changing workspace, and looking for it
+                  under Workspace is looking in the wrong place.
+                  Pinterest is the exception and says so in its own row: one
+                  account per workspace, shared by everybody in it, because its
+                  boards are the team's and not one person's. */}
               {settingsTab === "account" && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
@@ -51261,6 +51352,54 @@ export default function CircularMenu() {
                   </div>
                   {slackErr && (
                     <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{slackErr}</div>
+                  )}
+                  {/* Pinterest. The one integration here that belongs to the
+                      workspace rather than to the person signed in, so it says
+                      whose account it is: a team sharing a workspace shares
+                      this connection. */}
+                  {pinReady && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px", borderTop: `1px solid ${theme.borderFaint}`,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="#E60023" aria-hidden="true">
+                        <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146A12 12 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Pinterest</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {pinConn
+                          ? (pinConn.needs_reconnect
+                              ? (appLanguage === "de" ? "Die Verbindung ist abgelaufen. Einmal neu verbinden." : "The connection expired. Connect again.")
+                              : (appLanguage === "de"
+                                  ? `Verbunden${pinConn.username ? ` als @${pinConn.username}` : ""}. Gilt für diesen Workspace.`
+                                  : `Connected${pinConn.username ? ` as @${pinConn.username}` : ""}. Applies to this workspace.`))
+                          : (appLanguage === "de"
+                              ? "Boards und Pins hereinholen, und Bilder als Pin veröffentlichen."
+                              : "Bring in boards and pins, and publish images as a pin.")}
+                      </div>
+                    </div>
+                    <motion.button whileTap={{ scale: 0.97 }}
+                      onClick={pinBusy ? undefined : (pinConn ? disconnectPinterest : startPinterestConnect)}
+                      style={{ padding: "8px 14px", borderRadius: 10, cursor: pinBusy ? "wait" : "pointer",
+                        border: `1px solid ${pinConn ? theme.borderFaint : "transparent"}`,
+                        background: pinConn ? "transparent" : "#15151c",
+                        color: pinConn ? theme.text : "#fff",
+                        fontFamily: FONT, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0,
+                        opacity: pinBusy ? 0.6 : 1 }}>
+                      {pinConn ? (appLanguage === "de" ? "Trennen" : "Disconnect")
+                        : (appLanguage === "de" ? "Verbinden" : "Connect")}
+                    </motion.button>
+                  </div>
+                  )}
+                  {pinErr && (
+                    <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{pinErr}</div>
                   )}
                   {/* Telegram, in the list with the others. It used to be a
                       section of its own on the Account tab, which is not where
