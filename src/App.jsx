@@ -31739,7 +31739,10 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {tab === "moodboards" && (
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
             {loadingBoards ? (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+                <MetaballsLoader size={52} color={metaballColor(darkMode)}
+                  label={appLanguage === "de" ? "Moodboards werden geladen" : "Loading moodboards"} />
+              </div>
             ) : boards.length === 0 ? (
               // gap 9 instead of 14: the title and its sentence belong together,
               // and at 14 they read as two separate statements.
@@ -32064,7 +32067,10 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
         {/* Content */}
         <div style={{ flex: 1, minHeight: 0, overflow: view === "canvas" ? "hidden" : "auto", position: "relative" }}>
           {loadingItems ? (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+              <MetaballsLoader size={52} color={metaballColor(darkMode)}
+                label={appLanguage === "de" ? "Bilder werden geladen" : "Loading images"} />
+            </div>
           ) : items.length === 0 ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 9, padding: "20px 20px 70px" }}>
               {/* The three fanned references, as supplied. A picture of what a
@@ -43721,6 +43727,52 @@ If you don't know a field, infer a plausible value. Write all text values in the
     </motion.div>
   );
 }
+// The metaballs loader (beui.dev/components/motion/loader), rewritten in this
+// app's own terms: no Tailwind, no shadcn, Framer Motion straight from the
+// import at the top of this file.
+//
+// Two circles slide past each other behind a gooey filter: a big blur, then a
+// colour matrix that pushes the alpha channel hard (×20, −8) so the soft edges
+// snap back to a hard one. Where the two blurs overlap the alpha clears the
+// threshold and they read as one blob that stretches and splits.
+//
+// The colour comes from `currentColor`, so the caller sets it once on the
+// wrapper and light and dark each get their own.
+function MetaballsLoader({ size = 44, speed = 1, color, label }) {
+  // useId, not a counter: two of these on one page would otherwise share a
+  // filter id, and the second would silently take the first one's filter.
+  const fid = "goo-" + useId().replace(/:/g, "");
+  // Somebody who asked their system for less movement gets a calm pulse
+  // instead of two things sliding about.
+  const reduce = typeof window !== "undefined"
+    && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  const ball = (from, to, still) => (
+    <motion.circle cy="50" r="15" cx={reduce ? still : from}
+      animate={reduce ? { opacity: [0.4, 1, 0.4] } : { cx: [from, to, from] }}
+      transition={{ duration: speed * 1.6, ease: "easeInOut", repeat: Infinity }} />
+  );
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" role="img"
+      aria-label={label || "Loading"} style={{ color, display: "block", overflow: "visible" }}>
+      <defs>
+        <filter id={fid}>
+          <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b" />
+          <feColorMatrix in="b" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -8" />
+        </filter>
+      </defs>
+      <g filter={`url(#${fid})`} fill="currentColor">
+        {ball(30, 70, 40)}
+        {ball(70, 30, 60)}
+      </g>
+    </svg>
+  );
+}
+
+// What the loader is worth looking at against: near-white on dark, anthracite
+// on light, both a step short of the full text colour. At full strength two
+// solid blobs read as content rather than as waiting.
+const metaballColor = (darkMode) => (darkMode ? "rgba(244,244,247,0.82)" : "rgba(21,21,28,0.72)");
+
 // ── Saying which image model to use ─────────────────────────────────────────
 // The keys mirror MODELS in api/generate.js; the server stays the authority on
 // what exists, this table only teaches the ear. Longest alias first: "flux 2
