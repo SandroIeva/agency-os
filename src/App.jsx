@@ -34628,10 +34628,6 @@ const DOC_SKILLS = [
 // not documents, so they had nowhere to live.
 //
 // Categories are chips, not folders. A folder means "put it in one place and
-// look for it there"; these are ten or twenty links and the useful question is
-// "show me the tools", which is a filter. The chips are built from what is
-// actually saved, plus the three names most workspaces reach for first, so the
-// row is never empty and never a list of empty drawers.
 // The search box of a file-manager tab. Height and width are stated, not
 // inherited: the row's other controls are 36 tall, and a box that only fills
 // its padding sits two pixels higher in a row that has none of them.
@@ -34671,7 +34667,6 @@ function SegmentedFilter({ value, onChange, options, theme, darkMode }) {
   );
 }
 
-const LINK_CATEGORY_SUGGESTIONS = ["Skills", "Tools", "Inspiration"];
 // The bit of a url a person recognises. Fails soft: something that is not a url
 // yet is shown as typed rather than as an error.
 const linkHost = (url) => {
@@ -34699,25 +34694,38 @@ async function linkRowPreview(url) {
 function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", projectId = null, addRef, canEdit = true }) {
   const de = appLanguage === "de";
   const [rows, setRows] = useState(null);          // null = loading
-  const [cat, setCat] = useState("*");             // "*" = all
+  const [folders, setFolders] = useState([]);
+  const [currentFolder, setCurrentFolder] = useState(null); // null = root
+  const [folderMenu, setFolderMenu] = useState(null);
   const [scope, setScope] = useState("all");       // all | workspace | mine
+  const [sortMode, setSortMode] = useState("added"); // added | name — the two Media offers
+  const [layout, setLayout] = useState("grid");    // grid | list
   const [q, setQ] = useState("");
-  const [editing, setEditing] = useState(null);    // { id?, url, title, category, note }
+  const [editing, setEditing] = useState(null);    // { id?, url, title, folder_id, note }
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   const load = async () => {
-    if (!userOrg?.id) { setRows([]); return; }
+    if (!userOrg?.id) { setRows([]); setFolders([]); return; }
     // Everything the workspace has. The switch on the right decides what of it
     // is shown, which it cannot do if the query has already thrown the rest
     // away. Inside a project that means this project's links and the
     // workspace-wide ones; outside one, all of them.
     let sel = supabase.from("workspace_links").select("*").eq("org_id", userOrg.id);
-    if (projectId) sel = sel.or(`project_id.eq.${projectId},project_id.is.null`);
-    const { data } = await sel.order("created_at", { ascending: false });
+    let fsel = supabase.from("link_folders").select("*").eq("org_id", userOrg.id);
+    if (projectId) {
+      sel = sel.or(`project_id.eq.${projectId},project_id.is.null`);
+      fsel = fsel.or(`project_id.eq.${projectId},project_id.is.null`);
+    }
+    const [{ data }, { data: fdata }] = await Promise.all([
+      sel.order("created_at", { ascending: false }),
+      fsel.order("position").order("name"),
+    ]);
     setRows(data || []);
+    setFolders(fdata || []);
     backfillPreviews(data || []);
   };
+  useEffect(() => { load(); }, [userOrg?.id, projectId]); // eslint-disable-line
 
   // Links saved before there was anything to save. They fill themselves in
   // once, in the background: the row is already on screen, so this only ever
@@ -34744,11 +34752,11 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
     }
     backfilling.current = false;
   };
-  useEffect(() => { load(); }, [userOrg?.id, projectId]); // eslint-disable-line
 
-  const blank = { url: "", title: "", category: LINK_CATEGORY_SUGGESTIONS[0], note: "" };
-  useEffect(() => { if (addRef) addRef.current = () => { setErr(""); setEditing({ ...blank }); }; },
-    [addRef]); // eslint-disable-line
+  // A new link lands in the folder you are standing in. Anywhere else would be
+  // asking somebody who just opened Tools to say "Tools".
+  const blank = () => ({ url: "", title: "", folder_id: currentFolder, note: "" });
+  useEffect(() => { if (addRef) addRef.current = () => { setErr(""); setEditing(blank()); }; });
 
   const save = async () => {
     const url = (editing?.url || "").trim();
@@ -34761,7 +34769,7 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
       url,
       // A title the person typed wins. They renamed it for a reason.
       title: (editing.title || "").trim() || meta?.title || linkHost(url),
-      category: (editing.category || "").trim() || LINK_CATEGORY_SUGGESTIONS[0],
+      folder_id: editing.folder_id || null,
       note: (editing.note || "").trim() || null,
       favicon: meta?.favicon || editing.favicon || null,
       image_url: meta?.image_url || editing.image_url || null,
@@ -34783,29 +34791,110 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
     await supabase.from("workspace_links").delete().eq("id", row.id);
   };
 
+  const addFolder = async () => {
+    const name = (window.prompt(de ? "Name des Ordners" : "Folder name") || "").trim();
+    if (!name) return;
+    const { error } = await supabase.from("link_folders").insert({
+      org_id: userOrg.id, project_id: projectId || null, name,
+      position: folders.length + 10, created_by: session?.user?.id || null });
+    if (error) { setErr(planLimitError(error, de) || error.message); return; }
+    load();
+  };
+  const renameFolder = async (fo) => {
+    const name = (window.prompt(de ? "Neuer Name" : "New name", fo.name) || "").trim();
+    if (!name || name === fo.name) return;
+    await supabase.from("link_folders").update({ name, updated_at: new Date().toISOString() }).eq("id", fo.id);
+    load();
+  };
+  // The links survive. folder_id is ON DELETE SET NULL, so what was inside
+  // moves to the root rather than going down with the folder. Asked in a
+  // modal, not window.confirm, which the rest of the app has already left.
+  const [folderToDelete, setFolderToDelete] = useState(null);
+  const deleteFolder = (fo) => setFolderToDelete(fo);
+  const performDeleteFolder = async () => {
+    const fo = folderToDelete;
+    if (!fo) return;
+    setFolderToDelete(null);
+    await supabase.from("link_folders").delete().eq("id", fo.id);
+    if (currentFolder === fo.id) setCurrentFolder(null);
+    load();
+  };
+
   const everything = rows || [];
-  // The switch comes first: the category chips and their counts describe what
-  // is on screen, so they have to count the same set the list draws.
+  // The switch comes first: everything downstream describes what is on screen,
+  // so it has to work from the same set the list draws.
   const me = session?.user?.id || null;
-  const all = everything.filter(r =>
+  const inScope = everything.filter(r =>
     scope === "workspace" ? !r.project_id :
     // created_by is nullable, and null === null is true: without the guard, a
     // row whose author was never recorded belongs to whoever is not signed in.
     scope === "mine"      ? (!!me && r.created_by === me) :
     true);
-  const cats = [...new Set([...LINK_CATEGORY_SUGGESTIONS, ...all.map(r => r.category).filter(Boolean)])];
   const needle = q.trim().toLowerCase();
-  const shown = all.filter(r =>
-    (cat === "*" || r.category === cat) &&
-    (!needle || [r.title, r.url, r.note, r.category].some(v => (v || "").toLowerCase().includes(needle))));
+  const searching = needle.length > 0;
+  const matches = inScope.filter(r =>
+    !needle || [r.title, r.url, r.note, r.site].some(v => (v || "").toLowerCase().includes(needle)));
+  // Searching looks everywhere. A folder you are standing in is a place, not a
+  // filter, and a search that only looked inside it would answer "no" about
+  // links the workspace plainly has.
+  const shown = (searching ? matches : matches.filter(r => (r.folder_id ?? null) === (currentFolder ?? null)))
+    .slice()
+    .sort((x, y) => sortMode === "name"
+      ? (x.title || "").localeCompare(y.title || "", de ? "de" : "en")
+      : new Date(y.created_at || 0) - new Date(x.created_at || 0));
+  const folderCounts = {};
+  for (const r of inScope) if (r.folder_id) folderCounts[r.folder_id] = (folderCounts[r.folder_id] || 0) + 1;
+  const showFolders = !searching && currentFolder == null;
+  const currentFolderObj = folders.find(fo => fo.id === currentFolder) || null;
 
   const field = { width: "100%", boxSizing: "border-box", padding: "10px 13px", borderRadius: 11,
     border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff",
     color: theme.text, fontSize: 13.5, fontFamily: FONT, outline: "none" };
+  const toolBtn = { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9,
+    cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent",
+    color: theme.textSub, fontSize: 12, fontFamily: FONT, whiteSpace: "nowrap" };
+  const viewBtn = (mode, title, icon) => {
+    const on = layout === mode;
+    return (
+      <motion.div whileTap={{ scale: 0.95 }} onClick={() => setLayout(mode)} title={title}
+        style={{ padding: "6px 11px", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", color: on ? theme.text : theme.textDim,
+          background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent",
+          boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{icon}</motion.div>
+    );
+  };
+
+  // One link, drawn as a tile or as a row. Same parts either way, so the two
+  // views cannot end up disagreeing about what a link shows.
+  const linkIcon = (r, px) => (
+    <div style={{ width: px, height: px, borderRadius: px < 30 ? 8 : 10, flexShrink: 0, display: "flex",
+      alignItems: "center", justifyContent: "center", overflow: "hidden",
+      background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", color: theme.text,
+      fontSize: px < 30 ? 12 : 15, fontFamily: FONT, fontWeight: 600 }}>
+      {/* The site's own icon, stored with the row as bytes, so drawing this
+          list makes no request to anybody. A letter when the page had none. */}
+      {r.favicon
+        ? <img src={r.favicon} alt="" style={{ width: px - 14, height: px - 14, objectFit: "contain", display: "block" }} />
+        : (r.title || linkHost(r.url) || "?").trim()[0]?.toUpperCase()}
+    </div>
+  );
+  const rowActions = (r) => canEdit && (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+      <motion.div whileTap={{ scale: 0.9 }} onClick={() => { setErr(""); setEditing({ ...r }); }}
+        title={de ? "Bearbeiten" : "Edit"} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+      </motion.div>
+      <motion.div whileTap={{ scale: 0.9 }} onClick={() => remove(r)}
+        title={de ? "Entfernen" : "Remove"} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </motion.div>
+    </div>
+  );
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-      {/* The Media toolbar's search box, part for part. */}
+      {/* The Media toolbar, part for part: search, then the view switch, the
+          sort and the layout toggle at the right. */}
       <div style={{ padding: "16px 26px 4px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minHeight: TAB_SEARCH_H + 20 }}>
         <div style={tabSearchBox(theme, darkMode)}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
@@ -34819,103 +34908,211 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
             { value: "workspace", label: "Workspace" },
             { value: "mine",      label: de ? "Meine" : "Mine" },
           ]} />
-      </div>
-
-      <div style={{ padding: "12px 26px 0", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        {[{ key: "*", label: de ? "Alle" : "All" }, ...cats.map(c => ({ key: c, label: c }))].map(c => {
-          const on = cat === c.key;
-          const count = c.key === "*" ? all.length : all.filter(r => r.category === c.key).length;
-          return (
-            <motion.div key={c.key} whileTap={{ scale: 0.97 }} onClick={() => setCat(c.key)}
-              style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "6px 13px", borderRadius: 999, cursor: "pointer",
-                background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
-                border: `1px solid ${on ? "transparent" : theme.borderFaint}`,
-                color: on ? (darkMode ? "#15151c" : "#fff") : theme.textDim,
-                fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500 }}>
-              {c.label}
-              <span style={{ fontSize: 11, opacity: 0.7 }}>{count}</span>
-            </motion.div>
-          );
-        })}
+        <motion.div whileTap={{ scale: 0.96 }} onClick={() => setSortMode(m => m === "added" ? "name" : "added")} style={toolBtn}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+          {sortMode === "name" ? "Name" : (de ? "Zuletzt hinzugefügt" : "Recently added")}
+        </motion.div>
+        <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+          {viewBtn("grid", de ? "Kachelansicht" : "Grid view", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
+          {viewBtn("list", de ? "Listenansicht" : "List view", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>)}
+        </div>
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
         {rows == null ? (
           <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{t("common.loading") || "Lädt…"}</div>
-        ) : shown.length === 0 ? (
-          /* Bottom padding, not a transform: the box keeps its height, the
-             centred content rises by half of what is added, and nothing lands
-             above the scroll origin where scrolling cannot reach it. A JSX
-             comment cannot stand here: this is a ternary branch, and one of
-             those holds one expression, not a comment and an element. */
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", textAlign: "center", gap: 9, color: theme.textDim, paddingBottom: 120, boxSizing: "border-box" }}>
-            <div style={{ width: 52, height: 52, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text, marginBottom: 4 }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-              </svg>
-            </div>
-            <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-              {everything.length === 0 ? (de ? "Noch keine Links" : "No links yet") : (de ? "Nichts gefunden" : "Nothing found")}
-            </div>
-            <div style={{ fontSize: 13, fontFamily: FONT, lineHeight: 1.6, maxWidth: 380 }}>
-              {everything.length === 0
-                ? (de ? "Sammle hier, was ihr sonst in Lesezeichen verliert: Skills, Tools, Referenzen."
-                      : "Keep what otherwise gets lost in bookmarks: skills, tools, references.")
-                : (de ? "Andere Ansicht, andere Kategorie oder anderer Suchbegriff."
-                      : "Try another view, another category or another word.")}
-            </div>
-          </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
-            {shown.map(r => (
-              <div key={r.id} className="hover-row"
-                style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`,
-                  background: theme.cardBg, padding: 16, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
-                  {/* The site's own icon, stored with the row as bytes, so
-                      drawing this list makes no request to anybody. A letter
-                      when the page had none to give. */}
-                  <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                    background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", color: theme.text,
-                    fontSize: 15, fontFamily: FONT, fontWeight: 600, overflow: "hidden" }}>
-                    {r.favicon
-                      ? <img src={r.favicon} alt="" style={{ width: 22, height: 22, objectFit: "contain", display: "block" }} />
-                      : (r.title || linkHost(r.url) || "?").trim()[0]?.toUpperCase()}
-                  </div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <a href={linkHref(r.url)} target="_blank" rel="noopener noreferrer"
-                      style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text, textDecoration: "none",
-                        display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title || linkHost(r.url)}</a>
-                    <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{linkHost(r.url)}</div>
-                  </div>
-                </div>
-                {r.note && (
-                  <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5,
-                    display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{r.note}</div>
-                )}
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: "auto" }}>
-                  <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, padding: "3px 9px", borderRadius: 999,
-                    background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>{r.category}</span>
-                  <div style={{ flex: 1 }} />
-                  {canEdit && (<>
-                    <motion.div whileTap={{ scale: 0.9 }} onClick={() => { setErr(""); setEditing({ ...r }); }}
-                      title={de ? "Bearbeiten" : "Edit"}
-                      style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+          <>
+            {/* Breadcrumb when inside a folder */}
+            {currentFolder != null && !searching && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                <motion.div whileTap={{ scale: 0.96 }} onClick={() => { setCurrentFolder(null); setFolderMenu(null); }} style={toolBtn}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                  {de ? "Alle Links" : "All links"}
+                </motion.div>
+                <div style={{ flex: 1 }} />
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, minWidth: 0 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.text} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentFolderObj?.name || (de ? "Ordner" : "Folder")}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 400, color: theme.textDim, flexShrink: 0 }}>· {shown.length}</span>
+                </span>
+              </div>
+            )}
+
+            {showFolders && (
+              <div style={{ marginBottom: 22 }}>
+                <div style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>{de ? "Ordner" : "Folders"}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+                  {folders.map(fo => (
+                    <motion.div key={fo.id} whileHover={{ y: -2 }} onClick={() => { setCurrentFolder(fo.id); setFolderMenu(null); }}
+                      style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.text} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fo.name}</div>
+                        <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{(folderCounts[fo.id] || 0)} Links</div>
+                      </div>
+                      {canEdit && (
+                        <div style={{ position: "relative", flexShrink: 0 }}>
+                          <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); setFolderMenu(m => m === fo.id ? null : fo.id); }}
+                            title={de ? "Optionen" : "Options"} style={{ cursor: "pointer", color: theme.textDim, display: "flex", padding: 4 }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
+                          </motion.div>
+                          <AnimatePresence>
+                            {folderMenu === fo.id && (
+                              <>
+                                <div onClick={(e) => { e.stopPropagation(); setFolderMenu(null); }} style={{ position: "fixed", inset: 0, zIndex: 60 }} />
+                                <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.14 }} onClick={(e) => e.stopPropagation()}
+                                  style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 61, minWidth: 168, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 11, boxShadow: "0 16px 44px rgba(0,0,0,0.2)", overflow: "hidden", padding: 5 }}>
+                                  <div onClick={() => { setFolderMenu(null); renameFolder(fo); }} className="hover-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 8, cursor: "pointer" }}>
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                                    <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>{de ? "Umbenennen" : "Rename"}</span>
+                                  </div>
+                                  <div onClick={() => { setFolderMenu(null); deleteFolder(fo); }} className="hover-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 8, cursor: "pointer" }}>
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e5484d" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                                    <span style={{ fontSize: 13, fontFamily: FONT, color: "#e5484d" }}>{de ? "Löschen" : "Delete"}</span>
+                                  </div>
+                                </motion.div>
+                              </>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      )}
                     </motion.div>
-                    <motion.div whileTap={{ scale: 0.9 }} onClick={() => remove(r)}
-                      title={de ? "Entfernen" : "Remove"}
-                      style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  ))}
+                  {canEdit && (
+                    <motion.div whileHover={{ y: -2 }} onClick={addFolder}
+                      style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, cursor: "pointer",
+                        border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textDim }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", border: `1px dashed ${theme.borderFaint}` }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      </div>
+                      <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500 }}>{de ? "Neuer Ordner" : "New folder"}</div>
                     </motion.div>
-                  </>)}
+                  )}
                 </div>
               </div>
-            ))}
-          </div>
+            )}
+
+            {shown.length === 0 ? (
+              everything.length === 0 ? (
+                /* Bottom padding, not a transform: the box keeps its height, the
+                   centred content rises by half of what is added, and nothing lands
+                   above the scroll origin where scrolling cannot reach it. */
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 320, textAlign: "center", gap: 9, color: theme.textDim, paddingBottom: 120, boxSizing: "border-box" }}>
+                  <div style={{ width: 52, height: 52, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text, marginBottom: 4 }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                    </svg>
+                  </div>
+                  <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? "Noch keine Links" : "No links yet"}</div>
+                  <div style={{ fontSize: 13, fontFamily: FONT, lineHeight: 1.6, maxWidth: 380 }}>
+                    {de ? "Sammle hier, was ihr sonst in Lesezeichen verliert: Skills, Tools, Referenzen."
+                        : "Keep what otherwise gets lost in bookmarks: skills, tools, references."}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: "34px 20px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>
+                  {searching
+                    ? (de ? "Keine Treffer. Versuche einen anderen Suchbegriff." : "No matches. Try a different search term.")
+                    : currentFolder != null
+                      ? (de ? "Dieser Ordner ist leer." : "This folder is empty.")
+                      : (de ? "Hier liegt nichts außerhalb der Ordner." : "Nothing here outside the folders.")}
+                </div>
+              )
+            ) : layout === "grid" ? (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+                {shown.map(r => (
+                  <div key={r.id} className="hover-row"
+                    style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`,
+                      background: theme.cardBg, padding: 16, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+                      {linkIcon(r, 36)}
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <a href={linkHref(r.url)} target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text, textDecoration: "none",
+                            display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title || linkHost(r.url)}</a>
+                        <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{linkHost(r.url)}</div>
+                      </div>
+                    </div>
+                    {r.note && (
+                      <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5,
+                        display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{r.note}</div>
+                    )}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: "auto" }}>
+                      {searching && r.folder_id && (
+                        <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, padding: "3px 9px", borderRadius: 999,
+                          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
+                          {folders.find(f => f.id === r.folder_id)?.name}
+                        </span>
+                      )}
+                      <div style={{ flex: 1 }} />
+                      {rowActions(r)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {shown.map(r => (
+                  <div key={r.id} className="hover-row"
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 12px", borderRadius: 11,
+                      borderBottom: `1px solid ${theme.borderFaint}`, minWidth: 0 }}>
+                    {linkIcon(r, 28)}
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <a href={linkHref(r.url)} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text, textDecoration: "none",
+                          display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title || linkHost(r.url)}</a>
+                      <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {linkHost(r.url)}{r.note ? ` · ${r.note}` : ""}
+                      </div>
+                    </div>
+                    {searching && r.folder_id && (
+                      <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>
+                        {folders.find(f => f.id === r.folder_id)?.name}
+                      </span>
+                    )}
+                    {rowActions(r)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
+
+      {folderToDelete && createPortal(
+        <div onClick={() => setFolderToDelete(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width: "min(420px, 100%)", borderRadius: 20, padding: 24, display: "flex", flexDirection: "column", gap: 10,
+              background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+              {de ? "Ordner löschen" : "Delete folder"}
+            </div>
+            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+              {(() => {
+                const n = (rows || []).filter(r => r.folder_id === folderToDelete.id).length;
+                if (n === 0) return de ? `„${folderToDelete.name}" wird entfernt.` : `"${folderToDelete.name}" will be removed.`;
+                return de
+                  ? `„${folderToDelete.name}" wird entfernt. Die ${n} Links darin bleiben erhalten und liegen danach außerhalb der Ordner.`
+                  : `"${folderToDelete.name}" will be removed. The ${n} links inside stay, and end up outside any folder.`;
+              })()}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+              <div style={{ flex: 1 }} />
+              <motion.div whileTap={{ scale: 0.97 }} onClick={() => setFolderToDelete(null)}
+                style={{ padding: "9px 16px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`,
+                  color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>{de ? "Abbrechen" : "Cancel"}</motion.div>
+              <motion.div whileTap={{ scale: 0.97 }} onClick={performDeleteFolder}
+                style={{ padding: "9px 18px", borderRadius: 999, cursor: "pointer", background: "#e5484d", color: "#fff",
+                  fontSize: 12.5, fontFamily: FONT, fontWeight: 600 }}>{de ? "Löschen" : "Delete"}</motion.div>
+            </div>
+          </div>
+        </div>, document.body)}
 
       {editing && createPortal(
         <div onClick={() => setEditing(null)}
@@ -34931,17 +35128,13 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
               placeholder="https://…" style={field} />
             <input value={editing.title} onChange={e => setEditing(v => ({ ...v, title: e.target.value }))}
               placeholder={de ? "Titel (optional)" : "Title (optional)"} style={field} />
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {cats.map(c => (
-                <div key={c} onClick={() => setEditing(v => ({ ...v, category: c }))}
-                  style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12.5, fontFamily: FONT,
-                    background: editing.category === c ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
-                    color: editing.category === c ? (darkMode ? "#15151c" : "#fff") : theme.textDim,
-                    border: `1px solid ${editing.category === c ? "transparent" : theme.borderFaint}` }}>{c}</div>
-              ))}
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>{de ? "Ordner" : "Folder"}</span>
+              <Dropdown value={editing.folder_id || ""} onChange={(v) => setEditing(x => ({ ...x, folder_id: v || null }))}
+                theme={theme} darkMode={darkMode} minWidth={220} maxHeight={260}
+                options={[{ value: "", label: de ? "Kein Ordner" : "No folder" },
+                          ...folders.map(fo => ({ value: fo.id, label: fo.name }))]} />
             </div>
-            <input value={editing.category} onChange={e => setEditing(v => ({ ...v, category: e.target.value }))}
-              placeholder={de ? "Eigene Kategorie" : "Own category"} style={field} />
             <textarea value={editing.note || ""} onChange={e => setEditing(v => ({ ...v, note: e.target.value }))}
               rows={3} placeholder={de ? "Notiz (optional)" : "Note (optional)"}
               style={{ ...field, resize: "vertical", lineHeight: 1.55 }} />
