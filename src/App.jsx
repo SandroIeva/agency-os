@@ -34769,29 +34769,32 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
     const meta = await linkRowPreview(linkHref(url));
     const payload = {
       url,
-      // Nobody types a title or a description any more: the page says both, and
-      // asking a person to retype what the page already published is asking
-      // twice. The hostname is the answer for a page that says nothing.
-      title: meta?.title || editing.title || linkHost(url),
-      description: meta?.description || editing.description || null,
+      // Nobody types a title or a description: the page says both, and asking a
+      // person to retype what the page already published is asking twice. The
+      // hostname is the answer for a page that says nothing. The dialog only
+      // ever creates, so there are no previous values to fall back to.
+      title: meta?.title || linkHost(url),
+      description: meta?.description || null,
       folder_id: editing.folder_id || null,
       visibility: editing.visibility === "private" ? "private" : "workspace",
-      favicon: meta?.favicon || editing.favicon || null,
-      image_url: meta?.image_url || editing.image_url || null,
-      site: meta?.site || editing.site || null,
+      favicon: meta?.favicon || null,
+      image_url: meta?.image_url || null,
+      site: meta?.site || null,
       updated_at: new Date().toISOString(),
     };
-    const { error } = editing.id
-      ? await supabase.from("workspace_links").update(payload).eq("id", editing.id)
-      : await supabase.from("workspace_links").insert({
-          ...payload, org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id || null });
+    const { error } = await supabase.from("workspace_links").insert({
+      ...payload, org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id || null });
     setBusy(false);
     // planLimitError turns the trigger's own word into the sentence the rest of
     // the app uses; showing "i7os_read_only" is showing somebody a symptom.
     if (error) { setErr(planLimitError(error, de) || error.message); return; }
     setEditing(null); load();
   };
-  const remove = async (row) => {
+  const [linkToDelete, setLinkToDelete] = useState(null);
+  const performRemove = async () => {
+    const row = linkToDelete;
+    if (!row) return;
+    setLinkToDelete(null);
     setRows(list => (list || []).filter(r => r.id !== row.id));
     await supabase.from("workspace_links").delete().eq("id", row.id);
   };
@@ -34883,13 +34886,12 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
     </span>
   );
 
+  // One action, and it asks. There is no edit: a link is a url and a folder,
+  // and both are one removal and one re-add away. The X used to delete on the
+  // first click, which is how a link gets lost to a slipped cursor.
   const rowActions = (r) => canEdit && (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-      <motion.div whileTap={{ scale: 0.9 }} onClick={() => { setErr(""); setEditing({ ...r }); }}
-        title={de ? "Bearbeiten" : "Edit"} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-      </motion.div>
-      <motion.div whileTap={{ scale: 0.9 }} onClick={() => remove(r)}
+      <motion.div whileTap={{ scale: 0.9 }} onClick={() => setLinkToDelete(r)}
         title={de ? "Entfernen" : "Remove"} style={{ cursor: "pointer", color: theme.textDim, display: "flex" }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </motion.div>
@@ -35084,6 +35086,32 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
         )}
       </div>
 
+      {linkToDelete && createPortal(
+        <div onClick={() => setLinkToDelete(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width: "min(420px, 100%)", borderRadius: 20, padding: 24, display: "flex", flexDirection: "column", gap: 10,
+              background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+              {de ? "Link entfernen" : "Remove link"}
+            </div>
+            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+              {de ? `„${linkToDelete.title || linkHost(linkToDelete.url)}" wird aus der Sammlung entfernt.`
+                  : `"${linkToDelete.title || linkHost(linkToDelete.url)}" will be removed from the collection.`}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+              <div style={{ flex: 1 }} />
+              <motion.div whileTap={{ scale: 0.97 }} onClick={() => setLinkToDelete(null)}
+                style={{ padding: "9px 16px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`,
+                  color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>{de ? "Abbrechen" : "Cancel"}</motion.div>
+              <motion.div whileTap={{ scale: 0.97 }} onClick={performRemove}
+                style={{ padding: "9px 18px", borderRadius: 999, cursor: "pointer", background: "#e5484d", color: "#fff",
+                  fontSize: 12.5, fontFamily: FONT, fontWeight: 600 }}>{de ? "Entfernen" : "Remove"}</motion.div>
+            </div>
+          </div>
+        </div>, document.body)}
+
       {folderToDelete && createPortal(
         <div onClick={() => setFolderToDelete(null)}
           style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
@@ -35120,24 +35148,30 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
           style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
             display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ width: "min(460px, 100%)", borderRadius: 20, padding: 24, display: "flex", flexDirection: "column", gap: 12,
+            style={{ width: "min(520px, 100%)", borderRadius: 22, padding: 28, display: "flex", flexDirection: "column", gap: 20,
               background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
-            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 2 }}>
-              {editing.id ? (de ? "Link bearbeiten" : "Edit link") : (de ? "Link hinzufügen" : "Add a link")}
+            <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+              {de ? "Link hinzufügen" : "Add a link"}
             </div>
             <input autoFocus value={editing.url} onChange={e => setEditing(v => ({ ...v, url: e.target.value }))}
-              placeholder="https://…" style={field} />
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>{de ? "Ordner" : "Folder"}</span>
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); save(); } }}
+              placeholder="https://…" style={{ ...field, padding: "13px 15px", fontSize: 14 }} />
+            {/* The label sits above so the picker gets the whole width. Beside
+                it, the two of them split a 520px dialog into two cramped
+                halves, which is what this looked like. */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>{de ? "Ordner" : "Folder"}</span>
               <Dropdown value={editing.folder_id || ""} onChange={(v) => setEditing(x => ({ ...x, folder_id: v || null }))}
-                theme={theme} darkMode={darkMode} minWidth={220} maxHeight={260}
+                theme={theme} darkMode={darkMode} minWidth={464} maxHeight={260}
+                triggerStyle={{ width: "100%", padding: "12px 15px" }}
                 options={[{ value: "", label: de ? "Kein Ordner" : "No folder" },
                           ...folders.map(fo => ({ value: fo.id, label: fo.name }))]} />
             </div>
+            {err && <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767", lineHeight: 1.5 }}>{err}</div>}
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>{de ? "Sichtbar für" : "Visible to"}</span>
-              {/* Workspace first, and it is the default: a link collection that
-                  starts out private is a bookmark bar with extra steps. */}
+              {/* Who it is for, where the eye ends up last. Workspace is the
+                  default: a shared collection that starts out private is a
+                  bookmark bar with extra steps. */}
               <SegmentedFilter value={editing.visibility === "private" ? "private" : "workspace"}
                 onChange={(v) => setEditing(x => ({ ...x, visibility: v }))}
                 theme={theme} darkMode={darkMode}
@@ -35145,13 +35179,6 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
                   { value: "workspace", label: "Workspace" },
                   { value: "private",   label: de ? "Nur ich" : "Only me" },
                 ]} />
-            </div>
-            <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55, marginTop: -4 }}>
-              {de ? "Titel, Beschreibung und Icon kommen von der Seite selbst."
-                  : "Title, description and icon come from the page itself."}
-            </div>
-            {err && <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767", lineHeight: 1.5 }}>{err}</div>}
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
               <div style={{ flex: 1 }} />
               <motion.div whileTap={{ scale: 0.97 }} onClick={() => setEditing(null)}
                 style={{ padding: "9px 16px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`,

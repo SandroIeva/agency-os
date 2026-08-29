@@ -85,7 +85,7 @@ not be created from the UI at all.
 | **Calendar event** | `createTeamEvent` | App.jsx |
 | **Chat conversation** | `startConversation` (1:1) and the group-creation modal | App.jsx |
 | **Public share link** | `createShare` in `AssetsView` (moodboard header, link icon) | App.jsx |
-| **Link folder** | ONLY the `seed_link_folders` trigger on `organizations` (Skills / Tools / Inspirations / Mockups). There is deliberately no create-folder control in the UI; `LinksTab` can rename and delete, not add | Postgres |
+| **Link folder** | ONLY the `seed_link_folders` trigger on `organizations` (Skills / Tools / Inspirations / Mockups). There is deliberately no create-folder control in the UI; `LinksTab` can rename and delete folders, not add them, and a link itself can only be added or removed, never edited | Postgres |
 | **Link (bookmark)** | `save` in `LinksTab` (file manager → Links); it calls `linkRowPreview` → the shared `fetchLinkPreview(url, {icon:true})` → `api/fetch-brand?mode=preview&icon=1` first | App.jsx |
 | **File upload** | always through `uploadTracked` — never call `supabase.storage.upload` directly, or the storage ledger drifts | App.jsx |
 
