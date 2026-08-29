@@ -31086,7 +31086,6 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             <CreationsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} grad={grad} glow={glow} t={t}
               appLanguage={appLanguage} onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers} projectId={projectId}
               pickRef={creationsPick} drivePickRef={creationsDrivePick} newFolderRef={creationsNewFolder} webImportRef={creationsWebImport} openWebImport={openWebImport} generateRef={creationsGenerate} deepLink={assetDeepLink} onUploadingChange={setCreationsUploading}
-              generateFromVoice={openTab?.generate ? { prompt: openTab.generate, ts: openTab.ts } : null}
               getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin}
               llmProvider={llmProvider} llmKeys={llmKeys} />
           )}
@@ -31562,7 +31561,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 // Top-level component (not inline) so framer-motion never re-mounts it per render.
 // Creations tab — gallery of the workspace's images AND videos (AI-generated +
 // user uploads). Filter by media type; upload your own via the button.
-function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, openWebImport = null, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, newFolderRef, webImportRef, generateRef, deepLink, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, generateFromVoice = null }) {
+function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, openWebImport = null, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, newFolderRef, webImportRef, generateRef, deepLink, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null }) {
   const memberById = useMemo(() => {
     const m = {}; (orgMembers || []).forEach(om => { if (om.user_id) m[om.user_id] = { ...(om.profiles || {}) }; }); return m;
   }, [orgMembers]);
@@ -31660,26 +31659,6 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     };
   }, [generateRef, loadGenCredits]);
 
-  // Asked for out loud. The panel opens with the prompt in it and starts at
-  // once: saying "make me a picture of an office" IS the confirmation, and a
-  // dialog that then asks "are you sure" is asking the same question twice.
-  // Keyed on the timestamp so saying it twice runs twice, and guarded by a ref
-  // so StrictMode's double-invoked effect does not spend the credits twice.
-  const voiceGenRef = useRef(null);
-  useEffect(() => {
-    const job = generateFromVoice;
-    if (!job?.prompt || !job.ts || voiceGenRef.current === job.ts) return;
-    voiceGenRef.current = job.ts;
-    setGenOpen(true); setGenError(""); setGenPrompt(job.prompt);
-    loadGenCredits();
-    runGenRef.current?.(job.prompt);
-  }, [generateFromVoice?.ts]); // eslint-disable-line
-
-  // runGeneration reads genPrompt from state, which the line above has only
-  // just set: a call in the same tick would still see the old value. The ref
-  // holds the version that takes the prompt as an argument.
-  const runGenRef = useRef(null);
-
   const runGeneration = async (promptArg) => {
     const prompt = (typeof promptArg === "string" ? promptArg : genPrompt).trim();
     if (!prompt || genBusy || genWaiting || !userOrg?.id || !session?.user?.id) return;
@@ -31711,10 +31690,6 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     setGenBusy(false);
     loadGenCredits();
   };
-
-  // The effect above fires before this function is defined on the first
-  // render pass, so the ref is filled here rather than at the declaration.
-  runGenRef.current = runGeneration;
 
   // Follow a job and end it where the user is. Whoever is still waiting in the
   // dialog gets the picture opened in front of them; whoever left gets the
@@ -45129,6 +45104,13 @@ export default function CircularMenu() {
     return t("greet.night");
   };
   const [voiceMode, setVoiceMode] = useState(false);
+  // A picture asked for out loud. It is made HERE rather than by sending
+  // somebody to the generator: the request was spoken, so the answer should
+  // arrive where the question was asked. The orb stays up saying what it is
+  // doing, and the finished picture opens full size.
+  const [voiceImage, setVoiceImage] = useState(null);   // the finished url, for the lightbox
+  const [voiceGenLabel, setVoiceGenLabel] = useState(""); // what the orb says while it works
+  const voiceGenRef = useRef(null);                     // the job we are waiting on
   // The corner orb's exit. Set on click and held until the voice UI closes:
   // clearing it any earlier put the orb back in the corner while its big
   // self was on screen, which is one ball in two places.
@@ -45650,6 +45632,61 @@ export default function CircularMenu() {
     return () => clearTimeout(id);
   }, [voiceMode, aiSpeaking]);
 
+  // Submit, then poll. The server finishes the job whether or not this tab is
+  // still here, and it writes the notification either way, so leaving costs
+  // the lightbox and never the picture.
+  const generateFromVoice = async (prompt) => {
+    const de = appLanguage === "de";
+    setVoiceMode(false);
+    setTranscript("");
+    setAiResponse("");
+    setAiSpeaking(true);
+    setAiStatus("thinking");
+    setVoiceGenLabel(de ? "BILD WIRD ERSTELLT" : "CREATING IMAGE");
+    const say = (msg) => { setVoiceGenLabel(""); setAiStatus(""); setAiResponse(msg); };
+    const post = async (body) => {
+      const { data: { session: sess } } = await supabase.auth.getSession();
+      const r = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess?.access_token || ""}` },
+        body: JSON.stringify({ orgId: userOrg?.id, ...body }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { const e = new Error(j.error || `HTTP ${r.status}`); e.code = j.code; throw e; }
+      return j;
+    };
+    const finish = (url) => {
+      voiceGenRef.current = null;
+      setVoiceGenLabel("");
+      setAiSpeaking(false); setAiStatus(""); setAiResponse("");
+      setVoiceImage(url);
+    };
+    try {
+      const res = await post({ mode: "submit", model: "gpt-image-2", prompt });
+      if (res.status === "completed" && res.url) { finish(res.url); return; }
+      voiceGenRef.current = res.jobId;
+      const started = Date.now();
+      for (;;) {
+        if (Date.now() - started > 600000) {          // ten minutes, then leave it to the server
+          say(de ? "Das dauert länger. Du bekommst eine Nachricht, sobald es fertig ist."
+                 : "This is taking a while. You will be notified when it is done.");
+          return;
+        }
+        await new Promise(r => setTimeout(r, 4000));
+        if (voiceGenRef.current !== res.jobId) return;   // somebody moved on
+        const st = await post({ mode: "status", jobId: res.jobId }).catch(() => null);
+        if (!st) continue;
+        if (st.status === "completed" && st.url) { finish(st.url); return; }
+        if (st.status === "failed") {
+          say(st.error || (de ? "Das Bild konnte nicht erstellt werden." : "The image could not be created."));
+          return;
+        }
+      }
+    } catch (e) {
+      say(e.message || String(e));
+    }
+  };
+
   const startVoice = () => {
     setMenuOpen(false);
     setSubOpen(false);
@@ -45659,6 +45696,11 @@ export default function CircularMenu() {
     if (tasksOpen) setTasksOpen(false);
     setVoiceMode(true);
     setAiSpeaking(false);
+    // Asking something new abandons a picture that is still being made. The
+    // server finishes it and files it away regardless, so nothing is lost, but
+    // the lightbox must not ambush whatever the person is doing by then.
+    voiceGenRef.current = null;
+    setVoiceGenLabel("");
     setTranscript("");
     transcriptRef.current = "";
     setAiResponse("");
@@ -45759,18 +45801,18 @@ export default function CircularMenu() {
     const voiceNav = detectVoiceCommand(rawTranscript) || detectVoiceCommand(cleaned);
     if (voiceNav) {
       setVoiceMode(false);
-      setAiSpeaking(false);
-      setAiStatus("");
-      setAiResponse("");
+      // A picture keeps the orb on screen and writes its own status into it.
+      if (!voiceNav.generate) {
+        setAiSpeaking(false);
+        setAiStatus("");
+        setAiResponse("");
+      }
       setTranscript("");
       voiceTargetDialogRef.current = false;
       if (voiceNav.view) setCurrentView(voiceNav.view);
       if (voiceNav.action) voiceNav.action();
-      // Straight to where pictures are made, with the prompt already in it.
-      if (voiceNav.generate) {
-        setAssetsOpenTab({ tab: "creations", ts: Date.now(), generate: voiceNav.generate });
-        setCurrentView("assets");
-      }
+      // Made here, in front of the person who asked. No navigation.
+      if (voiceNav.generate) generateFromVoice(voiceNav.generate);
       return;
     }
 
@@ -48038,11 +48080,11 @@ export default function CircularMenu() {
                   fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff40" : "#1a1a2e50",
                   letterSpacing: 2, marginBottom: 20, fontWeight: 400,
                 }}
-              >{aiStatus === "thinking" ? t("ai.thinking") : ""}</motion.div>
+              >{voiceGenLabel || (aiStatus === "thinking" ? t("ai.thinking") : "")}</motion.div>
 
               {/* Pulsing glow behind sphere — click to ask another question */}
               <motion.div
-                onClick={askAgain}
+                onClick={voiceGenLabel ? undefined : askAgain}
                 animate={{
                   boxShadow: aiStatus === "speaking" ? [
                     "0 0 40px rgba(150,220,235,0.16), 0 0 80px rgba(190,170,250,0.06)",
@@ -48054,7 +48096,7 @@ export default function CircularMenu() {
                 transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
                 whileHover={{ scale: 1.06 }}
                 whileTap={{ scale: 0.95 }}
-                style={{ borderRadius: "50%", cursor: "pointer" }}
+                style={{ borderRadius: "50%", cursor: voiceGenLabel ? "default" : "pointer" }}
               >
                 {/* The same orb, larger, and it runs faster while the AI talks.
                     The old sphere is still the fallback where WebGPU is not. */}
@@ -48091,7 +48133,7 @@ export default function CircularMenu() {
                           color: isSpoken
                             ? (darkMode ? "#ffffffE6" : "#1a1a2eE6")
                             : (darkMode ? "#ffffff30" : "#1a1a2e35"),
-                          textShadow: isCurrent ? "0 0 12px rgba(139,122,255,0.5)" : "none",
+                          textShadow: isCurrent ? (darkMode ? "0 0 12px rgba(255,255,255,0.45)" : "0 0 12px rgba(26,26,46,0.28)") : "none",
                           transition: "color 0.2s ease, text-shadow 0.3s ease",
                         }}>{word}{" "}</span>
                       );
@@ -48100,6 +48142,22 @@ export default function CircularMenu() {
                 )}
               </AnimatePresence>
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* A picture that was asked for out loud, at full size. It opens here
+            rather than in the generator: the person never left this screen. */}
+        <AnimatePresence>
+          {voiceImage && (
+            <ImageLightbox
+              url={voiceImage}
+              onClose={() => setVoiceImage(null)}
+              onUploadStorage={uploadImageToStorage}
+              onUploadDrive={uploadImageToDrive}
+              theme={theme}
+              darkMode={darkMode}
+              appLanguage={appLanguage}
+            />
           )}
         </AnimatePresence>
 
