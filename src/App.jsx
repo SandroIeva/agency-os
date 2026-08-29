@@ -30647,7 +30647,15 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     }
   };
 
-  const deleteBoard = async (board) => {
+  // Deleting a moodboard takes everything on it, and the button sits on a card
+  // in a grid, one hover away from the card you meant. It asks first, the same
+  // way the link and folder deletes do.
+  const [boardToDelete, setBoardToDelete] = useState(null);
+  const deleteBoard = (board) => setBoardToDelete(board);
+  const performDeleteBoard = async () => {
+    const board = boardToDelete;
+    if (!board) return;
+    setBoardToDelete(null);
     await supabase.from("moodboards").delete().eq("id", board.id);
     setBoards(prev => prev.filter(b => b.id !== board.id));
     if (activeBoard?.id === board.id) closeBoard();
@@ -31264,6 +31272,33 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
               </motion.div>
             )}
           </AnimatePresence>
+
+          {boardToDelete && createPortal(
+            <div onClick={() => setBoardToDelete(null)}
+              style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+                display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+              <div onClick={e => e.stopPropagation()}
+                style={{ width: "min(420px, 100%)", borderRadius: 20, padding: 24, display: "flex", flexDirection: "column", gap: 10,
+                  background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
+                <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                  {appLanguage === "de" ? "Moodboard löschen" : "Delete moodboard"}
+                </div>
+                <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+                  {appLanguage === "de"
+                    ? `„${boardToDelete.title}" wird mit allem darauf gelöscht. Das lässt sich nicht rückgängig machen.`
+                    : `"${boardToDelete.title}" and everything on it will be deleted. This cannot be undone.`}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+                  <div style={{ flex: 1 }} />
+                  <motion.div whileTap={{ scale: 0.97 }} onClick={() => setBoardToDelete(null)}
+                    style={{ padding: "9px 16px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`,
+                      color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>{appLanguage === "de" ? "Abbrechen" : "Cancel"}</motion.div>
+                  <motion.div whileTap={{ scale: 0.97 }} onClick={performDeleteBoard}
+                    style={{ padding: "9px 18px", borderRadius: 999, cursor: "pointer", background: "#e5484d", color: "#fff",
+                      fontSize: 12.5, fontFamily: FONT, fontWeight: 600 }}>{appLanguage === "de" ? "Löschen" : "Delete"}</motion.div>
+                </div>
+              </div>
+            </div>, document.body)}
 
           {/* Pick a Pinterest board to import. Portalled, because this panel
               lives inside a view whose root is an animating motion.div, and a
