@@ -31507,10 +31507,18 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                 <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
                   {appLanguage === "de" ? "Moodboard löschen" : "Delete moodboard"}
                 </div>
+                {/* Two lines, not one paragraph. Run together, the warning
+                    started mid-line and broke across the wrap, so the sentence
+                    that matters was the one split in half. */}
                 <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
                   {appLanguage === "de"
-                    ? `„${boardToDelete.title}" wird mit allem darauf gelöscht. Das lässt sich nicht rückgängig machen.`
-                    : `"${boardToDelete.title}" and everything on it will be deleted. This cannot be undone.`}
+                    ? `„${boardToDelete.title}" wird mit allem darauf gelöscht.`
+                    : `"${boardToDelete.title}" and everything on it will be deleted.`}
+                </div>
+                <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginTop: -4 }}>
+                  {appLanguage === "de"
+                    ? "Das lässt sich nicht rückgängig machen."
+                    : "This cannot be undone."}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
                   <div style={{ flex: 1 }} />
