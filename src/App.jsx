@@ -42710,6 +42710,79 @@ If you don't know a field, infer a plausible value. Write all text values in the
     </motion.div>
   );
 }
+// ── Saying which image model to use ─────────────────────────────────────────
+// The keys mirror MODELS in api/generate.js; the server stays the authority on
+// what exists, this table only teaches the ear. Longest alias first: "flux 2
+// klein" has to win over "flux 2", which has to win over bare "flux".
+const VOICE_IMAGE_MODELS = [
+  { key: "nano-banana-2",  label: "Nano Banana 2", re: /\bnano[\s-]*banan[aei]{1,2}(?:\s*(?:2|ii|two|pro|plus))?\b/i },
+  { key: "flux-1-schnell", label: "Flux Schnell",  re: /\bflu[xk]s?\s*(?:1\s*)?schnell\b/i },
+  { key: "flux-2-klein",   label: "Flux 2 Klein",  re: /\bflu[xk]s?\s*(?:2\s*)?klein\b/i },
+  { key: "flux-2-dev",     label: "Flux 2 Dev",    re: /\bflu[xk]s?\s*2\s*dev\b/i },
+  { key: "flux-dev",       label: "Flux Dev",      re: /\bflu[xk]s?\s*dev\b/i },
+  { key: "flux-pro",       label: "FLUX Pro",      re: /\bflu[xk]s?\s*(?:pro|profi)\b/i },
+  { key: "flux-2-klein",   label: "Flux 2 Klein",  re: /\bflu[xk]s?\s*2\b/i },
+  { key: "gpt-image-2",    label: "GPT Image 2",   re: /\b(?:chat\s*)?gpt[\s-]*(?:image|bild)?\s*(?:2|ii|two)?\b/i },
+  // Just "Flux" means the flagship. It is the expensive one, so the orb always
+  // says which model it settled on and a wrong guess is one sentence to fix.
+  { key: "flux-pro",       label: "FLUX Pro",      re: /\bflu[xk]s?\b/i },
+];
+// "the best model", "low quality model". Only consulted when the sentence
+// actually says model or quality, so a picture OF a model stays a picture.
+const VOICE_IMAGE_QUALITY = [
+  { key: "nano-banana-2", label: "Nano Banana 2", re: /\b(?:best|beste[nrsm]?|highest|höchste[nrsm]?|top|maximal\w*|premium)\b/i },
+  { key: "flux-pro",      label: "FLUX Pro",      re: /\b(?:high|hoh\w+|gute?[nrsm]?|besser\w*)\b/i },
+  { key: "flux-2-klein",  label: "Flux 2 Klein",  re: /\b(?:low|niedrig\w*|schlecht\w*|einfach\w*|günstig\w*|billig\w*|cheap|draft|schnellst\w*|fast)\b/i },
+];
+// Naming a model needs a verb. Without one, "ein Bild von einer Banane" and
+// "ein Bild mit Nano Banana" are the same sentence to a regex.
+const VOICE_MODEL_VERB = /\b(?:use|using|with|nutz\w*|benutz\w*|verwend\w*|nimm|nehme|mit|per|via)\b/i;
+const VOICE_MODEL_CONTEXT = /(?:model|modell|qualität|qualitaet|quality)/i;
+
+// "Use Flux" is a setting. "Zeig mir ein Bild mit Flux" is a request that
+// happens to name one. The difference is whether anything is LEFT once the
+// model, the verb and the filler around them are taken out.
+const VOICE_MODEL_FILLER = /\b(?:use|using|with|to|for|from|now|on|always|please|the|an?|and|images?|pictures?|photos?|quality|(?:bild|image|foto|photo)?(?:model|modell)e?n?|qualität|qualitaet|bilder|bild|foto[s]?|grafiken?|nutz\w*|benutz\w*|verwend\w*|nimm|nehme|mit|per|via|bitte|mal|doch|jetzt|ab|immer|für|fuer|zum|zur|den|dem|der|das|die|ein(?:e[nrsm]?)?|erstellen|erstell\w*|machen|generieren)\b/gi;
+
+function isBareModelCommand(text, matched) {
+  const esc = matched.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  const rest = String(text || "")
+    .replace(new RegExp(esc, "i"), " ")
+    .replace(VOICE_MODEL_FILLER, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+  return rest.length === 0;
+}
+
+function detectImageModel(text) {
+  const t = String(text || "");
+  if (!VOICE_MODEL_VERB.test(t)) return null;
+  for (const m of VOICE_IMAGE_MODELS) {
+    const hit = t.match(m.re);
+    if (hit) return { key: m.key, label: m.label, matched: hit[0] };
+  }
+  if (VOICE_MODEL_CONTEXT.test(t)) {
+    for (const q of VOICE_IMAGE_QUALITY) {
+      const hit = t.match(q.re);
+      if (hit) return { key: q.key, label: q.label, matched: hit[0] };
+    }
+  }
+  return null;
+}
+
+// Take the model out of the prompt. "ein Office mit Nano Banana Pro" has to
+// reach the image model as "ein Office", or the picture grows a banana.
+function stripImageModel(prompt, matched) {
+  if (!prompt || !matched) return prompt;
+  const esc = matched.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  const cut = new RegExp(
+    "\\s*[.,;]?\\s*\\b(?:use|using|with|mit|nutze?|benutze?|verwende?|nimm|nehme|per|via)?\\s*" +
+    "(?:the|dem|der|das|den|einem?|ein)?\\s*" + esc +
+    "(?:\\s*(?:image|bild|quality|qualität|qualitaet|model|modell))*\\s*$", "i");
+  const out = prompt.replace(cut, "").trim().replace(/[.,;]+$/, "").trim();
+  // Cutting the whole sentence away leaves nothing to draw, so keep the original.
+  return out.length >= 2 ? out : prompt;
+}
+
 export default function CircularMenu() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -45110,6 +45183,10 @@ export default function CircularMenu() {
   // doing, and the finished picture opens full size.
   const [voiceImage, setVoiceImage] = useState(null);   // the finished url, for the lightbox
   const [voiceGenLabel, setVoiceGenLabel] = useState(""); // what the orb says while it works
+  // Which image model spoken requests use. Said once, kept until said again.
+  const [voiceGenModel, setVoiceGenModel] = useState(() => {
+    try { return localStorage.getItem("agencyos-voice-image-model") || "gpt-image-2"; } catch (_) { return "gpt-image-2"; }
+  });
   const voiceGenRef = useRef(null);                     // the job we are waiting on
   // The corner orb's exit. Set on click and held until the voice UI closes:
   // clearing it any earlier put the orb back in the corner while its big
@@ -45404,9 +45481,21 @@ export default function CircularMenu() {
         // matching runs on: a prompt is written for an image model, and
         // "office in berlin" is not what somebody said.
         const at = t.length - m[1].length;
-        const prompt = text.trim().replace(/[.!?]+$/, "").slice(at).trim();
-        if (prompt.length >= 2) return { generate: prompt };
+        const raw = text.trim().replace(/[.!?]+$/, "").slice(at).trim();
+        // "…von einem Office mit Nano Banana" picks the model for THIS picture.
+        const model = detectImageModel(text);
+        const prompt = model ? stripImageModel(raw, model.matched) : raw;
+        if (prompt.length >= 2) return { generate: prompt, model: model || null };
       }
+    }
+
+    // Naming a model on its own sets it for the pictures that follow.
+    // Checked after the generate rules so a sentence that does both still
+    // makes the picture, and after nothing else, because "use flux" is not a
+    // question anybody wants answered by a language model.
+    {
+      const model = detectImageModel(text);
+      if (model && isBareModelCommand(t, model.matched)) return { setModel: model };
     }
 
     for (const rule of navRules) {
@@ -45632,17 +45721,38 @@ export default function CircularMenu() {
     return () => clearTimeout(id);
   }, [voiceMode, aiSpeaking]);
 
+  // Saying "use Flux" once should not have to be said again next time.
+  const chooseVoiceImageModel = (model) => {
+    const de = appLanguage === "de";
+    setVoiceGenModel(model.key);
+    try { localStorage.setItem("agencyos-voice-image-model", model.key); } catch (_) {}
+    setVoiceGenLabel("");
+    setAiStatus("");
+    setAiSpeaking(true);
+    setAiResponse(de ? `Bilder werden jetzt mit ${model.label} erstellt.`
+                     : `Images will now be made with ${model.label}.`);
+    // A confirmation is not a conversation. It says its piece and goes.
+    setTimeout(() => {
+      setAiSpeaking(false);
+      setAiResponse("");
+    }, 2600);
+  };
+
   // Submit, then poll. The server finishes the job whether or not this tab is
   // still here, and it writes the notification either way, so leaving costs
   // the lightbox and never the picture.
-  const generateFromVoice = async (prompt) => {
+  const generateFromVoice = async (prompt, picked = null) => {
     const de = appLanguage === "de";
+    const modelKey = picked?.key || voiceGenModel;
+    const modelLabel = picked?.label
+      || VOICE_IMAGE_MODELS.find(m => m.key === voiceGenModel)?.label
+      || "";
     setVoiceMode(false);
     setTranscript("");
     setAiResponse("");
     setAiSpeaking(true);
     setAiStatus("thinking");
-    setVoiceGenLabel(de ? "BILD WIRD ERSTELLT" : "CREATING IMAGE");
+    setVoiceGenLabel((de ? "BILD WIRD ERSTELLT" : "CREATING IMAGE") + (modelLabel ? "  ·  " + modelLabel.toUpperCase() : ""));
     const say = (msg) => { setVoiceGenLabel(""); setAiStatus(""); setAiResponse(msg); };
     const post = async (body) => {
       const { data: { session: sess } } = await supabase.auth.getSession();
@@ -45662,7 +45772,11 @@ export default function CircularMenu() {
       setVoiceImage(url);
     };
     try {
-      const res = await post({ mode: "submit", model: "gpt-image-2", prompt });
+      if (picked?.key && picked.key !== voiceGenModel) {
+        setVoiceGenModel(picked.key);
+        try { localStorage.setItem("agencyos-voice-image-model", picked.key); } catch (_) {}
+      }
+      const res = await post({ mode: "submit", model: modelKey, prompt });
       if (res.status === "completed" && res.url) { finish(res.url); return; }
       voiceGenRef.current = res.jobId;
       const started = Date.now();
@@ -45802,7 +45916,7 @@ export default function CircularMenu() {
     if (voiceNav) {
       setVoiceMode(false);
       // A picture keeps the orb on screen and writes its own status into it.
-      if (!voiceNav.generate) {
+      if (!voiceNav.generate && !voiceNav.setModel) {
         setAiSpeaking(false);
         setAiStatus("");
         setAiResponse("");
@@ -45812,7 +45926,8 @@ export default function CircularMenu() {
       if (voiceNav.view) setCurrentView(voiceNav.view);
       if (voiceNav.action) voiceNav.action();
       // Made here, in front of the person who asked. No navigation.
-      if (voiceNav.generate) generateFromVoice(voiceNav.generate);
+      if (voiceNav.generate) generateFromVoice(voiceNav.generate, voiceNav.model);
+      if (voiceNav.setModel) chooseVoiceImageModel(voiceNav.setModel);
       return;
     }
 
