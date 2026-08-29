@@ -34856,9 +34856,12 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
   const field = { width: "100%", boxSizing: "border-box", padding: "10px 13px", borderRadius: 11,
     border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff",
     color: theme.text, fontSize: 13.5, fontFamily: FONT, outline: "none" };
-  // One number for the two controls on the dialog's bottom row. Equal height is
-  // then a fact, not something that happened to look right at one font size.
+  // The two controls on the dialog's bottom row, sized from one number so the
+  // relationship holds when either changes. They are not the SAME number: the
+  // switch draws its selected state on a pill inset by 3px all round, so at an
+  // equal box it reads two pixels shorter than the solid Save button beside it.
   const ACTION_H = 40;
+  const SWITCH_H = ACTION_H + 2;
   const toolBtn = { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9,
     cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent",
     color: theme.textSub, fontSize: 12, fontFamily: FONT, whiteSpace: "nowrap" };
@@ -35158,7 +35161,7 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
           style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
             display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ width: "min(520px, 100%)", borderRadius: 22, padding: "28px 28px 30px", display: "flex", flexDirection: "column", gap: 20,
+            style={{ width: "min(520px, 100%)", borderRadius: 22, padding: "29px 28px 30px", display: "flex", flexDirection: "column", gap: 20,
               background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0 }}>
@@ -35193,13 +35196,13 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
               options={[{ value: "", label: de ? "Kein Ordner" : "No folder" },
                         ...folders.map(fo => ({ value: fo.id, label: fo.name }))]} />
             {err && <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767", lineHeight: 1.5 }}>{err}</div>}
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 1 }}>
               {/* Who it is for, where the eye ends up last. Workspace is the
                   default: a shared collection that starts out private is a
                   bookmark bar with extra steps. */}
               <SegmentedFilter value={editing.visibility === "private" ? "private" : "workspace"}
                 onChange={(v) => setEditing(x => ({ ...x, visibility: v }))}
-                theme={theme} darkMode={darkMode} height={ACTION_H}
+                theme={theme} darkMode={darkMode} height={SWITCH_H}
                 options={[
                   { value: "workspace", label: "Workspace" },
                   { value: "private",   label: de ? "Nur ich" : "Only me" },
