@@ -30544,6 +30544,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   // button is not offered when the answer is no, because "connect Pinterest"
   // belongs in Settings and not in the middle of making a moodboard.
   const [pinConnected, setPinConnected] = useState(false);
+  const [mbMenuOpen, setMbMenuOpen] = useState(false);   // the moodboards "Neu erstellen" menu
   useEffect(() => {
     if (!userOrg?.id || !session?.access_token) { setPinConnected(false); return; }
     let alive = true;
@@ -30988,22 +30989,64 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       { id: "links",        label: "Browse" },
     ];
     const headerActions = (<>
-            {tab === "moodboards" && pinConnected && (
-              <motion.div whileTap={{ scale: 0.96 }} onClick={openPinterestImport}
-                title={appLanguage === "de" ? "Ein Pinterest-Board als Moodboard importieren" : "Import a Pinterest board as a moodboard"}
-                style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 15px", borderRadius: 10,
-                  cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent",
-                  color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 500, whiteSpace: "nowrap" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="#E60023" aria-hidden="true" style={{ flexShrink: 0 }}>
-                  <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146A12 12 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>
-                </svg>
-                {appLanguage === "de" ? "Aus Pinterest" : "From Pinterest"}
-              </motion.div>
-            )}
+            {/* One button with a menu, the way Creations and Artboards do it.
+                Two buttons side by side made "from Pinterest" look like an
+                equal of "create new" rather than one of the ways to create. */}
             {tab === "moodboards" && (
-              <motion.div whileTap={{ scale: 0.96 }} onClick={() => setCreating(true)} style={primaryBtn}>
-                {appLanguage === "de" ? "Neu erstellen" : "Create new"}
-              </motion.div>
+              <div style={{ position: "relative" }}>
+                <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setMbMenuOpen(o => !o)}
+                  style={primaryBtn}>
+                  {appLanguage === "de" ? "Neu erstellen" : "Create new"}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 1, opacity: 0.8 }}><polyline points="6 9 12 15 18 9"/></svg>
+                </motion.div>
+                <AnimatePresence>
+                  {mbMenuOpen && (
+                    <>
+                      <div onClick={() => setMbMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                      <motion.div
+                        initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                        transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+                        style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, minWidth: 250,
+                          background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
+                          boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 6 }}>
+                        {[
+                          { key: "blank", label: appLanguage === "de" ? "Leeres Moodboard" : "Empty moodboard",
+                            sub: appLanguage === "de" ? "Selbst zusammenstellen" : "Put it together yourself",
+                            fill: false,
+                            icon: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
+                            onClick: () => { setMbMenuOpen(false); setCreating(true); } },
+                          // Only when there is an account to import from. Offering
+                          // to connect one belongs in Settings, not here.
+                          ...(pinConnected ? [{
+                            key: "pinterest", label: appLanguage === "de" ? "Aus Pinterest" : "From Pinterest",
+                            sub: appLanguage === "de" ? "Ein ganzes Board übernehmen" : "Bring a whole board over",
+                            // The brand's own shape, so it is recognisable, but
+                            // in currentColor like every other tile in this menu.
+                            fill: true,
+                            icon: <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146A12 12 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>,
+                            onClick: () => { setMbMenuOpen(false); openPinterestImport(); },
+                          }] : []),
+                        ].map(it => (
+                          <div key={it.key} onClick={it.onClick} className="hover-row"
+                            style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
+                            <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                              background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
+                              <svg width="17" height="17" viewBox="0 0 24 24"
+                                fill={it.fill ? "currentColor" : "none"}
+                                stroke={it.fill ? "none" : "currentColor"}
+                                strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
+                            </div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{it.label}</div>
+                              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{it.sub}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
             )}
             {tab === "creations" && (
               <div style={{ position: "relative" }}>
