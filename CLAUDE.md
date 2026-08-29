@@ -77,7 +77,7 @@ not be created from the UI at all.
 | **Workspace invite** | inline in the Settings members panel — the "Einladen" button's `onClick`, a loop over `invitations` inserts. No named function. | App.jsx |
 | **Project invite** | `sendInvite` in `ProjectsView` | App.jsx |
 | **Invite acceptance** | onboarding: pending-invite tile + invite-code field (3 paths, all inserting `org_members`); project invites: `accept_project_invitation` RPC, called from the `?project-invite=` effect | App.jsx / Postgres |
-| **Task** | `KanbanBoard` — created inline in the column composer | App.jsx |
+| **Task** | `KanbanBoard` — created inline in the column composer — **and** `createDashboardTask` in the App root (the swipe-in task panel's "+" button) | App.jsx |
 | **Whiteboard** | `createBoard` in `IdeasTab`, plus `openBrainstorm` in the App root (Erstellen → Brainstorm) | App.jsx |
 | **Document** | `createDoc` | App.jsx |
 | **Moodboard** | `createBoard` in the assets area (the moodboards tab of `AssetsView`, now rendered inside **Brand → Creations** via `soloTab="moodboards"`, not in the file manager) | App.jsx |
@@ -88,8 +88,11 @@ not be created from the UI at all.
 | **Link (bookmark)** | `save` in `LinksTab` (file manager → Links) | App.jsx |
 | **File upload** | always through `uploadTracked` — never call `supabase.storage.upload` directly, or the storage ledger drifts | App.jsx |
 
-⚠ **Two things are created from MORE than one place**: workspaces (3) and
-whiteboards (2). A gate applied to only one of them is a hole.
+⚠ **Three things are created from MORE than one place**: workspaces (3),
+whiteboards (2) and tasks (2). A gate applied to only one of them is a hole.
+The two task writers must also agree on the ROW: same columns, same defaults,
+or a card looks different depending on where somebody happened to be standing
+when they made it.
 
 ## Billing, plans and limits
 

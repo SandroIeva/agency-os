@@ -42861,6 +42861,20 @@ export default function CircularMenu() {
   // changed. State is one line and cannot be out-specified.
   const [hoverAction, setHoverAction] = useState(-1);
   const [tasksOpen, setTasksOpen] = useState(false);
+  // Making a task from the task view. It used to only show them, which meant
+  // the one screen that answers "what am I supposed to be doing" could not
+  // take the answer down.
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState("medium");
+  const [newTaskProject, setNewTaskProject] = useState("");
+  const [newTaskBusy, setNewTaskBusy] = useState(false);
+  const [newTaskError, setNewTaskError] = useState("");
+  // The composer slides open by animating its height, which only looks right
+  // while it clips. Once it has settled it has to stop clipping, or the two
+  // dropdowns inside it open into nothing: they are absolutely positioned, not
+  // portalled, so an overflow:hidden ancestor eats the menu.
+  const [newTaskSettled, setNewTaskSettled] = useState(false);
   const [dashboardTasks, setDashboardTasks] = useState([]);
   const [dashboardReminders, setDashboardReminders] = useState([]);
   const [dashboardProjects, setDashboardProjects] = useState([]);
@@ -44096,6 +44110,40 @@ export default function CircularMenu() {
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [storeGoogleToken]);
+
+  // The second place a task can be created. The first is the KanbanBoard column
+  // composer, and the row has to come out identical: same columns, same
+  // defaults, or the card looks different depending on where it was made.
+  const createDashboardTask = async () => {
+    const de = appLanguage === "de";
+    const title = newTaskTitle.trim();
+    if (!title || newTaskBusy) return;
+    setNewTaskBusy(true);
+    setNewTaskError("");
+    const row = {
+      title,
+      description: null,
+      priority: newTaskPriority,
+      column_key: "todo",
+      project_name: newTaskProject || null,
+      creator_id: session.user.id,
+      assignee_id: session.user.id,
+      due_date: null,
+      position: dashboardTasks.filter(tk => tk.column_key === "todo").length,
+      org_id: userOrg?.id || null,
+    };
+    const { data, error } = await supabase.from("tasks").insert(row).select().single();
+    setNewTaskBusy(false);
+    if (error) {
+      setNewTaskError(planLimitError(error, de) || error.message);
+      return;
+    }
+    if (data) setDashboardTasks(prev => [...prev, data]);
+    setNewTaskTitle("");
+    setNewTaskError("");
+    // The panel stays open on purpose: somebody writing down what is on their
+    // mind rarely has exactly one thing.
+  };
 
   // ── Fetch Kanban tasks for dashboard/startview ──
   useEffect(() => {
@@ -48977,26 +49025,133 @@ export default function CircularMenu() {
                 style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
               >
                 <div>
-                  <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff60" : "#8A8F99", letterSpacing: 3, textTransform: "uppercase", marginBottom: 6, fontWeight: 600 }}>Deine Aufgaben</div>
-                  <div style={{ fontSize: 28, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 300 }}>Was steht an</div>
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff60" : "#8A8F99", letterSpacing: 3, textTransform: "uppercase", marginBottom: 6, fontWeight: 600 }}>{t("dash.yourTasks")}</div>
+                  <div style={{ fontSize: 28, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 300 }}>{t("dash.whatsUp")}</div>
                 </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {[
-                    { label: t("dash.all"), count: dashboardTasks.filter(tk => tk.column_key !== "done").length, active: true },
-                  ].map(f => (
-                    <div key={f.label} style={{
-                      padding: "6px 14px", borderRadius: 10, cursor: "pointer",
-                      background: f.active ? (darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)") : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)"),
-                      border: `1px solid ${f.active ? (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)")}`,
-                      fontSize: 12, fontFamily: FONT, color: f.active ? (darkMode ? "#ffffffdd" : "#1a1a2eDD") : (darkMode ? "#ffffff50" : "#1a1a2e60"),
-                      display: "flex", alignItems: "center", gap: 6,
+                {/* The count, and next to it the same shape with a plus in it.
+                    One reads, one writes, and they look like they belong to
+                    each other because they do. */}
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{
+                    padding: "6px 14px", borderRadius: 10,
+                    background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)",
+                    border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)"}`,
+                    fontSize: 12, fontFamily: FONT, color: darkMode ? "#ffffffdd" : "#1a1a2eDD",
+                    display: "flex", alignItems: "center", gap: 6,
+                  }}>
+                    {t("dash.all")}
+                    <span style={{ fontSize: 10, color: darkMode ? "#ffffff70" : "#1a1a2e70" }}>
+                      {dashboardTasks.filter(tk => tk.column_key !== "done").length}
+                    </span>
+                  </div>
+                  <motion.div
+                    onClick={() => {
+                      setNewTaskOpen(o => {
+                        if (o) { setNewTaskTitle(""); setNewTaskError(""); }
+                        return !o;
+                      });
+                    }}
+                    whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                    title={t("dash.newTask")}
+                    style={{
+                      width: 32, height: 32, borderRadius: 10, cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      // Open, it is the anthracite pill the rest of the app uses
+                      // for a selected state. Closed, it matches the count beside it.
+                      background: newTaskOpen
+                        ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c")
+                        : (darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)"),
+                      border: `1px solid ${newTaskOpen
+                        ? "transparent"
+                        : (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)")}`,
+                      transition: "background 0.2s ease, border-color 0.2s ease",
                     }}>
-                      {f.label}
-                      <span style={{ fontSize: 10, color: f.active ? (darkMode ? "#8B7AFF" : "#6C5CE7") : (darkMode ? "#ffffff30" : "#1a1a2e40") }}>{f.count}</span>
-                    </div>
-                  ))}
+                    <motion.svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                      stroke={newTaskOpen ? (darkMode ? "#15151c" : "#ffffff") : (darkMode ? "#ffffffdd" : "#1a1a2eDD")}
+                      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+                      animate={{ rotate: newTaskOpen ? 45 : 0 }}
+                      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                    </motion.svg>
+                  </motion.div>
                 </div>
               </motion.div>
+
+              {/* The composer. Title, priority, project, and that is all: this is
+                  the place you write down the thing you just thought of, not
+                  the place you plan it. Everything else stays in Kanban. */}
+              <AnimatePresence initial={false}>
+                {newTaskOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0, marginTop: -8 }}
+                    animate={{ opacity: 1, height: "auto", marginTop: 0 }}
+                    exit={{ opacity: 0, height: 0, marginTop: -8 }}
+                    transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                    onAnimationComplete={() => setNewTaskSettled(true)}
+                    onAnimationStart={() => setNewTaskSettled(false)}
+                    style={{ overflow: newTaskSettled ? "visible" : "hidden", flexShrink: 0 }}
+                  >
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+                      padding: "12px 14px", borderRadius: 14,
+                      background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)"}`,
+                    }}>
+                      <input
+                        autoFocus
+                        value={newTaskTitle}
+                        onChange={(e) => setNewTaskTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") { e.preventDefault(); createDashboardTask(); }
+                          if (e.key === "Escape") { setNewTaskOpen(false); setNewTaskTitle(""); setNewTaskError(""); }
+                        }}
+                        placeholder={t("dash.newTaskTitle")}
+                        style={{
+                          flex: 1, minWidth: 200, background: "transparent", border: "none", outline: "none",
+                          fontSize: 14, fontFamily: FONT, fontWeight: 400,
+                          color: darkMode ? "#ffffffDD" : "#1a1a2eDD", padding: "6px 2px",
+                        }} />
+                      <Dropdown
+                        value={newTaskPriority} onChange={setNewTaskPriority}
+                        theme={theme} darkMode={darkMode} minWidth={130}
+                        options={[
+                          { value: "high",   label: t("dash.prioHigh") },
+                          { value: "medium", label: t("dash.prioMedium") },
+                          { value: "low",    label: t("dash.prioLow") },
+                        ]} />
+                      <Dropdown
+                        value={newTaskProject} onChange={setNewTaskProject}
+                        theme={theme} darkMode={darkMode} minWidth={170} maxHeight={260}
+                        options={[
+                          { value: "", label: t("dash.noProject") },
+                          ...dashboardProjects
+                            .filter(pr => myProjectNames.has(pr.name))
+                            .map(pr => ({ value: pr.name, label: pr.name })),
+                        ]} />
+                      <motion.div
+                        onClick={createDashboardTask}
+                        whileHover={{ scale: newTaskTitle.trim() ? 1.03 : 1 }}
+                        whileTap={{ scale: newTaskTitle.trim() ? 0.97 : 1 }}
+                        style={{
+                          ...primaryBtn(darkMode),
+                          padding: "8px 18px", borderRadius: 10,
+                          fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
+                          cursor: newTaskTitle.trim() && !newTaskBusy ? "pointer" : "default",
+                          opacity: newTaskTitle.trim() && !newTaskBusy ? 1 : 0.4,
+                          userSelect: "none", whiteSpace: "nowrap",
+                          transition: "opacity 0.2s ease",
+                        }}>
+                        {t("dash.addTask")}
+                      </motion.div>
+                    </div>
+                    {newTaskError && (
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: "#C9437E", marginTop: 8, paddingLeft: 4 }}>
+                        {newTaskError}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Task sections — real data from Kanban board */}
               {(() => {
