@@ -29136,13 +29136,24 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
         {rows === null ? (
           <div style={{ color: theme.textDim, fontFamily: FONT, fontSize: 13 }}>{de ? "Lädt …" : "Loading …"}</div>
         ) : visible.length === 0 ? (
-          <div style={{ ...card, padding: "40px 22px", textAlign: "center", color: theme.textDim,
-            fontFamily: FONT, fontSize: 13, lineHeight: 1.6 }}>
-            {q.trim()
-              ? (de ? "Keine Treffer." : "No matches.")
-              : (de ? "Noch nichts angelegt. „Neu erstellen“ öffnet eine Canvas im gewünschten Format."
-                    : "Nothing here yet. “Create new” opens a canvas at the size you pick.")}
-          </div>
+          // Not inside a card any more: the other two tabs centre this in the
+          // whole area, and a boxed line of text was the odd one out.
+          <CreationsEmpty theme={theme} darkMode={darkMode}
+            image={q.trim() ? null : "/visual-NewBoard.png"}
+            title={q.trim()
+              ? (de ? "Keine Treffer" : "No matches")
+              : canvasFilter === "template"
+                ? (de ? "Noch keine Vorlagen" : "No templates yet")
+                : (de ? "Noch keine Artboards" : "No artboards yet")}
+            hint={q.trim()
+              ? (de ? "Versuche einen anderen Suchbegriff." : "Try a different search term.")
+              : canvasFilter === "template"
+                ? (de ? "Markiere eine Canvas als Vorlage, dann steht sie hier als Ausgangspunkt bereit."
+                      : "Mark a canvas as a template and it waits here as a starting point.")
+                : (de ? "Eine Canvas im gewünschten Format, für alles, was am Ende ein Bild werden soll."
+                      : "A canvas at the size you pick, for anything that ends up as a picture.")}
+            actionLabel={q.trim() ? null : (de ? "Neu erstellen" : "Create new")}
+            onAction={q.trim() ? null : () => setNewMenuOpen(true)} />
         ) : layout === "grid" ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
             {visible.map(r => (
@@ -30197,10 +30208,20 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
           </div>
         )}
         {visible.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "48px 20px" }}>
-            <div style={{ fontSize: 16, fontFamily: FONT, color: theme.text, marginBottom: 6 }}>{search ? (de ? "Keine Treffer" : "No matches") : currentFolder != null ? (de ? "Dieser Ordner ist leer" : "This folder is empty") : (de ? "Noch keine Boards" : "No boards yet")}</div>
-            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{search ? (de ? "Versuche einen anderen Suchbegriff." : "Try a different search term.") : (de ? "Erstelle ein Board über Hinzufügen → Neues Board oder Erstellen → Brainstorm." : "Create a board via Add → New board or Create → Brainstorm.")}</div>
-          </div>
+          // The picture only for the case it describes: nothing made yet. A
+          // search that found nothing and an empty folder are not that, and an
+          // illustration there would be shouting about nothing.
+          <CreationsEmpty theme={theme} darkMode={darkMode}
+            image={!search && currentFolder == null ? "/visual-NewBoard.png" : null}
+            title={search ? (de ? "Keine Treffer" : "No matches")
+                 : currentFolder != null ? (de ? "Dieser Ordner ist leer" : "This folder is empty")
+                 : (de ? "Noch keine Whiteboards" : "No whiteboards yet")}
+            hint={search ? (de ? "Versuche einen anderen Suchbegriff." : "Try a different search term.")
+                : currentFolder != null ? null
+                : (de ? "Ein Whiteboard ist eine unendliche Fläche für Notizen, Skizzen und alles, was noch keine Form hat."
+                      : "A whiteboard is an endless surface for notes, sketches and anything that has no shape yet.")}
+            actionLabel={!search && currentFolder == null ? (de ? "Neues Whiteboard" : "New whiteboard") : null}
+            onAction={!search && currentFolder == null ? () => createBoard() : null} />
         ) : viewMode === "grid" ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 24 }}>
             {visible.map(b => {
@@ -31836,43 +31857,12 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                   label={appLanguage === "de" ? "Moodboards werden geladen" : "Loading moodboards"} />
               </div>
             ) : boards.length === 0 ? (
-              // gap 9 instead of 14: the title and its sentence belong together,
-              // and at 14 they read as two separate statements.
-              // Padding at the bottom rather than translateY: with box-sizing
-              // border-box the box keeps its height, and half of the padding is
-              // what the centred content moves up — 50 to rise 25. A transform
-              // would have pushed content above the scroll container's origin
-              // in a short window, where scrolling cannot reach it; padding
-              // spills downward instead, which is scrollable.
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textDim, textAlign: "center", gap: 9, paddingBottom: 50 }}>
-                {/* Same visual as the empty board itself. This is the screen the
-                    mockup was drawn from — the one you reach with no boards at
-                    all, where "New board" is the right thing to offer. */}
-                <motion.img
-                  src="/visual-NewBoard.png" alt=""
-                  onError={(e) => { e.currentTarget.style.display = "none"; }}
-                  initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                  transition={{ type: "spring", stiffness: 160, damping: 18 }}
-                  // A fifth larger, and the negative margin closes the gap the
-                  // image's own transparent padding leaves under it.
-                  // marginTop moves the picture down, marginBottom takes the
-                  // same amount back off the bottom — the stack keeps its
-                  // height, so the centring does not budge and the picture
-                  // alone drops twenty pixels toward the text.
-                  style={{ width: 384, maxWidth: "78%", height: "auto",
-                    marginTop: 30, marginBottom: -36,
-                    pointerEvents: "none", userSelect: "none" }} />
-                <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("moodboard.emptyTitle") || "Noch keine Moodboards"}</div>
-                <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 340, lineHeight: 1.55 }}>{t("moodboard.emptyHint") || "Erstelle dein erstes Moodboard und sammle Referenzbilder, Farben und Inspirationen."}</div>
-                <motion.div whileTap={{ scale: 0.97 }} onClick={() => setCreating(true)}
-                  // 13px top and bottom rather than 11: the label sat low in the
-                  // pill because the cap height is not the line box.
-                  style={{ marginTop: 12, padding: "13px 26px", borderRadius: 999,
-                    background: "transparent", border: `1px solid ${darkMode ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.22)"}`,
-                    color: theme.text, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
-                  {t("moodboard.new") || "Neues Board"}
-                </motion.div>
-              </div>
+              <CreationsEmpty theme={theme} darkMode={darkMode}
+                image="/visual-NewBoard.png"
+                title={t("moodboard.emptyTitle") || "Noch keine Moodboards"}
+                hint={t("moodboard.emptyHint") || "Erstelle dein erstes Moodboard und sammle Referenzbilder, Farben und Inspirationen."}
+                actionLabel={t("moodboard.new") || "Neues Board"}
+                onAction={() => setCreating(true)} />
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 18 }}>
                 {/* Create tile */}
@@ -43823,6 +43813,50 @@ If you don't know a field, infer a plausible value. Write all text values in the
     </motion.div>
   );
 }
+// The "nothing here yet" screen, once, for the three Creations tabs. It was
+// three different compositions: Moodboards centred with a picture, Whiteboards
+// a block of text 48px down from the top, Artboards a line inside a card. Same
+// question, three answers.
+//
+// `image` is optional and `action` is optional, so the same component also
+// serves the smaller cases — an empty folder, a search with no matches — where
+// a full illustration would be shouting about nothing.
+function CreationsEmpty({ theme, darkMode, image, title, hint, actionLabel, onAction }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      height: "100%", minHeight: 320, color: theme.textDim, textAlign: "center", gap: 9,
+      // Bottom padding rather than a transform: the box keeps its height and
+      // the centred content rises by half of what is added, where a transform
+      // would push it above a short window's scroll origin, out of reach.
+      paddingBottom: 50, boxSizing: "border-box" }}>
+      {image && (
+        <motion.img
+          src={image} alt=""
+          onError={(e) => { e.currentTarget.style.display = "none"; }}
+          initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 160, damping: 18 }}
+          // marginTop moves the picture down and marginBottom takes the same
+          // amount back, so the stack keeps its height and the centring does
+          // not budge while the picture alone drops toward the text.
+          style={{ width: 384, maxWidth: "78%", height: "auto",
+            marginTop: 30, marginBottom: -36, pointerEvents: "none", userSelect: "none" }} />
+      )}
+      <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{title}</div>
+      {hint && <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 340, lineHeight: 1.55 }}>{hint}</div>}
+      {actionLabel && onAction && (
+        <motion.div whileTap={{ scale: 0.97 }} onClick={onAction}
+          // 13 top and bottom rather than 11: the label sits low in the pill
+          // otherwise, because the cap height is not the line box.
+          style={{ marginTop: 12, padding: "13px 26px", borderRadius: 999,
+            background: "transparent", border: `1px solid ${darkMode ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.22)"}`,
+            color: theme.text, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
+          {actionLabel}
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
 // Starting Pinterest's consent detour, from wherever somebody happens to be.
 // One function rather than one per entry point: it is a full navigation away
 // from the app and back, and two copies of that would drift.
