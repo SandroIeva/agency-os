@@ -38,7 +38,7 @@ const translations = {
   "linearMenu.document":      { de: "Dokument",         en: "Document" },
   "linearMenu.socialPost":    { de: "Social Media Post", en: "Social Media Post" },
   // Plan sub-items
-  "linearMenu.kanban":        { de: "Kanban",           en: "Kanban" },
+  "linearMenu.kanban":        { de: "Kanban Board",     en: "Kanban Board" },
   "linearMenu.timeline":      { de: "Timeline",         en: "Timeline" },
   "linearMenu.tasks":         { de: "Aufgaben",         en: "Tasks" },
   "linearMenu.calendar":      { de: "Kalender",         en: "Calendar" },

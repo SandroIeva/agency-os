@@ -118,10 +118,12 @@ const LINEAR_MENU_ITEMS_DEF = [
   // Files takes the slot Messenger held. Messenger moved to the bottom bar,
   // where it is one click away from anywhere instead of two.
   { id: "assets",    labelKey: "linearMenu.assets",    sub: [] },
+  // Tasks first: it is the one thing in here somebody opens to answer "what am
+  // I supposed to be doing", and it was sitting third.
   { id: "plan",      labelKey: "linearMenu.plan",      sub: [
+    { id: "tasks",    labelKey: "linearMenu.tasks" },
     { id: "kanban",   labelKey: "linearMenu.kanban" },
     { id: "timeline", labelKey: "linearMenu.timeline" },
-    { id: "tasks",    labelKey: "linearMenu.tasks" },
     { id: "calendar", labelKey: "linearMenu.calendar" },
     { id: "notes",    labelKey: "linearMenu.notes" },
   ]},
@@ -48586,7 +48588,10 @@ export default function CircularMenu() {
                     ? "0 28px 80px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)"
                     : "0 28px 80px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.6)",
                   display: "grid",
-                  gridTemplateColumns: "1fr 1px 1fr",
+                  // minmax(0, 1fr), not 1fr: plain 1fr is minmax(auto, 1fr), so a long
+                  // item ("Kanban Board") widens its own column and squeezes the other.
+                  // The card's width is fixed, so the two halves have to stay halves.
+                  gridTemplateColumns: "minmax(0, 1fr) 1px minmax(0, 1fr)",
                   // 46 = 28 visible breathing room + 18 pill overhang on each side, so the
                   // pill-to-divider gap matches the pill-to-container-edge gap exactly (28px).
                   columnGap: 46,
