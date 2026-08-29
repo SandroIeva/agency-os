@@ -3,12 +3,31 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    { "source": "/i/:slug", "destination": "/api/redirect?slug=:slug" },
-    { "source": "/s/:token", "destination": "/api/share?t=:token" },
-    { "source": "/slack/callback", "destination": "/api/slack?mode=callback" },
-    { "source": "/((?!api/|@|node_modules/|src/|i/|s/|.*\\.).*)", "destination": "/" }
+    {
+      "source": "/i/:slug",
+      "destination": "/api/redirect?slug=:slug"
+    },
+    {
+      "source": "/s/:token",
+      "destination": "/api/share?t=:token"
+    },
+    {
+      "source": "/slack/callback",
+      "destination": "/api/slack?mode=callback"
+    },
+    {
+      "source": "/pinterest/callback",
+      "destination": "/api/pinterest?mode=callback"
+    },
+    {
+      "source": "/((?!api/|@|node_modules/|src/|i/|s/|.*\\.).*)",
+      "destination": "/"
+    }
   ],
   "crons": [
-    { "path": "/api/lifecycle-sweep", "schedule": "0 4 * * *" }
+    {
+      "path": "/api/lifecycle-sweep",
+      "schedule": "0 4 * * *"
+    }
   ]
 }
