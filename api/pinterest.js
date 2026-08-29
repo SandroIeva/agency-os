@@ -336,7 +336,21 @@ export default async function handler(req) {
       }),
     });
     const j = await r.json().catch(() => null);
-    if (!r.ok) return json({ error: j?.message || `HTTP ${r.status}`, code: "pinterest_error" }, 502);
+    if (!r.ok) {
+      // An app that Pinterest has not reviewed yet may READ production but not
+      // create pins in it. Everything about the request is correct and it still
+      // fails, so this must not read as a bug in the composer: it is a state
+      // the Pinterest app is in, and only Pinterest can change it.
+      const msg = j?.message || "";
+      if (r.status === 403 && /trial access/i.test(msg)) {
+        return json({
+          error: msg,
+          code: "trial_access",
+          hint: "The Pinterest app has Trial access. Pins can only be created once Pinterest grants Standard access.",
+        }, 403);
+      }
+      return json({ error: msg || `HTTP ${r.status}`, code: "pinterest_error" }, 502);
+    }
     return json({ ok: true, id: j.id, url: j.id ? `https://www.pinterest.com/pin/${j.id}/` : null });
   }
 
