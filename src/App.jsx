@@ -30547,6 +30547,25 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   // belongs in Settings and not in the middle of making a moodboard.
   const [pinConnected, setPinConnected] = useState(false);
   const [mbMenuOpen, setMbMenuOpen] = useState(false);   // the moodboards "Neu erstellen" menu
+  // Shown when somebody reaches for Pinterest before there is an account to
+  // reach into. The entries stay VISIBLE when disconnected on purpose: a menu
+  // item that only exists once you already know about it is a feature nobody
+  // finds. Clicking it explains itself and offers the one thing missing.
+  const [pinConnectAsk, setPinConnectAsk] = useState(null); // null | { then: "import" | "pins" | "sync", busy, error }
+  const needsPinterest = (then) => {
+    if (pinConnected) return false;
+    setPinConnectAsk({ then, busy: false, error: "" });
+    return true;
+  };
+  const runPinterestConnect = async () => {
+    setPinConnectAsk(a => ({ ...a, busy: true, error: "" }));
+    try {
+      await startPinterestOAuth({ orgId: userOrg?.id, appLanguage, returnTo: "assets" });
+    } catch (e) {
+      setPinConnectAsk(a => ({ ...a, busy: false,
+        error: appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection." }));
+    }
+  };
   useEffect(() => {
     if (!userOrg?.id || !session?.access_token) { setPinConnected(false); return; }
     let alive = true;
@@ -31207,17 +31226,17 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             fill: false,
                             icon: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
                             onClick: () => { setMbMenuOpen(false); setCreating(true); } },
-                          // Only when there is an account to import from. Offering
-                          // to connect one belongs in Settings, not here.
-                          ...(pinConnected ? [{
+                          {
                             key: "pinterest", label: appLanguage === "de" ? "Aus Pinterest" : "From Pinterest",
-                            sub: appLanguage === "de" ? "Ein ganzes Board übernehmen" : "Bring a whole board over",
+                            sub: pinConnected
+                              ? (appLanguage === "de" ? "Ein ganzes Board übernehmen" : "Bring a whole board over")
+                              : (appLanguage === "de" ? "Einmal verbinden, dann geht es" : "Connect once, then it works"),
                             // The brand's own shape, so it is recognisable, but
                             // in currentColor like every other tile in this menu.
                             fill: true,
                             icon: <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146A12 12 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>,
-                            onClick: () => { setMbMenuOpen(false); openPinterestImport(); },
-                          }] : []),
+                            onClick: () => { setMbMenuOpen(false); if (!needsPinterest("import")) openPinterestImport(); },
+                          },
                         ].map(it => (
                           <div key={it.key} onClick={it.onClick} className="hover-row"
                             style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
@@ -31437,6 +31456,68 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Reached for Pinterest before there is an account. Says what the
+              connection is for and offers the one thing missing, rather than
+              sending somebody to Settings to work it out. */}
+          {pinConnectAsk && createPortal(
+            <div onClick={() => { if (!pinConnectAsk.busy) setPinConnectAsk(null); }}
+              style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+                display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+              <div onClick={e => e.stopPropagation()}
+                style={{ width: "min(440px, 100%)", borderRadius: 22, padding: "22px 28px 26px",
+                  display: "flex", flexDirection: "column", gap: 14,
+                  background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, display: "flex",
+                    alignItems: "center", justifyContent: "center",
+                    background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}>
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="#E60023" aria-hidden="true">
+                      <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146A12 12 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>
+                    </svg>
+                  </div>
+                  <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0 }}>
+                    {appLanguage === "de" ? "Pinterest verbinden" : "Connect Pinterest"}
+                  </div>
+                </div>
+                <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+                  {pinConnectAsk.then === "sync"
+                    ? (appLanguage === "de"
+                        ? "Zum Abgleichen braucht dieser Workspace ein verbundenes Pinterest-Konto. Einmal verbinden, danach holt der Abgleich neue Pins von selbst."
+                        : "Syncing needs a Pinterest account connected to this workspace. Connect once, and the sync brings in new pins from then on.")
+                    : (appLanguage === "de"
+                        ? "Um Boards und Pins zu holen, braucht dieser Workspace ein verbundenes Pinterest-Konto. Einmal verbinden, danach steht es allen hier zur Verfügung."
+                        : "To bring in boards and pins, this workspace needs a Pinterest account connected. Connect once and it is there for everybody in it.")}
+                </div>
+                <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
+                  {appLanguage === "de"
+                    ? "Die Verbindung gilt für den Workspace, nicht nur für dich. Du kannst sie jederzeit in den Einstellungen wieder trennen."
+                    : "The connection belongs to the workspace, not just to you. You can disconnect it any time in Settings."}
+                </div>
+                {pinConnectAsk.error && (
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767", lineHeight: 1.5 }}>{pinConnectAsk.error}</div>
+                )}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 2 }}>
+                  <div style={{ flex: 1 }} />
+                  <motion.div whileTap={{ scale: pinConnectAsk.busy ? 1 : 0.97 }}
+                    onClick={() => { if (!pinConnectAsk.busy) setPinConnectAsk(null); }}
+                    style={{ padding: "10px 16px", borderRadius: 999, cursor: pinConnectAsk.busy ? "default" : "pointer",
+                      border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 12.5, fontFamily: FONT,
+                      opacity: pinConnectAsk.busy ? 0.5 : 1 }}>
+                    {appLanguage === "de" ? "Später" : "Later"}
+                  </motion.div>
+                  <motion.div whileTap={{ scale: pinConnectAsk.busy ? 1 : 0.97 }}
+                    onClick={pinConnectAsk.busy ? undefined : runPinterestConnect}
+                    style={{ ...primaryBtn, padding: "11px 22px", borderRadius: 999,
+                      cursor: pinConnectAsk.busy ? "default" : "pointer", opacity: pinConnectAsk.busy ? 0.6 : 1,
+                      fontSize: 13, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap" }}>
+                    {pinConnectAsk.busy
+                      ? (t("common.loading") || "Lädt…")
+                      : (appLanguage === "de" ? "Verbinden" : "Connect")}
+                  </motion.div>
+                </div>
+              </div>
+            </div>, document.body)}
 
           {/* What the sync found, next to the button that asked for it. It goes
               away by itself: nothing here needs dismissing. */}
@@ -31977,14 +32058,14 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                         { key: "url", label: "URL", sub: appLanguage === "de" ? "Bild- oder Website-URL" : "Image or website URL",
                           icon: <><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></>,
                           onClick: () => { setBoardAddOpen(false); setShowUrlInput(true); } },
-                        // Only when the workspace has an account. Same rule as
-                        // the moodboards header: connecting belongs in Settings.
-                        ...(pinConnected ? [{
+                        {
                           key: "pinterest", label: appLanguage === "de" ? "Aus Pinterest" : "From Pinterest",
-                          sub: appLanguage === "de" ? "Pins aus einem Board wählen" : "Pick pins from a board",
+                          sub: pinConnected
+                            ? (appLanguage === "de" ? "Pins aus einem Board wählen" : "Pick pins from a board")
+                            : (appLanguage === "de" ? "Einmal verbinden, dann geht es" : "Connect once, then it works"),
                           fill: true,
                           icon: <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146A12 12 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>,
-                          onClick: () => { setBoardAddOpen(false); openPinPick(); },
+                          onClick: () => { setBoardAddOpen(false); if (!needsPinterest("pins")) openPinPick(); },
                         }, {
                           key: "sync",
                           label: appLanguage === "de" ? "Mit Pinterest abgleichen" : "Sync with Pinterest",
@@ -31992,8 +32073,8 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             ? (appLanguage === "de" ? `Neues aus „${activeBoard.pinterest_board_name}"` : `What is new in "${activeBoard.pinterest_board_name}"`)
                             : (appLanguage === "de" ? "Board wählen und Neues holen" : "Pick a board and fetch what is new"),
                           icon: <><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-7.6-4.2"/><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 7.6 4.2"/><polyline points="20 3 19.6 7.2 15.4 7.2"/><polyline points="4 21 4.4 16.8 8.6 16.8"/></>,
-                          onClick: () => { setBoardAddOpen(false); syncPinterestBoard(); },
-                        }] : []),
+                          onClick: () => { setBoardAddOpen(false); if (!needsPinterest("sync")) syncPinterestBoard(); },
+                        },
                       ].map(it => (
                         <div key={it.key} onClick={it.onClick} className="hover-row"
                           style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
@@ -43733,6 +43814,25 @@ If you don't know a field, infer a plausible value. Write all text values in the
     </motion.div>
   );
 }
+// Starting Pinterest's consent detour, from wherever somebody happens to be.
+// One function rather than one per entry point: it is a full navigation away
+// from the app and back, and two copies of that would drift.
+//
+// `returnTo` is remembered here rather than sent along, because the state token
+// is minted by Postgres and carries a user and a workspace, not a screen. It is
+// read once when Pinterest sends the person back.
+const PINTEREST_RETURN_KEY = "agencyos-pinterest-return";
+async function startPinterestOAuth({ orgId, appLanguage, returnTo = "settings" }) {
+  const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
+    p_org: orgId || null, p_kind: "pinterest", p_lang: appLanguage === "en" ? "en" : "de",
+  });
+  if (error || !token) throw error || new Error("token");
+  try { localStorage.setItem(PINTEREST_RETURN_KEY, returnTo); } catch (_) {}
+  // Full navigation, not a popup: Pinterest's consent screen is a page, and a
+  // blocked popup would look like a dead button.
+  window.location.href = `/api/pinterest?mode=install&state=${encodeURIComponent(token)}`;
+}
+
 // The metaballs loader (beui.dev/components/motion/loader), rewritten in this
 // app's own terms: no Tailwind, no shadcn, Framer Motion straight from the
 // import at the top of this file.
@@ -45801,7 +45901,19 @@ export default function CircularMenu() {
     const url = new URL(window.location.href);
     url.searchParams.delete("pinterest");
     window.history.replaceState({}, "", url.pathname + (url.search || ""));
-    if (status === "connected") { readPinterest().then(setPinConn); setSettingsTab("account"); setCurrentView("settings"); }
+    if (status === "connected") {
+      readPinterest().then(setPinConn);
+      // Somebody who started from a moodboard wanted a moodboard, not Settings.
+      let back = "settings";
+      try { back = localStorage.getItem(PINTEREST_RETURN_KEY) || "settings"; localStorage.removeItem(PINTEREST_RETURN_KEY); } catch (_) {}
+      if (back === "assets") {
+        setAssetsOpenTab({ tab: "moodboards", ts: Date.now() });
+        setCurrentView("assets");
+      } else {
+        setSettingsTab("account");
+        setCurrentView("settings");
+      }
+    }
     else if (status !== "cancelled") {
       setPinErr(appLanguage === "de"
         ? "Die Verbindung zu Pinterest ist nicht zustande gekommen. Versuch es noch einmal."
@@ -45812,15 +45924,7 @@ export default function CircularMenu() {
   const startPinterestConnect = async () => {
     setPinBusy(true); setPinErr("");
     try {
-      // The same one-time token the messengers use. p_org is what tells the
-      // callback which workspace is being connected.
-      const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
-        p_org: userOrg?.id || null, p_kind: "pinterest", p_lang: appLanguage === "en" ? "en" : "de",
-      });
-      if (error || !token) throw error || new Error("token");
-      // Full navigation, not a popup: Pinterest's consent screen is a page, and
-      // a blocked popup would look like a dead button.
-      window.location.href = `/api/pinterest?mode=install&state=${encodeURIComponent(token)}`;
+      await startPinterestOAuth({ orgId: userOrg?.id, appLanguage, returnTo: "settings" });
     } catch (e) {
       setPinErr(appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection.");
       setPinBusy(false);
