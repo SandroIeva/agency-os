@@ -34791,15 +34791,6 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
     await supabase.from("workspace_links").delete().eq("id", row.id);
   };
 
-  const addFolder = async () => {
-    const name = (window.prompt(de ? "Name des Ordners" : "Folder name") || "").trim();
-    if (!name) return;
-    const { error } = await supabase.from("link_folders").insert({
-      org_id: userOrg.id, project_id: projectId || null, name,
-      position: folders.length + 10, created_by: session?.user?.id || null });
-    if (error) { setErr(planLimitError(error, de) || error.message); return; }
-    load();
-  };
   const renameFolder = async (fo) => {
     const name = (window.prompt(de ? "Neuer Name" : "New name", fo.name) || "").trim();
     if (!name || name === fo.name) return;
@@ -34981,16 +34972,6 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
                       )}
                     </motion.div>
                   ))}
-                  {canEdit && (
-                    <motion.div whileHover={{ y: -2 }} onClick={addFolder}
-                      style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, cursor: "pointer",
-                        border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textDim }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", border: `1px dashed ${theme.borderFaint}` }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                      </div>
-                      <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500 }}>{de ? "Neuer Ordner" : "New folder"}</div>
-                    </motion.div>
-                  )}
                 </div>
               </div>
             )}
