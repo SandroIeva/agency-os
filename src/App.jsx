@@ -389,6 +389,18 @@ const ORB_UNIFORMS = [
   0.435294122, 0.619607866, 0.909803927, 1
 ];
 
+// The light theme's four ramp colours, by their index in the block above.
+// Only these differ: the highlight is white and the canvas is the same near
+// black in both, since the canvas is what the FLUID sits on inside the ball,
+// not the page behind it.
+const ORB_LIGHT_COLORS = {
+  32: [1, 0.964705882, 0.909803922],   // A  #FFF6E8
+  36: [0.690196078, 0.890196078, 0.835294118],   // B  #B0E3D5
+  40: [0.643137255, 0.752941176, 0.854901961],   // C  #A4C0DA
+  44: [0.0784313725, 0.0196078431, 0.901960784],   // D  #1405E6
+  76: [0.0784313725, 0.0196078431, 0.901960784],   // the glow follows D here, B in the dark
+};
+
 let orbGpu = null;   // Promise of { device, pipeline, format }, or null
 function orbDevice() {
   if (orbGpu) return orbGpu;
@@ -428,7 +440,8 @@ function orbDevice() {
 // `leaving` sends it down into the corner and out. The caller owns that flag,
 // because what happens next (the voice UI opening) is the caller's business,
 // and an orb that decided on its own when to vanish would be two truths.
-function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, leaving = false, fallback = null }) {
+function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, leaving = false,
+                    darkMode = true, fallback = null }) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const [failed, setFailed] = useState(false);
@@ -467,6 +480,8 @@ function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, leaving = false, 
       if (!ctx) { setFailed(true); return; }
       ctx.configure({ device, format, alphaMode: "premultiplied" });
       const values = new Float32Array(ORB_UNIFORMS);
+      // Same shader, same everything else: four colours swapped.
+      if (!darkMode) for (const i in ORB_LIGHT_COLORS) values.set(ORB_LIGHT_COLORS[i], Number(i));
       const buf = device.createBuffer({
         size: values.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -513,7 +528,7 @@ function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, leaving = false, 
       raf = requestAnimationFrame(frame);
     }).catch(() => { if (alive) setFailed(true); });
     return () => { alive = false; if (raf) cancelAnimationFrame(raf); };
-  }, [size]);
+  }, [size, darkMode]);
 
   if (failed) return fallback;
   return (
@@ -538,11 +553,16 @@ function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, leaving = false, 
       <div style={{ position: "absolute", left: "50%", top: "50%",
         width: ball, height: ball, marginLeft: -ball / 2, marginTop: -ball / 2,
         borderRadius: "50%", pointerEvents: "none",
-        // Colour B of the palette, so the halo is the orb's own light rather
-        // than a second opinion about what colour it is.
-        boxShadow: hover
-          ? `0 0 ${ball * 0.62}px rgba(110,163,242,0.40), 0 0 ${ball * 0.26}px rgba(160,200,255,0.26)`
-          : `0 0 ${ball * 0.40}px rgba(110,163,242,0.20), 0 0 ${ball * 0.16}px rgba(160,200,255,0.12)`,
+        // The halo is the orb's own light, so it takes its colour from the
+        // palette in force: B in the dark, D on light, where a pale blue glow
+        // on a pale page would be nothing at all.
+        boxShadow: darkMode
+          ? (hover
+            ? `0 0 ${ball * 0.62}px rgba(110,163,242,0.40), 0 0 ${ball * 0.26}px rgba(160,200,255,0.26)`
+            : `0 0 ${ball * 0.40}px rgba(110,163,242,0.20), 0 0 ${ball * 0.16}px rgba(160,200,255,0.12)`)
+          : (hover
+            ? `0 0 ${ball * 0.55}px rgba(20,5,230,0.26), 0 0 ${ball * 0.22}px rgba(176,227,213,0.22)`
+            : `0 0 ${ball * 0.34}px rgba(20,5,230,0.14), 0 0 ${ball * 0.14}px rgba(176,227,213,0.12)`),
         transition: "box-shadow 0.5s cubic-bezier(0.22, 1, 0.36, 1)" }} />
       <canvas ref={canvasRef}
         style={{ position: "relative", width: size, height: size, display: "block" }} />
@@ -47967,7 +47987,8 @@ export default function CircularMenu() {
               >
                 {/* The same orb, larger, and it runs faster while the AI talks.
                     The old sphere is still the fallback where WebGPU is not. */}
-                <LiquidOrb size={200} speed={aiStatus === "speaking" ? 3.4 : 1.5}
+                <LiquidOrb size={200} darkMode={darkMode}
+                  speed={aiStatus === "speaking" ? 3.4 : 1.5}
                   hoverSpeed={aiStatus === "speaking" ? 3.8 : 2.6}
                   fallback={<AISpeakingSphere darkMode={darkMode} speaking={aiStatus === "speaking"} audioLevel={audioLevelRef} />} />
               </motion.div>
@@ -51260,7 +51281,7 @@ export default function CircularMenu() {
               the whole transform when it does. */}
           <div style={{ cursor: "pointer", marginRight: -4 }}
             onClick={() => { setOrbLeaving(true); setTimeout(startVoice, 380); }}>
-            <LiquidOrb size={74} leaving={orbLeaving || voiceMode || aiSpeaking} fallback={<AISphere darkMode={darkMode} />} />
+            <LiquidOrb size={74} darkMode={darkMode} leaving={orbLeaving || voiceMode || aiSpeaking} fallback={<AISphere darkMode={darkMode} />} />
           </div>
         </div>
       </div>
