@@ -51440,7 +51440,7 @@ export default function CircularMenu() {
            blur, and a filter isolates the backdrop, so the blur would have had
            the dot grid outside what it can sample. */
         .sv-card {
-          transition: background 0.8s cubic-bezier(0.33, 0, 0.35, 1), border-color 0.4s cubic-bezier(0.33, 0, 0.35, 1);
+          transition: background ${darkMode ? "0.8s" : "1s"} cubic-bezier(0.33, 0, 0.35, 1), border-color ${darkMode ? "0.4s" : "0.5s"} cubic-bezier(0.33, 0, 0.35, 1);
         }
         .sv-lit {
           background:
@@ -51449,10 +51449,10 @@ export default function CircularMenu() {
         }
         .sv-card:hover {
           background:
-            linear-gradient(${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.07)"}, ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.07)"}),
+            linear-gradient(${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.055)"}, ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.055)"}),
             ${darkMode ? "rgba(17,17,23,0.72)" : "rgba(245,245,247,0.72)"} !important;
-          border-color: ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"} !important;
-          transition: background 0.35s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+          border-color: ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)"} !important;
+          transition: background ${darkMode ? "0.35s" : "0.5s"} cubic-bezier(0.22, 1, 0.36, 1), border-color ${darkMode ? "0.35s" : "0.5s"} cubic-bezier(0.22, 1, 0.36, 1);
         }
         /* Pink-tinted hover — used for Prioritäts-Tasks, keeps the pink identity */
         .hover-row-priority {
