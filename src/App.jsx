@@ -51255,9 +51255,12 @@ export default function CircularMenu() {
           {/* The orb drops out of the corner first, then the voice UI takes
               over. 380ms is the animation's own 420 less the overlap that
               keeps it from reading as two separate events. */}
-          <div style={{ cursor: "pointer" }}
+          {/* Four pixels further right, as a negative margin on the wrapper.
+              Not a transform: the orb inside animates x/y, and Framer writes
+              the whole transform when it does. */}
+          <div style={{ cursor: "pointer", marginRight: -4 }}
             onClick={() => { setOrbLeaving(true); setTimeout(startVoice, 380); }}>
-            <LiquidOrb size={64} leaving={orbLeaving || voiceMode || aiSpeaking} fallback={<AISphere darkMode={darkMode} />} />
+            <LiquidOrb size={74} leaving={orbLeaving || voiceMode || aiSpeaking} fallback={<AISphere darkMode={darkMode} />} />
           </div>
         </div>
       </div>
