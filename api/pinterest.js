@@ -278,18 +278,37 @@ export default async function handler(req) {
   }
 
   if (body.mode === "create-pin") {
-    const { boardId, imageUrl } = body;
-    if (!boardId || !imageUrl) return json({ error: "boardId and imageUrl are required" }, 400);
+    const { boardId } = body;
+    if (!boardId) return json({ error: "boardId is required" }, 400);
+    if (!body.imageUrl && !body.imageBase64) {
+      return json({ error: "imageUrl or imageBase64 is required" }, 400);
+    }
+    // Two ways in, because the app has both kinds of picture. A url means
+    // Pinterest fetches it itself, which only works for something publicly
+    // readable: most of this workspace's assets live in a private bucket whose
+    // signed urls expire, and Pinterest would fetch them at a moment we do not
+    // control. Those go up as bytes instead.
+    const media_source = body.imageBase64
+      ? {
+          source_type: "image_base64",
+          content_type: body.contentType || "image/jpeg",
+          // Tolerates a whole data: URL as well as bare base64, since that is
+          // what every image helper in the app already produces.
+          data: String(body.imageBase64).replace(/^data:[^;]+;base64,/, ""),
+        }
+      : { source_type: "image_url", url: body.imageUrl };
     const r = await pin(token, "/pins", {
       method: "POST",
       body: JSON.stringify({
         board_id: boardId,
+        // Pinterest's own limits: 100 for a title, 800 for a description. Cut
+        // here rather than letting the whole call come back as a 400.
         title: (body.title || "").slice(0, 100) || undefined,
         description: (body.description || "").slice(0, 800) || undefined,
         link: body.link || undefined,
-        // Pinterest fetches the image itself, so it has to be a url it can
-        // reach: a Supabase public url works, a signed one expires.
-        media_source: { source_type: "image_url", url: imageUrl },
+        alt_text: (body.altText || "").slice(0, 500) || undefined,
+        board_section_id: body.sectionId || undefined,
+        media_source,
       }),
     });
     const j = await r.json().catch(() => null);
