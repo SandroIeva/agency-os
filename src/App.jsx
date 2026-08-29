@@ -35158,7 +35158,7 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
           style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
             display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ width: "min(520px, 100%)", borderRadius: 22, padding: 28, display: "flex", flexDirection: "column", gap: 20,
+            style={{ width: "min(520px, 100%)", borderRadius: 22, padding: "28px 28px 30px", display: "flex", flexDirection: "column", gap: 20,
               background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0 }}>
@@ -35183,21 +35183,15 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
                 if (e.key === "Escape") setEditing(null);
               }}
               placeholder="https://…" style={{ ...field, padding: "13px 15px", fontSize: 14 }} />
-            {/* The label sits above so the picker gets the whole width. Beside
-                it, the two of them split a 520px dialog into two cramped
-                halves, which is what this looked like. */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>{de ? "Ordner" : "Folder"}</span>
-              {/* Built from the same `field` as the url input above it: a pill
-                  sitting under a rounded rectangle was the thing that looked
-                  wrong, and matching only the radius would have left the border
-                  and the fill still disagreeing. */}
-              <Dropdown value={editing.folder_id || ""} onChange={(v) => setEditing(x => ({ ...x, folder_id: v || null }))}
-                theme={theme} darkMode={darkMode} minWidth={464} maxHeight={260}
-                triggerStyle={{ ...field, padding: "13px 15px", display: "flex", fontSize: 13.5, fontWeight: 400 }}
-                options={[{ value: "", label: de ? "Kein Ordner" : "No folder" },
-                          ...folders.map(fo => ({ value: fo.id, label: fo.name }))]} />
-            </div>
+            {/* No label: the trigger reads "Kein Ordner" or the folder's name,
+                which is the label. Built from the same `field` as the url input
+                above it, so the two rows are the same shape one gap apart
+                rather than a pill under a rounded rectangle. */}
+            <Dropdown value={editing.folder_id || ""} onChange={(v) => setEditing(x => ({ ...x, folder_id: v || null }))}
+              theme={theme} darkMode={darkMode} minWidth={464} maxHeight={260}
+              triggerStyle={{ ...field, padding: "13px 15px", display: "flex", fontSize: 13.5, fontWeight: 400 }}
+              options={[{ value: "", label: de ? "Kein Ordner" : "No folder" },
+                        ...folders.map(fo => ({ value: fo.id, label: fo.name }))]} />
             {err && <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767", lineHeight: 1.5 }}>{err}</div>}
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               {/* Who it is for, where the eye ends up last. Workspace is the
