@@ -49028,53 +49028,44 @@ export default function CircularMenu() {
                   <div style={{ fontSize: 10, fontFamily: FONT, color: darkMode ? "#ffffff60" : "#8A8F99", letterSpacing: 3, textTransform: "uppercase", marginBottom: 6, fontWeight: 600 }}>{t("dash.yourTasks")}</div>
                   <div style={{ fontSize: 28, fontFamily: FONT, color: darkMode ? "#ffffffCC" : "#1a1a2eDD", fontWeight: 300 }}>{t("dash.whatsUp")}</div>
                 </div>
-                {/* The count, and next to it the same shape with a plus in it.
-                    One reads, one writes, and they look like they belong to
-                    each other because they do. */}
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <div style={{
-                    padding: "6px 14px", borderRadius: 10,
-                    background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)",
-                    border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)"}`,
-                    fontSize: 12, fontFamily: FONT, color: darkMode ? "#ffffffdd" : "#1a1a2eDD",
-                    display: "flex", alignItems: "center", gap: 6,
+                {/* The plus, with what it does written beside it. The count
+                    that used to sit here answered a question nobody was asking
+                    in a view that is already a list of the tasks. */}
+                <motion.div
+                  onClick={() => {
+                    setNewTaskOpen(o => {
+                      if (o) { setNewTaskTitle(""); setNewTaskError(""); }
+                      return !o;
+                    });
+                  }}
+                  whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "7px 14px 7px 11px", borderRadius: 10, cursor: "pointer",
+                    userSelect: "none", whiteSpace: "nowrap",
+                    // Open, it is the anthracite pill the rest of the app uses for
+                    // a selected state, inverted on dark like the nav.
+                    background: newTaskOpen
+                      ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c")
+                      : (darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)"),
+                    border: `1px solid ${newTaskOpen
+                      ? "transparent"
+                      : (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)")}`,
+                    color: newTaskOpen
+                      ? (darkMode ? "#15151c" : "#ffffff")
+                      : (darkMode ? "#ffffffdd" : "#1a1a2eDD"),
+                    fontSize: 12, fontFamily: FONT, fontWeight: 400,
+                    transition: "background 0.2s ease, border-color 0.2s ease, color 0.2s ease",
                   }}>
-                    {t("dash.all")}
-                    <span style={{ fontSize: 10, color: darkMode ? "#ffffff70" : "#1a1a2e70" }}>
-                      {dashboardTasks.filter(tk => tk.column_key !== "done").length}
-                    </span>
-                  </div>
-                  <motion.div
-                    onClick={() => {
-                      setNewTaskOpen(o => {
-                        if (o) { setNewTaskTitle(""); setNewTaskError(""); }
-                        return !o;
-                      });
-                    }}
-                    whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                    title={t("dash.newTask")}
-                    style={{
-                      width: 32, height: 32, borderRadius: 10, cursor: "pointer",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      // Open, it is the anthracite pill the rest of the app uses
-                      // for a selected state. Closed, it matches the count beside it.
-                      background: newTaskOpen
-                        ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c")
-                        : (darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)"),
-                      border: `1px solid ${newTaskOpen
-                        ? "transparent"
-                        : (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)")}`,
-                      transition: "background 0.2s ease, border-color 0.2s ease",
-                    }}>
-                    <motion.svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                      stroke={newTaskOpen ? (darkMode ? "#15151c" : "#ffffff") : (darkMode ? "#ffffffdd" : "#1a1a2eDD")}
-                      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
-                      animate={{ rotate: newTaskOpen ? 45 : 0 }}
-                      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
-                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                    </motion.svg>
-                  </motion.div>
-                </div>
+                  <motion.svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+                    animate={{ rotate: newTaskOpen ? 45 : 0 }}
+                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                    style={{ flexShrink: 0 }}>
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                  </motion.svg>
+                  {t("dash.newTask")}
+                </motion.div>
               </motion.div>
 
               {/* The composer. Title, priority, project, and that is all: this is
