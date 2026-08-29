@@ -43281,7 +43281,11 @@ If you don't know a field, infer a plausible value. Write all text values in the
           }} />
         )}
         {loading ? (
-          <div style={{ padding: 40, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim, margin: "auto", position: "relative", zIndex: 1 }}>Lädt...</div>
+          <div style={{ padding: 40, display: "flex", alignItems: "center", justifyContent: "center",
+            margin: "auto", position: "relative", zIndex: 1 }}>
+            <MetaballsLoader size={52} color={metaballColor(darkMode)}
+              label={appLanguage === "de" ? "Brand wird geladen" : "Loading brand"} />
+          </div>
         ) : isOnboarding ? (
           <>
             {step < 6 && (
