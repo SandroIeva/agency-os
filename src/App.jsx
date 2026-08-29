@@ -35160,8 +35160,12 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
         <div onClick={() => setEditing(null)}
           style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
             display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          {/* The top padding is smaller than the bottom on purpose, and it was
+              measured: the title is a line of text and the last row is a solid
+              button, so equal numbers put the glyphs further from the edge than
+              the button and the heading reads as hung too low. */}
           <div onClick={e => e.stopPropagation()}
-            style={{ width: "min(520px, 100%)", borderRadius: 22, padding: "24px 28px 30px", display: "flex", flexDirection: "column", gap: 20,
+            style={{ width: "min(520px, 100%)", borderRadius: 22, padding: "22px 28px 30px", display: "flex", flexDirection: "column", gap: 20,
               background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: -3 }}>
               <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0 }}>
