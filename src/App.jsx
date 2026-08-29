@@ -440,6 +440,10 @@ function orbDevice() {
 // `leaving` sends it down into the corner and out. The caller owns that flag,
 // because what happens next (the voice UI opening) is the caller's business,
 // and an orb that decided on its own when to vanish would be two truths.
+// How much the orb swells under the cursor. A tick, not a jump: the glow is
+// already brightening at the same moment, and the two together are the answer.
+const ORB_HOVER_SCALE = 1.06;
+
 function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, leaving = false,
                     darkMode = true, fallback = null }) {
   const canvasRef = useRef(null);
@@ -541,10 +545,15 @@ function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, leaving = false,
       onPointerLeave={() => { setHover(false); setPull({ x: 0, y: 0 }); }}
       animate={leaving
         ? { x: 0, y: size * 1.6, scale: 0.55, opacity: 0 }
-        : { x: pull.x, y: pull.y, scale: 1, opacity: 1 }}
+        : { x: pull.x, y: pull.y, scale: hover ? ORB_HOVER_SCALE : 1, opacity: 1 }}
+      // The lean and the swell answer to different things. The lean tracks a
+      // cursor that is still moving, so it wants the spring; the swell is a
+      // single step between two sizes and reads better eased. Framer takes a
+      // transition per property, so they do not have to share one.
       transition={leaving
         ? { duration: 0.42, ease: [0.4, 0, 0.9, 0.4] }
-        : { type: "spring", stiffness: 210, damping: 17, mass: 0.5 }}
+        : { default: { type: "spring", stiffness: 210, damping: 17, mass: 0.5 },
+            scale: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } }}
       style={{ width: size, height: size, borderRadius: "50%", position: "relative" }}>
       {/* The glow, on a disc exactly as big as the ball the shader draws, and
           behind it. A glow, not a halo: two soft shadows in the orb's own
@@ -48209,7 +48218,8 @@ export default function CircularMenu() {
                   scale: aiStatus === "speaking" ? [1, 1.04, 1] : 1,
                 }}
                 transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                whileHover={{ scale: 1.06 }}
+                // The swell belongs to the orb itself now. Left here as well it
+                // would compound, and the big one would jump twice as far.
                 whileTap={{ scale: 0.95 }}
                 style={{ borderRadius: "50%", cursor: voiceGenLabel ? "default" : "pointer" }}
               >
