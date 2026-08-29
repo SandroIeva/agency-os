@@ -2103,18 +2103,22 @@ function ImageLightbox({ url, onClose, onUploadStorage, onUploadDrive, theme, da
 const _linkPreviewCache = new Map(); // url → { data, fetchedAt }
 const _linkPreviewInflight = new Map(); // url → Promise
 
-async function fetchLinkPreview(url) {
+// `icon: true` also brings the site's icon back as bytes, for callers that
+// STORE the preview (the Links tab) rather than showing it once. Two different
+// answers for the same url, so the icon variant gets its own cache key.
+async function fetchLinkPreview(url, { icon = false } = {}) {
   // Skip image URLs and Supabase storage URLs — they don't have meaningful OG data,
   // and the chat shows them inline elsewhere already.
   if (!url) return null;
   if (/\.(png|jpe?g|gif|webp|svg|bmp|ico)(\?|$)/i.test(url)) return null;
   if (/supabase\.co\/storage\//i.test(url)) return null;
-  if (_linkPreviewCache.has(url)) return _linkPreviewCache.get(url).data; // includes cached nulls so we don't retry forever
-  if (_linkPreviewInflight.has(url)) return _linkPreviewInflight.get(url);
+  const key = icon ? url + "\u0000icon" : url;
+  if (_linkPreviewCache.has(key)) return _linkPreviewCache.get(key).data; // includes cached nulls so we don't retry forever
+  if (_linkPreviewInflight.has(key)) return _linkPreviewInflight.get(key);
   const p = (async () => {
     let data = null;
     try {
-      const r = await fetch(`/api/fetch-brand?mode=preview&url=${encodeURIComponent(url)}`);
+      const r = await fetch(`/api/fetch-brand?mode=preview${icon ? "&icon=1" : ""}&url=${encodeURIComponent(url)}`);
       if (r.ok) {
         const j = await r.json().catch(() => null);
         if (j && !j.error) data = j;
@@ -2125,11 +2129,11 @@ async function fetchLinkPreview(url) {
     } catch (e) {
       console.warn("[LinkPreview] error", url, e.message);
     }
-    _linkPreviewCache.set(url, { data, fetchedAt: Date.now() });
-    _linkPreviewInflight.delete(url);
+    _linkPreviewCache.set(key, { data, fetchedAt: Date.now() });
+    _linkPreviewInflight.delete(key);
     return data;
   })();
-  _linkPreviewInflight.set(url, p);
+  _linkPreviewInflight.set(key, p);
   return p;
 }
 
@@ -34660,6 +34664,22 @@ const linkHost = (url) => {
 };
 const linkHref = (url) => (/^https?:\/\//i.test(url) ? url : `https://${url}`);
 
+// What a page says about itself, in the shape a workspace_links row wants.
+// Our server does the asking, never the browser: an icon fetched from the page
+// would tell that site which workspace keeps a link to it, on every render.
+// The icon comes back as bytes and is stored with the row; the social image
+// stays a URL, to be served through img-proxy when it is actually shown.
+async function linkRowPreview(url) {
+  const j = await fetchLinkPreview(url, { icon: true });
+  if (!j || (!j.title && !j.iconDataUrl && !j.image)) return null;
+  return {
+    title: j.title || null,
+    favicon: j.iconDataUrl || null,
+    image_url: j.image || null,
+    site: j.site || null,
+  };
+}
+
 function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", projectId = null, addRef, canEdit = true }) {
   const de = appLanguage === "de";
   const [rows, setRows] = useState(null);          // null = loading
@@ -34675,6 +34695,33 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
     sel = projectId ? sel.eq("project_id", projectId) : sel.is("project_id", null);
     const { data } = await sel.order("created_at", { ascending: false });
     setRows(data || []);
+    backfillPreviews(data || []);
+  };
+
+  // Links saved before there was anything to save. They fill themselves in
+  // once, in the background: the row is already on screen, so this only ever
+  // adds an icon to it. A few at a time, and a failure stays quiet, because
+  // an account with no plan cannot write and there is nothing to say about it
+  // here.
+  const backfilling = useRef(false);
+  const backfillPreviews = async (list) => {
+    if (backfilling.current) return;
+    const todo = list.filter(r => !r.favicon && !r.image_url).slice(0, 8);
+    if (todo.length === 0) return;
+    backfilling.current = true;
+    for (const row of todo) {
+      const meta = await linkRowPreview(linkHref(row.url));
+      if (!meta) continue;
+      const patch = {
+        favicon: meta.favicon || null,
+        image_url: meta.image_url || null,
+        site: meta.site || null,
+      };
+      const { error } = await supabase.from("workspace_links").update(patch).eq("id", row.id);
+      if (error) break;   // no plan, no permission: stop rather than retry seven more times
+      setRows(cur => (cur || []).map(r => r.id === row.id ? { ...r, ...patch } : r));
+    }
+    backfilling.current = false;
   };
   useEffect(() => { load(); }, [userOrg?.id, projectId]); // eslint-disable-line
 
@@ -34686,10 +34733,18 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
     const url = (editing?.url || "").trim();
     if (!url || busy) return;
     setBusy(true); setErr("");
+    // Ask the page who it is. A link that answers nothing still saves; the
+    // preview is what the row shows, not what makes it valid.
+    const meta = await linkRowPreview(linkHref(url));
     const payload = {
-      url, title: (editing.title || "").trim() || linkHost(url),
+      url,
+      // A title the person typed wins. They renamed it for a reason.
+      title: (editing.title || "").trim() || meta?.title || linkHost(url),
       category: (editing.category || "").trim() || LINK_CATEGORY_SUGGESTIONS[0],
       note: (editing.note || "").trim() || null,
+      favicon: meta?.favicon || editing.favicon || null,
+      image_url: meta?.image_url || editing.image_url || null,
+      site: meta?.site || editing.site || null,
       updated_at: new Date().toISOString(),
     };
     const { error } = editing.id
@@ -34781,12 +34836,15 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
                 style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`,
                   background: theme.cardBg, padding: 16, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
-                  {/* A letter, not a favicon: fetching one would tell a third
-                      party which sites this workspace keeps. */}
+                  {/* The site's own icon, stored with the row as bytes, so
+                      drawing this list makes no request to anybody. A letter
+                      when the page had none to give. */}
                   <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
                     background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", color: theme.text,
-                    fontSize: 15, fontFamily: FONT, fontWeight: 600 }}>
-                    {(r.title || linkHost(r.url) || "?").trim()[0]?.toUpperCase()}
+                    fontSize: 15, fontFamily: FONT, fontWeight: 600, overflow: "hidden" }}>
+                    {r.favicon
+                      ? <img src={r.favicon} alt="" style={{ width: 22, height: 22, objectFit: "contain", display: "block" }} />
+                      : (r.title || linkHost(r.url) || "?").trim()[0]?.toUpperCase()}
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <a href={linkHref(r.url)} target="_blank" rel="noopener noreferrer"

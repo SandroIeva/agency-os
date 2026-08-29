@@ -496,6 +496,46 @@ export default async function handler(req, res) {
         ? absolutize(ogImage)
         : (absolutize(linkHref("apple-touch-icon")) || absolutize(linkHref("icon")) || `${origin}/favicon.ico`);
       const favicon = absolutize(linkHref("apple-touch-icon")) || absolutize(linkHref("icon")) || `${origin}/favicon.ico`;
+
+      // ?icon=1 also brings the icon back as bytes. A caller that stores the
+      // URL has to fetch it from the site every time it draws the row, which
+      // tells that site who is looking and how often; a data URL is fetched
+      // once, here, by us. Small on purpose: a site icon that does not fit in
+      // 60 KB is not a site icon.
+      let iconDataUrl = null;
+      if (req.query?.icon === "1") {
+        const sources = [
+          absolutize(linkHref("apple-touch-icon")),
+          absolutize(linkHref("icon")),
+          absolutize(linkHref("shortcut icon")),
+          `${origin}/apple-touch-icon.png`,
+          `${origin}/favicon.ico`,
+        ].filter(Boolean);
+        for (const src of sources) {
+          try {
+            const r = await fetch(src, {
+              headers: {
+                "User-Agent": "Mozilla/5.0 (compatible; i7-OS-BrandFetcher/1.0; +https://i7os.com)",
+                Accept: "image/avif,image/webp,image/png,image/svg+xml,image/*,*/*;q=0.8",
+                Referer: origin + "/",
+              },
+              redirect: "follow",
+            });
+            if (!r.ok) continue;
+            const ct = (r.headers.get("content-type") || "").split(";")[0].trim();
+            if (!/^image\//i.test(ct) && !/icon/i.test(ct)) continue;
+            const buf = Buffer.from(await r.arrayBuffer());
+            // Stored inline in a row, so the ceiling is a storage decision, not
+            // a display one: 40 KB raw is roughly 54 KB of base64. Most site
+            // icons are 1 to 5 KB; the ones that are not are usually a
+            // 512-pixel app icon being shown at 22.
+            if (buf.length < 70 || buf.length > 40_000) continue;
+            iconDataUrl = `data:${ct || "image/png"};base64,${buf.toString("base64")}`;
+            break;
+          } catch { /* try the next one */ }
+        }
+      }
+
       res.setHeader("Cache-Control", "public, max-age=3600");
       return res.status(200).json({
         url: finalUrl,
@@ -504,6 +544,7 @@ export default async function handler(req, res) {
         image: previewImage,
         site: meta("og:site_name") || meta("application-name") || parsed.hostname.replace(/^www\./, ""),
         favicon,
+        iconDataUrl,
       });
     }
 
