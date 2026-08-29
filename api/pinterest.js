@@ -188,9 +188,24 @@ export default async function handler(req) {
   }
 
   // ── Everything else is a POST from the app ────────────────────────────────
+  //
+  // Signed in, and a member of the workspace being asked about. An orgId is not
+  // a secret: it is in the url of every share link and in every row the browser
+  // already holds, so a body that only carries one is a body anybody can write.
+  // Without this, knowing a workspace's id would be enough to list its private
+  // Pinterest boards, or to publish a pin from its account.
   const body = await req.json().catch(() => ({}));
   const orgId = body.orgId;
   if (!orgId) return json({ error: "orgId is required" }, 400);
+
+  const bearer = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!bearer) return json({ error: "Not signed in", code: "unauthenticated" }, 401);
+  const { data: who } = await db.auth.getUser(bearer);
+  const userId = who?.user?.id;
+  if (!userId) return json({ error: "Not signed in", code: "unauthenticated" }, 401);
+  const { data: member } = await db.from("org_members")
+    .select("user_id").eq("org_id", orgId).eq("user_id", userId).maybeSingle();
+  if (!member) return json({ error: "Not a member of this workspace", code: "forbidden" }, 403);
 
   const { data: row } = await db.from("pinterest_connections").select("*").eq("org_id", orgId).maybeSingle();
 

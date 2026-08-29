@@ -45051,14 +45051,15 @@ export default function CircularMenu() {
     if (!userOrg?.id) return null;
     try {
       const r = await fetch("/api/pinterest", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
         body: JSON.stringify({ mode: "status", orgId: userOrg.id }),
       });
       if (!r.ok) return null;
       const j = await r.json().catch(() => null);
       return j?.connected ? j : null;
     } catch { return null; }
-  }, [userOrg?.id]);
+  }, [userOrg?.id, session?.access_token]);
 
   useEffect(() => {
     let alive = true;
@@ -45114,7 +45115,8 @@ export default function CircularMenu() {
     setPinBusy(true); setPinErr("");
     try {
       await fetch("/api/pinterest", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
         body: JSON.stringify({ mode: "disconnect", orgId: userOrg.id }),
       });
       setPinConn(null);
