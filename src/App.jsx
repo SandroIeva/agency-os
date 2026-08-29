@@ -35161,9 +35161,9 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
           style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
             display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ width: "min(520px, 100%)", borderRadius: 22, padding: "29px 28px 30px", display: "flex", flexDirection: "column", gap: 20,
+            style={{ width: "min(520px, 100%)", borderRadius: 22, padding: "24px 28px 30px", display: "flex", flexDirection: "column", gap: 20,
               background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: -3 }}>
               <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0 }}>
                 {de ? "Link hinzufügen" : "Add a link"}
               </div>
