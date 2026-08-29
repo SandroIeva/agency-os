@@ -45348,20 +45348,35 @@ export default function CircularMenu() {
       ], view: "dashboard" },
     ];
 
+    // The theme rules match in BOTH languages regardless of the app's, unlike
+    // the navigation ones above. "Dark mode" is said in English by people
+    // working in German all day, and the recogniser is only ever listening in
+    // one language, so a German speaker asking for "dark theme" was talking
+    // to a list that did not contain it.
     const actionRules = [
-      { patterns: isDE ? [
-        "dark mode", "dunkelmodus", "dunkel machen", "mach dunkel",
-        "dunkles design", "nachtmodus", "mach mal dunkel", "dunkler",
-      ] : [
-        "dark mode", "night mode", "switch to dark", "make it dark",
-        "go dark", "darker", "dark theme",
+      { patterns: [
+        // German
+        "dunkelmodus", "dunkel modus", "dunkles design", "dunkles theme",
+        "nachtmodus", "dunkel machen", "mach dunkel", "mach mal dunkel",
+        "mach es dunkel", "stell auf dunkel", "wechsle zu dunkel",
+        "wechsel zu dunkel", "workspace dunkel", "dunkler",
+        // English
+        "dark mode", "dark theme", "night mode", "switch to dark",
+        "change to dark", "make it dark", "make dark", "make the workspace dark",
+        "change workspace to dark", "workspace to dark", "workspace dark",
+        "go dark", "turn on dark", "darker",
       ], action: () => setDarkMode(true) },
-      { patterns: isDE ? [
-        "light mode", "hellmodus", "hell machen", "mach hell",
-        "helles design", "tagmodus", "mach mal hell", "heller",
-      ] : [
-        "light mode", "bright mode", "switch to light", "make it bright",
-        "go light", "lighter", "light theme",
+      { patterns: [
+        // German
+        "hellmodus", "hell modus", "helles design", "helles theme",
+        "tagmodus", "hell machen", "mach hell", "mach mal hell",
+        "mach es hell", "stell auf hell", "wechsle zu hell",
+        "wechsel zu hell", "workspace hell", "heller",
+        // English
+        "light mode", "light theme", "bright mode", "switch to light",
+        "change to light", "make it light", "make light", "make the workspace light",
+        "change workspace to light", "workspace to light", "workspace light",
+        "go light", "turn on light", "lighter",
       ], action: () => setDarkMode(false) },
     ];
 
