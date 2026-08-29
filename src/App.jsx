@@ -35152,11 +35152,28 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
           <div onClick={e => e.stopPropagation()}
             style={{ width: "min(520px, 100%)", borderRadius: 22, padding: 28, display: "flex", flexDirection: "column", gap: 20,
               background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
-            <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-              {de ? "Link hinzufügen" : "Add a link"}
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0 }}>
+                {de ? "Link hinzufügen" : "Add a link"}
+              </div>
+              {/* Closing belongs in the corner, next to the title, the way the
+                  rest of the app closes things. A Cancel button down beside
+                  Save gives leaving the same weight as finishing. */}
+              <motion.div
+                whileHover={{ scale: 1.12, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setEditing(null)}
+                title={de ? "Schließen" : "Close"}
+                style={{ cursor: "pointer", width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center",
+                  justifyContent: "center", color: theme.textDim, flexShrink: 0, transition: "background 0.15s" }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </motion.div>
             </div>
             <input autoFocus value={editing.url} onChange={e => setEditing(v => ({ ...v, url: e.target.value }))}
-              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); save(); } }}
+              onKeyDown={e => {
+                if (e.key === "Enter") { e.preventDefault(); save(); }
+                if (e.key === "Escape") setEditing(null);
+              }}
               placeholder="https://…" style={{ ...field, padding: "13px 15px", fontSize: 14 }} />
             {/* The label sits above so the picker gets the whole width. Beside
                 it, the two of them split a 520px dialog into two cramped
@@ -35182,14 +35199,14 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
                   { value: "private",   label: de ? "Nur ich" : "Only me" },
                 ]} />
               <div style={{ flex: 1 }} />
-              <motion.div whileTap={{ scale: 0.97 }} onClick={() => setEditing(null)}
-                style={{ padding: "9px 16px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`,
-                  color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>{de ? "Abbrechen" : "Cancel"}</motion.div>
-              <motion.div whileTap={{ scale: 0.97 }} onClick={save}
-                style={{ padding: "9px 18px", borderRadius: 999, cursor: editing.url.trim() && !busy ? "pointer" : "default",
-                  opacity: editing.url.trim() && !busy ? 1 : 0.5,
-                  background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
-                  fontSize: 12.5, fontFamily: FONT, fontWeight: 600 }}>{de ? "Speichern" : "Save"}</motion.div>
+              <motion.div whileHover={{ scale: editing.url.trim() && !busy ? 1.03 : 1 }} whileTap={{ scale: editing.url.trim() && !busy ? 0.97 : 1 }}
+                onClick={save}
+                style={{ ...primaryBtn(darkMode),
+                  padding: "13px 30px", borderRadius: 999,
+                  cursor: editing.url.trim() && !busy ? "pointer" : "default",
+                  opacity: editing.url.trim() && !busy ? 1 : 0.45,
+                  fontSize: 13.5, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap",
+                  transition: "opacity 0.2s ease" }}>{de ? "Speichern" : "Save"}</motion.div>
             </div>
           </div>
         </div>, document.body)}
