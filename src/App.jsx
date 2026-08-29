@@ -34839,7 +34839,7 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
   const needle = q.trim().toLowerCase();
   const searching = needle.length > 0;
   const matches = inScope.filter(r =>
-    !needle || [r.title, r.url, r.description, r.note, r.site].some(v => (v || "").toLowerCase().includes(needle)));
+    !needle || [r.title, r.url, r.site].some(v => (v || "").toLowerCase().includes(needle)));
   // Searching looks everywhere. A folder you are standing in is a place, not a
   // filter, and a search that only looked inside it would answer "no" about
   // links the workspace plainly has.
@@ -35050,10 +35050,6 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
                         <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{linkHost(r.url)}</div>
                       </div>
                     </div>
-                    {(r.description || r.note) && (
-                      <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5,
-                        display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{r.description || r.note}</div>
-                    )}
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: "auto" }}>
                       {searching && r.folder_id && (
                         <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, padding: "3px 9px", borderRadius: 999,
@@ -35082,7 +35078,7 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
                         {privateMark(r)}
                       </div>
                       <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {linkHost(r.url)}{(r.description || r.note) ? ` · ${r.description || r.note}` : ""}
+                        {linkHost(r.url)}
                       </div>
                     </div>
                     {searching && r.folder_id && (
