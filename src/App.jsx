@@ -45860,6 +45860,20 @@ export default function CircularMenu() {
     }
   };
 
+  // Clicking the corner orb and swiping up are the same thing, so they are one
+  // function. The orb falls out of the corner first and the voice UI comes up
+  // as it lands; 380ms is the drop.
+  const launchVoice = () => {
+    setOrbLeaving(true);
+    setTimeout(startVoice, 380);
+  };
+  // The wheel handler is a useCallback whose dependency list does not include
+  // everything startVoice reads (appLanguage, for one, decides which language
+  // the recogniser listens in). Calling through a ref means the gesture always
+  // runs the current version instead of whichever one the memo captured.
+  const launchVoiceRef = useRef(launchVoice);
+  launchVoiceRef.current = launchVoice;
+
   const startVoice = () => {
     setMenuOpen(false);
     setSubOpen(false);
@@ -46690,7 +46704,7 @@ export default function CircularMenu() {
     // Reset scrollTop to prevent drift
     if (containerRef.current) containerRef.current.scrollTop = 0;
 
-    // Dashboard: scroll down opens panel, scroll up opens tasks
+    // Dashboard: scroll down opens the panel, scroll up starts the orb
     if (currentView === "dashboard" && !menuOpen && !voiceMode && !aiSpeaking) {
       if (!panelCooldown.current) {
         // Scroll down (swipe down) → open panel overview
@@ -46707,9 +46721,12 @@ export default function CircularMenu() {
           setTimeout(() => { panelCooldown.current = false; }, 800);
           return;
         }
-        // Scroll up (swipe up) → open tasks view (closing is via the Home button)
+        // Swipe up starts the orb, the same as clicking it. It used to open the
+        // tasks view, which now lives at the top of Plan in the menu: a list you
+        // go and look at, rather than something the main gesture should spend
+        // itself on.
         if (e.deltaY > 30 && !tasksOpen && !panelOpen) {
-          setTasksOpen(true);
+          launchVoiceRef.current();
           panelCooldown.current = true;
           setTimeout(() => { panelCooldown.current = false; }, 800);
           return;
@@ -51685,7 +51702,7 @@ export default function CircularMenu() {
               Not a transform: the orb inside animates x/y, and Framer writes
               the whole transform when it does. */}
           <div style={{ cursor: "pointer", marginRight: -7 }}
-            onClick={() => { setOrbLeaving(true); setTimeout(startVoice, 380); }}>
+            onClick={launchVoice}>
             <LiquidOrb size={74} darkMode={darkMode} leaving={orbLeaving || voiceMode || aiSpeaking} fallback={<AISphere darkMode={darkMode} />} />
           </div>
         </div>
