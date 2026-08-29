@@ -231,7 +231,15 @@ curl -s https://app.i7os.com/assets/$(curl -s https://app.i7os.com/ | grep -o 'i
 ```
 
 Minification inlines module constants, so grep for a **string literal**
-(`"BILD WIRD ERSTELLT"`, a localStorage key), never for an identifier.
+(`"BILD WIRD ERSTELLT"`, a localStorage key), never for an identifier. A
+function name is renamed by the minifier and greps as absent even when it
+shipped, which has now produced two false "not deployed" readings.
+
+A change with no user-visible string has no literal to grep. Ask a function
+instead: `api/pinterest?check=1` and `api/slack?check=1` both report
+`VERCEL_GIT_COMMIT_SHA`, so the deployment says which commit it is, and
+`git merge-base --is-ancestor <commit> <live>` answers whether it contains
+yours. That is a fact rather than an inference from a bundle.
 
 The Vercel CLI's token is at `~/Library/Application Support/com.vercel.cli/auth.json`
 and answers what actually happened, no browser needed. Project
