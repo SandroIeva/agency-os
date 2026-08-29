@@ -30578,6 +30578,83 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     }
   };
 
+  // Adding pins to a board that already exists: pick a Pinterest board, then
+  // pick from its pins. Separate from importPinterestBoard, which makes a new
+  // moodboard out of a whole one: there, choosing is the point of the board
+  // list; here, the board list is only the way to the pictures.
+  const [pinPick, setPinPick] = useState(null);
+  // { step: "boards" | "pins", boards, board, pins, selected: string[], loading, busy, error }
+  const pinPost = useCallback(async (body) => {
+    const r = await fetch("/api/pinterest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+      body: JSON.stringify({ orgId: userOrg.id, ...body }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    return j;
+  }, [session?.access_token, userOrg?.id]);
+
+  const openPinPick = async () => {
+    if (!userOrg?.id) return;
+    setPinPick({ step: "boards", boards: [], pins: [], selected: [], loading: true, busy: false, error: "" });
+    try {
+      const j = await pinPost({ mode: "boards" });
+      setPinPick(p => ({ ...p, boards: j.boards || [], loading: false }));
+    } catch (e) {
+      setPinPick(p => ({ ...p, loading: false, error: String(e.message || e) }));
+    }
+  };
+
+  const openPinPickBoard = async (board) => {
+    setPinPick(p => ({ ...p, step: "pins", board, pins: [], selected: [], loading: true, error: "" }));
+    try {
+      const pins = [];
+      let bookmark = null;
+      do {
+        const j = await pinPost({ mode: "pins", boardId: board.id, bookmark });
+        pins.push(...(j.pins || []));
+        bookmark = j.bookmark || null;
+      } while (bookmark && pins.length < 500);
+      // Everything already on this moodboard, so the same pin cannot be added
+      // twice by somebody who came back for a second helping.
+      const have = new Set(items.map(it => it.metadata?.pinId).filter(Boolean));
+      setPinPick(p => ({ ...p, pins: pins.map(pn => ({ ...pn, already: have.has(pn.id) })), loading: false }));
+    } catch (e) {
+      setPinPick(p => ({ ...p, loading: false, error: String(e.message || e) }));
+    }
+  };
+
+  const addPinsToBoard = async () => {
+    if (!activeBoard || !pinPick?.selected?.length) return;
+    setPinPick(p => ({ ...p, busy: true, error: "" }));
+    const chosen = pinPick.pins.filter(pn => pinPick.selected.includes(pn.id));
+    const board = pinPick.board;
+    const pinName = (pn, i) => {
+      const t = (pn.title || "").trim();
+      if (t) return t.slice(0, 80);
+      const d = (pn.description || "").trim().split(/\r?\n/)[0].trim();
+      if (d) return d.slice(0, 80);
+      return `${board.name} ${i + 1}`;
+    };
+    const base = items.length;
+    const rows = chosen.map((pn, i) => ({
+      board_id: activeBoard.id, org_id: userOrg.id, created_by: session?.user?.id,
+      type: "image", url: pn.url, source: "pinterest", colors: [],
+      name: pinName(pn, base + i),
+      position: base + i,
+      x: 40 + ((base + i) % 5) * 60, y: 40 + Math.floor((base + i) / 5) * 60, w: 240,
+      metadata: { pinId: pn.id, sourceUrl: pn.link || null, title: pn.title || null, board: board.name },
+    }));
+    const { data, error } = await supabase.from("moodboard_items").insert(rows).select();
+    if (error) {
+      setPinPick(p => ({ ...p, busy: false, error: planLimitError(error, appLanguage === "de") || error.message }));
+      return;
+    }
+    setItems(prev => [...prev, ...(data || [])]);
+    setPinPick(null);
+  };
+
   const importPinterestBoard = async (board) => {
     if (!userOrg?.id || !board) return;
     const de = appLanguage === "de";
@@ -31273,6 +31350,153 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             )}
           </AnimatePresence>
 
+          {/* Pins for the board that is already open: choose a Pinterest board,
+              then choose from its pictures. Portalled like the others. */}
+          {pinPick && createPortal(
+            <div onClick={() => { if (!pinPick.busy) setPinPick(null); }}
+              style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+                display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+              <div onClick={e => e.stopPropagation()}
+                style={{ width: "min(760px, 100%)", maxHeight: "84vh", borderRadius: 22, padding: "22px 26px 24px",
+                  display: "flex", flexDirection: "column", gap: 16,
+                  background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  {pinPick.step === "pins" && (
+                    <motion.div whileTap={{ scale: 0.94 }}
+                      onClick={() => { if (!pinPick.busy) setPinPick(p => ({ ...p, step: "boards", board: null, pins: [], selected: [], error: "" })); }}
+                      title={appLanguage === "de" ? "Zurück" : "Back"}
+                      style={{ cursor: "pointer", width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center",
+                        justifyContent: "center", color: theme.textDim, flexShrink: 0 }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                    </motion.div>
+                  )}
+                  <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {pinPick.step === "pins"
+                      ? pinPick.board?.name
+                      : (appLanguage === "de" ? "Pins hinzufügen" : "Add pins")}
+                  </div>
+                  <motion.div whileHover={{ scale: 1.12 }} whileTap={{ scale: 0.9 }}
+                    onClick={() => { if (!pinPick.busy) setPinPick(null); }}
+                    title={appLanguage === "de" ? "Schließen" : "Close"}
+                    style={{ cursor: pinPick.busy ? "default" : "pointer", width: 28, height: 28, borderRadius: 8,
+                      display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim,
+                      flexShrink: 0, opacity: pinPick.busy ? 0.4 : 1 }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </motion.div>
+                </div>
+
+                {pinPick.loading ? (
+                  <div style={{ padding: "40px 0", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>
+                    {t("common.loading") || "Lädt…"}
+                  </div>
+                ) : pinPick.step === "boards" ? (
+                  pinPick.boards.length === 0 ? (
+                    <div style={{ padding: "34px 0", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>
+                      {appLanguage === "de" ? "Dieses Pinterest-Konto hat keine Boards." : "This Pinterest account has no boards."}
+                    </div>
+                  ) : (
+                    <div style={{ overflowY: "auto", margin: "0 -6px", padding: "0 6px", display: "flex", flexDirection: "column", gap: 6 }}>
+                      {pinPick.boards.map(b => (
+                        <motion.div key={b.id} whileTap={{ scale: 0.995 }} onClick={() => openPinPickBoard(b)}
+                          className="hover-row"
+                          style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 12, cursor: "pointer" }}>
+                          <div style={{ width: 44, height: 44, borderRadius: 10, flexShrink: 0, overflow: "hidden",
+                            background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
+                            {b.image && <img src={b.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name}</div>
+                            <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                              {b.pinCount ?? 0} Pins{b.privacy === "SECRET" ? (appLanguage === "de" ? " · geheim" : " · secret") : ""}
+                            </div>
+                          </div>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 18l6-6-6-6"/></svg>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )
+                ) : (
+                  <>
+                    {/* Select all, and what is already on this moodboard is
+                        shown but not selectable: adding the same pin twice is
+                        never what somebody coming back for more wanted. */}
+                    {(() => {
+                      const selectable = pinPick.pins.filter(pn => !pn.already);
+                      const allOn = selectable.length > 0 && pinPick.selected.length === selectable.length;
+                      return (
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          <motion.div whileTap={{ scale: 0.97 }}
+                            onClick={() => setPinPick(p => ({ ...p, selected: allOn ? [] : selectable.map(x => x.id) }))}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 13px", borderRadius: 999,
+                              cursor: "pointer", border: `1px solid ${theme.borderFaint}`, color: theme.text,
+                              fontSize: 12.5, fontFamily: FONT, whiteSpace: "nowrap" }}>
+                            {allOn ? (appLanguage === "de" ? "Auswahl aufheben" : "Clear selection")
+                                   : (appLanguage === "de" ? "Alle auswählen" : "Select all")}
+                          </motion.div>
+                          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
+                            {pinPick.selected.length} / {selectable.length}
+                            {pinPick.pins.length !== selectable.length && (
+                              <span> · {pinPick.pins.length - selectable.length} {appLanguage === "de" ? "schon drauf" : "already here"}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    <div style={{ overflowY: "auto", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
+                      {pinPick.pins.map(pn => {
+                        const on = pinPick.selected.includes(pn.id);
+                        return (
+                          <div key={pn.id}
+                            onClick={() => { if (pn.already) return; setPinPick(p => ({ ...p, selected: on ? p.selected.filter(x => x !== pn.id) : [...p.selected, pn.id] })); }}
+                            style={{ position: "relative", aspectRatio: "1 / 1", borderRadius: 12, overflow: "hidden",
+                              cursor: pn.already ? "default" : "pointer", opacity: pn.already ? 0.4 : 1,
+                              border: `2px solid ${on ? theme.text : "transparent"}`,
+                              background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
+                            <img src={pn.url} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                            {(on || pn.already) && (
+                              <div style={{ position: "absolute", top: 7, right: 7, width: 22, height: 22, borderRadius: "50%",
+                                background: pn.already ? "rgba(0,0,0,0.55)" : theme.text,
+                                display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                  stroke={pn.already ? "#fff" : (darkMode ? "#15151c" : "#fff")}
+                                  strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {pinPick.error && (
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767", lineHeight: 1.5 }}>{pinPick.error}</div>
+                )}
+
+                {pinPick.step === "pins" && !pinPick.loading && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, flex: 1, minWidth: 0 }}>
+                      {appLanguage === "de"
+                        ? "Die Bilder bleiben bei Pinterest liegen."
+                        : "The images stay at Pinterest."}
+                    </div>
+                    <motion.div whileTap={{ scale: pinPick.selected.length && !pinPick.busy ? 0.97 : 1 }}
+                      onClick={pinPick.selected.length && !pinPick.busy ? addPinsToBoard : undefined}
+                      style={{ ...primaryBtn, padding: "11px 22px", borderRadius: 999,
+                        cursor: pinPick.selected.length && !pinPick.busy ? "pointer" : "default",
+                        opacity: pinPick.selected.length && !pinPick.busy ? 1 : 0.45,
+                        fontSize: 13, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap" }}>
+                      {pinPick.busy
+                        ? (t("common.loading") || "Lädt…")
+                        : (appLanguage === "de"
+                            ? `${pinPick.selected.length} hinzufügen`
+                            : `Add ${pinPick.selected.length}`)}
+                    </motion.div>
+                  </div>
+                )}
+              </div>
+            </div>, document.body)}
+
           {boardToDelete && createPortal(
             <div onClick={() => setBoardToDelete(null)}
               style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
@@ -31634,12 +31858,24 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                         { key: "url", label: "URL", sub: appLanguage === "de" ? "Bild- oder Website-URL" : "Image or website URL",
                           icon: <><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></>,
                           onClick: () => { setBoardAddOpen(false); setShowUrlInput(true); } },
+                        // Only when the workspace has an account. Same rule as
+                        // the moodboards header: connecting belongs in Settings.
+                        ...(pinConnected ? [{
+                          key: "pinterest", label: appLanguage === "de" ? "Aus Pinterest" : "From Pinterest",
+                          sub: appLanguage === "de" ? "Pins aus einem Board wählen" : "Pick pins from a board",
+                          fill: true,
+                          icon: <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146A12 12 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>,
+                          onClick: () => { setBoardAddOpen(false); openPinPick(); },
+                        }] : []),
                       ].map(it => (
                         <div key={it.key} onClick={it.onClick} className="hover-row"
                           style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
                           <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
                             background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
-                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
+                            <svg width="17" height="17" viewBox="0 0 24 24"
+                              fill={it.fill ? "currentColor" : "none"}
+                              stroke={it.fill ? "none" : "currentColor"}
+                              strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
                           </div>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{it.label}</div>
