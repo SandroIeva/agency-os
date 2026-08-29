@@ -34743,7 +34743,12 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
   const backfilling = useRef(false);
   const backfillPreviews = async (list) => {
     if (backfilling.current) return;
-    const todo = list.filter(r => !r.favicon && !r.image_url && !r.description).slice(0, 8);
+    // Any one of these means the page has already been asked. Some sites have
+    // no icon at all (uncut.wtf answers 404 on every icon path), and without
+    // `site` in the test their rows read as never-fetched and get asked again
+    // on every load, in every workspace, for an answer that will not change.
+    const asked = r => r.favicon || r.image_url || r.description || r.site;
+    const todo = list.filter(r => !asked(r)).slice(0, 8);
     if (todo.length === 0) return;
     backfilling.current = true;
     for (const row of todo) {
@@ -34752,7 +34757,9 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
       const patch = {
         favicon: meta.favicon || null,
         image_url: meta.image_url || null,
-        site: meta.site || null,
+        // Always written, even when the page gave nothing else back: it is what
+        // marks the row as asked.
+        site: meta.site || linkHost(row.url) || null,
         description: row.description || meta.description || null,
       };
       const { error } = await supabase.from("workspace_links").update(patch).eq("id", row.id);
