@@ -30890,7 +30890,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       // its own now, and one word cannot mean two places.
       { id: "creations",    label: "Media" },
       { id: "docs",         label: t("assets.docs") || "Docs" },
-      { id: "links",        label: "Links" },
+      // "Browse", not "Links": the tab is where you go looking, and the same
+      // word is already the thing inside it.
+      { id: "links",        label: "Browse" },
     ];
     const headerActions = (<>
             {tab === "moodboards" && (
