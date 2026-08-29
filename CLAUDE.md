@@ -211,6 +211,26 @@ After a deploy, smoke-test the endpoints unauthenticated and read the shape of t
 curl -s -o /dev/null -w "%{http_code}\n" -X POST https://app.i7os.com/api/billing-status -H "Content-Type: application/json" -d '{"orgId":"00000000-0000-0000-0000-000000000000"}'
 ```
 
+**Do NOT check whether a push is live by comparing the bundle filename.** A
+local `npx vite build` and Vercel's build of the SAME commit produce different
+`dist/assets/index-<hash>.js` names, so waiting for the local hash to appear on
+app.i7os.com waits forever. This cost three false "not deployed yet" readings in
+one session, and led to a hunt through the Vercel API for a broken alias that was
+never broken. Check the CONTENT instead, with a string only the new code has:
+
+```bash
+curl -s https://app.i7os.com/assets/$(curl -s https://app.i7os.com/ | grep -o 'index-[A-Za-z0-9_-]*\.js' | head -1) | grep -c "SOME_NEW_STRING"
+```
+
+Minification inlines module constants, so grep for a **string literal**
+(`"BILD WIRD ERSTELLT"`, a localStorage key), never for an identifier.
+
+The Vercel CLI's token is at `~/Library/Application Support/com.vercel.cli/auth.json`
+and answers what actually happened, no browser needed. Project
+`prj_280CqRlcOd8N2WiRQ6l3E9XxWZbE`, team `team_WwuqpIITCDIiqLcDCVmEkU73`;
+`/v6/deployments?projectId=…` lists state per commit and
+`/v3/deployments/<id>/events` is the full build log.
+
 **401 = good** (the function loaded and rejected the request). **500 = the module failed to resolve.** The same trick reveals missing env vars: `lifecycle-sweep` answers 503 when `CRON_SECRET` is absent and 401 when it is set.
 
 ## Local development
