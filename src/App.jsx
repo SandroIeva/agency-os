@@ -46704,6 +46704,19 @@ export default function CircularMenu() {
     // Reset scrollTop to prevent drift
     if (containerRef.current) containerRef.current.scrollTop = 0;
 
+    // Up got you into the voice view, so down gets you out of it: the same
+    // thing the Home button at the bottom does, which until now was the only
+    // way back. Everything goDashboard reads is in this callback's dependency
+    // list, so it is safe to call directly rather than through a ref.
+    if (currentView === "dashboard" && !menuOpen && (voiceMode || aiSpeaking)) {
+      if (!panelCooldown.current && e.deltaY < -30) {
+        goDashboard();
+        panelCooldown.current = true;
+        setTimeout(() => { panelCooldown.current = false; }, 800);
+      }
+      return;
+    }
+
     // Dashboard: scroll down opens the panel, scroll up starts the orb
     if (currentView === "dashboard" && !menuOpen && !voiceMode && !aiSpeaking) {
       if (!panelCooldown.current) {
