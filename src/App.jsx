@@ -15522,14 +15522,11 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
           if (e.target === e.currentTarget) createNote();
         }}
       >
-        {loading ? (
-          // NotesView is handed `t` but not `appLanguage`, so the label comes
-          // from the translations rather than from a language check that has
-          // nothing here to read.
-          <div style={{ padding: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <MetaballsLoader size={52} color={metaballColor(darkMode)} label={t("common.loading") || "Loading"} />
-          </div>
-        ) : visibleNotes.length === 0 ? (
+        {/* Nothing while loading, on purpose: notes are a little text and they
+            are here before an indicator would have finished appearing. The
+            branch stays, though — without it the "no notes yet" state below
+            would flash for that moment and say something untrue. */}
+        {loading ? null : visibleNotes.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1, duration: 0.4 }}
