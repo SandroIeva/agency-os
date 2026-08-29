@@ -34685,6 +34685,7 @@ async function linkRowPreview(url) {
   if (!j || (!j.title && !j.iconDataUrl && !j.image)) return null;
   return {
     title: j.title || null,
+    description: j.description || null,
     favicon: j.iconDataUrl || null,
     image_url: j.image || null,
     site: j.site || null,
@@ -34735,7 +34736,7 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
   const backfilling = useRef(false);
   const backfillPreviews = async (list) => {
     if (backfilling.current) return;
-    const todo = list.filter(r => !r.favicon && !r.image_url).slice(0, 8);
+    const todo = list.filter(r => !r.favicon && !r.image_url && !r.description).slice(0, 8);
     if (todo.length === 0) return;
     backfilling.current = true;
     for (const row of todo) {
@@ -34745,6 +34746,7 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
         favicon: meta.favicon || null,
         image_url: meta.image_url || null,
         site: meta.site || null,
+        description: row.description || meta.description || null,
       };
       const { error } = await supabase.from("workspace_links").update(patch).eq("id", row.id);
       if (error) break;   // no plan, no permission: stop rather than retry seven more times
@@ -34755,7 +34757,7 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
 
   // A new link lands in the folder you are standing in. Anywhere else would be
   // asking somebody who just opened Tools to say "Tools".
-  const blank = () => ({ url: "", title: "", folder_id: currentFolder, note: "" });
+  const blank = () => ({ url: "", folder_id: currentFolder, visibility: "workspace" });
   useEffect(() => { if (addRef) addRef.current = () => { setErr(""); setEditing(blank()); }; });
 
   const save = async () => {
@@ -34767,10 +34769,13 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
     const meta = await linkRowPreview(linkHref(url));
     const payload = {
       url,
-      // A title the person typed wins. They renamed it for a reason.
-      title: (editing.title || "").trim() || meta?.title || linkHost(url),
+      // Nobody types a title or a description any more: the page says both, and
+      // asking a person to retype what the page already published is asking
+      // twice. The hostname is the answer for a page that says nothing.
+      title: meta?.title || editing.title || linkHost(url),
+      description: meta?.description || editing.description || null,
       folder_id: editing.folder_id || null,
-      note: (editing.note || "").trim() || null,
+      visibility: editing.visibility === "private" ? "private" : "workspace",
       favicon: meta?.favicon || editing.favicon || null,
       image_url: meta?.image_url || editing.image_url || null,
       site: meta?.site || editing.site || null,
@@ -34824,7 +34829,7 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
   const needle = q.trim().toLowerCase();
   const searching = needle.length > 0;
   const matches = inScope.filter(r =>
-    !needle || [r.title, r.url, r.note, r.site].some(v => (v || "").toLowerCase().includes(needle)));
+    !needle || [r.title, r.url, r.description, r.note, r.site].some(v => (v || "").toLowerCase().includes(needle)));
   // Searching looks everywhere. A folder you are standing in is a place, not a
   // filter, and a search that only looked inside it would answer "no" about
   // links the workspace plainly has.
@@ -34869,6 +34874,15 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
         : (r.title || linkHost(r.url) || "?").trim()[0]?.toUpperCase()}
     </div>
   );
+  const privateMark = (r) => r.visibility === "private" && (
+    <span title={de ? "Nur für dich sichtbar" : "Only visible to you"}
+      style={{ display: "inline-flex", flexShrink: 0, color: theme.textDim, marginLeft: 6, verticalAlign: "-2px" }}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+      </svg>
+    </span>
+  );
+
   const rowActions = (r) => canEdit && (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
       <motion.div whileTap={{ scale: 0.9 }} onClick={() => { setErr(""); setEditing({ ...r }); }}
@@ -35012,15 +35026,18 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
                     <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
                       {linkIcon(r, 36)}
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <a href={linkHref(r.url)} target="_blank" rel="noopener noreferrer"
-                          style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text, textDecoration: "none",
-                            display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title || linkHost(r.url)}</a>
+                        <div style={{ display: "flex", alignItems: "center", minWidth: 0 }}>
+                          <a href={linkHref(r.url)} target="_blank" rel="noopener noreferrer"
+                            style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text, textDecoration: "none",
+                              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title || linkHost(r.url)}</a>
+                          {privateMark(r)}
+                        </div>
                         <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{linkHost(r.url)}</div>
                       </div>
                     </div>
-                    {r.note && (
+                    {(r.description || r.note) && (
                       <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5,
-                        display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{r.note}</div>
+                        display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{r.description || r.note}</div>
                     )}
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: "auto" }}>
                       {searching && r.folder_id && (
@@ -35043,11 +35060,14 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
                       borderBottom: `1px solid ${theme.borderFaint}`, minWidth: 0 }}>
                     {linkIcon(r, 28)}
                     <div style={{ minWidth: 0, flex: 1 }}>
-                      <a href={linkHref(r.url)} target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text, textDecoration: "none",
-                          display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title || linkHost(r.url)}</a>
+                      <div style={{ display: "flex", alignItems: "center", minWidth: 0 }}>
+                        <a href={linkHref(r.url)} target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text, textDecoration: "none",
+                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title || linkHost(r.url)}</a>
+                        {privateMark(r)}
+                      </div>
                       <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {linkHost(r.url)}{r.note ? ` · ${r.note}` : ""}
+                        {linkHost(r.url)}{(r.description || r.note) ? ` · ${r.description || r.note}` : ""}
                       </div>
                     </div>
                     {searching && r.folder_id && (
@@ -35107,8 +35127,6 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
             </div>
             <input autoFocus value={editing.url} onChange={e => setEditing(v => ({ ...v, url: e.target.value }))}
               placeholder="https://…" style={field} />
-            <input value={editing.title} onChange={e => setEditing(v => ({ ...v, title: e.target.value }))}
-              placeholder={de ? "Titel (optional)" : "Title (optional)"} style={field} />
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>{de ? "Ordner" : "Folder"}</span>
               <Dropdown value={editing.folder_id || ""} onChange={(v) => setEditing(x => ({ ...x, folder_id: v || null }))}
@@ -35116,9 +35134,22 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
                 options={[{ value: "", label: de ? "Kein Ordner" : "No folder" },
                           ...folders.map(fo => ({ value: fo.id, label: fo.name }))]} />
             </div>
-            <textarea value={editing.note || ""} onChange={e => setEditing(v => ({ ...v, note: e.target.value }))}
-              rows={3} placeholder={de ? "Notiz (optional)" : "Note (optional)"}
-              style={{ ...field, resize: "vertical", lineHeight: 1.55 }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>{de ? "Sichtbar für" : "Visible to"}</span>
+              {/* Workspace first, and it is the default: a link collection that
+                  starts out private is a bookmark bar with extra steps. */}
+              <SegmentedFilter value={editing.visibility === "private" ? "private" : "workspace"}
+                onChange={(v) => setEditing(x => ({ ...x, visibility: v }))}
+                theme={theme} darkMode={darkMode}
+                options={[
+                  { value: "workspace", label: "Workspace" },
+                  { value: "private",   label: de ? "Nur ich" : "Only me" },
+                ]} />
+            </div>
+            <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55, marginTop: -4 }}>
+              {de ? "Titel, Beschreibung und Icon kommen von der Seite selbst."
+                  : "Title, description and icon come from the page itself."}
+            </div>
             {err && <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767", lineHeight: 1.5 }}>{err}</div>}
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
               <div style={{ flex: 1 }} />
