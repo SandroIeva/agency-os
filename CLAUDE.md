@@ -80,6 +80,7 @@ not be created from the UI at all.
 | **Task** | `KanbanBoard` — created inline in the column composer — **and** `createDashboardTask` in the App root (the swipe-in task panel's "+" button) | App.jsx |
 | **Whiteboard** | `createBoard` in `IdeasTab`, plus `openBrainstorm` in the App root (Erstellen → Brainstorm) | App.jsx |
 | **Document** | `createDoc` | App.jsx |
+| **Moodboard items (Pinterest sync)** | `syncPinterestBoard` in `AssetsView` — the Add menu's fourth entry. Follows `moodboards.pinterest_board_id`, ADDS only: a pin deleted on Pinterest stays, because a moodboard also holds work that never came from there. Pinterest has no webhook for "a pin was added", so this is deliberately a button and not a poll: Trial apps are rate limited per DAY per app, shared across every workspace | App.jsx |
 | **Moodboard items (from Pinterest)** | `addPinsToBoard` in `AssetsView` — the Add menu inside an open board; picks a board, then pins, and skips any `metadata.pinId` already on the moodboard | App.jsx |
 | **Moodboard (from Pinterest)** | `importPinterestBoard` in `AssetsView` — creates the board AND its items in one go; pins keep their `i.pinimg.com` url (`source: "pinterest"`) rather than being copied, so an import costs no storage | App.jsx |
 | **Moodboard** | `createBoard` in the assets area (the moodboards tab of `AssetsView`, now rendered inside **Brand → Creations** via `soloTab="moodboards"`, not in the file manager) | App.jsx |

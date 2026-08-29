@@ -30595,9 +30595,11 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     return j;
   }, [session?.access_token, userOrg?.id]);
 
-  const openPinPick = async () => {
+  // `forSync` reuses the board list for a different question: which board this
+  // moodboard should follow, rather than which pictures to take now.
+  const openPinPick = async ({ forSync = false } = {}) => {
     if (!userOrg?.id) return;
-    setPinPick({ step: "boards", boards: [], pins: [], selected: [], loading: true, busy: false, error: "" });
+    setPinPick({ step: "boards", boards: [], pins: [], selected: [], loading: true, busy: false, error: "", forSync });
     try {
       const j = await pinPost({ mode: "boards" });
       setPinPick(p => ({ ...p, boards: j.boards || [], loading: false }));
@@ -30607,6 +30609,8 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   };
 
   const openPinPickBoard = async (board) => {
+    // Picking a board to FOLLOW ends here: the sync fetches and adds by itself.
+    if (pinPick?.forSync) { setPinPick(null); syncPinterestBoard(board); return; }
     setPinPick(p => ({ ...p, step: "pins", board, pins: [], selected: [], loading: true, error: "" }));
     try {
       const pins = [];
@@ -30655,6 +30659,84 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     setPinPick(null);
   };
 
+  // Fetch what a Pinterest board holds now and add whatever is not here yet.
+  // Only adds. A picture removed on Pinterest stays: a moodboard is also where
+  // people put their own work and arrange it, and tidying up over there is not
+  // a reason to take things away here.
+  const [pinSync, setPinSync] = useState(null);   // { busy, msg, error } | null
+  const syncPinterestBoard = async (explicitBoard = null) => {
+    if (!activeBoard || !userOrg?.id) return;
+    const de = appLanguage === "de";
+    setPinSync({ busy: true, msg: "", error: "" });
+    try {
+      let boardId = explicitBoard?.id || activeBoard.pinterest_board_id;
+      let boardName = explicitBoard?.name || activeBoard.pinterest_board_name;
+
+      // Imported before the link was recorded: resolve the id from the name we
+      // kept on the items rather than making somebody pick the board again.
+      if (!boardId && boardName) {
+        const list = await pinPost({ mode: "boards" });
+        const hit = (list.boards || []).find(b => b.name === boardName);
+        if (hit) boardId = hit.id;
+      }
+      // Nothing to go on: ask which board this moodboard should follow.
+      if (!boardId) {
+        setPinSync(null);
+        openPinPick({ forSync: true });
+        return;
+      }
+
+      const pins = [];
+      let bookmark = null;
+      do {
+        const j = await pinPost({ mode: "pins", boardId, bookmark });
+        pins.push(...(j.pins || []));
+        bookmark = j.bookmark || null;
+      } while (bookmark && pins.length < 500);
+
+      const have = new Set(items.map(it => it.metadata?.pinId).filter(Boolean));
+      const fresh = pins.filter(pn => !have.has(pn.id));
+
+      const patch = {
+        pinterest_board_id: boardId,
+        pinterest_board_name: boardName || activeBoard.pinterest_board_name || null,
+        pinterest_synced_at: new Date().toISOString(),
+      };
+      await supabase.from("moodboards").update(patch).eq("id", activeBoard.id);
+      setActiveBoard(prev => ({ ...prev, ...patch }));
+      setBoards(prev => prev.map(b => b.id === activeBoard.id ? { ...b, ...patch } : b));
+
+      if (fresh.length === 0) {
+        setPinSync({ busy: false, error: "", msg: de ? "Nichts Neues auf dem Board." : "Nothing new on that board." });
+        setTimeout(() => setPinSync(null), 3200);
+        return;
+      }
+
+      const base = items.length;
+      const rows = fresh.map((pn, i) => ({
+        board_id: activeBoard.id, org_id: userOrg.id, created_by: session?.user?.id,
+        type: "image", url: pn.url, source: "pinterest", colors: [],
+        name: (pn.title || "").trim().slice(0, 80)
+          || (pn.description || "").trim().split(/\r?\n/)[0].trim().slice(0, 80)
+          || `${boardName || "Pinterest"} ${base + i + 1}`,
+        position: base + i,
+        x: 40 + ((base + i) % 5) * 60, y: 40 + Math.floor((base + i) / 5) * 60, w: 240,
+        metadata: { pinId: pn.id, sourceUrl: pn.link || null, title: pn.title || null, board: boardName || null },
+      }));
+      const { data, error } = await supabase.from("moodboard_items").insert(rows).select();
+      if (error) throw error;
+      setItems(prev => [...prev, ...(data || [])]);
+      setPinSync({ busy: false, error: "",
+        msg: de ? `${fresh.length} ${fresh.length === 1 ? "neues Bild" : "neue Bilder"} geholt.`
+                : `${fresh.length} new ${fresh.length === 1 ? "image" : "images"} added.` });
+      setTimeout(() => setPinSync(null), 3200);
+    } catch (e) {
+      const msg = planLimitError(e, appLanguage === "de") || e.message || String(e);
+      setPinSync({ busy: false, msg: "", error: msg });
+      setTimeout(() => setPinSync(null), 5000);
+    }
+  };
+
   const importPinterestBoard = async (board) => {
     if (!userOrg?.id || !board) return;
     const de = appLanguage === "de";
@@ -30681,6 +30763,10 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       const { data: made, error: boardErr } = await supabase.from("moodboards").insert({
         org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id,
         title: board.name,
+        // What this moodboard follows, so it can be synced later without
+        // asking again which board it came from.
+        pinterest_board_id: board.id, pinterest_board_name: board.name,
+        pinterest_synced_at: new Date().toISOString(),
       }).select().single();
       if (boardErr) throw boardErr;
 
@@ -31350,6 +31436,24 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             )}
           </AnimatePresence>
 
+          {/* What the sync found, next to the button that asked for it. It goes
+              away by itself: nothing here needs dismissing. */}
+          {pinSync && createPortal(
+            <div style={{ position: "fixed", left: "50%", bottom: 28, transform: "translateX(-50%)", zIndex: 100003,
+              display: "flex", alignItems: "center", gap: 11, padding: "12px 18px", borderRadius: 999,
+              background: darkMode ? "rgba(28,28,38,0.96)" : "rgba(255,255,255,0.98)",
+              border: `1px solid ${theme.borderFaint}`, boxShadow: "0 18px 50px rgba(0,0,0,0.22)",
+              fontSize: 13, fontFamily: FONT, color: pinSync.error ? "#E86767" : theme.text, whiteSpace: "nowrap" }}>
+              {pinSync.busy && (
+                <span style={{ width: 15, height: 15, flexShrink: 0, borderRadius: "50%",
+                  border: `2px solid ${theme.borderFaint}`, borderTopColor: theme.text,
+                  animation: "spin 0.9s linear infinite" }} />
+              )}
+              {pinSync.busy
+                ? (appLanguage === "de" ? "Wird abgeglichen…" : "Syncing…")
+                : (pinSync.error || pinSync.msg)}
+            </div>, document.body)}
+
           {/* Pins for the board that is already open: choose a Pinterest board,
               then choose from its pictures. Portalled like the others. */}
           {pinPick && createPortal(
@@ -31373,7 +31477,9 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                   <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {pinPick.step === "pins"
                       ? pinPick.board?.name
-                      : (appLanguage === "de" ? "Pins hinzufügen" : "Add pins")}
+                      : pinPick.forSync
+                        ? (appLanguage === "de" ? "Welches Board?" : "Which board?")
+                        : (appLanguage === "de" ? "Pins hinzufügen" : "Add pins")}
                   </div>
                   <motion.div whileHover={{ scale: 1.12 }} whileTap={{ scale: 0.9 }}
                     onClick={() => { if (!pinPick.busy) setPinPick(null); }}
@@ -31874,6 +31980,14 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                           fill: true,
                           icon: <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146A12 12 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>,
                           onClick: () => { setBoardAddOpen(false); openPinPick(); },
+                        }, {
+                          key: "sync",
+                          label: appLanguage === "de" ? "Mit Pinterest abgleichen" : "Sync with Pinterest",
+                          sub: activeBoard?.pinterest_board_name
+                            ? (appLanguage === "de" ? `Neues aus „${activeBoard.pinterest_board_name}"` : `What is new in "${activeBoard.pinterest_board_name}"`)
+                            : (appLanguage === "de" ? "Board wählen und Neues holen" : "Pick a board and fetch what is new"),
+                          icon: <><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-7.6-4.2"/><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 7.6 4.2"/><polyline points="20 3 19.6 7.2 15.4 7.2"/><polyline points="4 21 4.4 16.8 8.6 16.8"/></>,
+                          onClick: () => { setBoardAddOpen(false); syncPinterestBoard(); },
                         }] : []),
                       ].map(it => (
                         <div key={it.key} onClick={it.onClick} className="hover-row"
