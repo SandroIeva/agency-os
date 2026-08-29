@@ -51166,7 +51166,7 @@ export default function CircularMenu() {
       }}>
         {/* Logo — left third (opens Profile) */}
         {!docFullscreen && (
-        <div style={{ flex: 1, display: "flex", alignItems: "center", paddingTop: 10 }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", paddingTop: 10, paddingLeft: 3 }}>
           <motion.div
             onClick={() => { if (currentView === "settings") { setCurrentView("dashboard"); } else { setCurrentView("settings"); } }}
             whileHover={{ scale: 1.05 }}
@@ -51279,7 +51279,7 @@ export default function CircularMenu() {
           {/* Four pixels further right, as a negative margin on the wrapper.
               Not a transform: the orb inside animates x/y, and Framer writes
               the whole transform when it does. */}
-          <div style={{ cursor: "pointer", marginRight: -4 }}
+          <div style={{ cursor: "pointer", marginRight: -7 }}
             onClick={() => { setOrbLeaving(true); setTimeout(startVoice, 380); }}>
             <LiquidOrb size={74} darkMode={darkMode} leaving={orbLeaving || voiceMode || aiSpeaking} fallback={<AISphere darkMode={darkMode} />} />
           </div>
