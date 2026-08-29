@@ -30616,7 +30616,14 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           metadata: { pinId: pn.id, sourceUrl: pn.link || null, title: pn.title || null, board: board.name },
         }));
         const { error: itemErr } = await supabase.from("moodboard_items").insert(rows);
-        if (itemErr) throw itemErr;
+        // The board exists before its pictures can, so a failure here leaves an
+        // empty board named after the one that did not arrive. Take it back:
+        // two failed attempts left two "App ui" boards behind, and the next
+        // person would have had to guess which of them meant anything.
+        if (itemErr) {
+          await supabase.from("moodboards").delete().eq("id", made.id);
+          throw itemErr;
+        }
       }
 
       setBoards(prev => [made, ...prev]);
