@@ -43747,7 +43747,20 @@ export default function CircularMenu() {
   const [whiteboardId, setWhiteboardId] = useState(null);    // board to open in the Brainstorm whiteboard view
   const [whiteboardReturn, setWhiteboardReturn] = useState("dashboard"); // view to return to when leaving the whiteboard
   const [docFullscreen, setDocFullscreen] = useState(false); // document editor in full-viewport mode
-  const [brandProfile, setBrandProfile] = useState(null);    // brand_profile row for current org — fed into AI context
+  // The workspace's brand row. It is read by the AI context AND handed to
+  // CreationsView as a prop, which is why it cannot be loaded once and left:
+  // Creations showed the logo the brand had when the workspace was opened, and
+  // a new one only appeared after a full reload. Everything else on the brand
+  // side loads its own copy, which is why only Creations looked wrong.
+  const [brandProfile, setBrandProfile] = useState(null);
+  const loadBrandProfile = useCallback(async (orgId) => {
+    if (!orgId) { setBrandProfile(null); return; }
+    try {
+      const { data } = await supabase.from("brand_profile").select("*")
+        .eq("org_id", orgId).is("project_id", null).maybeSingle();
+      setBrandProfile(data || null);
+    } catch (_) { /* the brand is context, not a precondition */ }
+  }, []);
   const [appProjects, setAppProjects] = useState([]);        // [{name}] — known project names for AI context + vocab correction
   const [wsName, setWsName] = useState("");                  // workspace name input
   const [wsCreating, setWsCreating] = useState(false);       // creating workspace loading
@@ -44739,6 +44752,15 @@ export default function CircularMenu() {
     // The panel stays open on purpose: somebody writing down what is on their
     // mind rarely has exactly one thing.
   };
+
+  // BrandView is the only thing that writes this row, so re-read it on the way
+  // out rather than polling or threading a callback through every save in it.
+  const prevViewRef = useRef(currentView);
+  useEffect(() => {
+    const was = prevViewRef.current;
+    prevViewRef.current = currentView;
+    if (was === "brand" && currentView !== "brand") loadBrandProfile(userOrg?.id);
+  }, [currentView, userOrg?.id, loadBrandProfile]);
 
   // ── Fetch Kanban tasks for dashboard/startview ──
   useEffect(() => {
