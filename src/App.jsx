@@ -51378,7 +51378,11 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {pinConn
                           ? (pinConn.needs_reconnect
-                              ? (appLanguage === "de" ? "Die Verbindung ist abgelaufen. Einmal neu verbinden." : "The connection expired. Connect again.")
+                              ? (pinConn.scopes_missing?.length
+                                  ? (appLanguage === "de"
+                                      ? "Es fehlen Berechtigungen. Einmal trennen und neu verbinden."
+                                      : "Some permissions are missing. Disconnect and connect again.")
+                                  : (appLanguage === "de" ? "Die Verbindung ist abgelaufen. Einmal neu verbinden." : "The connection expired. Connect again."))
                               : (appLanguage === "de"
                                   ? `Verbunden${pinConn.username ? ` als @${pinConn.username}` : ""}. Gilt für diesen Workspace.`
                                   : `Connected${pinConn.username ? ` as @${pinConn.username}` : ""}. Applies to this workspace.`))

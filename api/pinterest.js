@@ -31,12 +31,28 @@ const API = "https://api.pinterest.com/v5";
 // The _secret variants are what make a private board visible at all, and a
 // design team's inspiration boards are usually secret. No ads, no catalogs, no
 // billing: a scope list is read by the person clicking Allow.
+//
+// boards:write is here because creating a PIN needs it. That is not obvious
+// from the scope table, and pins:write alone gets a 401 saying
+// "Missing: ['boards:write']" at the moment the pin is posted — measured
+// against the live API, not guessed. boards:write_secret for the same reason on
+// a secret board, which is exactly where a team's own boards live.
 const SCOPES = [
   "user_accounts:read",
   "boards:read", "boards:read_secret",
+  "boards:write", "boards:write_secret",
   "pins:read", "pins:read_secret",
   "pins:write",
 ].join(",");
+
+// A token carries the scopes it was issued with, for as long as it lives. Widen
+// the list above and every existing connection keeps working for what it could
+// already do, which is the trap: reading still works, posting fails at the last
+// step. Only reconnecting fetches a token with the new ones.
+const scopesBehind = (granted) => {
+  const held = new Set(String(granted || "").split(/[\s,]+/).filter(Boolean));
+  return SCOPES.split(",").filter(x => !held.has(x));
+};
 
 // Pinterest wants the client id and secret as HTTP Basic on the token calls.
 const basic = (id, secret) => "Basic " + btoa(`${id}:${secret}`);
@@ -114,9 +130,13 @@ export default async function handler(req) {
   // ── Health, needs no secret ───────────────────────────────────────────────
   if (check) {
     const { count } = await db.from("pinterest_connections").select("org_id", { count: "exact", head: true });
+    const { data: any } = await db.from("pinterest_connections").select("scopes").limit(1).maybeSingle();
+    const behind = any ? scopesBehind(any.scopes) : [];
     return json({
       configured: true,
       connections: count ?? 0,
+      scopes_current: any ? behind.length === 0 : null,
+      scopes_missing: behind.length ? behind : undefined,
       redirect_uri: redirectUri,
       scopes: SCOPES,
       // Which commit is answering, so "is my fix live" stops being a guess.
@@ -211,12 +231,16 @@ export default async function handler(req) {
 
   if (body.mode === "status") {
     // Never the tokens. This endpoint answers "connected, and as whom".
+    const behind = row ? scopesBehind(row.scopes) : [];
     return json({
       connected: !!row,
       username: row?.username || null,
       scopes: row?.scopes || null,
       connected_at: row?.created_at || null,
-      needs_reconnect: !!row?.last_error,
+      // A token issued before a scope was added keeps working for everything it
+      // already could, so nothing looks wrong until the new thing fails.
+      scopes_missing: behind.length ? behind : undefined,
+      needs_reconnect: !!row?.last_error || behind.length > 0,
       last_error: row?.last_error || null,
     });
   }
