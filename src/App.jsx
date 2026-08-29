@@ -14190,8 +14190,18 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               )}
               {messages.map((msg, i) => {
                 const isMe = msg.sender_id === myId;
-                const sender = memberMap[msg.sender_id] || { display_name: "Unbekannt", initials: "?", color: "#888" };
-                const msgTime = new Date(msg.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+                // An agent's message carries an agent_id and no sender_id, so
+                // looking it up among the workspace's people found nothing and
+                // it signed itself "Unbekannt" with a question mark. The agents
+                // are right here, with a name, a face and a colour.
+                const agent = msg.agent_id ? AGENT_BY_KEY[msg.agent_id] : null;
+                const sender = agent
+                  ? { display_name: agent.name[appLanguage === "de" ? "de" : "en"],
+                      initials: agent.initials, color: agent.color, avatar_url: agent.avatar }
+                  : (memberMap[msg.sender_id]
+                     || { display_name: appLanguage === "de" ? "Unbekannt" : "Unknown", initials: "?", color: "#888" });
+                const msgTime = new Date(msg.created_at)
+                  .toLocaleTimeString(appLanguage === "de" ? "de-DE" : "en-US", { hour: "2-digit", minute: "2-digit" });
                 return (
                   <motion.div
                     key={msg.id}
