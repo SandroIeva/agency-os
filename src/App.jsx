@@ -30608,9 +30608,21 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       if (boardErr) throw boardErr;
 
       if (pins.length) {
+        // The name field in the details panel. A pin usually carries a title;
+        // where it does not, the first line of its description says more than
+        // an empty box, and the board and a number is better than nothing at
+        // all. Cut at 80: this is a label, not the description itself.
+        const pinName = (pn, i) => {
+          const t = (pn.title || "").trim();
+          if (t) return t.slice(0, 80);
+          const d = (pn.description || "").trim().split(/\r?\n/)[0].trim();
+          if (d) return d.slice(0, 80);
+          return `${board.name} ${i + 1}`;
+        };
         const rows = pins.map((pn, i) => ({
           board_id: made.id, org_id: userOrg.id, created_by: session?.user?.id,
           type: "image", url: pn.url, source: "pinterest", colors: [],
+          name: pinName(pn, i),
           position: i, x: 40 + (i % 5) * 60, y: 40 + Math.floor(i / 5) * 60, w: 240,
           // Where it came from, so a picture is traceable to its pin later.
           metadata: { pinId: pn.id, sourceUrl: pn.link || null, title: pn.title || null, board: board.name },
