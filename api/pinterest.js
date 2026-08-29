@@ -282,11 +282,20 @@ export default async function handler(req) {
     if (!r.ok) return json({ error: j?.message || `HTTP ${r.status}`, code: "pinterest_error" }, 502);
     return json({
       pins: (j.items || []).map(p => {
-        // The image comes back as a map of sizes whose keys differ by pin type.
-        // Take the widest rather than naming one, or a pin that happens not to
-        // have "1200x" comes through with no picture at all.
-        const sizes = Object.values(p.media?.images || {});
-        const best = sizes.sort((a, b) => (b.width || 0) - (a.width || 0))[0] || null;
+        // The image comes back as a map of sizes whose keys differ by pin type,
+        // so take the widest rather than naming one: a pin without "1200x"
+        // would otherwise come through with no picture at all.
+        //
+        // The reported widths tie more often than you would think. A pin whose
+        // original is 420px wide reports width 420 for BOTH the 600x and the
+        // 1200x entry, and sorting on width alone then returns whichever the
+        // object happened to list first, which was the smaller file. Break the
+        // tie on the cap in the key.
+        const cap = (k) => parseInt(String(k), 10) || 0;
+        const sizes = Object.entries(p.media?.images || {})
+          .map(([k, v]) => ({ ...v, key: k }));
+        const best = sizes.sort((a, b) =>
+          (b.width || 0) - (a.width || 0) || cap(b.key) - cap(a.key))[0] || null;
         return {
           id: p.id,
           title: p.title || null,

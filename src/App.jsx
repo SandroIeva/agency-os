@@ -30534,6 +30534,99 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     if (!error && data) { setBoards(prev => [data, ...prev]); openBoard(data); }
   };
 
+  // ── Import a whole Pinterest board ────────────────────────────────────────
+  // The pins keep their Pinterest image url rather than being copied into
+  // storage. An imported board is reference material, often fifty pictures at
+  // once, and copying would spend a workspace's storage allowance on somebody
+  // else's images. The same choice the "add by url" button already makes.
+  const [pinImport, setPinImport] = useState(null);   // null | { boards, loading, error, busy, doing }
+  // Whether this workspace has a Pinterest account at all. Asked once; the
+  // button is not offered when the answer is no, because "connect Pinterest"
+  // belongs in Settings and not in the middle of making a moodboard.
+  const [pinConnected, setPinConnected] = useState(false);
+  useEffect(() => {
+    if (!userOrg?.id || !session?.access_token) { setPinConnected(false); return; }
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/pinterest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ mode: "status", orgId: userOrg.id }),
+        });
+        const j = r.ok ? await r.json().catch(() => null) : null;
+        if (alive) setPinConnected(!!j?.connected);
+      } catch { if (alive) setPinConnected(false); }
+    })();
+    return () => { alive = false; };
+  }, [userOrg?.id, session?.access_token]);
+  const openPinterestImport = async () => {
+    if (!userOrg?.id) return;
+    setPinImport({ boards: [], loading: true, error: "", busy: false, doing: "" });
+    try {
+      const r = await fetch("/api/pinterest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ mode: "boards", orgId: userOrg.id }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      setPinImport({ boards: j.boards || [], loading: false, error: "", busy: false, doing: "" });
+    } catch (e) {
+      setPinImport({ boards: [], loading: false, busy: false, doing: "", error: String(e.message || e) });
+    }
+  };
+
+  const importPinterestBoard = async (board) => {
+    if (!userOrg?.id || !board) return;
+    const de = appLanguage === "de";
+    setPinImport(p => ({ ...p, busy: true, error: "", doing: board.name }));
+    try {
+      // Every page of the board, not the first fifty. A board that stops
+      // halfway through is worse than one that takes a moment.
+      const pins = [];
+      let bookmark = null;
+      do {
+        const r = await fetch("/api/pinterest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+          body: JSON.stringify({ mode: "pins", orgId: userOrg.id, boardId: board.id, bookmark }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+        pins.push(...(j.pins || []));
+        bookmark = j.bookmark || null;
+        // Trial apps are rate limited per DAY per app, so a runaway loop here
+        // would spend the whole product's quota on one import.
+      } while (bookmark && pins.length < 500);
+
+      const { data: made, error: boardErr } = await supabase.from("moodboards").insert({
+        org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id,
+        title: board.name,
+      }).select().single();
+      if (boardErr) throw boardErr;
+
+      if (pins.length) {
+        const rows = pins.map((pn, i) => ({
+          board_id: made.id, org_id: userOrg.id, created_by: session?.user?.id,
+          type: "image", url: pn.url, source: "pinterest", colors: [],
+          position: i, x: 40 + (i % 5) * 60, y: 40 + Math.floor(i / 5) * 60, w: 240,
+          // Where it came from, so a picture is traceable to its pin later.
+          metadata: { pinId: pn.id, sourceUrl: pn.link || null, title: pn.title || null, board: board.name },
+        }));
+        const { error: itemErr } = await supabase.from("moodboard_items").insert(rows);
+        if (itemErr) throw itemErr;
+      }
+
+      setBoards(prev => [made, ...prev]);
+      setPinImport(null);
+      openBoard(made);
+    } catch (e) {
+      const msg = planLimitError(e, de) || e.message || String(e);
+      setPinImport(p => ({ ...p, busy: false, doing: "", error: msg }));
+    }
+  };
+
   const deleteBoard = async (board) => {
     await supabase.from("moodboards").delete().eq("id", board.id);
     setBoards(prev => prev.filter(b => b.id !== board.id));
@@ -30895,6 +30988,18 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       { id: "links",        label: "Browse" },
     ];
     const headerActions = (<>
+            {tab === "moodboards" && pinConnected && (
+              <motion.div whileTap={{ scale: 0.96 }} onClick={openPinterestImport}
+                title={appLanguage === "de" ? "Ein Pinterest-Board als Moodboard importieren" : "Import a Pinterest board as a moodboard"}
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 15px", borderRadius: 10,
+                  cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent",
+                  color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 500, whiteSpace: "nowrap" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#E60023" aria-hidden="true" style={{ flexShrink: 0 }}>
+                  <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146A12 12 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>
+                </svg>
+                {appLanguage === "de" ? "Aus Pinterest" : "From Pinterest"}
+              </motion.div>
+            )}
             {tab === "moodboards" && (
               <motion.div whileTap={{ scale: 0.96 }} onClick={() => setCreating(true)} style={primaryBtn}>
                 {appLanguage === "de" ? "Neu erstellen" : "Create new"}
@@ -31097,6 +31202,83 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Pick a Pinterest board to import. Portalled, because this panel
+              lives inside a view whose root is an animating motion.div, and a
+              fixed overlay under a transformed ancestor covers that box rather
+              than the screen. */}
+          {pinImport && createPortal(
+            <div onClick={() => { if (!pinImport.busy) setPinImport(null); }}
+              style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+                display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+              <div onClick={e => e.stopPropagation()}
+                style={{ width: "min(560px, 100%)", maxHeight: "80vh", borderRadius: 22, padding: "22px 28px 26px",
+                  display: "flex", flexDirection: "column", gap: 16,
+                  background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0 }}>
+                    {appLanguage === "de" ? "Board importieren" : "Import a board"}
+                  </div>
+                  <motion.div whileHover={{ scale: 1.12 }} whileTap={{ scale: 0.9 }}
+                    onClick={() => { if (!pinImport.busy) setPinImport(null); }}
+                    title={appLanguage === "de" ? "Schließen" : "Close"}
+                    style={{ cursor: pinImport.busy ? "default" : "pointer", width: 28, height: 28, borderRadius: 8,
+                      display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim,
+                      flexShrink: 0, opacity: pinImport.busy ? 0.4 : 1 }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </motion.div>
+                </div>
+
+                {pinImport.loading ? (
+                  <div style={{ padding: "26px 0", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>
+                    {t("common.loading") || "Lädt…"}
+                  </div>
+                ) : pinImport.busy ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "20px 0" }}>
+                    <span style={{ width: 18, height: 18, flexShrink: 0, borderRadius: "50%",
+                      border: `2px solid ${theme.borderFaint}`, borderTopColor: theme.text,
+                      animation: "spin 0.9s linear infinite" }} />
+                    <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text }}>
+                      {appLanguage === "de" ? `„${pinImport.doing}" wird geholt…` : `Fetching "${pinImport.doing}"…`}
+                    </div>
+                  </div>
+                ) : pinImport.boards.length === 0 ? (
+                  <div style={{ padding: "26px 0", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+                    {appLanguage === "de" ? "Dieses Pinterest-Konto hat keine Boards." : "This Pinterest account has no boards."}
+                  </div>
+                ) : (
+                  <div style={{ overflowY: "auto", margin: "0 -6px", padding: "0 6px", display: "flex", flexDirection: "column", gap: 6 }}>
+                    {pinImport.boards.map(b => (
+                      <motion.div key={b.id} whileTap={{ scale: 0.995 }} onClick={() => importPinterestBoard(b)}
+                        className="hover-row"
+                        style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 12, cursor: "pointer" }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 10, flexShrink: 0, overflow: "hidden",
+                          background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
+                          {b.image && <img src={b.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name}</div>
+                          <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                            {b.pinCount ?? 0} Pins{b.privacy === "SECRET" ? (appLanguage === "de" ? " · geheim" : " · secret") : ""}
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+
+                {pinImport.error && (
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767", lineHeight: 1.5 }}>{pinImport.error}</div>
+                )}
+                {!pinImport.loading && !pinImport.busy && pinImport.boards.length > 0 && (
+                  <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
+                    {appLanguage === "de"
+                      ? "Die Bilder bleiben bei Pinterest liegen und zählen nicht auf euren Speicher."
+                      : "The images stay at Pinterest and do not count against your storage."}
+                  </div>
+                )}
+              </div>
+            </div>, document.body)}
 
           {/* ── CREATIONS tab ── */}
           {tab === "creations" && (

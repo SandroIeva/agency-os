@@ -80,6 +80,7 @@ not be created from the UI at all.
 | **Task** | `KanbanBoard` — created inline in the column composer — **and** `createDashboardTask` in the App root (the swipe-in task panel's "+" button) | App.jsx |
 | **Whiteboard** | `createBoard` in `IdeasTab`, plus `openBrainstorm` in the App root (Erstellen → Brainstorm) | App.jsx |
 | **Document** | `createDoc` | App.jsx |
+| **Moodboard (from Pinterest)** | `importPinterestBoard` in `AssetsView` — creates the board AND its items in one go; pins keep their `i.pinimg.com` url (`source: "pinterest"`) rather than being copied, so an import costs no storage | App.jsx |
 | **Moodboard** | `createBoard` in the assets area (the moodboards tab of `AssetsView`, now rendered inside **Brand → Creations** via `soloTab="moodboards"`, not in the file manager) | App.jsx |
 | **Note** | `createNote` | App.jsx |
 | **Calendar event** | `createTeamEvent` | App.jsx |
