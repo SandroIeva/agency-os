@@ -32154,16 +32154,6 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
           boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{children}</motion.div>
     );
   };
-  const filterBtn = (mode, label) => {
-    const on = mediaFilter === mode;
-    return (
-      <motion.div whileTap={{ scale: 0.95 }} onClick={() => setMediaFilter(mode)}
-        style={{ padding: "6px 13px", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-          fontSize: 12.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
-          background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent", color: on ? theme.text : theme.textDim,
-          boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{label}</motion.div>
-    );
-  };
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
@@ -32448,11 +32438,12 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
               </div>
               <div style={{ flex: 1 }} />
               {/* Type filter: Alle · Bilder · Videos */}
-              <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
-                {filterBtn("all", appLanguage === "de" ? "Alle" : "All")}
-                {filterBtn("image", t("assets.images") || "Bilder")}
-                {filterBtn("video", t("assets.videos") || "Videos")}
-              </div>
+              <SegmentedFilter value={mediaFilter} onChange={setMediaFilter} theme={theme} darkMode={darkMode}
+                options={[
+                  { value: "all",   label: appLanguage === "de" ? "Alle" : "All" },
+                  { value: "image", label: t("assets.images") || "Bilder" },
+                  { value: "video", label: t("assets.videos") || "Videos" },
+                ]} />
               <motion.div whileTap={{ scale: 0.96 }} onClick={() => setSortMode(m => m === "created" ? "name" : "created")}
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9, cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, whiteSpace: "nowrap" }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
@@ -34655,6 +34646,31 @@ const tabSearchInput = (theme) => ({
   color: theme.text, fontSize: 13, fontFamily: FONT,
 });
 
+// The little segmented switch at the right of a tab's toolbar (Media's
+// Alle · Bilder · Videos). It existed three times, written out by hand each
+// time, which is how two of them ended up half a pixel and one shade apart.
+// One definition now, so a second tab asking for it gets the same control
+// rather than a lookalike.
+function SegmentedFilter({ value, onChange, options, theme, darkMode }) {
+  return (
+    <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11,
+      background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+      {options.map(o => {
+        const on = value === o.value;
+        return (
+          <motion.div key={o.value} whileTap={{ scale: 0.95 }} onClick={() => onChange(o.value)}
+            style={{ padding: "6px 13px", borderRadius: 8, cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 12.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
+              background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent",
+              color: on ? theme.text : theme.textDim,
+              boxShadow: on ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>{o.label}</motion.div>
+        );
+      })}
+    </div>
+  );
+}
+
 const LINK_CATEGORY_SUGGESTIONS = ["Skills", "Tools", "Inspiration"];
 // The bit of a url a person recognises. Fails soft: something that is not a url
 // yet is shown as typed rather than as an error.
@@ -34684,6 +34700,7 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
   const de = appLanguage === "de";
   const [rows, setRows] = useState(null);          // null = loading
   const [cat, setCat] = useState("*");             // "*" = all
+  const [scope, setScope] = useState("all");       // all | workspace | mine
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState(null);    // { id?, url, title, category, note }
   const [busy, setBusy] = useState(false);
@@ -34691,8 +34708,12 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
 
   const load = async () => {
     if (!userOrg?.id) { setRows([]); return; }
+    // Everything the workspace has. The switch on the right decides what of it
+    // is shown, which it cannot do if the query has already thrown the rest
+    // away. Inside a project that means this project's links and the
+    // workspace-wide ones; outside one, all of them.
     let sel = supabase.from("workspace_links").select("*").eq("org_id", userOrg.id);
-    sel = projectId ? sel.eq("project_id", projectId) : sel.is("project_id", null);
+    if (projectId) sel = sel.or(`project_id.eq.${projectId},project_id.is.null`);
     const { data } = await sel.order("created_at", { ascending: false });
     setRows(data || []);
     backfillPreviews(data || []);
@@ -34762,7 +34783,16 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
     await supabase.from("workspace_links").delete().eq("id", row.id);
   };
 
-  const all = rows || [];
+  const everything = rows || [];
+  // The switch comes first: the category chips and their counts describe what
+  // is on screen, so they have to count the same set the list draws.
+  const me = session?.user?.id || null;
+  const all = everything.filter(r =>
+    scope === "workspace" ? !r.project_id :
+    // created_by is nullable, and null === null is true: without the guard, a
+    // row whose author was never recorded belongs to whoever is not signed in.
+    scope === "mine"      ? (!!me && r.created_by === me) :
+    true);
   const cats = [...new Set([...LINK_CATEGORY_SUGGESTIONS, ...all.map(r => r.category).filter(Boolean)])];
   const needle = q.trim().toLowerCase();
   const shown = all.filter(r =>
@@ -34783,6 +34813,12 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
             style={tabSearchInput(theme)} />
         </div>
         <div style={{ flex: 1 }} />
+        <SegmentedFilter value={scope} onChange={setScope} theme={theme} darkMode={darkMode}
+          options={[
+            { value: "all",       label: de ? "Alle" : "All" },
+            { value: "workspace", label: "Workspace" },
+            { value: "mine",      label: de ? "Meine" : "Mine" },
+          ]} />
       </div>
 
       <div style={{ padding: "12px 26px 0", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -34820,13 +34856,14 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
               </svg>
             </div>
             <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-              {all.length === 0 ? (de ? "Noch keine Links" : "No links yet") : (de ? "Nichts gefunden" : "Nothing found")}
+              {everything.length === 0 ? (de ? "Noch keine Links" : "No links yet") : (de ? "Nichts gefunden" : "Nothing found")}
             </div>
             <div style={{ fontSize: 13, fontFamily: FONT, lineHeight: 1.6, maxWidth: 380 }}>
-              {all.length === 0
+              {everything.length === 0
                 ? (de ? "Sammle hier, was ihr sonst in Lesezeichen verliert: Skills, Tools, Referenzen."
                       : "Keep what otherwise gets lost in bookmarks: skills, tools, references.")
-                : (de ? "Andere Kategorie oder anderer Suchbegriff." : "Try another category or another word.")}
+                : (de ? "Andere Ansicht, andere Kategorie oder anderer Suchbegriff."
+                      : "Try another view, another category or another word.")}
             </div>
           </div>
         ) : (
