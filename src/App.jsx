@@ -15523,7 +15523,12 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
         }}
       >
         {loading ? (
-          <div style={{ textAlign: "center", padding: 60, color: theme.textDim, fontFamily: FONT, fontSize: 13 }}>Lädt...</div>
+          // NotesView is handed `t` but not `appLanguage`, so the label comes
+          // from the translations rather than from a language check that has
+          // nothing here to read.
+          <div style={{ padding: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <MetaballsLoader size={52} color={metaballColor(darkMode)} label={t("common.loading") || "Loading"} />
+          </div>
         ) : visibleNotes.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
