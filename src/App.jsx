@@ -31086,6 +31086,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             <CreationsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} grad={grad} glow={glow} t={t}
               appLanguage={appLanguage} onUploadStorage={onUploadStorage} onUploadDrive={onUploadDrive} orgMembers={orgMembers} projectId={projectId}
               pickRef={creationsPick} drivePickRef={creationsDrivePick} newFolderRef={creationsNewFolder} webImportRef={creationsWebImport} openWebImport={openWebImport} generateRef={creationsGenerate} deepLink={assetDeepLink} onUploadingChange={setCreationsUploading}
+              generateFromVoice={openTab?.generate ? { prompt: openTab.generate, ts: openTab.ts } : null}
               getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin}
               llmProvider={llmProvider} llmKeys={llmKeys} />
           )}
@@ -31561,7 +31562,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 // Top-level component (not inline) so framer-motion never re-mounts it per render.
 // Creations tab — gallery of the workspace's images AND videos (AI-generated +
 // user uploads). Filter by media type; upload your own via the button.
-function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, openWebImport = null, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, newFolderRef, webImportRef, generateRef, deepLink, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null }) {
+function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t, appLanguage, openWebImport = null, onUploadStorage, onUploadDrive, orgMembers = [], pickRef, drivePickRef, newFolderRef, webImportRef, generateRef, deepLink, onUploadingChange, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, generateFromVoice = null }) {
   const memberById = useMemo(() => {
     const m = {}; (orgMembers || []).forEach(om => { if (om.user_id) m[om.user_id] = { ...(om.profiles || {}) }; }); return m;
   }, [orgMembers]);
@@ -31659,8 +31660,28 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     };
   }, [generateRef, loadGenCredits]);
 
-  const runGeneration = async () => {
-    const prompt = genPrompt.trim();
+  // Asked for out loud. The panel opens with the prompt in it and starts at
+  // once: saying "make me a picture of an office" IS the confirmation, and a
+  // dialog that then asks "are you sure" is asking the same question twice.
+  // Keyed on the timestamp so saying it twice runs twice, and guarded by a ref
+  // so StrictMode's double-invoked effect does not spend the credits twice.
+  const voiceGenRef = useRef(null);
+  useEffect(() => {
+    const job = generateFromVoice;
+    if (!job?.prompt || !job.ts || voiceGenRef.current === job.ts) return;
+    voiceGenRef.current = job.ts;
+    setGenOpen(true); setGenError(""); setGenPrompt(job.prompt);
+    loadGenCredits();
+    runGenRef.current?.(job.prompt);
+  }, [generateFromVoice?.ts]); // eslint-disable-line
+
+  // runGeneration reads genPrompt from state, which the line above has only
+  // just set: a call in the same tick would still see the old value. The ref
+  // holds the version that takes the prompt as an argument.
+  const runGenRef = useRef(null);
+
+  const runGeneration = async (promptArg) => {
+    const prompt = (typeof promptArg === "string" ? promptArg : genPrompt).trim();
     if (!prompt || genBusy || genWaiting || !userOrg?.id || !session?.user?.id) return;
     setGenBusy(true); setGenError("");
     try {
@@ -31690,6 +31711,10 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     setGenBusy(false);
     loadGenCredits();
   };
+
+  // The effect above fires before this function is defined on the first
+  // render pass, so the ref is filled here rather than at the declaration.
+  runGenRef.current = runGeneration;
 
   // Follow a job and end it where the user is. Whoever is still waiting in the
   // dialog gets the picture opened in front of them; whoever left gets the
@@ -45380,6 +45405,28 @@ export default function CircularMenu() {
       ], action: () => setDarkMode(false) },
     ];
 
+    // Making a picture is the one command that carries an argument, so it is
+    // a pattern with a tail rather than a phrase to look up. Both languages
+    // again: the theme rules already learned that people mix them.
+    //
+    // The tail has to be there. "Erstelle ein Bild" on its own is a request
+    // for a conversation, not a prompt, and it falls through to the AI.
+    const genRules = [
+      /(?:erstell(?:e|st)?|mach(?:e|s)?|generier(?:e)?|zeichne|male?)\s+(?:mir\s+)?(?:doch\s+)?(?:mal\s+)?(?:bitte\s+)?(?:ein|eine|einen)?\s*(?:bild|foto|grafik|illustration|artwork)\s*(?:von|vom|mit|über|zu)?\s+(.{2,})/i,
+      /(?:create|generate|make|draw|paint)\s+(?:me\s+)?(?:an?\s+)?(?:image|picture|photo|graphic|illustration|artwork)\s*(?:of|with|showing|about)?\s+(.{2,})/i,
+    ];
+    for (const re of genRules) {
+      const m = re.exec(t);
+      if (m && m[1]) {
+        // The prompt comes off the ORIGINAL text, not the lowercased one the
+        // matching runs on: a prompt is written for an image model, and
+        // "office in berlin" is not what somebody said.
+        const at = t.length - m[1].length;
+        const prompt = text.trim().replace(/[.!?]+$/, "").slice(at).trim();
+        if (prompt.length >= 2) return { generate: prompt };
+      }
+    }
+
     for (const rule of navRules) {
       for (const p of rule.patterns) {
         if (t.includes(p)) return { view: rule.view };
@@ -45665,7 +45712,11 @@ export default function CircularMenu() {
         // vocab correction (e.g. "brand" → "BrandX") can't sabotage commands.
         if (rawText.length > 0) {
           const voiceNav = detectVoiceCommand(rawText) || detectVoiceCommand(currentText);
-          if (voiceNav) {
+          // Everything except a picture may fire on a partial result: those
+          // are fixed phrases, and matching one early only makes it quicker.
+          // A prompt is the rest of the sentence, so firing here would
+          // generate "an office in" and stop listening. It waits for the end.
+          if (voiceNav && !voiceNav.generate) {
             commandExecuted = true;
             clearSilenceTimer();
             try { recognition.stop(); } catch(e) {}
@@ -45715,6 +45766,11 @@ export default function CircularMenu() {
       voiceTargetDialogRef.current = false;
       if (voiceNav.view) setCurrentView(voiceNav.view);
       if (voiceNav.action) voiceNav.action();
+      // Straight to where pictures are made, with the prompt already in it.
+      if (voiceNav.generate) {
+        setAssetsOpenTab({ tab: "creations", ts: Date.now(), generate: voiceNav.generate });
+        setCurrentView("assets");
+      }
       return;
     }
 
