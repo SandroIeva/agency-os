@@ -31497,24 +31497,33 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                 {pinConnectAsk.error && (
                   <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767", lineHeight: 1.5 }}>{pinConnectAsk.error}</div>
                 )}
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 2 }}>
-                  <div style={{ flex: 1 }} />
-                  <motion.div whileTap={{ scale: pinConnectAsk.busy ? 1 : 0.97 }}
-                    onClick={() => { if (!pinConnectAsk.busy) setPinConnectAsk(null); }}
-                    style={{ padding: "10px 16px", borderRadius: 999, cursor: pinConnectAsk.busy ? "default" : "pointer",
-                      border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 12.5, fontFamily: FONT,
-                      opacity: pinConnectAsk.busy ? 0.5 : 1 }}>
-                    {appLanguage === "de" ? "Später" : "Later"}
-                  </motion.div>
-                  <motion.div whileTap={{ scale: pinConnectAsk.busy ? 1 : 0.97 }}
-                    onClick={pinConnectAsk.busy ? undefined : runPinterestConnect}
-                    style={{ ...primaryBtn, padding: "11px 22px", borderRadius: 999,
-                      cursor: pinConnectAsk.busy ? "default" : "pointer", opacity: pinConnectAsk.busy ? 0.6 : 1,
-                      fontSize: 13, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap" }}>
-                    {pinConnectAsk.busy
-                      ? (t("common.loading") || "Lädt…")
-                      : (appLanguage === "de" ? "Verbinden" : "Connect")}
-                  </motion.div>
+                {/* Both buttons the same width, and no number decides it: a grid
+                    of two equal columns takes its width from the wider label, so
+                    it still holds when "Verbinden" becomes "Connect". Same
+                    padding on both, or equal width would still sit at unequal
+                    height. */}
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 2 }}>
+                  <div style={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: "1fr", gap: 10 }}>
+                    <motion.div whileTap={{ scale: pinConnectAsk.busy ? 1 : 0.97 }}
+                      onClick={() => { if (!pinConnectAsk.busy) setPinConnectAsk(null); }}
+                      style={{ padding: "11px 22px", borderRadius: 999, cursor: pinConnectAsk.busy ? "default" : "pointer",
+                        border: `1px solid ${theme.borderFaint}`, boxSizing: "border-box",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: theme.textDim, fontSize: 13, fontFamily: FONT, whiteSpace: "nowrap",
+                        opacity: pinConnectAsk.busy ? 0.5 : 1 }}>
+                      {appLanguage === "de" ? "Später" : "Later"}
+                    </motion.div>
+                    <motion.div whileTap={{ scale: pinConnectAsk.busy ? 1 : 0.97 }}
+                      onClick={pinConnectAsk.busy ? undefined : runPinterestConnect}
+                      style={{ ...primaryBtn, padding: "11px 22px", borderRadius: 999, border: "1px solid transparent",
+                        boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center",
+                        cursor: pinConnectAsk.busy ? "default" : "pointer", opacity: pinConnectAsk.busy ? 0.6 : 1,
+                        fontSize: 13, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap" }}>
+                      {pinConnectAsk.busy
+                        ? (t("common.loading") || "Lädt…")
+                        : (appLanguage === "de" ? "Verbinden" : "Connect")}
+                    </motion.div>
+                  </div>
                 </div>
               </div>
             </div>, document.body)}
