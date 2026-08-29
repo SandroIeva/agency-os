@@ -34649,16 +34649,21 @@ const tabSearchInput = (theme) => ({
 // time, which is how two of them ended up half a pixel and one shade apart.
 // One definition now, so a second tab asking for it gets the same control
 // rather than a lookalike.
-function SegmentedFilter({ value, onChange, options, theme, darkMode }) {
+// `height` is optional and only for callers that have to line up with
+// something else. Left off, the control sizes itself from its labels, which is
+// what every toolbar wants.
+function SegmentedFilter({ value, onChange, options, theme, darkMode, height }) {
   return (
-    <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11,
+    <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 11, boxSizing: "border-box",
+      ...(height ? { height } : null),
       background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
       {options.map(o => {
         const on = value === o.value;
         return (
           <motion.div key={o.value} whileTap={{ scale: 0.95 }} onClick={() => onChange(o.value)}
-            style={{ padding: "6px 13px", borderRadius: 8, cursor: "pointer",
+            style={{ padding: height ? "0 15px" : "6px 13px", borderRadius: 8, cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
+              ...(height ? { height: "100%" } : null),
               fontSize: 12.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap",
               background: on ? (darkMode ? "rgba(255,255,255,0.10)" : "#fff") : "transparent",
               color: on ? theme.text : theme.textDim,
@@ -34851,6 +34856,9 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
   const field = { width: "100%", boxSizing: "border-box", padding: "10px 13px", borderRadius: 11,
     border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff",
     color: theme.text, fontSize: 13.5, fontFamily: FONT, outline: "none" };
+  // One number for the two controls on the dialog's bottom row. Equal height is
+  // then a fact, not something that happened to look right at one font size.
+  const ACTION_H = 40;
   const toolBtn = { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9,
     cursor: "pointer", border: `1px solid ${theme.borderFaint}`, background: "transparent",
     color: theme.textSub, fontSize: 12, fontFamily: FONT, whiteSpace: "nowrap" };
@@ -35180,9 +35188,13 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
                 halves, which is what this looked like. */}
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>{de ? "Ordner" : "Folder"}</span>
+              {/* Built from the same `field` as the url input above it: a pill
+                  sitting under a rounded rectangle was the thing that looked
+                  wrong, and matching only the radius would have left the border
+                  and the fill still disagreeing. */}
               <Dropdown value={editing.folder_id || ""} onChange={(v) => setEditing(x => ({ ...x, folder_id: v || null }))}
                 theme={theme} darkMode={darkMode} minWidth={464} maxHeight={260}
-                triggerStyle={{ width: "100%", padding: "12px 15px" }}
+                triggerStyle={{ ...field, padding: "13px 15px", display: "flex", fontSize: 13.5, fontWeight: 400 }}
                 options={[{ value: "", label: de ? "Kein Ordner" : "No folder" },
                           ...folders.map(fo => ({ value: fo.id, label: fo.name }))]} />
             </div>
@@ -35193,7 +35205,7 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
                   bookmark bar with extra steps. */}
               <SegmentedFilter value={editing.visibility === "private" ? "private" : "workspace"}
                 onChange={(v) => setEditing(x => ({ ...x, visibility: v }))}
-                theme={theme} darkMode={darkMode}
+                theme={theme} darkMode={darkMode} height={ACTION_H}
                 options={[
                   { value: "workspace", label: "Workspace" },
                   { value: "private",   label: de ? "Nur ich" : "Only me" },
@@ -35202,7 +35214,8 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
               <motion.div whileHover={{ scale: editing.url.trim() && !busy ? 1.03 : 1 }} whileTap={{ scale: editing.url.trim() && !busy ? 0.97 : 1 }}
                 onClick={save}
                 style={{ ...primaryBtn(darkMode),
-                  padding: "13px 30px", borderRadius: 999,
+                  height: ACTION_H, padding: "0 30px", display: "flex", alignItems: "center", justifyContent: "center",
+                  boxSizing: "border-box", borderRadius: 999,
                   cursor: editing.url.trim() && !busy ? "pointer" : "default",
                   opacity: editing.url.trim() && !busy ? 1 : 0.45,
                   fontSize: 13.5, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap",
