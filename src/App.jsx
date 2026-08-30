@@ -17977,6 +17977,21 @@ const canvasTextLines = (it) => {
 // What that text is tall, once broken.
 const canvasTextH = (it) => Math.max(1, canvasTextLines(it).length) * canvasLH(it);
 
+// Size the edit box to the text inside it, in whole lines.
+//
+// Rounded to the nearest LINE rather than taken from scrollHeight directly: a
+// textarea reports a couple of pixels more than its content, and at 48px lines
+// that turned a one-line box into a two-line one. Measured: scrollHeight 50 for
+// a single 48px line. Reading it after height:auto is worse still — the box
+// falls back to its default TWO rows and reports 96, which is how a fix for the
+// frame growing made the frame grow twice as much.
+const fitTextArea = (el, it) => {
+  if (!el) return;
+  const lh = canvasLH(it);
+  const lines = Math.max(1, Math.round(el.scrollHeight / lh));
+  el.style.height = `${Math.max(canvasTextH(it), lines * lh)}px`;
+};
+
 // The polygon shapes, in fractions of the item's box. The editor turns these
 // into a CSS clip-path and the export into a canvas path — one source, so the
 // two cannot disagree about where a corner sits.
@@ -22683,29 +22698,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         // Selected on entry, so typing replaces it. autoFocus
                         // alone only puts a caret somewhere in the text, and
                         // everybody's second click was a select-all.
+                        rows={1}
                         ref={el => {
                           if (!el) return;
                           if (el.selectionStart === el.selectionEnd) el.select();
-                          // And on the way in, not only while typing: if the
-                          // browser needs one line more than the shared wrapper
-                          // does, the last line would sit clipped from the
-                          // moment it opened.
-                          el.style.height = "auto";
-                          el.style.height = `${Math.max(canvasTextH(it), el.scrollHeight)}px`;
+                          fitTextArea(el, it);
                         }}
                         onChange={e => patch(it.id, { text: e.target.value })}
                         onBlur={() => setEditing(null)}
                         onKeyDown={e => { if (e.key === "Escape") setEditing(null); }}
-                        onInput={e => {
-                          // The one case the shared wrapper and the browser can
-                          // disagree about is a word that lands exactly on the
-                          // boundary. Growing to fit means the last line is
-                          // never clipped while typing, and on entry the two
-                          // agree so nothing jumps.
-                          const el = e.currentTarget;
-                          el.style.height = "auto";
-                          el.style.height = `${Math.max(canvasTextH(it), el.scrollHeight)}px`;
-                        }}
+                        onInput={e => fitTextArea(e.currentTarget, it)}
                         style={{ width: "100%", background: "transparent", border: "none", outline: "none",
                           resize: "none", font: "inherit", color: "inherit", lineHeight: "inherit",
                           textAlign: "inherit", padding: 0, margin: 0, overflow: "hidden",
@@ -22714,6 +22716,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                           // and use the default line height, so the box changed
                           // shape the moment anybody double-clicked it.
                           whiteSpace: "pre-wrap", boxSizing: "border-box",
+                          // block, not the inline-block a textarea is by
+                          // default: an inline box sits on a text baseline and
+                          // the descender space under it made the frame taller
+                          // than the text it replaced.
+                          display: "block", verticalAlign: "top",
                           height: `${canvasTextH(it)}px` }} />
                     ) : canvasTextLines(it).join("\n")}
                     </div>
