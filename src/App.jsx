@@ -17942,12 +17942,32 @@ const canvasTextLines = (it) => {
 // then sits as far from its neighbour as an "M".
 const canvasArc = (it) => (it.type === "text" && it.arc && it.arc.on) ? it.arc : null;
 
+// Defaults for the ring seen in space: a shallow look down on it, and a lens
+// somewhere between a snapshot and a wide angle.
+const ARC_TILT = 18, ARC_PERSP = 50;
+
 // Where each character sits, in the box's own coordinates. One function for the
 // editor, the thumbnail and the export, for the same reason the line breaker is
 // one function: three of them would disagree.
+//
+// Each character comes back as a 2x3 MATRIX rather than a position and an
+// angle. Flat on a circle a rotation would do, but a ring standing in space
+// foreshortens a letter as it turns away and mirrors it once it faces the
+// back, and neither of those is a rotation. One matrix carries all of it, and
+// the DOM and the canvas each take one directly.
+const _arcCache = new Map();
 const canvasArcLayout = (it) => {
   const arc = canvasArc(it);
   if (!arc) return null;
+  const lh = canvasLH(it);
+  // Separated by a character no text contains, the way the line breaker's cache
+  // is: joined with spaces, a text ending in a number and a different width
+  // can make the same key.
+  const key = [it.text, it.w, canvasFont(it), canvasLS(it), lh,
+    JSON.stringify(arc)].join("\u0000");
+  const hit = _arcCache.get(key);
+  if (hit) return hit;
+
   // A ring has no lines to break, so a newline is just a gap.
   const chars = [...String(it.text ?? "").replace(/\n/g, " ")];
   const ctx = measureCtx();
@@ -17962,24 +17982,104 @@ const canvasArcLayout = (it) => {
   } else widths = chars.map(() => it.size * 0.6 + ls);
   const total = widths.reduce((a, b) => a + b, 0) || 1;
   const sweep = ((arc.sweep == null ? 360 : arc.sweep) * Math.PI) / 180;
-  const inside = !!arc.inside;
-  const dir = inside ? -1 : 1;
-  // Outside reads across the top, inside across the bottom — a badge's two
-  // halves. Anything else is the rotation control's job.
-  const base = (inside ? Math.PI : 0) + ((arc.start || 0) * Math.PI) / 180;
-  const lh = canvasLH(it);
   const R = Math.max(1, (it.w || 0) / 2);
+  const cyl = arc.mode === "cyl";
+  // Inside is a flat idea: a ring standing in space shows its own back.
+  const inside = !cyl && !!arc.inside;
+  const dir = inside ? -1 : 1;
+  const base = (inside ? Math.PI : 0) + ((arc.start || 0) * Math.PI) / 180
+    + (cyl ? ((arc.spin || 0) * Math.PI) / 180 : 0);
   let run = 0;
-  const out = chars.map((ch, i) => {
+  const angles = chars.map((ch, i) => {
     const a = base + dir * (((run + widths[i] / 2) / total) * sweep - sweep / 2);
     run += widths[i];
-    return { ch, a };
+    return a;
   });
-  // The letters hang from the box's edge, so the centre of a letter's line box
-  // is half a line further in. Inside or out, that radius is the same — only
-  // which way the letter faces changes.
-  return { chars: out, c: R, rc: Math.max(1, R - lh / 2), lh, inside,
-           spin: inside ? Math.PI : 0 };
+
+  let out;
+  if (!cyl) {
+    // Flat: the letters hang from the box's edge, so the centre of a letter's
+    // line box is half a line further in.
+    const rc = Math.max(1, R - lh / 2);
+    const spin = inside ? Math.PI : 0;
+    out = { boxW: it.w, boxH: it.w, lh, c: R, rc, inside, spin, top: 0, chars: [] };
+    out.chars = chars.map((ch, i) => {
+      const a = angles[i], r = a + spin;
+      return { ch, a, depth: 0, w: widths[i] - ls,
+        m: [Math.cos(r), Math.sin(r), -Math.sin(r), Math.cos(r),
+            R + rc * Math.sin(a), R - rc * Math.cos(a)] };
+    });
+  } else {
+    // The ring, standing in space: horizontal, around a vertical axis, looked
+    // down on by `tilt`, with the letters standing up on its surface like a
+    // carousel. Angle 0 is the point nearest the viewer. The far half is
+    // smaller and its letters face away, which is why they read in a mirror
+    // there, the same as photographing a printed band.
+    const t = ((arc.tilt == null ? ARC_TILT : arc.tilt) * Math.PI) / 180;
+    const st = Math.sin(t), ct = Math.cos(t);
+    const pv = Math.max(0, Math.min(100, arc.persp == null ? ARC_PERSP : arc.persp));
+    // How far the eye is, in radii. Close is a wide angle: the near letters
+    // tower over the far ones.
+    const D = R * (1.4 + ((100 - pv) / 100) * 7);
+    // One projector, used for the letter's own point and for the two steps
+    // that give its axes. Working those out by hand and forgetting that the
+    // perspective divide is part of them is how a letter ends up sitting
+    // straight on a ring that is leaning.
+    const proj = (a, h) => {
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const depth = Math.max(R * 0.02, D - R * ca * ct - h * st);
+      const s = D / depth;
+      return [s * R * sa, s * (R * ca * st - h * ct), depth];
+    };
+    const raw = chars.map((ch, i) => {
+      const a = angles[i];
+      const [px, py, depth] = proj(a, 0);
+      // The letter's two axes, measured rather than assumed: one step along
+      // the ring and one step up its surface, each projected and divided back
+      // out. Their lengths ARE the foreshortening and their handedness IS the
+      // mirror on the far side.
+      const ea = 0.004, eh = Math.max(1, R * 0.004);
+      const [ax1, ay1] = proj(a + ea, 0), [ax0, ay0] = proj(a - ea, 0);
+      const [hx1, hy1] = proj(a, eh), [hx0, hy0] = proj(a, -eh);
+      const ux = (ax1 - ax0) / (2 * ea * R), uy = (ay1 - ay0) / (2 * ea * R);
+      // Local +y runs DOWN a glyph, so it is the step DOWN the surface.
+      const vx = (hx0 - hx1) / (2 * eh), vy = (hy0 - hy1) / (2 * eh);
+      return { ch, a, depth, w: widths[i] - ls, m: [ux, uy, vx, vy, px, py] };
+    });
+    // Painted far to near, so a near letter covers the one behind it.
+    raw.sort((p2, q2) => q2.depth - p2.depth);
+    // Half a ring at a time, so the thing it wraps can be laid between the two
+    // halves. One element cannot be both behind and in front of a picture.
+    const face = arc.face || "all";
+    const keep = face === "all" ? raw
+      : raw.filter(c => (Math.cos(c.a) >= 0) === (face === "front"));
+    // The box is the ring's own width, and as tall as the letters actually
+    // reach. A leaning ring is nowhere near square, and a square frame around
+    // it would be mostly air that swallows clicks meant for what it wraps.
+    let minY = Infinity, maxY = -Infinity;
+    for (const c of keep) {
+      const [a2, b2, c2, d2, e2, f2] = c.m;
+      const hw = c.w / 2, hh = lh / 2;
+      for (const [lx, ly] of [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]]) {
+        const y = b2 * lx + d2 * ly + f2;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+    if (!keep.length) { minY = 0; maxY = lh; }
+    const boxH = Math.max(1, maxY - minY);
+    // `top` is where the ring's own centre sits relative to the box's top
+    // edge. Each half of a wrap is trimmed to the letters IT keeps, so the two
+    // boxes are different heights and only this lines their rings up.
+    out = { boxW: it.w, boxH, lh, c: R, rc: R, inside: false, spin: 0, tilt: t, D, top: minY,
+      chars: keep.map(c => ({ ...c,
+        m: [c.m[0], c.m[1], c.m[2], c.m[3], c.m[4] + R, c.m[5] - minY] })) };
+  }
+
+  // Bounded, because every keystroke while typing makes a new key.
+  if (_arcCache.size > 2000) _arcCache.clear();
+  _arcCache.set(key, out);
+  return out;
 };
 
 // The ring, as DOM. Font and colour are inherited from the box around it, the
@@ -17990,11 +18090,14 @@ function CanvasArcText({ it }) {
   return (
     <div style={{ position: "absolute", inset: 0 }}>
       {L.chars.map((ch, i) => (ch.ch.trim() ? (
-        <span key={i} style={{ position: "absolute",
-          left: L.c + L.rc * Math.sin(ch.a), top: L.c - L.rc * Math.cos(ch.a),
+        <span key={i} style={{ position: "absolute", left: 0, top: 0,
           height: L.lh, lineHeight: `${L.lh}px`, letterSpacing: 0, whiteSpace: "pre",
-          // translate first (outermost), so the centring is not itself turned.
-          transform: `translate(-50%, -50%) rotate(${ch.a + L.spin}rad)` }}>
+          // The matrix maps the letter's own frame, so that frame has to start
+          // at the corner the matrix was written for. The centring runs first,
+          // innermost: it puts the middle of the glyph on the local origin and
+          // the matrix takes it from there.
+          transformOrigin: "0 0",
+          transform: `matrix(${ch.m.join(",")}) translate(-50%, -50%)` }}>
           {ch.ch}
         </span>
       ) : null))}
@@ -18002,10 +18105,13 @@ function CanvasArcText({ it }) {
   );
 }
 
-// What that text is tall, once broken. A ring is as tall as it is wide.
-const canvasTextH = (it) =>
-  canvasArc(it) ? Math.max(1, it.w || 0)
-  : Math.max(1, canvasTextLines(it).length) * canvasLH(it);
+// What that text is tall, once broken. A ring answers for itself: flat it is
+// as tall as it is wide, and leaning it is only as tall as the letters reach.
+const canvasTextH = (it) => {
+  const L = canvasArcLayout(it);
+  if (L) return Math.max(1, L.boxH);
+  return Math.max(1, canvasTextLines(it).length) * canvasLH(it);
+};
 
 // Size the edit box to the text inside it, in whole lines.
 //
@@ -20676,6 +20782,28 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const it = items.find(i => i.id === id);
     if (it) clipRef.current = [it];
   };
+  // The other half of a ring, made to match. A band that wraps a subject is
+  // two elements: the back of the ring under the picture and the front of it
+  // over the top, because one element cannot be on both sides of another.
+  const wrapHalf = (it) => {
+    const face = it?.arc?.face;
+    if (face !== "front" && face !== "back") return;
+    const other = face === "front" ? "back" : "front";
+    const c = { ...cloneOf(it, 0, 0), arc: { ...it.arc, face: other } };
+    // Not offset like an ordinary duplicate: the two halves are one ring seen
+    // twice and have to sit on top of each other. Their boxes are different
+    // heights, each trimmed to the letters it keeps, so what is lined up is the
+    // ring's centre and not the box.
+    const a = canvasArcLayout(it), b = canvasArcLayout(c);
+    // Not rounded: a whole pixel of rounding is half a pixel of daylight
+    // between the two halves of what has to look like one ring.
+    if (a && b) c.y = (it.y || 0) + (b.top || 0) - (a.top || 0);
+    markChange();
+    // The back half goes to the bottom of the stack and the front half to the
+    // top, which leaves the middle of the pile free for whatever it wraps.
+    setItems(list => other === "back" ? [c, ...list] : [...list, c]);
+    setSel(c.id);
+  };
   const duplicateSel = (id = sel) => {
     const it = items.find(i => i.id === id);
     if (!it) return;
@@ -21990,9 +22118,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           for (const ch of L.chars) {
             if (!ch.ch.trim()) continue;
             ctx.save();
-            ctx.translate(it.x + L.c + L.rc * Math.sin(ch.a),
-                          it.y + L.c - L.rc * Math.cos(ch.a));
-            ctx.rotate(ch.a + L.spin);
+            ctx.translate(it.x, it.y);
+            // The same matrix the screen used, handed to the canvas whole. A
+            // rotation would have been enough for the flat ring and wrong for
+            // the leaning one, where a letter is squashed and sometimes
+            // mirrored as well.
+            ctx.transform(ch.m[0], ch.m[1], ch.m[2], ch.m[3], ch.m[4], ch.m[5]);
             ctx.fillText(ch.ch, 0, baseA);
             ctx.restore();
           }
@@ -22804,7 +22935,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
                       filter: effectFilter(it),
                       whiteSpace: "pre", overflow: "visible",
-                      ...(arc ? { position: "relative", height: it.w } : {}) }}>
+                      ...(arc ? { position: "relative", height: canvasTextH(it) } : {}) }}>
                     {editing === it.id ? (
                       <textarea autoFocus value={it.text}
                         rows={1}
@@ -24778,6 +24909,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               {selItem.type === "text" && (() => {
                 const arc = selItem.arc || {};
                 const on = !!arc.on;
+                const cyl = arc.mode === "cyl";
                 const putArc = (p) => set("arc", { ...arc, ...p });
                 // Growing a ring from its top-left corner walks it across the
                 // artboard. It grows from the middle instead, which is where
@@ -24815,10 +24947,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     {tile(!on, () => putArc({ on: false }),
                       <><path d="M5 8h14" /><path d="M5 12h9" /><path d="M5 16h14" /></>,
                       de ? "Standard" : "Straight")}
-                    {tile(on, () => set("arc", { sweep: 360, start: 0, inside: false, ...arc, on: true }),
+                    {tile(on && !cyl,
+                      () => set("arc", { sweep: 360, inside: false, ...arc, on: true, mode: undefined }),
                       <><path d="M3.6 13.6a8.4 8.4 0 0 1 16.8 0" /><path d="M12 6.4V4.2" />
                         <path d="M6.9 8.3L5.6 6.6" /><path d="M17.1 8.3l1.3-1.7" /></>,
                       de ? "Radial" : "Radial")}
+                    {/* An ellipse is a circle lying down, and the ticks are
+                        letters standing on it. */}
+                    {tile(on && cyl,
+                      () => set("arc", { sweep: 360, ...arc, on: true, mode: "cyl" }),
+                      <><ellipse cx="12" cy="13" rx="8.6" ry="4" /><path d="M6.6 15.4v2.6" />
+                        <path d="M12 17v2.6" /><path d="M17.4 15.4v2.6" /></>,
+                      "3D")}
                   </div>
                   {on && (<>
                     <div style={{ marginTop: 8 }}>
@@ -24843,19 +24983,78 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         onChange={(v) => setRadius(v)} onCommit={(v) => setRadius(v)}
                         theme={theme} darkMode={darkMode} />
                     </div>
-                    {/* The two halves of a badge: the top reads over the ring,
-                        the bottom under it and the right way up. */}
-                    <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
-                      {[[false, de ? "Außen" : "Outside"], [true, de ? "Innen" : "Inside"]].map(([v, l]) => (
-                        <div key={String(v)} onClick={() => putArc({ inside: v })}
-                          style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
-                            justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12,
-                            color: theme.text, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
-                            border: `1px solid ${!!arc.inside === v ? "#15151c" : "transparent"}` }}>
-                          {l}
+                    {cyl ? (<>
+                      {/* How far down on the ring you are looking. Flat on is a
+                          circle, which is the mode next door; nearly edge on is
+                          the band that wraps a subject. */}
+                      <div style={{ marginTop: 8 }}>
+                        <SliderField label={de ? "Neigung" : "Tilt"} suffix="°"
+                          value={Math.round(arc.tilt == null ? ARC_TILT : arc.tilt)} min={0} max={75}
+                          onChange={(v) => putArc({ tilt: v })} onCommit={(v) => putArc({ tilt: v })}
+                          theme={theme} darkMode={darkMode} />
+                      </div>
+                      {/* The lens. High is close and wide: the near letters
+                          tower over the far ones. */}
+                      <div style={{ marginTop: 8 }}>
+                        <SliderField label={de ? "Perspektive" : "Perspective"}
+                          value={Math.round(arc.persp == null ? ARC_PERSP : arc.persp)} min={0} max={100}
+                          onChange={(v) => putArc({ persp: v })} onCommit={(v) => putArc({ persp: v })}
+                          theme={theme} darkMode={darkMode} />
+                      </div>
+                      {/* Turns the text around the ring rather than turning the
+                          ring: it decides which words face the viewer. Not the
+                          item's own rotation, which spins the whole picture. */}
+                      <div style={{ marginTop: 8 }}>
+                        <SliderField label={de ? "Startpunkt" : "Start"} suffix="°"
+                          value={Math.round(arc.spin || 0)} min={-180} max={180}
+                          onChange={(v) => putArc({ spin: v })} onCommit={(v) => putArc({ spin: v })}
+                          theme={theme} darkMode={darkMode} />
+                      </div>
+                      {/* One element cannot be both behind a picture and in
+                          front of it. Two copies of the ring can: put the back
+                          half under the picture and the front half over it, and
+                          the band wraps whatever stands between them. */}
+                      <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
+                        {[["all", de ? "Ganz" : "Whole"], ["back", de ? "Hinten" : "Back"],
+                          ["front", de ? "Vorne" : "Front"]].map(([v, l]) => (
+                          <div key={v} onClick={() => putArc({ face: v })}
+                            style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
+                              justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12,
+                              color: theme.text, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
+                              border: `1px solid ${(arc.face || "all") === v ? "#15151c" : "transparent"}` }}>
+                            {l}
+                          </div>
+                        ))}
+                      </div>
+                      {/* The other half, set up to match, in one click. Doing it
+                          by hand means duplicating and then changing four
+                          numbers without a single typo. */}
+                      {(arc.face === "front" || arc.face === "back") && (
+                        <div onClick={() => wrapHalf(selItem)}
+                          style={{ marginTop: 8, height: 34, borderRadius: 9, display: "flex",
+                            alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer",
+                            fontFamily: FONT, fontSize: 12.5, color: theme.text,
+                            background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                          {arc.face === "front"
+                            ? (de ? "Rückseite dahinter anlegen" : "Add the back half behind")
+                            : (de ? "Vorderseite davor anlegen" : "Add the front half in front")}
                         </div>
-                      ))}
-                    </div>
+                      )}
+                    </>) : (<>
+                      {/* The two halves of a badge: the top reads over the ring,
+                          the bottom under it and the right way up. */}
+                      <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
+                        {[[false, de ? "Außen" : "Outside"], [true, de ? "Innen" : "Inside"]].map(([v, l]) => (
+                          <div key={String(v)} onClick={() => putArc({ inside: v })}
+                            style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
+                              justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12,
+                              color: theme.text, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
+                              border: `1px solid ${!!arc.inside === v ? "#15151c" : "transparent"}` }}>
+                            {l}
+                          </div>
+                        ))}
+                      </div>
+                    </>)}
                   </>)}
                 </>);
               })()}
