@@ -34318,17 +34318,48 @@ const DOC_HIGHLIGHTS = [
 
 function HighlightToolbarButton({ editor, darkMode, appLanguage }) {
   const Components = useComponentsContext();
-  const [open, setOpen] = useState(false);
+  const [at, setAt] = useState(null);   // null | { top, left } — where to draw it
+  const btn = useRef(null);
+  const pop = useRef(null);
   const de = appLanguage === "de";
-  const wrap = useRef(null);
-  // Clicking anywhere else puts it away. The toolbar itself is a floating
-  // element, so this listens on the document rather than on a backdrop.
+
+  // Portalled to <body>, not absolutely positioned inside the toolbar. The
+  // formatting toolbar is a floating element that clips its own contents, so a
+  // panel hanging out of its bottom edge was cut away and looked like a dead
+  // button. Same reason every other overlay in this file portals.
+  const place = () => {
+    const r = btn.current?.getBoundingClientRect();
+    if (!r) return;
+    // Below the button, centred on it, and nudged back inside if that would put
+    // it off the edge of a narrow window.
+    const width = 186;
+    const left = Math.min(Math.max(8, r.left + r.width / 2 - width / 2), window.innerWidth - width - 8);
+    setAt({ top: r.bottom + 8, left });
+  };
+
   useEffect(() => {
-    if (!open) return;
-    const away = (e) => { if (!wrap.current?.contains(e.target)) setOpen(false); };
+    if (!at) return;
+    const away = (e) => {
+      if (pop.current?.contains(e.target) || btn.current?.contains(e.target)) return;
+      setAt(null);
+    };
+    const key = (e) => { if (e.key === "Escape") setAt(null); };
+    // Closing on scroll rather than following it: the toolbar moves with the
+    // selection, and a panel that chases it across the page is worse than one
+    // that goes away.
+    const gone = () => setAt(null);
     document.addEventListener("mousedown", away);
-    return () => document.removeEventListener("mousedown", away);
-  }, [open]);
+    document.addEventListener("keydown", key);
+    window.addEventListener("scroll", gone, true);
+    window.addEventListener("resize", gone);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", key);
+      window.removeEventListener("scroll", gone, true);
+      window.removeEventListener("resize", gone);
+    };
+  }, [at]);
+
   const apply = (key) => {
     try {
       // Removing is setting it back to the default, not deleting a style.
@@ -34336,42 +34367,51 @@ function HighlightToolbarButton({ editor, darkMode, appLanguage }) {
       else editor.removeStyles({ backgroundColor: true });
       editor.focus();
     } catch (_) {}
-    setOpen(false);
+    setAt(null);
   };
+
+  // preventDefault on mousedown, everywhere in the panel: the swatches live in
+  // <body> now, so a plain click would move focus out of the editor and drop
+  // the selection before addStyles could reach it.
+  const hold = (e) => e.preventDefault();
+
   return (
-    <span ref={wrap} style={{ position: "relative", display: "inline-flex" }}>
-      <Components.FormattingToolbar.Button mainTooltip={de ? "Markieren" : "Highlight"}
-        onClick={() => setOpen(o => !o)}>
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 20h9" />
-          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z" />
-        </svg>
-      </Components.FormattingToolbar.Button>
-      {open && (
-        <div style={{ position: "absolute", top: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)",
-          zIndex: 100005, display: "flex", alignItems: "center", gap: 6, padding: 7, borderRadius: 12,
-          background: darkMode ? "#1c1c26" : "#fff",
-          border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"}`,
-          boxShadow: "0 16px 44px rgba(0,0,0,0.22)" }}>
+    <>
+      <span ref={btn} style={{ display: "inline-flex" }}>
+        <Components.FormattingToolbar.Button mainTooltip={de ? "Markieren" : "Highlight"}
+          onClick={() => (at ? setAt(null) : place())}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z" />
+          </svg>
+        </Components.FormattingToolbar.Button>
+      </span>
+      {at && createPortal(
+        <div ref={pop} onMouseDown={hold}
+          style={{ position: "fixed", top: at.top, left: at.left, width: 186, boxSizing: "border-box",
+            zIndex: 100010, display: "flex", alignItems: "center", gap: 6, padding: 7, borderRadius: 12,
+            background: darkMode ? "#1c1c26" : "#fff",
+            border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"}`,
+            boxShadow: "0 16px 44px rgba(0,0,0,0.22)" }}>
           {DOC_HIGHLIGHTS.map(h => (
-            <div key={h.key} onClick={() => apply(h.key)}
+            <div key={h.key} onClick={() => apply(h.key)} onMouseDown={hold}
               title={h.label[de ? "de" : "en"]}
-              style={{ width: 24, height: 24, borderRadius: 7, cursor: "pointer",
+              style={{ width: 26, height: 26, borderRadius: 8, cursor: "pointer", flexShrink: 0,
                 background: darkMode ? h.dark : h.light,
                 border: `1px solid ${darkMode ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.10)"}` }} />
           ))}
           <div style={{ width: 1, alignSelf: "stretch", background: darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)" }} />
-          <div onClick={() => apply(null)} title={de ? "Markierung entfernen" : "Remove highlight"}
-            style={{ width: 24, height: 24, borderRadius: 7, cursor: "pointer", display: "flex",
+          <div onClick={() => apply(null)} onMouseDown={hold}
+            title={de ? "Markierung entfernen" : "Remove highlight"}
+            style={{ width: 26, height: 26, borderRadius: 8, cursor: "pointer", flexShrink: 0, display: "flex",
               alignItems: "center", justifyContent: "center",
               color: darkMode ? "#ffffff99" : "#1a1a2e99",
               border: `1px solid ${darkMode ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.10)"}` }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </div>
-        </div>
-      )}
-    </span>
+        </div>, document.body)}
+    </>
   );
 }
 
