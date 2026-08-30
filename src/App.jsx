@@ -22683,14 +22683,38 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         // Selected on entry, so typing replaces it. autoFocus
                         // alone only puts a caret somewhere in the text, and
                         // everybody's second click was a select-all.
-                        ref={el => { if (el && el.selectionStart === el.selectionEnd) el.select(); }}
+                        ref={el => {
+                          if (!el) return;
+                          if (el.selectionStart === el.selectionEnd) el.select();
+                          // And on the way in, not only while typing: if the
+                          // browser needs one line more than the shared wrapper
+                          // does, the last line would sit clipped from the
+                          // moment it opened.
+                          el.style.height = "auto";
+                          el.style.height = `${Math.max(canvasTextH(it), el.scrollHeight)}px`;
+                        }}
                         onChange={e => patch(it.id, { text: e.target.value })}
                         onBlur={() => setEditing(null)}
                         onKeyDown={e => { if (e.key === "Escape") setEditing(null); }}
+                        onInput={e => {
+                          // The one case the shared wrapper and the browser can
+                          // disagree about is a word that lands exactly on the
+                          // boundary. Growing to fit means the last line is
+                          // never clipped while typing, and on entry the two
+                          // agree so nothing jumps.
+                          const el = e.currentTarget;
+                          el.style.height = "auto";
+                          el.style.height = `${Math.max(canvasTextH(it), el.scrollHeight)}px`;
+                        }}
                         style={{ width: "100%", background: "transparent", border: "none", outline: "none",
                           resize: "none", font: "inherit", color: "inherit", lineHeight: "inherit",
                           textAlign: "inherit", padding: 0, margin: 0, overflow: "hidden",
-                          height: `${(String(it.text).split("\n").length || 1) * it.size * CANVAS_LH}px` }} />
+                          // Wrapped the same way and measured the same way as the
+                          // text underneath it. It used to count hard newlines
+                          // and use the default line height, so the box changed
+                          // shape the moment anybody double-clicked it.
+                          whiteSpace: "pre-wrap", boxSizing: "border-box",
+                          height: `${canvasTextH(it)}px` }} />
                     ) : canvasTextLines(it).join("\n")}
                     </div>
                     )}
