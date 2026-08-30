@@ -20,6 +20,7 @@ import { notifLines } from "../src/notificationText.js";
 import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
   splitDraft, workspacesFor, projectsFor, createTask, DEFAULT_TYPES, typeWanted, attachedImage, linkify, createNote, addAssetFile, humanSize,
+  asLinkRequest, LINK_PREFIX, linkFoldersFor, createWorkspaceLink,
   moodboardsFor, addMoodboardImage,
   draftStep, draftDone, PRIORITY_CODES, dueDateFor, timezoneOf,
   replyTarget, describeTask, addChecklist, commentOnTask,
@@ -96,6 +97,10 @@ const T = {
     newEmptyTask: "Schreib dazu, was zu tun ist: /aufgabe Angebot schreiben",
     noteAsk: (body) => `<b>Neue Notiz</b>\n${body}\n\nWohin?`,
     notePrivate: "Allgemein",
+    linkAsk: (url) => `<b>Link speichern</b>\n${url}\n\nIn welchen Ordner?`,
+    linkNoFolder: "Ohne Ordner",
+    linkSaved: "Link gespeichert.",
+    linkMade: (title, folder) => `<b>${title}</b>\n${folder}\n\n<i>Link gespeichert.</i>`,
     fileAsk: (name) => `<b>${name}</b>\n\nWohin in den Assets?`,
     filePrivate: "Allgemein",
     fileSaved: (name, size) => `${name} liegt in den Assets (${size}).`,
@@ -166,6 +171,10 @@ const T = {
     newEmptyTask: "Say what needs doing: /task write the proposal",
     noteAsk: (body) => `<b>New note</b>\n${body}\n\nWhere?`,
     notePrivate: "General",
+    linkAsk: (url) => `<b>Save link</b>\n${url}\n\nWhich folder?`,
+    linkNoFolder: "No folder",
+    linkSaved: "Link saved.",
+    linkMade: (title, folder) => `<b>${title}</b>\n${folder}\n\n<i>Link saved.</i>`,
     fileAsk: (name) => `<b>${name}</b>\n\nWhere in Assets?`,
     filePrivate: "General",
     fileSaved: (name, size) => `${name} is in Assets (${size}).`,
@@ -760,6 +769,45 @@ export default async function handler(req) {
                           : t.fileSaved(file.name, humanSize(saved.size)));
     }
 
+    if (action === "f" || action === "g") {
+      // The url from the message this one replies to, read back the same way it
+      // was read the first time rather than stored anywhere.
+      const asked = asLinkRequest((cb.message?.reply_to_message?.text || ""));
+      if (!asked) return answer(t.newGone, true);
+      const orgs = await workspacesFor(db, link.user_id);
+      const org = resolveHint(orgs, notifId);
+      if (!org) return answer(t.newDenied, true);
+      const folders = await linkFoldersFor(db, org.id);
+
+      if (action === "g") {
+        await api(botToken, "editMessageReplyMarkup", {
+          chat_id: cbChat, message_id: cb.message.message_id,
+          reply_markup: { inline_keyboard: [
+            ...folders.map(f => [{ text: f.name.slice(0, 60), callback_data: `f:${org.id.slice(0, ID_HINT)}:${f.id.slice(0, ID_HINT)}` }]),
+            [{ text: t.linkNoFolder, callback_data: `f:${org.id.slice(0, ID_HINT)}:-` }],
+          ] },
+        });
+        return answer("");
+      }
+
+      const folder = hint && hint !== "-" ? resolveHint(folders, hint) : null;
+      if (hint && hint !== "-" && !folder) return answer(t.newGone, true);
+      const made = await createWorkspaceLink(db, {
+        userId: link.user_id, orgId: org.id, folderId: folder?.id || null,
+        url: asked.url, title: asked.title, appUrl,
+      });
+      if (!made.ok) {
+        return answer(made.reason === "read_only" ? t.newReadOnly
+          : made.reason === "denied" ? t.newDenied : t.newFailed, true);
+      }
+      await api(botToken, "editMessageText", {
+        chat_id: cbChat, message_id: cb.message.message_id,
+        text: t.linkMade(esc(made.link?.title || made.host), esc(headLine(org.name, folder?.name || t.linkNoFolder))),
+        parse_mode: "HTML",
+      });
+      return answer(t.linkSaved);
+    }
+
     if (action === "q" || action === "v") {
       // The note's own text, from the message this one replies to, with the
       // command stripped the same way it was when the question was asked.
@@ -1114,6 +1162,32 @@ export default async function handler(req) {
       }).then(() => json({ ok: true }));
     };
     return ask(orgs.length === 1 ? orgs[0] : null);
+  }
+
+  // A message that is nothing but a url. Before the task wizard on purpose:
+  // free text becomes a task, and a pasted link is not free text. Notes learned
+  // this the hard way and got a prefix; a url needs none, because nobody types
+  // one into a wizard by accident.
+  const asLink = answering ? null : asLinkRequest(text);
+  if (asLink) {
+    if (!link?.user_id) return reply(t.notLinked);
+    const orgs = await workspacesFor(db, link.user_id);
+    if (!orgs.length) return reply(t.newNoWorkspace);
+    const askFolder = async (org) => {
+      const folders = org ? await linkFoldersFor(db, org.id) : [];
+      const rows = [
+        ...(org
+          ? [...folders.map(f => [{ text: f.name.slice(0, 60), callback_data: `f:${org.id.slice(0, ID_HINT)}:${f.id.slice(0, ID_HINT)}` }]),
+             [{ text: t.linkNoFolder, callback_data: `f:${org.id.slice(0, ID_HINT)}:-` }]]
+          : orgs.map(o => [{ text: o.name.slice(0, 60), callback_data: `g:${o.id.slice(0, ID_HINT)}` }])),
+        [{ text: t.cancel, callback_data: "k:x" }],
+      ];
+      return api(botToken, "sendMessage", {
+        chat_id: chatId, text: t.linkAsk(esc(asLink.url)), parse_mode: "HTML",
+        reply_to_message_id: msg.message_id, reply_markup: { inline_keyboard: rows },
+      }).then(() => json({ ok: true }));
+    };
+    return askFolder(orgs.length === 1 ? orgs[0] : null);
   }
 
   if (text.startsWith("/status")) {

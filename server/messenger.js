@@ -526,6 +526,74 @@ export const createNote = async (db, { userId, orgId, content, projectName }) =>
   return { ok: true, note: data };
 };
 
+// ── Links ───────────────────────────────────────────────────────────────────
+// A message that is nothing but a url is a link somebody wants kept. Nobody
+// types a bare url into a task wizard, which is what makes this safe to read
+// without a command in front of it. An optional title may follow the url, so
+// "https://ui.sh a good reference" arrives named.
+const BARE_URL = /^\s*(https?:\/\/[^\s<>"']+)\s*(.{0,120})?$/i;
+export const LINK_PREFIX = /^\/?(link|lesezeichen|bookmark)(@\S+)?\b[\s:,-]*/i;
+
+export const asLinkRequest = (text) => {
+  const raw = String(text || "").trim();
+  const stripped = raw.replace(LINK_PREFIX, "").trim();
+  const m = BARE_URL.exec(stripped);
+  if (!m) return null;
+  // The same trailing punctuation linkify already knows about: a url at the end
+  // of a sentence keeps the full stop, and Pinterest does not have that page.
+  const url = m[1].replace(/[.,;:!?)\]}»"']+$/, "");
+  const title = (m[2] || "").trim();
+  return { url, title: title || null };
+};
+
+export const linkFoldersFor = async (db, orgId) => {
+  const { data } = await db.from("link_folders")
+    .select("id, name").eq("org_id", orgId).is("project_id", null)
+    .order("position").order("name");
+  return data || [];
+};
+
+// What the page says about itself, through the endpoint the app already uses.
+// Best effort: a link whose site is down is still a link worth keeping.
+export const linkPreview = async (appUrl, url) => {
+  try {
+    const r = await fetch(`${appUrl}/api/fetch-brand?mode=preview&icon=1&url=${encodeURIComponent(url)}`);
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j && !j.error ? j : null;
+  } catch { return null; }
+};
+
+export const createWorkspaceLink = async (db, { userId, orgId, folderId, url, title, appUrl }) => {
+  if (!userId || !orgId || !url) return { ok: false, reason: "incomplete" };
+  const { data: member } = await db.from("org_members").select("id")
+    .eq("org_id", orgId).eq("user_id", userId).maybeSingle();
+  if (!member) return { ok: false, reason: "denied" };
+  if (await orgIsReadOnly(db, orgId)) return { ok: false, reason: "read_only" };
+
+  const meta = appUrl ? await linkPreview(appUrl, url) : null;
+  const host = (() => {
+    try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; }
+  })();
+  const { data, error } = await db.from("workspace_links").insert({
+    org_id: orgId,
+    project_id: null,
+    folder_id: folderId || null,
+    url,
+    // A title somebody typed after the url wins, then the page's own, then the
+    // host — the same order the app uses when a link is saved by hand.
+    title: (title || meta?.title || host).slice(0, 200),
+    description: meta?.description || null,
+    favicon: meta?.iconDataUrl || null,
+    image_url: meta?.image || null,
+    site: meta?.site || host,
+    visibility: "workspace",
+    created_by: userId,
+  }).select("id, title").maybeSingle();
+  if (error) return { ok: false, reason: "failed" };
+  return { ok: true, link: data, host };
+};
+
 // ── Room in the workspace's storage ─────────────────────────────────────────
 // The app checks this in the browser against currentEntitlements, which a
 // server does not have, so the same question is asked from the two places that

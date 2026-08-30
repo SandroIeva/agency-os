@@ -90,11 +90,12 @@ not be created from the UI at all.
 | **Chat conversation** | `startConversation` (1:1) and the group-creation modal | App.jsx |
 | **Public share link** | `createShare` in `AssetsView` (moodboard header, link icon) | App.jsx |
 | **Link folder** | ONLY the `seed_link_folders` trigger on `organizations` (Skills / Tools / Inspirations / Resources, and the starter links from `link_defaults` inside them). There is deliberately no create-folder control in the UI; `LinksTab` can rename and delete folders, not add them, and a link itself can only be added or removed, never edited | Postgres |
+| **Link (from a messenger)** | `createWorkspaceLink` in `server/messenger.js` — a message that is nothing BUT a url, in Telegram or Slack, then one question for the folder. Checked before the task wizard, since free text becomes a task | server/messenger.js |
 | **Link (bookmark)** | `save` in `LinksTab` (file manager → Browse); it calls `linkRowPreview` → the shared `fetchLinkPreview(url, {icon:true})` → `api/fetch-brand?mode=preview&icon=1` first | App.jsx |
 | **File upload** | always through `uploadTracked` — never call `supabase.storage.upload` directly, or the storage ledger drifts | App.jsx |
 
-⚠ **Three things are created from MORE than one place**: workspaces (3),
-whiteboards (2) and tasks (2). A gate applied to only one of them is a hole.
+⚠ **Four things are created from MORE than one place**: workspaces (3),
+whiteboards (2), tasks (2) and links (2: the Browse tab and the messengers). A gate applied to only one of them is a hole.
 The two task writers must also agree on the ROW: same columns, same defaults,
 or a card looks different depending on where somebody happened to be standing
 when they made it.

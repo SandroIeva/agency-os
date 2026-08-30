@@ -22,6 +22,7 @@ import {
   MOVE_COLUMNS, COLUMN_LABELS, ID_HINT, headLine,
   splitDraft, workspacesFor, projectsFor, createTask, describeTask, addChecklist, commentOnTask,
   typeWanted, attachedImage, linkify, createNote, addAssetFile, humanSize,
+  asLinkRequest, linkFoldersFor, createWorkspaceLink,
   moodboardsFor, addMoodboardImage,
   nextQuestion, PRIORITY_CODES, dueDateFor, timezoneOf,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
@@ -78,6 +79,10 @@ const T = {
     noteMade: "Notiz gespeichert.",
     noteEmpty: "Schreib dazu, was du dir merken willst: /i7os notiz Preise anheben",
     noteTitle: "Neue Notiz",
+    linkTitle: "Link speichern",
+    askFolder: "In welchen Ordner?",
+    linkNoFolder: "Ohne Ordner",
+    linkSaved: "Link gespeichert.",
     notePrivate: "Allgemein",
     fileTitle: "Neues Bild",
     fileAsk: "Wohin in den Assets?",
@@ -142,6 +147,10 @@ const T = {
     noteMade: "Note saved.",
     noteEmpty: "Say what you want to remember: /i7os note raise the prices",
     noteTitle: "New note",
+    linkTitle: "Save link",
+    askFolder: "Which folder?",
+    linkNoFolder: "No folder",
+    linkSaved: "Link saved.",
     notePrivate: "General",
     fileTitle: "New picture",
     fileAsk: "Where in Assets?",
@@ -674,6 +683,26 @@ export default async function handler(req) {
         ], t.noteTitle));
     }
 
+    // A message that is nothing but a url. Checked before the task wizard,
+    // because free text becomes a task and a pasted link is not free text.
+    const asLink = asLinkRequest(said);
+    if (asLink) {
+      const orgs = await workspacesFor(db, link.user_id);
+      if (!orgs.length) return ephemeral(t.newNoWorkspace);
+      const state = { t: asLink.url, ln: 1, lt: asLink.title || "" };
+      if (orgs.length > 1) {
+        return ephemeral(t.linkTitle, draftBlocks(t, state, t.askWorkspace,
+          orgs.map(o => ({ key: "o", label: o.name, set: { o: o.id.slice(0, ID_HINT) } })), t.linkTitle));
+      }
+      const org = orgs[0];
+      const folders = await linkFoldersFor(db, org.id);
+      return ephemeral(t.linkTitle, draftBlocks(t,
+        { ...state, o: org.id.slice(0, ID_HINT), chosen: org.name }, t.askFolder, [
+          ...folders.map(f => ({ key: "d", label: f.name, set: { d: f.id.slice(0, ID_HINT) } })),
+          { key: "d", label: t.linkNoFolder, set: { d: "-" } },
+        ], t.linkTitle));
+    }
+
     const { title } = splitDraft(said);
     if (!title) return ephemeral(t.newEmpty);
 
@@ -871,6 +900,26 @@ export default async function handler(req) {
     if (!org) return replace(t.newDenied);
     const projects = await projectsFor(db, link.user_id, org.id);
     const project = st.p && st.p !== "-" ? resolveHint(projects, st.p) : null;
+
+    // A link asks one question too: which folder.
+    if (st.ln) {
+      const folders = await linkFoldersFor(db, org.id);
+      if (st.d === undefined) {
+        return replace(t.linkTitle, draftBlocks(t, { ...st, chosen: org.name }, t.askFolder, [
+          ...folders.map(f => ({ key: "d", label: f.name, set: { d: f.id.slice(0, ID_HINT) } })),
+          { key: "d", label: t.linkNoFolder, set: { d: "-" } },
+        ], t.linkTitle));
+      }
+      const folder = st.d && st.d !== "-" ? resolveHint(folders, st.d) : null;
+      const made = await createWorkspaceLink(db, {
+        userId: link.user_id, orgId: org.id, folderId: folder?.id || null,
+        url: st.t, title: st.lt || null, appUrl,
+      });
+      return replace(made.ok
+        ? `${headLine(org.name, folder?.name || t.linkNoFolder)}\n${made.link?.title || made.host}\n${t.linkSaved}`
+        : made.reason === "read_only" ? t.newReadOnly
+        : made.reason === "denied" ? t.newDenied : t.newFailed);
+    }
 
     // A note asks one question and is done. It has no owner to pick and no
     // deadline, which is the whole reason it is not a five-step wizard.
