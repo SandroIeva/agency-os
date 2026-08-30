@@ -14231,7 +14231,10 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                         background: isMe
                           ? "#15151c"
                           : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.045)"),
-                        border: isMe ? "none" : `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"}`,
+                        // No border. The fill already separates the bubble from
+                        // the page, and outlining only the received side made
+                        // the two halves of a conversation look like different
+                        // kinds of thing.
                         fontSize: 13.5, fontFamily: FONT, color: isMe ? "#fff" : theme.text, lineHeight: 1.55,
                         overflow: "hidden",
                       }}>
