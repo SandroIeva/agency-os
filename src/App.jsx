@@ -14219,7 +14219,9 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                     )}
                     <div style={{ maxWidth: "65%" }}>
                       <div style={{
-                        fontSize: 11, fontFamily: FONT, marginBottom: 4,
+                        // 9, not 4: the name and the time are a label above the
+                        // bubble, not a first line of it.
+                        fontSize: 11, fontFamily: FONT, marginBottom: 9,
                         color: theme.textDim,
                         textAlign: isMe ? "right" : "left",
                       }}>
