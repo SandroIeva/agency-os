@@ -17932,8 +17932,80 @@ const canvasTextLines = (it) => {
   _wrapCache.set(key, out);
   return out;
 };
-// What that text is tall, once broken.
-const canvasTextH = (it) => Math.max(1, canvasTextLines(it).length) * canvasLH(it);
+// ── Text on a ring ─────────────────────────────────────────────────────────
+// Adobe calls it a text layout; it is one line bent onto a circle. The circle
+// IS the element's box, so the handles that already size a text box size the
+// ring too and there is no second frame to keep in sync.
+//
+// Every character gets a share of the sweep in PROPORTION to how wide it is.
+// Dividing the sweep evenly is the tell of a cheap curved-text tool: an "i"
+// then sits as far from its neighbour as an "M".
+const canvasArc = (it) => (it.type === "text" && it.arc && it.arc.on) ? it.arc : null;
+
+// Where each character sits, in the box's own coordinates. One function for the
+// editor, the thumbnail and the export, for the same reason the line breaker is
+// one function: three of them would disagree.
+const canvasArcLayout = (it) => {
+  const arc = canvasArc(it);
+  if (!arc) return null;
+  // A ring has no lines to break, so a newline is just a gap.
+  const chars = [...String(it.text ?? "").replace(/\n/g, " ")];
+  const ctx = measureCtx();
+  const ls = canvasLS(it);
+  let widths;
+  if (ctx) {
+    ctx.font = canvasFont(it);
+    // Letter spacing widens each character's SHARE of the ring. It must not
+    // also be handed to the renderer, which would push every glyph off its
+    // own centre by half a gap.
+    widths = chars.map(ch => ctx.measureText(ch).width + ls);
+  } else widths = chars.map(() => it.size * 0.6 + ls);
+  const total = widths.reduce((a, b) => a + b, 0) || 1;
+  const sweep = ((arc.sweep == null ? 360 : arc.sweep) * Math.PI) / 180;
+  const inside = !!arc.inside;
+  const dir = inside ? -1 : 1;
+  // Outside reads across the top, inside across the bottom — a badge's two
+  // halves. Anything else is the rotation control's job.
+  const base = (inside ? Math.PI : 0) + ((arc.start || 0) * Math.PI) / 180;
+  const lh = canvasLH(it);
+  const R = Math.max(1, (it.w || 0) / 2);
+  let run = 0;
+  const out = chars.map((ch, i) => {
+    const a = base + dir * (((run + widths[i] / 2) / total) * sweep - sweep / 2);
+    run += widths[i];
+    return { ch, a };
+  });
+  // The letters hang from the box's edge, so the centre of a letter's line box
+  // is half a line further in. Inside or out, that radius is the same — only
+  // which way the letter faces changes.
+  return { chars: out, c: R, rc: Math.max(1, R - lh / 2), lh, inside,
+           spin: inside ? Math.PI : 0 };
+};
+
+// The ring, as DOM. Font and colour are inherited from the box around it, the
+// same way the straight text is drawn, so nothing has to be passed twice.
+function CanvasArcText({ it }) {
+  const L = canvasArcLayout(it);
+  if (!L) return null;
+  return (
+    <div style={{ position: "absolute", inset: 0 }}>
+      {L.chars.map((ch, i) => (ch.ch.trim() ? (
+        <span key={i} style={{ position: "absolute",
+          left: L.c + L.rc * Math.sin(ch.a), top: L.c - L.rc * Math.cos(ch.a),
+          height: L.lh, lineHeight: `${L.lh}px`, letterSpacing: 0, whiteSpace: "pre",
+          // translate first (outermost), so the centring is not itself turned.
+          transform: `translate(-50%, -50%) rotate(${ch.a + L.spin}rad)` }}>
+          {ch.ch}
+        </span>
+      ) : null))}
+    </div>
+  );
+}
+
+// What that text is tall, once broken. A ring is as tall as it is wide.
+const canvasTextH = (it) =>
+  canvasArc(it) ? Math.max(1, it.w || 0)
+  : Math.max(1, canvasTextLines(it).length) * canvasLH(it);
 
 // Size the edit box to the text inside it, in whole lines.
 //
@@ -18425,7 +18497,8 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
                   whiteSpace: "pre", overflow: "hidden",
                   padding: it.type === "sticky" ? Math.round(bw * 0.08) : 0,
                   boxSizing: "border-box" } : {}) }}>
-                {isText ? canvasTextLines(it).join("\n") : null}
+                {isText ? (canvasArc(it) ? <CanvasArcText it={it} />
+                  : canvasTextLines(it).join("\n")) : null}
               </div>
             );
             return (
@@ -20575,7 +20648,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const bx = it.type === "arrow" || it.type === "line"
       ? { x: Math.min(it.x1, it.x2), y: Math.min(it.y1, it.y2),
           w: Math.abs(it.x2 - it.x1) || 1, h: Math.abs(it.y2 - it.y1) || 1 }
-      : { x: it.x || 0, y: it.y || 0, w: it.w || 1, h: (it.h || it.size * CANVAS_LH) || 1 };
+      // canvasTextH, not one line's worth of height: a text box has as many
+      // lines as it has, and on a ring it is as tall as it is wide.
+      : { x: it.x || 0, y: it.y || 0, w: it.w || 1,
+          h: (it.h || (it.type === "text" ? canvasTextH(it) : it.size * CANVAS_LH)) || 1 };
     const aw = Math.max(120, window.innerWidth - RAIL_W - (PANEL_W + 16)), ah = Math.max(120, window.innerHeight - 88);
     const s2 = Math.min(8, Math.min(aw / bx.w, ah / bx.h) * 0.7);
     setCam({ s: s2, x: RAIL_W + aw / 2 - (bx.x + bx.w / 2) * s2, y: 62 + ah / 2 - (bx.y + bx.h / 2) * s2 });
@@ -21896,6 +21972,30 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           ctx.beginPath();
           ctx.moveTo(hd.x1, hd.y1); ctx.lineTo(it.x2, it.y2); ctx.lineTo(hd.x2, hd.y2);
           ctx.stroke();
+        } else if (it.type === "text" && canvasArc(it)) {
+          // The ring, drawn from the same layout the screen used. A letter's
+          // line box is centred on the point the layout gives, and its baseline
+          // sits half the leading below that box's top — the same sum the
+          // straight branch below makes, which is what keeps the two agreeing.
+          const L = canvasArcLayout(it);
+          ctx.fillStyle = it.color; ctx.font = canvasFont(it);
+          // Never the canvas letter-spacing here: the gaps are already in the
+          // angles, and adding them again would push every glyph off centre.
+          if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+          const mA = ctx.measureText("Hg");
+          const baseA = (L.lh - (mA.fontBoundingBoxAscent + mA.fontBoundingBoxDescent)) / 2
+            + mA.fontBoundingBoxAscent - L.lh / 2;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "alphabetic";
+          for (const ch of L.chars) {
+            if (!ch.ch.trim()) continue;
+            ctx.save();
+            ctx.translate(it.x + L.c + L.rc * Math.sin(ch.a),
+                          it.y + L.c - L.rc * Math.cos(ch.a));
+            ctx.rotate(ch.a + L.spin);
+            ctx.fillText(ch.ch, 0, baseA);
+            ctx.restore();
+          }
         } else if (it.type === "text") {
           ctx.fillStyle = it.color; ctx.font = canvasFont(it);
           ctx.textAlign = it.align === "center" ? "center" : it.align === "right" ? "right" : "left";
@@ -22687,6 +22787,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 );
               }
               if (it.type === "text") {
+                const arc = canvasArc(it);
+                // Typing happens on a straight line even when the text is bent:
+                // a caret walking round a ring is a novelty, and everybody who
+                // tried one went looking for the way back out. The box measures
+                // itself as if it were flat while the editor is open.
+                const flat = arc ? { ...it, arc: undefined } : it;
                 return (
                   <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                     onDoubleClick={() => beginEdit(it.id)}
@@ -22697,16 +22803,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       letterSpacing: `${canvasLS(it)}px`, opacity: it.opacity == null ? 1 : it.opacity,
                       mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
                       filter: effectFilter(it),
-                      whiteSpace: "pre", overflow: "visible" }}>
+                      whiteSpace: "pre", overflow: "visible",
+                      ...(arc ? { position: "relative", height: it.w } : {}) }}>
                     {editing === it.id ? (
                       <textarea autoFocus value={it.text}
                         rows={1}
                         onFocus={selectOnFirstFocus}
-                        ref={el => fitTextArea(el, it)}
+                        ref={el => fitTextArea(el, flat)}
                         onChange={e => patch(it.id, { text: e.target.value })}
                         onBlur={() => setEditing(null)}
                         onKeyDown={e => { if (e.key === "Escape") setEditing(null); }}
-                        onInput={e => fitTextArea(e.currentTarget, it)}
+                        onInput={e => fitTextArea(e.currentTarget, flat)}
                         style={{ width: "100%", background: "transparent", border: "none", outline: "none",
                           resize: "none", font: "inherit", color: "inherit", lineHeight: "inherit",
                           textAlign: "inherit", padding: 0, margin: 0, overflow: "hidden",
@@ -22720,8 +22827,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                           // the descender space under it made the frame taller
                           // than the text it replaced.
                           display: "block", verticalAlign: "top",
-                          height: `${canvasTextH(it)}px` }} />
-                    ) : canvasTextLines(it).join("\n")}
+                          // On a ring the box is a square with a hole in it, so
+                          // the line being typed sits across the middle of it.
+                          ...(arc ? { position: "absolute", left: 0, top: "50%",
+                            transform: "translateY(-50%)", textAlign: "center" } : {}),
+                          height: `${canvasTextH(flat)}px` }} />
+                    ) : arc ? <CanvasArcText it={it} />
+                    : canvasTextLines(it).join("\n")}
                     </div>
                     )}
                   </div>
@@ -24658,6 +24770,76 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 ["center", <><path d="M4 6h16"/><path d="M7 12h10"/><path d="M4 18h16"/></>, de ? "Zentriert" : "Centre"],
                 ["right", <><path d="M4 6h16"/><path d="M10 12h10"/><path d="M4 18h16"/></>, de ? "Rechtsbündig" : "Right"],
               ], v => set("align", v))}
+
+              {/* Text on a ring. The circle is the text box itself, so the
+                  handles that already resize the box resize the ring, and the
+                  corner grips scale the type with it like anywhere else. Only
+                  real text: a sticky is a note, not a line of type. */}
+              {selItem.type === "text" && (() => {
+                const arc = selItem.arc || {};
+                const on = !!arc.on;
+                const putArc = (p) => set("arc", { ...arc, ...p });
+                const tile = (active, onClick, glyph, caption) => (
+                  <div onClick={onClick}
+                    style={{ flex: 1, padding: "10px 0 8px", borderRadius: 10, cursor: "pointer",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
+                      border: `1px solid ${active ? "#15151c" : "transparent"}` }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+                      style={{ color: active ? theme.text : theme.textDim }}>
+                      {glyph}
+                    </svg>
+                    <span style={{ fontFamily: FONT, fontSize: 11, color: active ? theme.text : theme.textDim }}>
+                      {caption}
+                    </span>
+                  </div>
+                );
+                return (<>
+                  <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 12 }}>
+                    {de ? "Textlayout" : "Text layout"}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                    {tile(!on, () => putArc({ on: false }),
+                      <><path d="M5 8h14" /><path d="M5 12h9" /><path d="M5 16h14" /></>,
+                      de ? "Standard" : "Straight")}
+                    {tile(on, () => set("arc", { sweep: 360, start: 0, inside: false, ...arc, on: true }),
+                      <><path d="M3.6 13.6a8.4 8.4 0 0 1 16.8 0" /><path d="M12 6.4V4.2" />
+                        <path d="M6.9 8.3L5.6 6.6" /><path d="M17.1 8.3l1.3-1.7" /></>,
+                      de ? "Radial" : "Radial")}
+                  </div>
+                  {on && (<>
+                    <div style={{ marginTop: 8 }}>
+                      {/* Never below zero: a negative sweep lays the text out
+                          backwards, which reads in a mirror. The way round the
+                          ring is the Außen/Innen choice, not this. */}
+                      <SliderField label={de ? "Winkel" : "Sweep"} suffix="°"
+                        value={Math.round(arc.sweep == null ? 360 : arc.sweep)} min={10} max={360}
+                        onChange={(v) => putArc({ sweep: v })} onCommit={(v) => putArc({ sweep: v })}
+                        theme={theme} darkMode={darkMode} />
+                    </div>
+                    <div style={{ marginTop: 8 }}>
+                      <SliderField label={de ? "Drehung" : "Rotation"} suffix="°"
+                        value={Math.round(arc.start || 0)} min={-180} max={180}
+                        onChange={(v) => putArc({ start: v })} onCommit={(v) => putArc({ start: v })}
+                        theme={theme} darkMode={darkMode} />
+                    </div>
+                    {/* The two halves of a badge: the top reads over the ring,
+                        the bottom under it and the right way up. */}
+                    <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
+                      {[[false, de ? "Außen" : "Outside"], [true, de ? "Innen" : "Inside"]].map(([v, l]) => (
+                        <div key={String(v)} onClick={() => putArc({ inside: v })}
+                          style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
+                            justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12,
+                            color: theme.text, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
+                            border: `1px solid ${!!arc.inside === v ? "#15151c" : "transparent"}` }}>
+                          {l}
+                        </div>
+                      ))}
+                    </div>
+                  </>)}
+                </>);
+              })()}
             </>)}
 
             {/* A stroke has a colour, not a fill. Calling that row "Füllung" is
