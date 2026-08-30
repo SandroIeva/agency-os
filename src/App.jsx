@@ -19700,12 +19700,26 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [flying, setFlying] = useState(!!originRect);
   const [imgMenuOpen, setImgMenuOpen] = useState(false);
   const [editing, setEditing] = useState(null);
-  // Which edit box has already had its text selected. A ref callback runs on
-  // EVERY render, and after a keystroke the caret is collapsed, so "select if
-  // nothing is selected" selected the whole text again and the next character
-  // replaced it — which is why typing only ever left the last letter. Cleared
-  // when the box unmounts, so entering it again does select again.
-  const editSelRef = useRef(null);
+  const beginEdit = (id) => { setEditing(id); setSel(id); };
+
+  // Select the whole text the first time the edit box is focused, and never
+  // again. Three earlier attempts all failed for the same underlying reason:
+  //   in a ref or an effect it runs on EVERY render, and a render happens on
+  //   every keystroke, so it re-selected the text and the next character
+  //   replaced it — typing left only the last letter;
+  //   a "have I done this id" guard in a ref dies with a remount;
+  //   and a requestAnimationFrame after setEditing fires BEFORE React has
+  //   committed the textarea, so there is nothing to select yet. Measured: the
+  //   text was appended to rather than replacing the placeholder.
+  // focus fires once when autoFocus reaches the box. The flag lives on the DOM
+  // node, which a re-render does not touch and a remount replaces — which is
+  // exactly the distinction that matters.
+  const selectOnFirstFocus = (e) => {
+    const el = e.currentTarget;
+    if (el.dataset.picked) return;
+    el.dataset.picked = "1";
+    el.select();
+  };
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const stageRef = useRef(null);
@@ -22652,7 +22666,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               if (it.type === "sticky") {
                 return (
                   <div key={it.id} onPointerDown={e => onItemDown(e, it)}
-                    onDoubleClick={() => { setEditing(it.id); setSel(it.id); }}
+                    onDoubleClick={() => beginEdit(it.id)}
                     style={{ ...common, width: it.w, height: it.h }}>
                     {depthWrap(it,
                     /* Through fillOf like every other shape: inside a call the
@@ -22674,10 +22688,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         // Selected on entry, so typing replaces it. autoFocus
                         // alone only puts a caret somewhere in the text, and
                         // everybody's second click was a select-all.
-                        ref={el => {
-                          if (!el) { editSelRef.current = null; return; }
-                          if (editSelRef.current !== it.id) { editSelRef.current = it.id; el.select(); }
-                        }}
+                        onFocus={selectOnFirstFocus}
                         onChange={e => patch(it.id, { text: e.target.value })}
                         onBlur={() => setEditing(null)}
                         onKeyDown={e => { if (e.key === "Escape") setEditing(null); }}
@@ -22693,7 +22704,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               if (it.type === "text") {
                 return (
                   <div key={it.id} onPointerDown={e => onItemDown(e, it)}
-                    onDoubleClick={() => { setEditing(it.id); setSel(it.id); }}
+                    onDoubleClick={() => beginEdit(it.id)}
                     style={{ ...common, width: it.w }}>
                     {depthWrap(it,
                     <div style={{ clipPath: maskClip(it), font: canvasFont(it), color: it.color,
@@ -22704,15 +22715,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       whiteSpace: "pre", overflow: "visible" }}>
                     {editing === it.id ? (
                       <textarea autoFocus value={it.text}
-                        // Selected on entry, so typing replaces it. autoFocus
-                        // alone only puts a caret somewhere in the text, and
-                        // everybody's second click was a select-all.
                         rows={1}
-                        ref={el => {
-                          if (!el) { editSelRef.current = null; return; }
-                          if (editSelRef.current !== it.id) { editSelRef.current = it.id; el.select(); }
-                          fitTextArea(el, it);
-                        }}
+                        onFocus={selectOnFirstFocus}
+                        ref={el => fitTextArea(el, it)}
                         onChange={e => patch(it.id, { text: e.target.value })}
                         onBlur={() => setEditing(null)}
                         onKeyDown={e => { if (e.key === "Escape") setEditing(null); }}
