@@ -24779,6 +24779,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 const arc = selItem.arc || {};
                 const on = !!arc.on;
                 const putArc = (p) => set("arc", { ...arc, ...p });
+                // Growing a ring from its top-left corner walks it across the
+                // artboard. It grows from the middle instead, which is where
+                // anybody dragging a radius is looking. Several at once keep
+                // their corners: one patch cannot hold a different centre for
+                // each of them, and moving them all to one point is worse than
+                // not moving them at all.
+                const setRadius = (r) => {
+                  const w = Math.max(2, Math.round(r * 2));
+                  if (many) { set("w", w); return; }
+                  const d = (w - (selItem.w || 0)) / 2;
+                  set2({ w, x: Math.round((selItem.x || 0) - d), y: Math.round((selItem.y || 0) - d) });
+                };
                 const tile = (active, onClick, glyph, caption) => (
                   <div onClick={onClick}
                     style={{ flex: 1, padding: "10px 0 8px", borderRadius: 10, cursor: "pointer",
@@ -24818,10 +24830,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         onChange={(v) => putArc({ sweep: v })} onCommit={(v) => putArc({ sweep: v })}
                         theme={theme} darkMode={darkMode} />
                     </div>
+                    {/* The radius IS the box: its width is the diameter. So this
+                        writes the width and keeps the ring where it stands,
+                        rather than adding a second number that could disagree
+                        with the frame. Turning the ring is the item's own
+                        rotation, at the top of this panel — there is no reason
+                        to have that twice. */}
                     <div style={{ marginTop: 8 }}>
-                      <SliderField label={de ? "Drehung" : "Rotation"} suffix="°"
-                        value={Math.round(arc.start || 0)} min={-180} max={180}
-                        onChange={(v) => putArc({ start: v })} onCommit={(v) => putArc({ start: v })}
+                      <SliderField label={de ? "Radius" : "Radius"} suffix=" px"
+                        value={Math.round((selItem.w || 0) / 2)}
+                        min={20} max={Math.round(Math.max(W, H) / 2)} editMax={20000}
+                        onChange={(v) => setRadius(v)} onCommit={(v) => setRadius(v)}
                         theme={theme} darkMode={darkMode} />
                     </div>
                     {/* The two halves of a badge: the top reads over the ring,
