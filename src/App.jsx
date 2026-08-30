@@ -34309,11 +34309,17 @@ const docSchema = BlockNoteSchema.create({ blockSpecs: { ...defaultBlockSpecs, y
 // beside this one keeps working.
 //
 // No purple: it is not an accent in this app.
+// Marker colours, not tints: a highlighter is meant to be seen from across the
+// room. The dark-mode tones are the same hues a step down in lightness, so they
+// stay punchy without glaring on a dark page.
+//
+// The ink stays dark on every one of them, in BOTH themes. These are bright
+// saturated fills, and white text on a lemon-yellow marker is unreadable.
 const DOC_HIGHLIGHTS = [
-  { key: "yellow", light: "#FFE9A3", dark: "#6b5a1f", label: { de: "Gelb", en: "Yellow" } },
-  { key: "green",  light: "#C7EFD6", dark: "#1f5138", label: { de: "Grün", en: "Green" } },
-  { key: "blue",   light: "#CFE4FF", dark: "#1e3f66", label: { de: "Blau", en: "Blue" } },
-  { key: "pink",   light: "#FBD5E3", dark: "#5f2440", label: { de: "Rosa", en: "Pink" } },
+  { key: "yellow", light: "#FBF24A", dark: "#DFD230", label: { de: "Gelb", en: "Yellow" } },
+  { key: "green",  light: "#9BF56B", dark: "#7FD452", label: { de: "Grün", en: "Green" } },
+  { key: "blue",   light: "#6FD9FF", dark: "#4FBBE4", label: { de: "Blau", en: "Blue" } },
+  { key: "pink",   light: "#FF8FD0", dark: "#E272B4", label: { de: "Rosa", en: "Pink" } },
 ];
 
 function HighlightToolbarButton({ editor, darkMode, appLanguage }) {
@@ -53343,7 +53349,7 @@ export default function CircularMenu() {
         ${DOC_HIGHLIGHTS.map(h => `
         .doc-blocknote [data-background-color="${h.key}"] {
           background-color: ${darkMode ? h.dark : h.light} !important;
-          color: ${darkMode ? "#f2f2f6" : "#1a1a2e"} !important;
+          color: #1a1a2e !important;
         }`).join("")}
         /* Give the hover side-menu (drag handle + plus) a bit more gap from text. */
         .doc-blocknote .bn-side-menu { transform: translateX(-8px); }
