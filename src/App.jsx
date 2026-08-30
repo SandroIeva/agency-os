@@ -13286,6 +13286,12 @@ const CHAT_AGENTS = [
 ];
 const AGENT_BY_KEY = Object.fromEntries(CHAT_AGENTS.map(a => [a.key, a]));
 
+// The "<name> · <time>" line above a message, and the gap under it. The avatar
+// sits beside the column that holds both, so it is pushed down by exactly these
+// two to line up with the top of the bubble rather than floating between them.
+const MSG_LABEL_H = 13;
+const MSG_LABEL_GAP = 9;
+
 function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t, session, userOrg, orgMembers, darkMode, theme, createNotification, notifications = [], markNotifRead, appLanguage = "en", llmProvider, llmKeys, onOpenAiSettings, getProviderToken, ensureValidToken }) {
   // An agent without a model is a name that will never answer. Two ways to have
   // one: a key stored for the chosen provider, or a Google sign-in, which is
@@ -14210,18 +14216,25 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                     transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.25 }}
                     style={{ display: "flex", justifyContent: isMe ? "flex-end" : "flex-start", gap: 10 }}
                   >
+                    {/* Level with the top of the bubble, not floating between
+                        the name and it. The offset is the label's own height
+                        plus its gap, stated as one number so the three cannot
+                        drift: line box 13 at font-size 11, then 9 of gap. */}
                     {!isMe && (
                       sender.avatar_url ? (
-                        <img src={sender.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 32, height: 32, borderRadius: "50%", flexShrink: 0, marginTop: 2 }} />
+                        <img src={sender.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 32, height: 32, borderRadius: "50%", flexShrink: 0, marginTop: MSG_LABEL_H + MSG_LABEL_GAP }} />
                       ) : (
-                        <InitialsAvatar color={sender.color} initials={sender.initials} size={32} fontSize={11} style={{ marginTop: 2 }} />
+                        <InitialsAvatar color={sender.color} initials={sender.initials} size={32} fontSize={11} style={{ marginTop: MSG_LABEL_H + MSG_LABEL_GAP }} />
                       )
                     )}
                     <div style={{ maxWidth: "65%" }}>
                       <div style={{
+                        // The line box is stated rather than left to the font,
+                        // because the avatar beside it is positioned from it.
+                        fontSize: 11, lineHeight: `${MSG_LABEL_H}px`, fontFamily: FONT,
                         // 9, not 4: the name and the time are a label above the
                         // bubble, not a first line of it.
-                        fontSize: 11, fontFamily: FONT, marginBottom: 9,
+                        marginBottom: MSG_LABEL_GAP,
                         color: theme.textDim,
                         textAlign: isMe ? "right" : "left",
                       }}>
