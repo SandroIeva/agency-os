@@ -52990,7 +52990,14 @@ export default function CircularMenu() {
         {!docFullscreen && (
         <div style={{ flex: 1, display: "flex", alignItems: "center", paddingTop: 10, paddingLeft: 3 }}>
           <motion.div
-            onClick={() => { if (currentView === "settings") { setCurrentView("dashboard"); } else { setCurrentView("settings"); } }}
+            // The menu has to close first. It sits above the view it opened
+            // over, so navigating out from under it left it standing there with
+            // Settings unreachable behind it. The home button already did this;
+            // the two buttons either side of it did not.
+            onClick={() => {
+              if (menuOpen) handleClose();
+              setCurrentView(currentView === "settings" ? "dashboard" : "settings");
+            }}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             style={{ cursor: "pointer" }}
@@ -53021,7 +53028,7 @@ export default function CircularMenu() {
           <motion.div
             whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }} transition={smoothSpring}
             style={{ cursor: "pointer" }}
-            onClick={() => setCurrentView("chat")}
+            onClick={() => { if (menuOpen) handleClose(); setCurrentView("chat"); }}
             title={appLanguage === "de" ? "Messenger" : "Messenger"}
           >
             <svg width="50" height="50" viewBox="0 0 52 52" fill="none">
