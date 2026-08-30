@@ -53332,14 +53332,15 @@ export default function CircularMenu() {
            padding-top:18px) is what its calibrated side-menu heights rely on to
            sit on the first text line, so we must not clobber it with a shorthand. */
         .doc-blocknote .bn-block-content { padding-bottom: 14px; }
-        /* The four highlighters. BlockNote paints backgroundColor from its own
-           palette variables, so these override exactly those four and leave the
-           rest of its colours alone. Padding and a radius so a marked run reads
-           as drawn over the text rather than as a table cell. */
-        .doc-blocknote span[data-background-color="yellow"],
-        .doc-blocknote span[data-background-color="green"],
-        .doc-blocknote span[data-background-color="blue"],
-        .doc-blocknote span[data-background-color="pink"] {
+        /* The four highlighters, overriding exactly those four of BlockNote's
+           colours and leaving the rest alone.
+           TWO selectors per colour, because BlockNote writes the mark two
+           different ways and only one of them is the inline case: a highlighted
+           RUN is <span data-style-type="backgroundColor" data-value="green">,
+           while data-background-color is what a whole coloured BLOCK gets.
+           Matching only the second is why the first attempt did nothing at all
+           to selected text — read off the real DOM, not the docs. */
+        .doc-blocknote span[data-style-type="backgroundColor"] {
           border-radius: 4px;
           padding: 1px 2px;
           margin: 0 -1px;
@@ -53347,6 +53348,7 @@ export default function CircularMenu() {
           -webkit-box-decoration-break: clone;
         }
         ${DOC_HIGHLIGHTS.map(h => `
+        .doc-blocknote [data-style-type="backgroundColor"][data-value="${h.key}"],
         .doc-blocknote [data-background-color="${h.key}"] {
           background-color: ${darkMode ? h.dark : h.light} !important;
           color: #1a1a2e !important;
