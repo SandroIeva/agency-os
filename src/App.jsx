@@ -7620,6 +7620,48 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       return;
     }
     if (d.mode === "resize") {
+      // Text resizes the way a type tool does, and the handle says which way:
+      //   a SIDE grip changes the column width and the words reflow into it,
+      //   a CORNER scales the whole thing, type size and all.
+      // Everything else keeps the one behaviour it had.
+      if (d.isText) {
+        const side = d.handle === "e" || d.handle === "w";
+        if (side) {
+          // The left grip moves the left edge and keeps the right one still, or
+          // dragging it would pull the whole block sideways.
+          const patch = d.handle === "e"
+            ? { w: Math.max(24, Math.round(pt.x - d.base.x)) }
+            : (() => {
+                const right = d.base.x + d.base.w;
+                const w = Math.max(24, Math.round(right - pt.x));
+                return { x: Math.round(right - w), w };
+              })();
+          patchItem(d.id, patch); d.final = patch; d.persistId = d.id;
+          return;
+        }
+        // A corner: one scale for the box and the type, taken from the axis the
+        // cursor moved proportionally further, so the box follows the cursor.
+        const west = d.handle === "nw" || d.handle === "sw";
+        const north = d.handle === "nw" || d.handle === "ne";
+        const rightX = d.base.x + d.base.w;
+        const bottomY = d.base.y + d.baseH;
+        const rawW2 = Math.max(24, west ? rightX - pt.x : pt.x - d.base.x);
+        const rawH2 = Math.max(12, north ? bottomY - pt.y : pt.y - d.base.y);
+        const scale = Math.max(rawW2 / d.base.w, rawH2 / Math.max(1, d.baseH));
+        const w = Math.max(24, Math.round(d.base.w * scale));
+        // Type size is what makes this a scale rather than a stretch. Kept to
+        // one decimal: rounding to whole pixels makes small text jump a tier at
+        // a time and the box then no longer follows the cursor.
+        const size = Math.max(4, Math.round(d.baseSize * scale * 10) / 10);
+        const h = d.baseH * scale;
+        const patch = {
+          w, size,
+          x: Math.round(west ? rightX - w : d.base.x),
+          y: Math.round(north ? bottomY - h : d.base.y),
+        };
+        patchItem(d.id, patch); d.final = patch; d.persistId = d.id;
+        return;
+      }
       const rawW = Math.max(36, pt.x - d.base.x), rawH = Math.max(30, pt.y - d.base.y);
       let patch;
       if (e.shiftKey) {
@@ -17867,6 +17909,74 @@ const canvasFont = (it) => `${it.weight || 600} ${it.size}px ${it.font ? `'${it.
 const canvasLH = (it) => it.size * (it.lh || CANVAS_LH);
 const canvasLS = (it) => ((it.ls || 0) / 100) * it.size;
 
+// ── Where a text element's lines break ──────────────────────────────────────
+// The lines are worked out HERE and then drawn, rather than letting CSS wrap on
+// screen and re-deriving them for the export. Canvas measureText and DOM layout
+// disagree by a pixel or two, so two independent wrappers would put the break in
+// a different place and an exported artboard would not be the one on screen.
+// One function, three consumers: the editor, the thumbnail and the export.
+//
+// The measuring canvas is made once. Creating one per call is what makes a
+// naive version of this crawl on a board with a hundred elements.
+let _measureCtx = null;
+const measureCtx = () => {
+  if (!_measureCtx && typeof document !== "undefined") {
+    _measureCtx = document.createElement("canvas").getContext("2d");
+  }
+  return _measureCtx;
+};
+
+// A cache keyed by everything that can move a break. Text is re-measured on
+// every render otherwise, and measureText is not free.
+const _wrapCache = new Map();
+const canvasTextLines = (it) => {
+  const text = String(it.text ?? "");
+  const width = Math.max(1, it.w || 0);
+  const key = `${text}\u0000${width}\u0000${canvasFont(it)}\u0000${canvasLS(it)}`;
+  const hit = _wrapCache.get(key);
+  if (hit) return hit;
+
+  const ctx = measureCtx();
+  const paragraphs = text.split("\n");
+  let out;
+  if (!ctx) {
+    // No DOM to measure with (a server render): break nothing rather than
+    // guess, so the text is at worst unwrapped and never wrongly wrapped.
+    out = paragraphs;
+  } else {
+    ctx.font = canvasFont(it);
+    const ls = canvasLS(it);
+    // Letter spacing adds one gap per character, and the browsers that do not
+    // support ctx.letterSpacing still have to be measured with it.
+    const widthOf = (str) => ctx.measureText(str).width + (ls ? ls * str.length : 0);
+    out = [];
+    for (const para of paragraphs) {
+      if (!para) { out.push(""); continue; }
+      // Split on spaces but KEEP them: a run of two spaces is somebody's
+      // layout, and collapsing it would rewrite their text.
+      const words = para.split(/(\s+)/).filter(x => x !== "");
+      let line = "";
+      for (const word of words) {
+        const next = line + word;
+        if (line && widthOf(next) > width) {
+          out.push(line.replace(/\s+$/, ""));
+          // A space that fell at the break is consumed by it.
+          line = /^\s+$/.test(word) ? "" : word;
+        } else {
+          line = next;
+        }
+      }
+      out.push(line);
+    }
+  }
+  // Bounded, because every keystroke while typing makes a new key.
+  if (_wrapCache.size > 4000) _wrapCache.clear();
+  _wrapCache.set(key, out);
+  return out;
+};
+// What that text is tall, once broken.
+const canvasTextH = (it) => Math.max(1, canvasTextLines(it).length) * canvasLH(it);
+
 // The polygon shapes, in fractions of the item's box. The editor turns these
 // into a CSS clip-path and the export into a canvas path — one source, so the
 // two cannot disagree about where a corner sits.
@@ -18322,7 +18432,7 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
             const isText = it.type === "text" || it.type === "sticky";
             const bw = Number(it.w) || 0;
             const bh = Number(it.h) || (isText
-              ? (String(it.text ?? "").split("\n").length || 1) * canvasLH(it) : 0);
+              ? canvasTextH(it) : 0);
             const spin = [it.rot ? `rotate(${it.rot}deg)` : "",
               it.flipX ? "scaleX(-1)" : "", it.flipY ? "scaleY(-1)" : ""].filter(Boolean).join(" ");
             const inner = (
@@ -18342,7 +18452,7 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
                   whiteSpace: "pre", overflow: "hidden",
                   padding: it.type === "sticky" ? Math.round(bw * 0.08) : 0,
                   boxSizing: "border-box" } : {}) }}>
-                {isText ? String(it.text ?? "") : null}
+                {isText ? canvasTextLines(it).join("\n") : null}
               </div>
             );
             return (
@@ -20198,7 +20308,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
         })()
       : { x: it.x, y: it.y, w: it.w,
-          h: it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it) };
+          h: it.h || canvasTextH(it) };
 
   const selItem = items.find(i => i.id === sel) || null;
 
@@ -20591,9 +20701,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     }
     if (tool === "text") {
       const s = Math.max(12, Math.round(H * 0.09));
+      // Black, not palette[0]. The brand's first colour is usually the loud
+      // one, and text that arrives already coloured has made a decision nobody
+      // asked for; the palette is one click away in the bar above.
       addItem({ id: crypto.randomUUID(), type: "text", x: Math.round(p.x), y: Math.round(p.y),
         w: Math.round(Math.min(W * 0.7, W - p.x)), text: de ? "Text" : "Text",
-        size: s, weight: 600, color: palette[0], align: "left" });
+        size: s, weight: 600, color: "#15151c", align: "left" });
       return;
     }
     if (tool === "image") { setImgMenuOpen(true); return; }
@@ -21063,8 +21176,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // it must not be, or a shape pulled past the edge can no longer be grabbed.
   const selectionChrome = (it) => {
                       const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
-                      const bh = it.h || (String(it.text ?? "").split("\n").length || 1) * canvasLH(it);
-                      const edgeOnly = it.type === "text";
+                      const bh = it.h || canvasTextH(it);
+                      // Text used to have only the two side grips. Corners
+                      // scale it the way a type tool does, so both are drawn and
+                      // the handler tells them apart.
+                      const edgeOnly = false;
                       return (
                         <>
                           <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
@@ -21130,7 +21246,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     pushUndo(takeSnap());
     dragRef.current = { mode: "resize", id: it.id, handle, sx: e.clientX, sy: e.clientY,
       base: { x: it.x, y: it.y, w: it.w, h: it.h || 0 }, rot: it.rot || 0,
-      isText: it.type === "text" };
+      isText: it.type === "text",
+      // Where the scale starts from. Read once: taking it from the item on every
+      // move would compound, and a slow drag would grow faster than a quick one.
+      baseSize: it.size || 16,
+      baseH: it.h || canvasTextH(it) };
   };
 
   // radii are kept in CSS order — [tl, tr, br, bl] — so a corner name has to be
@@ -21777,7 +21897,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           const base = (L - (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent)) / 2
             + m.fontBoundingBoxAscent;
           ctx.textBaseline = "alphabetic";
-          String(it.text).split("\n").forEach((line, i) => {
+          // The same lines the screen shows. Splitting on newlines here and
+          // letting the editor wrap would put the break in a different place and
+          // the exported artboard would not be the one anybody approved.
+          canvasTextLines(it).forEach((line, i) => {
             const y = it.y + i * L + base;
             if (canSpace || !ls) { ctx.fillText(line, tx, y); return; }
             const wLine = [...line].reduce((a2, ch) => a2 + ctx.measureText(ch).width + ls, 0) - ls;
@@ -22527,6 +22650,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       lineHeight: `${canvasLH(it)}px`, whiteSpace: "pre", overflow: "hidden" }}>
                     {editing === it.id ? (
                       <textarea autoFocus value={it.text}
+                        // Selected on entry, so typing replaces it. autoFocus
+                        // alone only puts a caret somewhere in the text, and
+                        // everybody's second click was a select-all.
+                        ref={el => { if (el && el.selectionStart === el.selectionEnd) el.select(); }}
                         onChange={e => patch(it.id, { text: e.target.value })}
                         onBlur={() => setEditing(null)}
                         onKeyDown={e => { if (e.key === "Escape") setEditing(null); }}
@@ -22553,6 +22680,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       whiteSpace: "pre", overflow: "visible" }}>
                     {editing === it.id ? (
                       <textarea autoFocus value={it.text}
+                        // Selected on entry, so typing replaces it. autoFocus
+                        // alone only puts a caret somewhere in the text, and
+                        // everybody's second click was a select-all.
+                        ref={el => { if (el && el.selectionStart === el.selectionEnd) el.select(); }}
                         onChange={e => patch(it.id, { text: e.target.value })}
                         onBlur={() => setEditing(null)}
                         onKeyDown={e => { if (e.key === "Escape") setEditing(null); }}
@@ -22560,7 +22691,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                           resize: "none", font: "inherit", color: "inherit", lineHeight: "inherit",
                           textAlign: "inherit", padding: 0, margin: 0, overflow: "hidden",
                           height: `${(String(it.text).split("\n").length || 1) * it.size * CANVAS_LH}px` }} />
-                    ) : String(it.text)}
+                    ) : canvasTextLines(it).join("\n")}
                     </div>
                     )}
                   </div>
