@@ -34309,117 +34309,27 @@ const docSchema = BlockNoteSchema.create({ blockSpecs: { ...defaultBlockSpecs, y
 // beside this one keeps working.
 //
 // No purple: it is not an accent in this app.
-// Marker colours, not tints: a highlighter is meant to be seen from across the
-// room. The dark-mode tones are the same hues a step down in lightness, so they
-// stay punchy without glaring on a dark page.
+// Marker colours for the document editor's background palette. Not a menu of
+// our own: BlockNote's colour button already offers text and background, and a
+// second highlighter beside it was the same thing twice.
 //
-// The ink stays dark on every one of them, in BOTH themes. These are bright
-// saturated fills, and white text on a lemon-yellow marker is unreadable.
+// ALL of its background colours are here, not the four that were interesting.
+// Restyling only some leaves a palette that is half marker and half pale wash,
+// which reads as a bug in whichever half you happen to pick.
+//
+// The ink stays dark on every one, in BOTH themes: these are bright saturated
+// fills, and light text on a lemon-yellow marker cannot be read.
 const DOC_HIGHLIGHTS = [
-  { key: "yellow", light: "#FBF24A", dark: "#DFD230", label: { de: "Gelb", en: "Yellow" } },
-  { key: "green",  light: "#9BF56B", dark: "#7FD452", label: { de: "Grün", en: "Green" } },
-  { key: "blue",   light: "#6FD9FF", dark: "#4FBBE4", label: { de: "Blau", en: "Blue" } },
-  { key: "pink",   light: "#FF8FD0", dark: "#E272B4", label: { de: "Rosa", en: "Pink" } },
+  { key: "yellow", light: "#FBF24A", dark: "#DFD230" },
+  { key: "green",  light: "#9BF56B", dark: "#7FD452" },
+  { key: "blue",   light: "#6FD9FF", dark: "#4FBBE4" },
+  { key: "pink",   light: "#FF8FD0", dark: "#E272B4" },
+  { key: "orange", light: "#FFB861", dark: "#E09A45" },
+  { key: "red",    light: "#FF8F80", dark: "#E0705F" },
+  { key: "purple", light: "#C39BFF", dark: "#A47DE0" },
+  { key: "brown",  light: "#DFC0A0", dark: "#BFA184" },
+  { key: "gray",   light: "#D7DCE2", dark: "#B4BAC2" },
 ];
-
-function HighlightToolbarButton({ editor, darkMode, appLanguage }) {
-  const Components = useComponentsContext();
-  const [at, setAt] = useState(null);   // null | { top, left } — where to draw it
-  const btn = useRef(null);
-  const pop = useRef(null);
-  const de = appLanguage === "de";
-
-  // Portalled to <body>, not absolutely positioned inside the toolbar. The
-  // formatting toolbar is a floating element that clips its own contents, so a
-  // panel hanging out of its bottom edge was cut away and looked like a dead
-  // button. Same reason every other overlay in this file portals.
-  const place = () => {
-    const r = btn.current?.getBoundingClientRect();
-    if (!r) return;
-    // Below the button, centred on it, and nudged back inside if that would put
-    // it off the edge of a narrow window.
-    const width = 186;
-    const left = Math.min(Math.max(8, r.left + r.width / 2 - width / 2), window.innerWidth - width - 8);
-    setAt({ top: r.bottom + 8, left });
-  };
-
-  useEffect(() => {
-    if (!at) return;
-    const away = (e) => {
-      if (pop.current?.contains(e.target) || btn.current?.contains(e.target)) return;
-      setAt(null);
-    };
-    const key = (e) => { if (e.key === "Escape") setAt(null); };
-    // Closing on scroll rather than following it: the toolbar moves with the
-    // selection, and a panel that chases it across the page is worse than one
-    // that goes away.
-    const gone = () => setAt(null);
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", key);
-    window.addEventListener("scroll", gone, true);
-    window.addEventListener("resize", gone);
-    return () => {
-      document.removeEventListener("mousedown", away);
-      document.removeEventListener("keydown", key);
-      window.removeEventListener("scroll", gone, true);
-      window.removeEventListener("resize", gone);
-    };
-  }, [at]);
-
-  const apply = (key) => {
-    try {
-      // Removing is setting it back to the default, not deleting a style.
-      if (key) editor.addStyles({ backgroundColor: key });
-      else editor.removeStyles({ backgroundColor: true });
-      editor.focus();
-    } catch (_) {}
-    setAt(null);
-  };
-
-  // preventDefault on mousedown, everywhere in the panel: the swatches live in
-  // <body> now, so a plain click would move focus out of the editor and drop
-  // the selection before addStyles could reach it.
-  const hold = (e) => e.preventDefault();
-
-  return (
-    <>
-      <span ref={btn} style={{ display: "inline-flex" }}>
-        <Components.FormattingToolbar.Button mainTooltip={de ? "Markieren" : "Highlight"}
-          onClick={() => (at ? setAt(null) : place())}>
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 20h9" />
-            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z" />
-          </svg>
-        </Components.FormattingToolbar.Button>
-      </span>
-      {at && createPortal(
-        <div ref={pop} onMouseDown={hold}
-          style={{ position: "fixed", top: at.top, left: at.left, width: 186, boxSizing: "border-box",
-            zIndex: 100010, display: "flex", alignItems: "center", gap: 6, padding: 7, borderRadius: 12,
-            background: darkMode ? "#1c1c26" : "#fff",
-            border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"}`,
-            boxShadow: "0 16px 44px rgba(0,0,0,0.22)" }}>
-          {DOC_HIGHLIGHTS.map(h => (
-            <div key={h.key} onClick={() => apply(h.key)} onMouseDown={hold}
-              title={h.label[de ? "de" : "en"]}
-              style={{ width: 26, height: 26, borderRadius: 8, cursor: "pointer", flexShrink: 0,
-                background: darkMode ? h.dark : h.light,
-                border: `1px solid ${darkMode ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.10)"}` }} />
-          ))}
-          <div style={{ width: 1, alignSelf: "stretch", background: darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)" }} />
-          <div onClick={() => apply(null)} onMouseDown={hold}
-            title={de ? "Markierung entfernen" : "Remove highlight"}
-            style={{ width: 26, height: 26, borderRadius: 8, cursor: "pointer", flexShrink: 0, display: "flex",
-              alignItems: "center", justifyContent: "center",
-              color: darkMode ? "#ffffff99" : "#1a1a2e99",
-              border: `1px solid ${darkMode ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.10)"}` }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-          </div>
-        </div>, document.body)}
-    </>
-  );
-}
 
 function CommentToolbarButton({ editor, onComment }) {
   const Components = useComponentsContext();
@@ -35014,10 +34924,9 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
   const renderFmtToolbar = useCallback(() => (
     <FormattingToolbar>
       {getFormattingToolbarItems()}
-      <HighlightToolbarButton editor={editor} darkMode={darkMode} appLanguage={appLanguage} />
       <CommentToolbarButton editor={editor} onComment={(id) => setOpenId(id)} />
     </FormattingToolbar>
-  ), [editor, darkMode, appLanguage]);
+  ), [editor]);
   const getSuggestion = useCallback(async (query) => filterSuggestionItems(getSlashItems(editor), query), [editor, getSlashItems]);
 
   const openBlock = blockMeta.find(b => b.id === openId);
@@ -53332,8 +53241,7 @@ export default function CircularMenu() {
            padding-top:18px) is what its calibrated side-menu heights rely on to
            sit on the first text line, so we must not clobber it with a shorthand. */
         .doc-blocknote .bn-block-content { padding-bottom: 14px; }
-        /* The four highlighters, overriding exactly those four of BlockNote's
-           colours and leaving the rest alone.
+        /* The background palette in the colour button, at marker strength.
            TWO selectors per colour, because BlockNote writes the mark two
            different ways and only one of them is the inline case: a highlighted
            RUN is <span data-style-type="backgroundColor" data-value="green">,
