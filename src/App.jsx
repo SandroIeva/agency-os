@@ -7620,48 +7620,6 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
       return;
     }
     if (d.mode === "resize") {
-      // Text resizes the way a type tool does, and the handle says which way:
-      //   a SIDE grip changes the column width and the words reflow into it,
-      //   a CORNER scales the whole thing, type size and all.
-      // Everything else keeps the one behaviour it had.
-      if (d.isText) {
-        const side = d.handle === "e" || d.handle === "w";
-        if (side) {
-          // The left grip moves the left edge and keeps the right one still, or
-          // dragging it would pull the whole block sideways.
-          const patch = d.handle === "e"
-            ? { w: Math.max(24, Math.round(pt.x - d.base.x)) }
-            : (() => {
-                const right = d.base.x + d.base.w;
-                const w = Math.max(24, Math.round(right - pt.x));
-                return { x: Math.round(right - w), w };
-              })();
-          patchItem(d.id, patch); d.final = patch; d.persistId = d.id;
-          return;
-        }
-        // A corner: one scale for the box and the type, taken from the axis the
-        // cursor moved proportionally further, so the box follows the cursor.
-        const west = d.handle === "nw" || d.handle === "sw";
-        const north = d.handle === "nw" || d.handle === "ne";
-        const rightX = d.base.x + d.base.w;
-        const bottomY = d.base.y + d.baseH;
-        const rawW2 = Math.max(24, west ? rightX - pt.x : pt.x - d.base.x);
-        const rawH2 = Math.max(12, north ? bottomY - pt.y : pt.y - d.base.y);
-        const scale = Math.max(rawW2 / d.base.w, rawH2 / Math.max(1, d.baseH));
-        const w = Math.max(24, Math.round(d.base.w * scale));
-        // Type size is what makes this a scale rather than a stretch. Kept to
-        // one decimal: rounding to whole pixels makes small text jump a tier at
-        // a time and the box then no longer follows the cursor.
-        const size = Math.max(4, Math.round(d.baseSize * scale * 10) / 10);
-        const h = d.baseH * scale;
-        const patch = {
-          w, size,
-          x: Math.round(west ? rightX - w : d.base.x),
-          y: Math.round(north ? bottomY - h : d.base.y),
-        };
-        patchItem(d.id, patch); d.final = patch; d.persistId = d.id;
-        return;
-      }
       const rawW = Math.max(36, pt.x - d.base.x), rawH = Math.max(30, pt.y - d.base.y);
       let patch;
       if (e.shiftKey) {
@@ -21031,8 +20989,35 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       if (hd.includes("w")) { w = d.base.w - (alt ? 2 * dx : dx); x = d.base.x + dx; }
       if (hd.includes("s")) { h = d.base.h + (alt ? 2 * dy : dy); if (alt) y = d.base.y - dy; }
       if (hd.includes("n")) { h = d.base.h - (alt ? 2 * dy : dy); y = d.base.y + dy; }
-      // A text box only ever changes width — its height follows the lines in it.
-      if (d.isText) { patch(d.id, { w: Math.round(Math.max(8, w)), x: Math.round(x) }); return; }
+      // Text resizes the way a type tool does, and the handle says which way.
+      //
+      // A SIDE grip changes the column width and the words reflow into it: the
+      // height is not an input here, it follows the lines. A CORNER scales the
+      // whole thing, type size included, which is what makes dragging a corner
+      // feel like scaling rather than stretching.
+      if (d.isText) {
+        const corner2 = hd.length === 2;
+        if (!corner2) {
+          patch(d.id, { w: Math.round(Math.max(8, w)), x: Math.round(x) });
+          return;
+        }
+        // One factor for the box and the type, taken from the axis that moved
+        // proportionally further so the box keeps up with the cursor.
+        const scale = Math.max(Math.max(8, w) / d.base.w,
+                               d.baseH > 0 ? Math.max(8, h) / d.baseH : 0);
+        const nw2 = Math.max(8, Math.round(d.base.w * scale));
+        // One decimal: whole pixels make small type jump a tier at a time, and
+        // the box then stops following the cursor.
+        const size = Math.max(4, Math.round((d.baseSize || 16) * scale * 10) / 10);
+        patch(d.id, {
+          w: nw2, size,
+          // The anchored corner has to stay put, or the box walks away from the
+          // cursor as it grows.
+          x: Math.round(hd.includes("w") ? d.base.x + d.base.w - nw2 : d.base.x),
+          y: Math.round(hd.includes("n") ? d.base.y + d.baseH - d.baseH * scale : d.base.y),
+        });
+        return;
+      }
       const corner = hd.length === 2;
       if (e.shiftKey && corner && d.base.h > 0) {
         const r = d.base.w / d.base.h;
@@ -24656,8 +24641,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 {num(selItem.size, v => set("size", Math.max(6, Number(v) || 6)), "T")}
               </div>
               <div style={two}>
-                {num(selItem.lh ? selItem.lh.toFixed(2) : "Auto",
-                  v => set("lh", /^[\d.]+$/.test(v) ? Number(v) : undefined), "↕")}
+                {/* The number, not a string. num() only shows a value it can
+                    read as a number, so "Auto" and "1.20" both arrived as
+                    nothing and the field sat empty. Unset means CANVAS_LH, and
+                    showing the value it is actually using beats showing a word
+                    for it. */}
+                {num(selItem.lh ?? CANVAS_LH,
+                  v => set("lh", /^[\d.]+$/.test(String(v)) ? Number(v) : undefined), "↕")}
                 {num(selItem.ls || 0, v => set("ls", Number(v) || 0), "|A|", "%")}
               </div>
               <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 12 }}>
