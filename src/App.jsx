@@ -34302,6 +34302,79 @@ const docSchema = BlockNoteSchema.create({ blockSpecs: { ...defaultBlockSpecs, y
 
 // "Kommentieren" button for the selection formatting toolbar — opens the same
 // per-block comment thread as the hover "⋯" control.
+// Four highlighters. BlockNote already carries a backgroundColor style with a
+// fixed set of names, so these ARE those names — restyled in the CSS below to
+// tones that sit on a page without shouting. Using its own names means the mark
+// survives a save and a reload without a custom schema, and the "A" button
+// beside this one keeps working.
+//
+// No purple: it is not an accent in this app.
+const DOC_HIGHLIGHTS = [
+  { key: "yellow", light: "#FFE9A3", dark: "#6b5a1f", label: { de: "Gelb", en: "Yellow" } },
+  { key: "green",  light: "#C7EFD6", dark: "#1f5138", label: { de: "Grün", en: "Green" } },
+  { key: "blue",   light: "#CFE4FF", dark: "#1e3f66", label: { de: "Blau", en: "Blue" } },
+  { key: "pink",   light: "#FBD5E3", dark: "#5f2440", label: { de: "Rosa", en: "Pink" } },
+];
+
+function HighlightToolbarButton({ editor, darkMode, appLanguage }) {
+  const Components = useComponentsContext();
+  const [open, setOpen] = useState(false);
+  const de = appLanguage === "de";
+  const wrap = useRef(null);
+  // Clicking anywhere else puts it away. The toolbar itself is a floating
+  // element, so this listens on the document rather than on a backdrop.
+  useEffect(() => {
+    if (!open) return;
+    const away = (e) => { if (!wrap.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", away);
+    return () => document.removeEventListener("mousedown", away);
+  }, [open]);
+  const apply = (key) => {
+    try {
+      // Removing is setting it back to the default, not deleting a style.
+      if (key) editor.addStyles({ backgroundColor: key });
+      else editor.removeStyles({ backgroundColor: true });
+      editor.focus();
+    } catch (_) {}
+    setOpen(false);
+  };
+  return (
+    <span ref={wrap} style={{ position: "relative", display: "inline-flex" }}>
+      <Components.FormattingToolbar.Button mainTooltip={de ? "Markieren" : "Highlight"}
+        onClick={() => setOpen(o => !o)}>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z" />
+        </svg>
+      </Components.FormattingToolbar.Button>
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)",
+          zIndex: 100005, display: "flex", alignItems: "center", gap: 6, padding: 7, borderRadius: 12,
+          background: darkMode ? "#1c1c26" : "#fff",
+          border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"}`,
+          boxShadow: "0 16px 44px rgba(0,0,0,0.22)" }}>
+          {DOC_HIGHLIGHTS.map(h => (
+            <div key={h.key} onClick={() => apply(h.key)}
+              title={h.label[de ? "de" : "en"]}
+              style={{ width: 24, height: 24, borderRadius: 7, cursor: "pointer",
+                background: darkMode ? h.dark : h.light,
+                border: `1px solid ${darkMode ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.10)"}` }} />
+          ))}
+          <div style={{ width: 1, alignSelf: "stretch", background: darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)" }} />
+          <div onClick={() => apply(null)} title={de ? "Markierung entfernen" : "Remove highlight"}
+            style={{ width: 24, height: 24, borderRadius: 7, cursor: "pointer", display: "flex",
+              alignItems: "center", justifyContent: "center",
+              color: darkMode ? "#ffffff99" : "#1a1a2e99",
+              border: `1px solid ${darkMode ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.10)"}` }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </div>
+        </div>
+      )}
+    </span>
+  );
+}
+
 function CommentToolbarButton({ editor, onComment }) {
   const Components = useComponentsContext();
   return (
@@ -34895,9 +34968,10 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
   const renderFmtToolbar = useCallback(() => (
     <FormattingToolbar>
       {getFormattingToolbarItems()}
+      <HighlightToolbarButton editor={editor} darkMode={darkMode} appLanguage={appLanguage} />
       <CommentToolbarButton editor={editor} onComment={(id) => setOpenId(id)} />
     </FormattingToolbar>
-  ), [editor]);
+  ), [editor, darkMode, appLanguage]);
   const getSuggestion = useCallback(async (query) => filterSuggestionItems(getSlashItems(editor), query), [editor, getSlashItems]);
 
   const openBlock = blockMeta.find(b => b.id === openId);
@@ -53212,6 +53286,25 @@ export default function CircularMenu() {
            padding-top:18px) is what its calibrated side-menu heights rely on to
            sit on the first text line, so we must not clobber it with a shorthand. */
         .doc-blocknote .bn-block-content { padding-bottom: 14px; }
+        /* The four highlighters. BlockNote paints backgroundColor from its own
+           palette variables, so these override exactly those four and leave the
+           rest of its colours alone. Padding and a radius so a marked run reads
+           as drawn over the text rather than as a table cell. */
+        .doc-blocknote span[data-background-color="yellow"],
+        .doc-blocknote span[data-background-color="green"],
+        .doc-blocknote span[data-background-color="blue"],
+        .doc-blocknote span[data-background-color="pink"] {
+          border-radius: 4px;
+          padding: 1px 2px;
+          margin: 0 -1px;
+          box-decoration-break: clone;
+          -webkit-box-decoration-break: clone;
+        }
+        ${DOC_HIGHLIGHTS.map(h => `
+        .doc-blocknote [data-background-color="${h.key}"] {
+          background-color: ${darkMode ? h.dark : h.light} !important;
+          color: ${darkMode ? "#f2f2f6" : "#1a1a2e"} !important;
+        }`).join("")}
         /* Give the hover side-menu (drag handle + plus) a bit more gap from text. */
         .doc-blocknote .bn-side-menu { transform: translateX(-8px); }
         /* Code block — light, rounded, with a line-number gutter (overlay layer). */
