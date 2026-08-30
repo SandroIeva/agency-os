@@ -19700,6 +19700,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [flying, setFlying] = useState(!!originRect);
   const [imgMenuOpen, setImgMenuOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  // Which edit box has already had its text selected. A ref callback runs on
+  // EVERY render, and after a keystroke the caret is collapsed, so "select if
+  // nothing is selected" selected the whole text again and the next character
+  // replaced it — which is why typing only ever left the last letter. Cleared
+  // when the box unmounts, so entering it again does select again.
+  const editSelRef = useRef(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const stageRef = useRef(null);
@@ -22668,7 +22674,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         // Selected on entry, so typing replaces it. autoFocus
                         // alone only puts a caret somewhere in the text, and
                         // everybody's second click was a select-all.
-                        ref={el => { if (el && el.selectionStart === el.selectionEnd) el.select(); }}
+                        ref={el => {
+                          if (!el) { editSelRef.current = null; return; }
+                          if (editSelRef.current !== it.id) { editSelRef.current = it.id; el.select(); }
+                        }}
                         onChange={e => patch(it.id, { text: e.target.value })}
                         onBlur={() => setEditing(null)}
                         onKeyDown={e => { if (e.key === "Escape") setEditing(null); }}
@@ -22700,8 +22709,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         // everybody's second click was a select-all.
                         rows={1}
                         ref={el => {
-                          if (!el) return;
-                          if (el.selectionStart === el.selectionEnd) el.select();
+                          if (!el) { editSelRef.current = null; return; }
+                          if (editSelRef.current !== it.id) { editSelRef.current = it.id; el.select(); }
                           fitTextArea(el, it);
                         }}
                         onChange={e => patch(it.id, { text: e.target.value })}
