@@ -29054,7 +29054,10 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   // `kind` used to be both the open tab and the value written to the row. With
   // the tabs gone it is only the latter, so the two are separate now: a tab
   // cannot leak into the database any more.
-  const [section, setSection] = useState("ideas");
+  // Moodboards, which is the tab on the LEFT. It opened on Whiteboards, the
+  // second one, so the view came up with a tab sitting unexplained to the left
+  // of the one it had chosen.
+  const [section, setSection] = useState("moodboards");
   const ideasCreate = useRef(null);      // IdeasTab registers its "new board" fn
   // Where the moodboards tab puts its own header buttons. It portals into this
   // rather than being told what to draw, which is how the project brand embeds
