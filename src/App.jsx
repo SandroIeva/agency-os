@@ -31147,13 +31147,18 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
           // illustration there would be shouting about nothing.
           <CreationsEmpty theme={theme} darkMode={darkMode}
             // The board's own drawing, not the stack of photographs the
-            // moodboards use. Supplied under this name, typo and all: keeping
-            // it means a re-export from the same place still lands on the file
-            // the app asks for.
-            image={!search && currentFolder == null ? "/whiteboard-viual-light.png" : null}
-            // Half the size the other empty states draw at: this one was
+            // moodboards use. Supplied under these names, typo and all: keeping
+            // them means a re-export from the same place still lands on the
+            // files the app asks for.
+            //
+            // Two of them, one per theme. The light one is a white card, which
+            // on anthracite is a lamp; the dark one is drawn for that ground.
+            image={!search && currentFolder == null
+              ? (darkMode ? "/whiteboard-viual-dark.png" : "/whiteboard-viual-light.png")
+              : null}
+            // Smaller than the other empty states draw at: this one was
             // exported large on purpose and does not need the room.
-            imageWidth={192}
+            imageWidth={230}
             title={search ? (de ? "Keine Treffer" : "No matches")
                  : currentFolder != null ? (de ? "Dieser Ordner ist leer" : "This folder is empty")
                  : (de ? "Noch keine Whiteboards" : "No whiteboards yet")}
