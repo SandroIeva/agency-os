@@ -18130,6 +18130,84 @@ const canvasTextH = (it) => {
   return Math.max(1, canvasTextLines(it).length) * canvasLH(it);
 };
 
+// The boxes behind the lines of a text element. One per line, each hugging the
+// line it sits behind, which is what makes it read as a highlighter drawn over
+// the words rather than a rectangle drawn around the paragraph.
+//
+// Measured with the same context and the same letter spacing the line breaker
+// uses, so a box is exactly as wide as the line it belongs to. The lines
+// themselves come from that breaker, not from a second walk over the text.
+const canvasTextBoxes = (it) => {
+  const hasFill = !!it.bg;
+  const hasStroke = !!(it.bgStrokeW && it.bgStroke);
+  if (!hasFill && !hasStroke) return [];
+  // A ring has letters, not lines. There is nothing here for a box to hug.
+  if (canvasArc(it)) return [];
+  const ctx = measureCtx();
+  const L = canvasLH(it);
+  const ls = canvasLS(it);
+  const pad = Math.max(0, it.bgPad || 0);
+  if (ctx) ctx.font = canvasFont(it);
+  const out = [];
+  canvasTextLines(it).forEach((ln, i) => {
+    // A blank line is a gap somebody left on purpose. A highlighter run across
+    // it would join two marks that are meant to be apart.
+    if (!ln) return;
+    const tw = ctx ? ctx.measureText(ln).width + (ls ? ls * ln.length : 0)
+      : Math.max(0, it.w || 0);
+    const x = it.align === "center" ? ((it.w || 0) - tw) / 2
+      : it.align === "right" ? (it.w || 0) - tw : 0;
+    out.push({ x: x - pad, y: i * L, w: tw + pad * 2, h: L });
+  });
+  return out;
+};
+
+// The words of a straight text element, onto a canvas. Its own function
+// because two branches draw it now: plain text, and text over a highlight.
+const drawStraightText = (ctx, it) => {
+  ctx.fillStyle = it.color; ctx.font = canvasFont(it);
+  ctx.textAlign = it.align === "center" ? "center" : it.align === "right" ? "right" : "left";
+  const tx = it.align === "center" ? it.x + it.w / 2
+    : it.align === "right" ? it.x + it.w : it.x;
+  // textBaseline "top" puts the em box at y; CSS instead centres the glyph
+  // box inside the line box, so the two drift apart by the half-leading —
+  // measured at 1.4px for 26px text, and it grows with the size. Drawing
+  // on the alphabetic baseline with the same half-leading makes the export
+  // land where the editor showed it.
+  // Letter spacing: the canvas property where the browser has it, and a
+  // per-character walk where it does not — otherwise the export would
+  // quietly ignore a setting the editor is showing.
+  const ls = canvasLS(it);
+  const canSpace = "letterSpacing" in ctx;
+  if (canSpace) ctx.letterSpacing = `${ls}px`;
+  const m = ctx.measureText("Hg");
+  const L = canvasLH(it);
+  const base = (L - (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent)) / 2
+    + m.fontBoundingBoxAscent;
+  ctx.textBaseline = "alphabetic";
+  // The same lines the screen shows. Splitting on newlines here and
+  // letting the editor wrap would put the break in a different place and
+  // the exported artboard would not be the one anybody approved.
+  canvasTextLines(it).forEach((line, i) => {
+    const y = it.y + i * L + base;
+    if (canSpace || !ls) { ctx.fillText(line, tx, y); return; }
+    const wLine = [...line].reduce((a2, ch) => a2 + ctx.measureText(ch).width + ls, 0) - ls;
+    let x = it.align === "center" ? it.x + it.w / 2 - wLine / 2
+          : it.align === "right" ? it.x + it.w - wLine : it.x;
+    const prev = ctx.textAlign; ctx.textAlign = "left";
+    for (const ch of line) { ctx.fillText(ch, x, y); x += ctx.measureText(ch).width + ls; }
+    ctx.textAlign = prev;
+  });
+  if (canSpace) ctx.letterSpacing = "0px";
+};
+
+// Text drawn over a highlight has to be positioned as well, or the highlight
+// paints over it: a positioned element covers in-flow content whichever way
+// round the two are written.
+const wrapBg = (boxes, body) => boxes.length
+  ? <div style={{ position: "relative" }}>{body}</div>
+  : body;
+
 // Size the edit box to the text inside it, in whole lines.
 //
 // Rounded to the nearest LINE rather than taken from scrollHeight directly: a
@@ -18620,7 +18698,14 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
                   whiteSpace: "pre", overflow: "hidden",
                   padding: it.type === "sticky" ? Math.round(bw * 0.08) : 0,
                   boxSizing: "border-box" } : {}) }}>
-                {isText ? (canvasArc(it) ? <CanvasArcText it={it} />
+                {canvasTextBoxes(it).map((b, bi) => (
+                  <div key={"bg" + bi} style={{ position: "absolute", left: b.x, top: b.y,
+                    width: b.w, height: b.h, boxSizing: "border-box",
+                    borderRadius: it.bgRadius || 0, background: it.bg || "transparent",
+                    border: it.bgStrokeW && it.bgStroke
+                      ? `${it.bgStrokeW}px solid ${it.bgStroke}` : undefined }} />
+                ))}
+                {isText ? wrapBg(canvasTextBoxes(it), canvasArc(it) ? <CanvasArcText it={it} />
                   : canvasTextLines(it).join("\n")) : null}
               </div>
             );
@@ -22140,6 +22225,34 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           ctx.beginPath();
           ctx.moveTo(hd.x1, hd.y1); ctx.lineTo(it.x2, it.y2); ctx.lineTo(hd.x2, hd.y2);
           ctx.stroke();
+        } else if (it.type === "text" && canvasTextBoxes(it).length) {
+          // The highlight first, then the words on top of it, from the same
+          // boxes the screen drew. A CSS border sits INSIDE its box, so the
+          // path is inset by half its width to put the centred canvas stroke
+          // where the screen put the border.
+          const sw = it.bgStrokeW && it.bgStroke ? it.bgStrokeW : 0;
+          const path = (x, y, w2, h2, rr) => {
+            ctx.beginPath();
+            if (rr > 0 && ctx.roundRect) ctx.roundRect(x, y, w2, h2, rr);
+            else ctx.rect(x, y, w2, h2);
+          };
+          for (const b of canvasTextBoxes(it)) {
+            const r = Math.min(it.bgRadius || 0, Math.min(b.w, b.h) / 2);
+            if (it.bg) {
+              ctx.fillStyle = it.bg;
+              path(it.x + b.x, it.y + b.y, b.w, b.h, r);
+              ctx.fill();
+            }
+            if (sw) {
+              ctx.strokeStyle = it.bgStroke;
+              ctx.lineWidth = sw;
+              ctx.lineJoin = "round";
+              path(it.x + b.x + sw / 2, it.y + b.y + sw / 2,
+                   Math.max(0, b.w - sw), Math.max(0, b.h - sw), Math.max(0, r - sw / 2));
+              ctx.stroke();
+            }
+          }
+          drawStraightText(ctx, it);
         } else if (it.type === "text" && canvasArc(it)) {
           // The ring, drawn from the same layout the screen used. A letter's
           // line box is centred on the point the layout gives, and its baseline
@@ -22168,40 +22281,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             ctx.restore();
           }
         } else if (it.type === "text") {
-          ctx.fillStyle = it.color; ctx.font = canvasFont(it);
-          ctx.textAlign = it.align === "center" ? "center" : it.align === "right" ? "right" : "left";
-          const tx = it.align === "center" ? it.x + it.w / 2
-            : it.align === "right" ? it.x + it.w : it.x;
-          // textBaseline "top" puts the em box at y; CSS instead centres the glyph
-          // box inside the line box, so the two drift apart by the half-leading —
-          // measured at 1.4px for 26px text, and it grows with the size. Drawing
-          // on the alphabetic baseline with the same half-leading makes the export
-          // land where the editor showed it.
-          // Letter spacing: the canvas property where the browser has it, and a
-          // per-character walk where it does not — otherwise the export would
-          // quietly ignore a setting the editor is showing.
-          const ls = canvasLS(it);
-          const canSpace = "letterSpacing" in ctx;
-          if (canSpace) ctx.letterSpacing = `${ls}px`;
-          const m = ctx.measureText("Hg");
-          const L = canvasLH(it);
-          const base = (L - (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent)) / 2
-            + m.fontBoundingBoxAscent;
-          ctx.textBaseline = "alphabetic";
-          // The same lines the screen shows. Splitting on newlines here and
-          // letting the editor wrap would put the break in a different place and
-          // the exported artboard would not be the one anybody approved.
-          canvasTextLines(it).forEach((line, i) => {
-            const y = it.y + i * L + base;
-            if (canSpace || !ls) { ctx.fillText(line, tx, y); return; }
-            const wLine = [...line].reduce((a2, ch) => a2 + ctx.measureText(ch).width + ls, 0) - ls;
-            let x = it.align === "center" ? it.x + it.w / 2 - wLine / 2
-                  : it.align === "right" ? it.x + it.w - wLine : it.x;
-            const prev = ctx.textAlign; ctx.textAlign = "left";
-            for (const ch of line) { ctx.fillText(ch, x, y); x += ctx.measureText(ch).width + ls; }
-            ctx.textAlign = prev;
-          });
-          if (canSpace) ctx.letterSpacing = "0px";
+          drawStraightText(ctx, it);
         }
         // The outline, after the fill and before the inner shadow.
         if (it.strokeWidth && canStroke(it)) {
@@ -22972,6 +23052,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 // tried one went looking for the way back out. The box measures
                 // itself as if it were flat while the editor is open.
                 const flat = arc ? { ...it, arc: undefined } : it;
+                const boxes = canvasTextBoxes(it);
+                const bgLayer = boxes.map((b, bi) => (
+                  <div key={"bg" + bi} style={{ position: "absolute", left: b.x, top: b.y,
+                    width: b.w, height: b.h, boxSizing: "border-box",
+                    borderRadius: it.bgRadius || 0,
+                    background: it.bg || "transparent",
+                    border: it.bgStrokeW && it.bgStroke
+                      ? `${it.bgStrokeW}px solid ${it.bgStroke}` : undefined,
+                    pointerEvents: "none" }} />
+                ));
                 return (
                   <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                     onDoubleClick={() => beginEdit(it.id)}
@@ -22983,8 +23073,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
                       filter: effectFilter(it),
                       whiteSpace: "pre", overflow: "visible",
-                      ...(arc ? { position: "relative", height: canvasTextH(it) } : {}) }}>
-                    {editing === it.id ? (
+                      ...(arc || boxes.length ? { position: "relative" } : {}),
+                      ...(arc ? { height: canvasTextH(it) } : {}) }}>
+                    {bgLayer}
+                    {/* The words sit in a positioned box of their own, or the
+                        highlight behind them would paint over them: a
+                        positioned element covers in-flow text no matter which
+                        way round they are written. Only when there IS a
+                        highlight, because on a ring the edit box is positioned
+                        against the square and this wrapper would become the
+                        square's stand-in. */}
+                    {wrapBg(boxes, editing === it.id ? (
                       <textarea autoFocus value={it.text}
                         rows={1}
                         onFocus={selectOnFirstFocus}
@@ -23012,7 +23111,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                             transform: "translateY(-50%)", textAlign: "center" } : {}),
                           height: `${canvasTextH(flat)}px` }} />
                     ) : arc ? <CanvasArcText it={it} />
-                    : canvasTextLines(it).join("\n")}
+                    : canvasTextLines(it).join("\n"))}
                     </div>
                     )}
                   </div>
@@ -23577,7 +23676,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 : picker.what === "shadow"
                   ? (/^#/.test(selItem?.[picker.key]?.color || "") ? selItem[picker.key].color : "#000000")
                 : (selItem?.[picker.key] || "#000000")}
-              alpha={picker.what === "bg" ? 100
+              alpha={picker.what === "plain" ? 100
+                : picker.what === "bg" ? 100
                 : picker.what === "stroke" ? (selItem?.strokeAlpha == null ? 100 : selItem.strokeAlpha)
                 : picker.what === "shadow" ? (selItem?.[picker.key]?.alpha == null ? 35 : selItem[picker.key].alpha)
                 : (selItem?.fillAlpha == null ? 100 : selItem.fillAlpha)}
@@ -23587,7 +23687,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 : picker.what === "shadow"
                   ? patch(selItem.id, { [picker.key]: { ...selItem[picker.key], color: c } })
                 : patch(selItem.id, { [picker.key]: c })}
-              onAlphaChange={(a) => picker.what === "bg" ? undefined
+              // A plain colour has no alpha of its own: the element's own
+              // opacity covers fading, and letting the slider fall through
+              // would write the item's FILL alpha instead.
+              onAlphaChange={(a) => picker.what === "plain" ? undefined
+                : picker.what === "bg" ? undefined
                 : picker.what === "stroke" ? patch(selItem.id, { strokeAlpha: a })
                 : picker.what === "shadow"
                   ? patch(selItem.id, { [picker.key]: { ...selItem[picker.key], alpha: a } })
@@ -24946,6 +25050,69 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   v => set("lh", Number(v) > 0 ? Number(v) : undefined), "↕", "", 0.1)}
                 {num(selItem.ls || 0, v => set("ls", Number(v) || 0), "|A|", "%")}
               </div>
+              {selItem.type === "text" && !canvasArc(selItem) && (() => {
+                // The same row the stroke uses: a swatch that opens the
+                // picker, the hex, and an ✕ that takes it off again.
+                const colourRow = (value, key, onClear) => (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6,
+                    padding: "8px 10px", borderRadius: 9,
+                    background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                    <div onClick={(e) => setPicker({ what: "plain", key,
+                        x: e.currentTarget.getBoundingClientRect().left,
+                        y: e.currentTarget.getBoundingClientRect().top })}
+                      style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, cursor: "pointer",
+                        border: `1px solid ${line}`, background: value }} />
+                    <input value={String(value).replace("#", "").toUpperCase()}
+                      onChange={e => { const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
+                        if (v.length === 6) set(key, "#" + v); }}
+                      style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
+                        color: theme.text, fontFamily: FONT, fontSize: 12.5, letterSpacing: 0.4 }} />
+                    <div onClick={onClear} title={de ? "Entfernen" : "Remove"}
+                      style={{ cursor: "pointer", color: theme.textFaint, fontSize: 12,
+                        paddingLeft: 4, flexShrink: 0 }}>✕</div>
+                  </div>
+                );
+                return (<>
+                  <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 12 }}>
+                    {de ? "Texthintergrund" : "Text background"}
+                  </div>
+                  {!selItem.bg ? (
+                    <div onClick={() => set2({ bg: palette[2] || "#15151c",
+                        bgPad: Math.round((selItem.size || 16) * 0.18) })}
+                      style={{ marginTop: 6, padding: "9px 12px", borderRadius: 9, textAlign: "center",
+                        cursor: "pointer", border: `1px dashed ${line}`, color: theme.textDim, fontSize: 12 }}>
+                      {de ? "Hintergrund hinzufügen" : "Add a background"}
+                    </div>
+                  ) : (<>
+                    {colourRow(selItem.bg, "bg",
+                      () => set2({ bg: undefined, bgPad: undefined, bgRadius: undefined,
+                                   bgStroke: undefined, bgStrokeW: undefined }))}
+                    {/* Padding widens the mark to the sides only. Its height is
+                        the line's own height, so two lines of a paragraph meet
+                        rather than overlapping the way a padded box would. */}
+                    <div style={two}>
+                      {num(Math.round(selItem.bgPad || 0),
+                        v => set("bgPad", Math.max(0, Math.round(v))), "↔")}
+                      {num(Math.round(selItem.bgRadius || 0),
+                        v => set("bgRadius", Math.max(0, Math.round(v))), "◠")}
+                    </div>
+                    {!selItem.bgStrokeW ? (
+                      <div onClick={() => set2({ bgStrokeW: 2, bgStroke: selItem.color || palette[0] })}
+                        style={{ marginTop: 6, padding: "9px 12px", borderRadius: 9, textAlign: "center",
+                          cursor: "pointer", border: `1px dashed ${line}`, color: theme.textDim, fontSize: 12 }}>
+                        {de ? "Kontur hinzufügen" : "Add a stroke"}
+                      </div>
+                    ) : (<>
+                      {colourRow(selItem.bgStroke || "#15151c", "bgStroke",
+                        () => set2({ bgStrokeW: undefined, bgStroke: undefined }))}
+                      <div style={{ marginTop: 6 }}>
+                        {num(selItem.bgStrokeW, v => set("bgStrokeW", Math.max(0, Number(v) || 0)), "▭")}
+                      </div>
+                    </>)}
+                  </>)}
+                </>);
+              })()}
+
               <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 12 }}>
                 {de ? "Schreibweise" : "Case"}
               </div>
