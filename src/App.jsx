@@ -19579,7 +19579,7 @@ function Track({ bg, pos, onSet, size }) {
 // So the draft lives here while the field has focus, and Enter or leaving the
 // field hands it over. Escape drops it. Sliders stay live on purpose — a drag
 // shows its own result, and waiting for a confirmation there would be worse.
-function NumberField({ value, onCommit, min, max, style, ...rest }) {
+function NumberField({ value, onCommit, min, max, step = 1, style, ...rest }) {
   const [draft, setDraft] = useState(null);
   const clamp = (n) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n));
   const commit = () => {
@@ -19587,6 +19587,27 @@ function NumberField({ value, onCommit, min, max, style, ...rest }) {
     const n = Number(draft);
     if (draft.trim() !== "" && Number.isFinite(n)) onCommit(clamp(n));
     setDraft(null);
+  };
+  // The arrows nudge the value, the way every design tool does it: one step,
+  // and ten of them with Shift held. It starts from whatever is in the field,
+  // so nudging a half-typed number carries on from what you typed rather than
+  // from the value underneath it.
+  const nudge = (e, dir) => {
+    const typed = draft !== null && draft.trim() !== "" ? Number(draft) : NaN;
+    const from = Number.isFinite(typed) ? typed : Number(value);
+    if (!Number.isFinite(from)) return;
+    e.preventDefault();
+    // Rounded to the step's own precision: 1.2 + 0.1 arrives as
+    // 1.3000000000000003 otherwise, and the field shows every digit of it.
+    const dec = Math.min(6, (String(step).split(".")[1] || "").length);
+    const next = clamp(Number((from + step * (e.shiftKey ? 10 : 1) * dir).toFixed(dec)));
+    setDraft(null);
+    onCommit(next);
+    // Left selected, so the next press lands on the same field and the number
+    // stays readable. After the commit, not before: React re-renders the input
+    // with the new value first, and setting a value drops the selection.
+    const el = e.currentTarget;
+    requestAnimationFrame(() => { try { el.select(); } catch {} });
   };
   return (
     <input {...rest}
@@ -19596,6 +19617,8 @@ function NumberField({ value, onCommit, min, max, style, ...rest }) {
       onKeyDown={(e) => {
         if (e.key === "Enter") { e.preventDefault(); commit(); e.currentTarget.blur(); }
         if (e.key === "Escape") { e.preventDefault(); setDraft(null); e.currentTarget.blur(); }
+        if (e.key === "ArrowUp") nudge(e, 1);
+        if (e.key === "ArrowDown") nudge(e, -1);
       }}
       style={style} />
   );
@@ -22531,13 +22554,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     );
   };
 
-  const num = (value, onChange, glyph, suffix = "") => (
+  const num = (value, onChange, glyph, suffix = "", step = 1) => (
           <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
             borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
             <span style={{ fontSize: 11, color: theme.textFaint, minWidth: 13 }}>{glyph}</span>
             {/* Not a number means the selection does not agree on one, and an
                 empty field says that better than NaN does. */}
             <NumberField value={Number.isFinite(value) ? value : undefined} onCommit={onChange}
+              step={step}
               style={{ width: "100%", border: "none", outline: "none", background: "transparent",
                 color: theme.text, fontFamily: FONT, fontSize: 12.5 }} />
             {suffix && <span style={{ fontSize: 11.5, color: theme.textFaint }}>{suffix}</span>}
@@ -24913,8 +24937,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     nothing and the field sat empty. Unset means CANVAS_LH, and
                     showing the value it is actually using beats showing a word
                     for it. */}
+                {/* A tenth at a time: this is a multiplier around 1.2, and a
+                    whole step would take it to 2.2. Nudged to nothing or below,
+                    it goes back to automatic rather than to a line of no
+                    height, which divides by zero when the edit box measures
+                    itself. */}
                 {num(selItem.lh ?? CANVAS_LH,
-                  v => set("lh", /^[\d.]+$/.test(String(v)) ? Number(v) : undefined), "↕")}
+                  v => set("lh", Number(v) > 0 ? Number(v) : undefined), "↕", "", 0.1)}
                 {num(selItem.ls || 0, v => set("ls", Number(v) || 0), "|A|", "%")}
               </div>
               <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 12 }}>
