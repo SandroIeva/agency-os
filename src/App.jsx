@@ -23677,19 +23677,36 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               </div>
             </div>
             {barPop === "size" && (
-              <div style={{ marginTop: 6, padding: 6, borderRadius: 11, background: "#15151c",
-                boxShadow: "0 8px 24px rgba(0,0,0,0.28)", display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr", gap: 3, width: 172 }}>
-                {BAR_SIZES.map(sz => (
-                  <div key={sz} onClick={() => { patch(selItem.id, { size: sz }); setBarPop(null); }}
-                    style={{ height: 28, borderRadius: 7, display: "flex", alignItems: "center",
-                      justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12,
-                      color: "#fff",
-                      background: Math.round(selItem.size) === sz
-                        ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.07)" }}>
-                    {sz}
-                  </div>
-                ))}
+              // A list, one under the other. It was a three-column grid, which
+              // reads as a keypad rather than as a set of choices: nothing in a
+              // grid tells you the numbers run in order.
+              <div className="no-scrollbar"
+                style={{ marginTop: 6, padding: 6, borderRadius: 11, background: "#15151c",
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.28)", width: 92,
+                  maxHeight: 248, overflowY: "auto" }}>
+                {BAR_SIZES.map(sz => {
+                  const on = Math.round(selItem.size) === sz;
+                  return (
+                    <div key={sz} onClick={() => { patch(selItem.id, { size: sz }); setBarPop(null); }}
+                      // The one in force is scrolled into view when the list
+                      // opens, since twelve sizes do not fit at once. Once,
+                      // not on every render: a ref callback runs on all of
+                      // them, and re-scrolling under the cursor is how a list
+                      // fights the person reading it.
+                      ref={on ? (el => {
+                        if (!el || el.dataset.shown) return;
+                        el.dataset.shown = "1";
+                        try { el.scrollIntoView({ block: "nearest" }); } catch (_) {}
+                      }) : undefined}
+                      onPointerEnter={e => { if (!on) e.currentTarget.style.background = "rgba(255,255,255,0.10)"; }}
+                      onPointerLeave={e => { if (!on) e.currentTarget.style.background = "transparent"; }}
+                      style={{ height: 30, padding: "0 10px", borderRadius: 7, display: "flex",
+                        alignItems: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
+                        color: "#fff", background: on ? "rgba(255,255,255,0.22)" : "transparent" }}>
+                      {sz}
+                    </div>
+                  );
+                })}
               </div>
             )}
             {barPop && barPop !== "size" && (() => {
