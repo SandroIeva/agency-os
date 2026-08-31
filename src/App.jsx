@@ -37813,11 +37813,11 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
               instead of sending somebody up to the header to find it. Not on a
               search or inside a folder, where there is nothing to start. */}
           {!search && currentFolder == null && (
-            <motion.div whileTap={{ scale: 0.97 }} onClick={() => createDoc()}
+            <motion.div whileTap={{ scale: 0.97 }} onClick={() => pdfInputRef.current?.click()}
               style={{ marginTop: 12, padding: "13px 26px", borderRadius: 999,
                 background: "transparent", border: `1px solid ${darkMode ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.22)"}`,
                 color: theme.text, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
-              {appLanguage === "de" ? "Neues Dokument" : "New document"}
+              {appLanguage === "de" ? "Hochladen" : "Upload"}
             </motion.div>
           )}
         </div>
