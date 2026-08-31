@@ -37804,6 +37804,18 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
           )}
           <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{search ? (appLanguage === "de" ? "Keine Treffer" : "No matches") : currentFolder != null ? (appLanguage === "de" ? "Dieser Ordner ist leer" : "This folder is empty") : (appLanguage === "de" ? "Noch keine Dokumente" : "No documents yet")}</div>
           <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, maxWidth: 340, lineHeight: 1.55 }}>{search ? (appLanguage === "de" ? "Versuche einen anderen Suchbegriff." : "Try a different search term.") : (appLanguage === "de" ? "Klicke auf Neues Dokument, um loszulegen." : "Click New document to get started.")}</div>
+          {/* The same pill the other empty sections offer, doing the same thing
+              their buttons do: the section's primary action, right there,
+              instead of sending somebody up to the header to find it. Not on a
+              search or inside a folder, where there is nothing to start. */}
+          {!search && currentFolder == null && (
+            <motion.div whileTap={{ scale: 0.97 }} onClick={() => createDoc()}
+              style={{ marginTop: 12, padding: "13px 26px", borderRadius: 999,
+                background: "transparent", border: `1px solid ${darkMode ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.22)"}`,
+                color: theme.text, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
+              {appLanguage === "de" ? "Neues Dokument" : "New document"}
+            </motion.div>
+          )}
         </div>
       ) : viewMode === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 24 }}>
