@@ -31151,6 +31151,9 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
             // it means a re-export from the same place still lands on the file
             // the app asks for.
             image={!search && currentFolder == null ? "/whiteboard-viual-light.png" : null}
+            // Half the size the other empty states draw at: this one was
+            // exported large on purpose and does not need the room.
+            imageWidth={192}
             title={search ? (de ? "Keine Treffer" : "No matches")
                  : currentFolder != null ? (de ? "Dieser Ordner ist leer" : "This folder is empty")
                  : (de ? "Noch keine Whiteboards" : "No whiteboards yet")}
@@ -44788,7 +44791,8 @@ If you don't know a field, infer a plausible value. Write all text values in the
 // `image` is optional and `action` is optional, so the same component also
 // serves the smaller cases — an empty folder, a search with no matches — where
 // a full illustration would be shouting about nothing.
-function CreationsEmpty({ theme, darkMode, image, title, hint, actionLabel, onAction }) {
+function CreationsEmpty({ theme, darkMode, image, imageWidth = 384, title, hint,
+                         actionLabel, onAction }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       height: "100%", minHeight: 320, color: theme.textDim, textAlign: "center", gap: 9,
@@ -44805,8 +44809,14 @@ function CreationsEmpty({ theme, darkMode, image, title, hint, actionLabel, onAc
           // marginTop moves the picture down and marginBottom takes the same
           // amount back, so the stack keeps its height and the centring does
           // not budge while the picture alone drops toward the text.
-          style={{ width: 384, maxWidth: "78%", height: "auto",
-            marginTop: 30, marginBottom: -36, pointerEvents: "none", userSelect: "none" }} />
+          //
+          // Both scale with the picture. They are the gap between a drawing and
+          // the words under it, and a fixed 36px overlap is an eighth of a
+          // full-size picture and a quarter of a half-size one.
+          style={{ width: imageWidth, maxWidth: "78%", height: "auto",
+            marginTop: Math.round(30 * (imageWidth / 384)),
+            marginBottom: Math.round(-36 * (imageWidth / 384)),
+            pointerEvents: "none", userSelect: "none" }} />
       )}
       <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{title}</div>
       {hint && <div style={{ fontSize: 13, fontFamily: FONT, maxWidth: 340, lineHeight: 1.55 }}>{hint}</div>}
