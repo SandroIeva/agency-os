@@ -23508,9 +23508,31 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         // One height and one rounding for every control in this bar. Two fields
         // of different heights side by side is the first thing the eye catches.
         const BAR_H = 30, BAR_R = 9;
+        // Sizes worth a click. Typing still works: a dropdown that ONLY offers
+        // steps is the thing every designer works around within a minute.
+        const BAR_SIZES = [16, 24, 32, 48, 64, 80, 96, 128, 160, 200, 260, 320];
         const iconBtn = { width: BAR_H, height: BAR_H, borderRadius: BAR_R, display: "flex",
           alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" };
         const div2 = <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.16)", margin: "0 3px" }} />;
+        // Every colour in this bar, drawn the same way: a disc of the colour,
+        // struck through in red while there is none, the way the board toolbar
+        // already says "no fill". `ring` leaves the middle empty, which is the
+        // one difference kept — it is what tells an outline from a fill, and it
+        // is the difference the reference draws too.
+        const barSwatch = (which, colour, title, ring = false) => (
+          <div key={which} onClick={() => setBarPop(pp => (pp === which ? null : which))} title={title}
+            style={{ ...iconBtn, background: barPop === which ? "rgba(255,255,255,0.16)" : "transparent" }}>
+            <div style={{ width: 19, height: 19, borderRadius: "50%", position: "relative",
+              overflow: "hidden", boxSizing: "border-box",
+              background: ring ? "transparent" : (colour || "transparent"),
+              border: ring
+                ? `3.5px solid ${colour || "rgba(255,255,255,0.4)"}`
+                : `2px solid rgba(255,255,255,${colour ? 0.5 : 0.4})` }}>
+              {!colour && <div style={{ position: "absolute", left: -2, top: "50%", width: "150%",
+                height: 1.5, background: "#ff8589", transform: "rotate(-45deg)" }} />}
+            </div>
+          </div>
+        );
         // A colour swatch on a group would ask which member it means. What a
         // group can be asked instead is to stop being one.
         if (gMembers && gMembers.length > 1) return (
@@ -23600,11 +23622,23 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 </div>
               </>)}
               {isText && (<>
-                <NumberField value={selItem.size} min={6}
-                  onCommit={v => patch(selItem.id, { size: v })}
-                  style={{ width: 52, height: BAR_H, borderRadius: BAR_R, border: "none", outline: "none",
-                    background: "rgba(255,255,255,0.12)", color: "#fff", fontFamily: FONT, fontSize: 12,
-                    textAlign: "center" }} />
+                {/* Type a size, or take one from the list beside it. */}
+                <div style={{ display: "flex", alignItems: "center", height: BAR_H, borderRadius: BAR_R,
+                  background: "rgba(255,255,255,0.12)", paddingRight: 2 }}>
+                  <NumberField value={selItem.size} min={6}
+                    onCommit={v => patch(selItem.id, { size: v })}
+                    style={{ width: 46, height: BAR_H, border: "none", outline: "none",
+                      background: "transparent", color: "#fff", fontFamily: FONT, fontSize: 12,
+                      textAlign: "center" }} />
+                  <div onClick={() => setBarPop(pp => pp === "size" ? null : "size")}
+                    title={de ? "Schriftgrößen" : "Font sizes"}
+                    style={{ width: 18, height: 24, display: "flex", alignItems: "center",
+                      justifyContent: "center", cursor: "pointer", borderRadius: 7,
+                      background: barPop === "size" ? "rgba(255,255,255,0.16)" : "transparent" }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4"
+                      strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}><polyline points="6 9 12 15 18 9"/></svg>
+                  </div>
+                </div>
                 <div onClick={() => patch(selItem.id, { weight: selItem.weight >= 700 ? 400 : 700 })} title="Bold"
                   style={{ ...iconBtn, fontFamily: FONT, fontWeight: 800, fontSize: 13,
                     background: selItem.weight >= 700 ? "rgba(255,255,255,0.22)" : "transparent" }}>B</div>
@@ -23622,47 +23656,19 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   </svg>
                 </div>
               </>)}
-              {/* Highlight and its outline, beside the text colour: the three
-                  things a headline is coloured with, in the place the text is
-                  being worked on. The full set of settings — padding, corner
-                  radius, stroke width — stays in the sidebar. */}
+              {/* The colours a headline is made of, in the place it is being
+                  worked on: the words, the highlight behind them, the outline
+                  around that. One control drawn once and used three times.
+                  They were three different drawings before — a circle with a
+                  chevron beside two rounded squares with a slash — which is
+                  what made one row of settings look like three unrelated
+                  buttons. */}
+              {barSwatch("color", selItem[colourKey], de ? "Farbe" : "Colour")}
               {selItem.type === "text" && !canvasArc(selItem) && (<>
-                <div onClick={() => setBarPop(pp => pp === "bg" ? null : "bg")}
-                  title={de ? "Texthintergrund" : "Text background"}
-                  style={{ ...iconBtn, background: barPop === "bg" ? "rgba(255,255,255,0.16)" : "transparent" }}>
-                  <div style={{ width: 17, height: 17, borderRadius: 4, position: "relative",
-                    overflow: "hidden", background: selItem.bg || "transparent",
-                    border: `2px solid ${selItem.bg ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.45)"}`,
-                    boxSizing: "border-box" }}>
-                    {/* Struck through when there is none, the same way the board
-                        toolbar says "no fill". */}
-                    {!selItem.bg && <div style={{ position: "absolute", left: -2, top: "50%",
-                      width: "150%", height: 1.5, background: "#ff8589", transform: "rotate(-45deg)" }} />}
-                  </div>
-                </div>
-                <div onClick={() => setBarPop(pp => pp === "bgStroke" ? null : "bgStroke")}
-                  title={de ? "Kontur des Hintergrunds" : "Background outline"}
-                  style={{ ...iconBtn, background: barPop === "bgStroke" ? "rgba(255,255,255,0.16)" : "transparent" }}>
-                  <div style={{ width: 17, height: 17, borderRadius: 4, position: "relative",
-                    overflow: "hidden", background: "transparent", boxSizing: "border-box",
-                    border: `3px solid ${selItem.bgStrokeW && selItem.bgStroke
-                      ? selItem.bgStroke : "rgba(255,255,255,0.45)"}` }}>
-                    {!(selItem.bgStrokeW && selItem.bgStroke) && <div style={{ position: "absolute",
-                      left: -2, top: "50%", width: "150%", height: 1.5, background: "#ff8589",
-                      transform: "rotate(-45deg)" }} />}
-                  </div>
-                </div>
+                {barSwatch("bg", selItem.bg, de ? "Texthintergrund" : "Text background")}
+                {barSwatch("bgStroke", selItem.bgStrokeW ? selItem.bgStroke : null,
+                  de ? "Kontur des Hintergrunds" : "Background outline", true)}
               </>)}
-              <div onClick={() => setBarPop(pp => pp ? null : "color")} title={de ? "Farbe" : "Colour"}
-                style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 8px 0 5px",
-                  height: BAR_H, borderRadius: BAR_R, cursor: "pointer",
-                  background: barPop ? "rgba(255,255,255,0.16)" : "transparent" }}>
-                <div style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
-                  background: selItem[colourKey] || "#fff",
-                  border: "2px solid rgba(255,255,255,0.5)", boxSizing: "border-box" }} />
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4"
-                  strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}><polyline points="6 9 12 15 18 9"/></svg>
-              </div>
               {div2}
               <div onClick={() => { setItems(list => list.filter(i2 => i2.id !== selItem.id)); setSel(null); }}
                 title={de ? "Löschen" : "Delete"} style={{ ...iconBtn, color: "#ff8589" }}>
@@ -23670,7 +23676,23 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
               </div>
             </div>
-            {barPop && (() => {
+            {barPop === "size" && (
+              <div style={{ marginTop: 6, padding: 6, borderRadius: 11, background: "#15151c",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.28)", display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr", gap: 3, width: 172 }}>
+                {BAR_SIZES.map(sz => (
+                  <div key={sz} onClick={() => { patch(selItem.id, { size: sz }); setBarPop(null); }}
+                    style={{ height: 28, borderRadius: 7, display: "flex", alignItems: "center",
+                      justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12,
+                      color: "#fff",
+                      background: Math.round(selItem.size) === sz
+                        ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.07)" }}>
+                    {sz}
+                  </div>
+                ))}
+              </div>
+            )}
+            {barPop && barPop !== "size" && (() => {
               // One grid, whichever swatch opened it. A highlight and its
               // outline can also be taken off again, which a text colour
               // cannot: text with no colour is text nobody can read.
@@ -23709,6 +23731,29 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         border: (selItem[key] || "").toLowerCase() === c.toLowerCase()
                           ? "2px solid #fff" : "1px solid rgba(255,255,255,0.25)" }} />
                   ))}
+                  {/* The brand's colours are a handful, and a headline often
+                      wants one that is not in it. This opens the full mixer —
+                      wheel, hex and the eyedropper — on whichever of the three
+                      is open, so the bar is a shortcut and not a ceiling. */}
+                  <div onClick={(e) => {
+                      const r = e.currentTarget.getBoundingClientRect();
+                      setBarPop(null);
+                      // A first outline still needs a width, or the colour
+                      // would be set and nothing would be drawn.
+                      if (barPop === "bgStroke" && !selItem.bgStrokeW) patch(selItem.id, { bgStrokeW: 2 });
+                      if (barPop === "bg" && selItem.bgPad == null) {
+                        patch(selItem.id, { bgPad: Math.round((selItem.size || 16) * 0.18) });
+                      }
+                      setPicker({ what: "plain", key, x: r.left, y: r.top });
+                    }}
+                    title={de ? "Eigene Farbe" : "Custom colour"}
+                    style={{ width: 22, height: 22, borderRadius: 6, cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      border: "1px solid rgba(255,255,255,0.25)",
+                      background: "conic-gradient(#ff5f6d, #ffc371, #47e0a0, #4facfe, #b06ab3, #ff5f6d)" }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff"
+                      strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                  </div>
                   {/* An outline is a colour AND a thickness AND a side. Sending
                       somebody to the sidebar for two of the three is what makes
                       a toolbar feel like a shortcut that is not one. */}
