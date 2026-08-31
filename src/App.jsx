@@ -17867,6 +17867,23 @@ const canvasFont = (it) => `${it.weight || 600} ${it.size}px ${it.font ? `'${it.
 const canvasLH = (it) => it.size * (it.lh || CANVAS_LH);
 const canvasLS = (it) => ((it.ls || 0) / 100) * it.size;
 
+// Upper, lower or title case, as a SETTING rather than an edit: the typed text
+// is left alone, so switching back to Normal gives it back and dictated or
+// pasted text is never destroyed.
+//
+// The string is transformed here rather than by a CSS text-transform, because
+// the width of a word decides where the line breaks and where a letter sits on
+// a ring. A CSS-only transform would leave the wrapper and the export
+// measuring the lower-case original and breaking somewhere the screen does not.
+const canvasCase = (s, c) =>
+  c === "upper" ? s.toUpperCase()
+  : c === "lower" ? s.toLowerCase()
+  // Only the first letter of each word, the way CSS capitalize behaves: making
+  // the rest lower case as well turns iPhone into Iphone.
+  : c === "title" ? s.replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toUpperCase())
+  : s;
+const canvasText = (it) => canvasCase(String(it.text ?? ""), it.case);
+
 // ── Where a text element's lines break ──────────────────────────────────────
 // The lines are worked out HERE and then drawn, rather than letting CSS wrap on
 // screen and re-deriving them for the export. Canvas measureText and DOM layout
@@ -17888,7 +17905,7 @@ const measureCtx = () => {
 // every render otherwise, and measureText is not free.
 const _wrapCache = new Map();
 const canvasTextLines = (it) => {
-  const text = String(it.text ?? "");
+  const text = canvasText(it);
   const width = Math.max(1, it.w || 0);
   const key = `${text}\u0000${width}\u0000${canvasFont(it)}\u0000${canvasLS(it)}`;
   const hit = _wrapCache.get(key);
@@ -17963,13 +17980,13 @@ const canvasArcLayout = (it) => {
   // Separated by a character no text contains, the way the line breaker's cache
   // is: joined with spaces, a text ending in a number and a different width
   // can make the same key.
-  const key = [it.text, it.w, canvasFont(it), canvasLS(it), lh,
+  const key = [canvasText(it), it.w, canvasFont(it), canvasLS(it), lh,
     JSON.stringify(arc)].join("\u0000");
   const hit = _arcCache.get(key);
   if (hit) return hit;
 
   // A ring has no lines to break, so a newline is just a gap.
-  const chars = [...String(it.text ?? "").replace(/\n/g, " ")];
+  const chars = [...canvasText(it).replace(/\n/g, " ")];
   const ctx = measureCtx();
   const ls = canvasLS(it);
   let widths;
@@ -22037,7 +22054,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           const bs = (Ls - (ms.fontBoundingBoxAscent + ms.fontBoundingBoxDescent)) / 2 + ms.fontBoundingBoxAscent;
           ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
           ctx.save(); ctx.beginPath(); ctx.rect(it.x, it.y, it.w, it.h); ctx.clip();
-          String(it.text).split("\n").forEach((line, i2) =>
+          canvasText(it).split("\n").forEach((line, i2) =>
             ctx.fillText(line, it.x + pad, it.y + pad + i2 * Ls + bs));
           ctx.restore();
         } else if (it.type === "rect") {
@@ -22557,8 +22574,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   justifyContent: "center", cursor: "pointer", color: theme.text,
                   border: `1px solid ${value === v ? "#15151c" : "transparent"}`,
                   background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  strokeWidth="2" strokeLinecap="round">{glyph}</svg>
+                {typeof glyph === "string" ? (
+                  // Letters, for the rows where the setting IS a letterform.
+                  <span style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, lineHeight: 1 }}>
+                    {glyph}
+                  </span>
+                ) : (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round">{glyph}</svg>
+                )}
               </div>
             ))}
           </div>
@@ -22911,7 +22935,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         style={{ width: "100%", height: "100%", background: "transparent", border: "none",
                           outline: "none", resize: "none", font: "inherit", color: "inherit",
                           lineHeight: "inherit", padding: 0, margin: 0 }} />
-                    ) : String(it.text)}
+                    ) : canvasText(it)}
                     </div>
                     )}
                   </div>
@@ -24893,6 +24917,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   v => set("lh", /^[\d.]+$/.test(String(v)) ? Number(v) : undefined), "↕")}
                 {num(selItem.ls || 0, v => set("ls", Number(v) || 0), "|A|", "%")}
               </div>
+              <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 12 }}>
+                {de ? "Schreibweise" : "Case"}
+              </div>
+              {segment(selItem.case || "", [
+                ["", "—", de ? "Wie getippt" : "As typed"],
+                ["upper", "AG", de ? "Großbuchstaben" : "Uppercase"],
+                ["lower", "ag", de ? "Kleinbuchstaben" : "Lowercase"],
+                ["title", "Ag", de ? "Wortanfänge groß" : "Title case"],
+              ], v => set("case", v || undefined))}
               <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 12 }}>
                 {de ? "Ausrichtung" : "Alignment"}
               </div>
