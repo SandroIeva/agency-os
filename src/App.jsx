@@ -37802,7 +37802,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
               // 20px of top margin taken straight back off the bottom: the
               // picture drops toward the words and the block keeps its height,
               // so the centring does not move with it.
-              style={{ width: 190, maxWidth: "61%", height: "auto",
+              style={{ width: 170, maxWidth: "61%", height: "auto",
                 marginTop: 20, marginBottom: -10,
                 pointerEvents: "none", userSelect: "none" }} />
           )}
