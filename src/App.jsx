@@ -6084,7 +6084,7 @@ function WbColorPicker({ value, onPreview, onCommit, de }) {
             style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
               background: "rgba(255,255,255,0.09)", cursor: "pointer" }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15.5 3.5a2.1 2.1 0 0 1 3 3L9 16l-4 1 1-4z" /><path d="M13 6l5 5" />
+              {EYEDROPPER_ICON}
             </svg>
           </div>
         )}
@@ -17856,6 +17856,13 @@ function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onO
 // Instagram — and tiny is unpleasant to draw on. The editor works at no less
 // than this, and never below what the platform itself asks for: YouTube wants
 // 800, and a flat 700 would have quietly made that worse.
+// The eyedropper, drawn once for both places that offer one: Brainstorm's
+// colour popover and the artboard's colour picker. Two hand-drawn droppers is
+// how a set of icons quietly stops being a set.
+const EYEDROPPER_ICON = (
+  <><path d="M15.5 3.5a2.1 2.1 0 0 1 3 3L9 16l-4 1 1-4z" /><path d="M13 6l5 5" /></>
+);
+
 const CANVAS_MIN_EDIT = 700;
 const CANVAS_LH = 1.2;               // line height, shared by display and export
 const CANVAS_FONT_STACK = "'Geist', -apple-system, sans-serif";
@@ -19203,7 +19210,7 @@ function CanvasGradientEditor({ value, onChange, theme, darkMode, de }) {
           </div>
           {/* The same mixer the Farbe tab uses — one colour surface in this app,
               not one per place that needs a colour. */}
-          <ColorMixer value={g.stops[editStop].color}
+          <ColorMixer de={de} value={g.stops[editStop].color}
             alpha={g.stops[editStop].alpha == null ? 100 : g.stops[editStop].alpha}
             onChange={(c) => setStop(editStop, { color: c })}
             onAlphaChange={(a) => setStop(editStop, { alpha: a })}
@@ -19284,7 +19291,7 @@ const hsvToRgb = ({ h, s, v }) => {
 // the picker because the gradient's stops need exactly this and were getting a
 // second, lesser version of it — a native colour input, which looks nothing like
 // the rest and behaves differently on every platform.
-function ColorMixer({ value, alpha = 100, onChange, onAlphaChange, theme, darkMode }) {
+function ColorMixer({ value, alpha = 100, onChange, onAlphaChange, theme, darkMode, de: de2 }) {
   const [hsv, setHsv] = useState(() => rgbToHsv(hexToRgb(value)));
   const [hex, setHex] = useState(String(value || "#000000").replace("#", "").toUpperCase());
   const svRef = useRef(null);
@@ -19347,6 +19354,30 @@ function ColorMixer({ value, alpha = 100, onChange, onAlphaChange, theme, darkMo
       )}
 
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        {/* Pick a colour off the screen. The browser owns the magnifier and the
+            click, and hands back one hex; Escape cancels and throws, which is
+            not an error worth reporting. Only where the browser has it: Chrome
+            and Edge do, Safari and Firefox do not, and a button that cannot
+            work is worse than no button. */}
+        {typeof window !== "undefined" && "EyeDropper" in window && (
+          <div onClick={async () => {
+              try {
+                const r = await new window.EyeDropper().open();
+                const h = String(r?.sRGBHex || "").toUpperCase();
+                if (/^#[0-9A-F]{6}$/.test(h)) {
+                  setHex(h.slice(1)); setHsv(rgbToHsv(hexToRgb(h))); onChange(h);
+                }
+              } catch (_) {}
+            }}
+            title={de2 ? "Farbe vom Bildschirm aufnehmen" : "Pick a colour from the screen"}
+            style={{ ...field, width: 34, flexShrink: 0, display: "flex", alignItems: "center",
+              justifyContent: "center", cursor: "pointer", color: theme.textDim }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              {EYEDROPPER_ICON}
+            </svg>
+          </div>
+        )}
         <input value={hex}
           onChange={(e) => {
             const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
@@ -19367,7 +19398,67 @@ function ColorMixer({ value, alpha = 100, onChange, onAlphaChange, theme, darkMo
   );
 }
 
-function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, de,
+// A panel that opens where it was asked to and then makes sure it is really on
+// the screen, by MEASURING itself rather than trusting a guessed height. The
+// colour picker's height depends on how many colours a brand has, so the guess
+// it used to be clamped by was always going to be wrong for somebody: the
+// bottom of the panel hung below the window and the swatches down there could
+// not be reached.
+//
+// It can also be dragged, by whatever the child wires the handle to.
+function FloatingPanel({ x, y, z = 100009, children }) {
+  const ref = useRef(null);
+  const [pos, setPos] = useState({ x, y });
+  const drag = useRef(null);
+  // Clamped on mount and again whenever the panel changes size, because
+  // switching to the gradient tab makes it taller than the custom one.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const fit = () => {
+      const r = el.getBoundingClientRect();
+      setPos(p => {
+        const nx = Math.max(12, Math.min(p.x, window.innerWidth - r.width - 12));
+        const ny = Math.max(12, Math.min(p.y, window.innerHeight - r.height - 12));
+        return (nx === p.x && ny === p.y) ? p : { x: nx, y: ny };
+      });
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    window.addEventListener("resize", fit);
+    return () => { ro.disconnect(); window.removeEventListener("resize", fit); };
+  }, []);
+  const handle = {
+    onPointerDown: (e) => {
+      // The bar carries the tabs and the close button as well. Whatever says it
+      // is not a handle keeps its click.
+      if (e.target.closest?.("[data-nodrag]")) return;
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      drag.current = { sx: e.clientX, sy: e.clientY, ox: pos.x, oy: pos.y };
+    },
+    onPointerMove: (e) => {
+      const d = drag.current;
+      if (!d) return;
+      const r = ref.current?.getBoundingClientRect();
+      const w = r?.width || 0, h = r?.height || 0;
+      setPos({
+        x: Math.max(12, Math.min(d.ox + e.clientX - d.sx, window.innerWidth - w - 12)),
+        y: Math.max(12, Math.min(d.oy + e.clientY - d.sy, window.innerHeight - h - 12)),
+      });
+    },
+    onPointerUp: () => { drag.current = null; },
+    style: { cursor: "grab", touchAction: "none" },
+  };
+  return (
+    <div ref={ref} style={{ position: "fixed", left: pos.x, top: pos.y, zIndex: z }}>
+      {children(handle)}
+    </div>
+  );
+}
+
+function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, de, dragHandle,
   tabs = ["custom"], onImage, theme, darkMode, onClose }) {
   const kindOf = (v) => isGradient(v) ? "gradient" : isImageFill(v) ? "image"
     : isPattern(v) ? "pattern" : "custom";
@@ -19438,11 +19529,13 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, de,
         background: darkMode ? "#1B1B23" : "#fff",
         border: `1px solid ${theme.borderFaint}`, boxShadow: "0 18px 48px rgba(0,0,0,0.3)" }}>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 12, flexShrink: 0 }}>
+      <div {...(dragHandle || {})}
+        style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 12, flexShrink: 0,
+          ...(dragHandle?.style || {}) }}>
         {[["custom", de ? "Farbe" : "Colour"], ["gradient", de ? "Verlauf" : "Gradient"],
           ["image", de ? "Bild" : "Image"], ["pattern", de ? "Muster" : "Pattern"]]
           .filter(([k]) => tabs.includes(k)).map(([k, l]) => (
-          <div key={k} onClick={() => enter(k)}
+          <div key={k} data-nodrag onClick={() => enter(k)}
             style={{ padding: "6px 10px", borderRadius: 8, cursor: "pointer", fontFamily: FONT,
               fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap",
               color: tab === k ? theme.text : theme.textDim,
@@ -19451,12 +19544,13 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, de,
           </div>
         ))}
         <div style={{ flex: 1 }} />
-        <div onClick={onClose} style={{ cursor: "pointer", color: theme.textDim, padding: "4px 6px" }}>✕</div>
+        <div data-nodrag onClick={onClose}
+          style={{ cursor: "pointer", color: theme.textDim, padding: "4px 6px" }}>✕</div>
       </div>
 
       {tab === "custom" && (
         <div style={fill}>
-          <ColorMixer value={kindOf(value) === "custom" ? value : seed} alpha={alpha}
+          <ColorMixer de={de} value={kindOf(value) === "custom" ? value : seed} alpha={alpha}
             onChange={onChange} onAlphaChange={onAlphaChange}
             theme={theme} darkMode={darkMode} />
           {/* The brand's colours sit under the hex field rather than behind a tab
@@ -19608,7 +19702,7 @@ function ColorPicker({ value, alpha = 100, onChange, onAlphaChange, brand, de,
                   </div>
                   {patEdit === k && (
                     <div style={{ marginTop: 10, marginBottom: 14 }}>
-                      <ColorMixer value={hex6(pat[k]) || "#FFFFFF"}
+                      <ColorMixer de={de} value={hex6(pat[k]) || "#FFFFFF"}
                         onChange={(c) => putPattern({ [k]: c })}
                         theme={theme} darkMode={darkMode} />
                     </div>
@@ -23768,13 +23862,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         <>
           <div onPointerDown={() => setPicker(null)}
             style={{ position: "fixed", inset: 0, zIndex: 100008 }} />
-          <div style={{ position: "fixed", zIndex: 100009,
-            // Anchored clear of the panel it belongs to: the offset is the
-            // picker's own width plus the gap, so widening it does not park it
-            // half on top of the row being edited.
-            left: Math.max(12, picker.x - 358),
-            top: Math.max(12, Math.min(picker.y - 20, window.innerHeight - 460)) }}>
-            <ColorPicker
+          {/* Anchored clear of the panel it belongs to: the offset is the
+              picker's own width plus the gap, so widening it does not park it
+              half on top of the row being edited. Whether it FITS is the
+              panel's own business — it measures itself, where this used to
+              clamp against a guessed 460 and leave the bottom off the screen
+              whenever a brand had enough colours to make it taller. */}
+          <FloatingPanel x={picker.x - 358} y={picker.y - 20}>{(handle) => (
+            <ColorPicker dragHandle={handle}
               value={picker.what === "stage" ? (stageBg || (darkMode ? "#15151C" : "#F4F4F7"))
                 : picker.what === "bg" ? (bg === "transparent" ? "#FFFFFF" : bg)
                 : picker.what === "stroke" ? (selItem?.stroke || "#15151c")
@@ -23815,7 +23910,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 ? ["custom", "gradient", "image", "pattern"] : ["custom"]}
               onImage={() => setFillImgFor(picker)}
               onClose={() => setPicker(null)} />
-          </div>
+          )}</FloatingPanel>
         </>, document.body)}
 
       {/* Right-click menu, the same rows Brainstorm offers. Both layers below
