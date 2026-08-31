@@ -37807,7 +37807,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
                 pointerEvents: "none", userSelect: "none" }} />
           )}
           <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{search ? (appLanguage === "de" ? "Keine Treffer" : "No matches") : currentFolder != null ? (appLanguage === "de" ? "Dieser Ordner ist leer" : "This folder is empty") : (appLanguage === "de" ? "Noch keine Dokumente" : "No documents yet")}</div>
-          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, maxWidth: 340, lineHeight: 1.55 }}>{search ? (appLanguage === "de" ? "Versuche einen anderen Suchbegriff." : "Try a different search term.") : (appLanguage === "de" ? "Klicke auf Neues Dokument, um loszulegen." : "Click New document to get started.")}</div>
+          <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, maxWidth: 340, lineHeight: 1.55 }}>{search ? (appLanguage === "de" ? "Versuche einen anderen Suchbegriff." : "Try a different search term.") : (appLanguage === "de" ? "Dokumente und PDFs hochladen oder mit KI erstellen." : "Upload documents and PDFs, or generate one with AI.")}</div>
           {/* The same pill the other empty sections offer, doing the same thing
               their buttons do: the section's primary action, right there,
               instead of sending somebody up to the header to find it. Not on a
