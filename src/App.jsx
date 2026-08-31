@@ -18350,97 +18350,6 @@ const CANVAS_COMPONENTS = [
     } },
 ];
 
-const CANVAS_TEMPLATE_GROUPS = [
-  ["posts",     { de: "Posts", en: "Posts" }],
-  ["banner",    { de: "Banner", en: "Banners" }],
-  ["corporate", { de: "Corporate", en: "Corporate" }],
-];
-const CANVAS_TEMPLATES = [
-  { key: "solid", group: "posts", label: { de: "Fläche", en: "Solid" },
-    build: (W, H, pal) => ({ bg: pal[0], items: [] }) },
-
-  { key: "headline", group: "posts", label: { de: "Schlagzeile", en: "Headline" },
-    build: (W, H, pal, brand) => {
-      const size = Math.round(H * 0.16);
-      return { bg: pal[0], items: [
-        { id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.08), y: Math.round(H / 2 - size * CANVAS_LH / 2),
-          w: Math.round(W * 0.84), text: brand?.claim || brand?.name || "Headline",
-          size, weight: 700, color: pal[1], align: "left" },
-      ] };
-    } },
-
-  { key: "bar", group: "posts", label: { de: "Textbalken", en: "Text bar" },
-    build: (W, H, pal, brand) => {
-      const barH = Math.round(H * 0.26);
-      const size = Math.round(barH * 0.42);
-      return { bg: pal[1], items: [
-        { id: crypto.randomUUID(), type: "rect", x: 0, y: H - barH, w: W, h: barH, fill: pal[0] },
-        { id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.06), y: Math.round(H - barH + (barH - size * CANVAS_LH) / 2),
-          w: Math.round(W * 0.88), text: brand?.name || "Name", size, weight: 600, color: pal[1], align: "left" },
-      ] };
-    } },
-
-  { key: "quote", group: "posts", label: { de: "Zitat", en: "Quote" },
-    build: (W, H, pal, brand) => {
-      const size = Math.round(Math.min(W, H) * 0.09);
-      return { bg: pal[1], items: [
-        { id: crypto.randomUUID(), type: "rect", x: Math.round(W * 0.08), y: Math.round(H * 0.3),
-          w: Math.round(W * 0.012), h: Math.round(H * 0.4), fill: pal[0] },
-        { id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.16), y: Math.round(H * 0.32),
-          w: Math.round(W * 0.72), text: brand?.claim || (brand?.name || "") ,
-          size, weight: 500, color: pal[0], align: "left" },
-      ] };
-    } },
-
-  { key: "split", group: "banner", label: { de: "Zweiteilung", en: "Split" },
-    build: (W, H, pal) => ({ bg: pal[1], items: [
-      { id: crypto.randomUUID(), type: "rect", x: 0, y: 0, w: Math.round(W * 0.42), h: H, fill: pal[0] },
-    ] }) },
-
-  { key: "logo", group: "banner", label: { de: "Logo mittig", en: "Logo centred" },
-    build: (W, H, pal, brand) => {
-      const d = Math.round(Math.min(W, H) * 0.46);
-      return { bg: pal[0], items: brand?.logo_url ? [
-        { id: crypto.randomUUID(), type: "image", x: Math.round((W - d) / 2), y: Math.round((H - d) / 2),
-          w: d, h: d, url: brand.logo_url, fit: "contain" },
-      ] : [] };
-    } },
-
-  { key: "logoclaim", group: "banner", label: { de: "Logo + Claim", en: "Logo + claim" },
-    build: (W, H, pal, brand) => {
-      const d = Math.round(Math.min(W, H) * 0.34);
-      const size = Math.round(Math.min(W, H) * 0.09);
-      return { bg: pal[1], items: [
-        ...(brand?.logo_url ? [{ id: crypto.randomUUID(), type: "image", x: Math.round(W * 0.07),
-          y: Math.round(H / 2 - d / 2), w: d, h: d, url: brand.logo_url, fit: "contain" }] : []),
-        { id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.07 + d + W * 0.04),
-          y: Math.round(H / 2 - size * CANVAS_LH / 2), w: Math.round(W * 0.5),
-          text: brand?.claim || brand?.name || "Claim", size, weight: 600, color: pal[0], align: "left" },
-      ] };
-    } },
-
-  { key: "title", group: "corporate", label: { de: "Titelfolie", en: "Title slide" },
-    build: (W, H, pal, brand) => {
-      const big = Math.round(Math.min(W, H) * 0.12), small = Math.round(big * 0.38);
-      return { bg: pal[0], items: [
-        { id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.08), y: Math.round(H * 0.42),
-          w: Math.round(W * 0.8), text: brand?.name || "Titel", size: big, weight: 700, color: pal[1], align: "left" },
-        { id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.08), y: Math.round(H * 0.42 + big * 1.5),
-          w: Math.round(W * 0.8), text: brand?.claim || "", size: small, weight: 400, color: pal[1], align: "left" },
-      ] };
-    } },
-
-  { key: "contact", group: "corporate", label: { de: "Kontakt", en: "Contact" },
-    build: (W, H, pal, brand) => {
-      const size = Math.round(Math.min(W, H) * 0.06);
-      return { bg: pal[1], items: [
-        { id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.08), y: Math.round(H * 0.5),
-          w: Math.round(W * 0.84),
-          text: [brand?.name, String(brand?.website_url || "").replace(/^https?:\/\//, "")].filter(Boolean).join("\n"),
-          size, weight: 500, color: pal[0], align: "left" },
-      ] };
-    } },
-];
 
 
 // A slider shaped like a field: label on the left, the value on the right, and
@@ -20035,7 +19944,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [mediaTab, setMediaTab] = useState("emoji");
   const [zoomMenu, setZoomMenu] = useState(false);
   const [doneMenu, setDoneMenu] = useState(false);
-  const [tplGroup, setTplGroup] = useState("posts");
   const [compGroup, setCompGroup] = useState("basics");
   // Set while the asset browser is open ON BEHALF of the picker, so the chosen
   // picture lands in a fill instead of becoming an image of its own.
@@ -24725,48 +24633,21 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           {label(de ? "Vorlagen" : "Templates")}
         </>)}
 
-        {!selItem && sel !== "frame" && CANVAS_TEMPLATE_GROUPS.map(([gk, gl]) => (
-        <div key={gk} style={{ borderBottom: `1px solid ${line}`, paddingBottom: 8, marginTop: 4 }}>
-          <div onClick={() => setTplGroup(g => (g === gk ? null : gk))}
-            style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "9px 0" }}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.textDim}
-              strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"
-              style={{ flexShrink: 0, transform: tplGroup === gk ? "rotate(90deg)" : "none",
-                transition: "transform 0.16s" }}>
-              <polyline points="9 6 15 12 9 18"/></svg>
-            <span style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: theme.text }}>
-              {de ? gl.de : gl.en}
-            </span>
+        {/* The three groups of ready-made templates that used to live here
+            were ours, not the workspace's, and they looked it. A template is
+            something somebody in the workspace made and marked as one; until
+            there is such a thing, this says so rather than filling the space
+            with layouts nobody chose. It points at Artboards rather than
+            offering to list them, because that is where they are: this panel
+            does not read them, and a line that says otherwise is a promise the
+            panel does not keep. */}
+        {!selItem && sel !== "frame" && (
+          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5,
+            marginTop: 6, paddingBottom: 8, borderBottom: `1px solid ${line}` }}>
+            {de ? "Noch keine Vorlagen. Ein Artboard, das als Vorlage markiert ist, findest du unter Artboards."
+                : "No templates yet. An artboard marked as a template is listed under Artboards."}
           </div>
-          {tplGroup === gk && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, paddingBottom: 4 }}>
-          {CANVAS_TEMPLATES.filter(t => t.group === gk).map(tpl => {
-            const p = tpl.build(W, H, palette, brand);
-            return (
-              <div key={tpl.key}
-                onClick={() => { setBg(p.bg); setItems(p.items); setSel(null); }}
-                style={{ cursor: "pointer" }}>
-                <div style={{ position: "relative", width: "100%", aspectRatio: String(W / H),
-                  borderRadius: 7, overflow: "hidden", background: p.bg, border: `1px solid ${line}` }}>
-                  {p.items.map(it => (
-                    <div key={it.id} style={{ position: "absolute",
-                      left: `${(it.x / W) * 100}%`, top: `${(it.y / H) * 100}%`,
-                      width: `${(it.w / W) * 100}%`,
-                      height: it.type === "text" ? `${(it.size * CANVAS_LH / H) * 100}%` : `${(it.h / H) * 100}%`,
-                      borderRadius: it.type === "ellipse" ? "50%" : 0,
-                      background: it.type === "image" ? `center/contain no-repeat url(${it.url})`
-                        : it.type === "text" ? it.color : it.fill,
-                      opacity: it.type === "text" ? 0.85 : 1 }} />
-                  ))}
-                </div>
-                <div style={{ fontSize: 11, color: theme.textDim, marginTop: 4 }}>{de ? tpl.label.de : tpl.label.en}</div>
-              </div>
-            );
-          })}
-          </div>
-          )}
-        </div>
-        ))}
+        )}
 
         {sel === "frame" && !selItem && frameTab === "components" && CANVAS_COMPONENT_GROUPS.map(([gk, gl]) => (
           <div key={gk} style={{ borderBottom: `1px solid ${line}`, paddingBottom: 8, marginTop: 4 }}>
