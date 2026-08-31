@@ -17873,7 +17873,10 @@ const CANVAS_MIN_EDIT = 700;
 const CANVAS_LH = 1.2;               // line height, shared by display and export
 const CANVAS_FONT_STACK = "'Geist', -apple-system, sans-serif";
 
-const canvasFont = (it) => `${it.weight || 600} ${it.size}px ${it.font ? `'${it.font}', ` : ""}${CANVAS_FONT_STACK}`;
+// Italic goes in the shorthand rather than beside it: the CSS `font` property
+// and the canvas `ctx.font` both take one, so the editor, the thumbnail, the
+// ring and the export all slant together without one of them being told twice.
+const canvasFont = (it) => `${it.italic ? "italic " : ""}${it.weight || 600} ${it.size}px ${it.font ? `'${it.font}', ` : ""}${CANVAS_FONT_STACK}`;
 // "Auto" is 1.2, the value the frame was built with. Letter spacing is a
 // percentage of the size, the way type tools express it, so it survives a
 // change of size.
@@ -18213,8 +18216,20 @@ const drawStraightText = (ctx, it) => {
   // The same lines the screen shows. Splitting on newlines here and
   // letting the editor wrap would put the break in a different place and
   // the exported artboard would not be the one anybody approved.
+  // A canvas has no underline, so it is drawn: one bar per line, under that
+  // line's own baseline and only as wide as the line is. Faked as a rectangle
+  // under the WHOLE box it would run on past the words, which is the tell of
+  // an underline that was never measured.
+  const rule = (line, y) => {
+    if (!it.underline || !line) return;
+    const w2 = ctx.measureText(line).width + (ls && !canSpace ? ls * line.length : 0);
+    const x0 = it.align === "center" ? it.x + it.w / 2 - w2 / 2
+      : it.align === "right" ? it.x + it.w - w2 : it.x;
+    ctx.fillRect(x0, y + it.size * 0.12, w2, Math.max(1, it.size / 15));
+  };
   canvasTextLines(it).forEach((line, i) => {
     const y = it.y + i * L + base;
+    rule(line, y);
     if (canSpace || !ls) { ctx.fillText(line, tx, y); return; }
     const wLine = [...line].reduce((a2, ch) => a2 + ctx.measureText(ch).width + ls, 0) - ls;
     let x = it.align === "center" ? it.x + it.w / 2 - wLine / 2
@@ -18629,6 +18644,7 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
                   : { background: paintCss(it.fill, it.fillAlpha) }),
                 ...(isText ? { font: canvasFont(it), color: it.color,
                   lineHeight: `${canvasLH(it)}px`, textAlign: it.align || "left",
+                  textDecoration: it.underline ? "underline" : undefined,
                   whiteSpace: "pre", overflow: "hidden",
                   padding: it.type === "sticky" ? Math.round(bw * 0.08) : 0,
                   boxSizing: "border-box" } : {}) }}>
@@ -23089,6 +23105,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     {depthWrap(it,
                     <div style={{ clipPath: maskClip(it), font: canvasFont(it), color: it.color,
                       lineHeight: `${canvasLH(it)}px`, textAlign: it.align || "left",
+                      textDecoration: it.underline ? "underline" : undefined,
                       letterSpacing: `${canvasLS(it)}px`, opacity: it.opacity == null ? 1 : it.opacity,
                       mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
                       filter: effectFilter(it),
@@ -23513,7 +23530,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const BAR_SIZES = [16, 24, 32, 48, 64, 80, 96, 128, 160, 200, 260, 320];
         const iconBtn = { width: BAR_H, height: BAR_H, borderRadius: BAR_R, display: "flex",
           alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" };
-        const div2 = <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.16)", margin: "0 3px" }} />;
+        // Space, not a rule. A 1px line floating in a 30px bar has nothing to
+        // align to and reads as a seam somebody forgot to finish; a gap groups
+        // just as well and cannot look unfinished.
+        const div2 = <div style={{ width: 9 }} />;
         // Every colour in this bar, drawn the same way: a disc of the colour,
         // struck through in red while there is none, the way the board toolbar
         // already says "no fill". `ring` leaves the middle empty, which is the
@@ -23522,12 +23542,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const barSwatch = (which, colour, title, ring = false) => (
           <div key={which} onClick={() => setBarPop(pp => (pp === which ? null : which))} title={title}
             style={{ ...iconBtn, background: barPop === which ? "rgba(255,255,255,0.16)" : "transparent" }}>
+            {/* The SAME ring around all three, always: one width, one colour.
+                Drawing the outline swatch's border in its own colour made the
+                three sit at three different weights, which is what still read
+                as three unrelated buttons. What differs is inside the ring —
+                an outline shows its colour as a band with the middle left
+                open, a fill shows it flat. */}
             <div style={{ width: 19, height: 19, borderRadius: "50%", position: "relative",
               overflow: "hidden", boxSizing: "border-box",
-              background: ring ? "transparent" : (colour || "transparent"),
-              border: ring
-                ? `3.5px solid ${colour || "rgba(255,255,255,0.4)"}`
-                : `2px solid rgba(255,255,255,${colour ? 0.5 : 0.4})` }}>
+              border: "2px solid rgba(255,255,255,0.5)",
+              background: !colour ? "transparent"
+                : ring ? `radial-gradient(circle at 50% 50%, transparent 40%, ${colour} 42%)`
+                : colour }}>
               {!colour && <div style={{ position: "absolute", left: -2, top: "50%", width: "150%",
                 height: 1.5, background: "#ff8589", transform: "rotate(-45deg)" }} />}
             </div>
@@ -23642,6 +23668,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 <div onClick={() => patch(selItem.id, { weight: selItem.weight >= 700 ? 400 : 700 })} title="Bold"
                   style={{ ...iconBtn, fontFamily: FONT, fontWeight: 800, fontSize: 13,
                     background: selItem.weight >= 700 ? "rgba(255,255,255,0.22)" : "transparent" }}>B</div>
+                <div onClick={() => patch(selItem.id, { italic: !selItem.italic })} title="Italic"
+                  style={{ ...iconBtn, fontFamily: "Georgia, serif", fontStyle: "italic", fontSize: 14,
+                    background: selItem.italic ? "rgba(255,255,255,0.22)" : "transparent" }}>I</div>
+                <div onClick={() => patch(selItem.id, { underline: !selItem.underline })}
+                  title={de ? "Unterstrichen" : "Underline"}
+                  style={{ ...iconBtn, fontFamily: FONT, fontSize: 13,
+                    textDecoration: "underline", textUnderlineOffset: 2,
+                    background: selItem.underline ? "rgba(255,255,255,0.22)" : "transparent" }}>U</div>
                 {/* Left, centre, right, round again. It toggled between two of
                     them, so right alignment could only be reached from the
                     sidebar — and the icon showed the state, not the ends. */}
@@ -23676,6 +23710,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
               </div>
             </div>
+            {/* Anything open closes on a click somewhere else. A menu that
+                stays put while you work behind it is the one that gets clicked
+                through by accident.
+                PORTALLED, and measured before it was believed: this bar's
+                wrapper carries a translateX to centre itself, a transformed
+                ancestor becomes the containing block for fixed children, and
+                the first version of this layer was therefore only as big as
+                the bar. A click beside it landed on the artboard and the menu
+                stayed open. z-index 5 puts it under the bar, which sits at 6,
+                and over everything the bar floats above. */}
+            {barPop && createPortal(
+              <div onPointerDown={(e) => { e.stopPropagation(); setBarPop(null); }}
+                style={{ position: "fixed", inset: 0, zIndex: 5 }} />,
+              document.body)}
             {barPop === "size" && (
               // A list, one under the other. It was a three-column grid, which
               // reads as a keypad rather than as a set of choices: nothing in a
