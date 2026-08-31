@@ -31052,7 +31052,10 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
   //
   // Only when the section is genuinely bare. A search that found nothing has to
   // keep its box, or there is no way to take the search back.
-  const bare = boards !== null && boards.length === 0 && folders.length === 0
+  // null is "not loaded yet", and that counts as bare for the same reason it
+  // does in Documents: waiting for the answer draws the toolbar for the length
+  // of one query and then takes it away again.
+  const bare = (boards === null || boards.length === 0) && folders.length === 0
     && !search && currentFolder == null;
 
   return (
@@ -37597,7 +37600,14 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   // rule the whiteboards tab follows, and only when the tab is genuinely bare:
   // a search that found nothing keeps its box, or there is no way back out of
   // the search, and an empty folder is not an empty tab.
-  const bare = !loading && docs.length === 0 && folders.length === 0
+  //
+  // A tab that has not loaded yet counts as bare. It used to wait for the
+  // answer, which meant the toolbar was drawn for the length of one query and
+  // then taken away again the moment the answer came back empty: a flicker of
+  // search box and filters on every arrival. Nothing is loaded, so nothing is
+  // there to search. Loading does not empty the list either, so a tab that
+  // already has documents does not blink while it refreshes.
+  const bare = docs.length === 0 && folders.length === 0
     && !searching && currentFolder == null;
   const currentFolderObj = folders.find(f => f.id === currentFolder) || null;
   // Takes the row so a PDF is distinguishable at a glance — same list, and the
