@@ -18147,6 +18147,14 @@ const canvasTextBoxes = (it) => {
   const L = canvasLH(it);
   const ls = canvasLS(it);
   const pad = Math.max(0, it.bgPad || 0);
+  // Inside or outside, decided HERE and nowhere else. Every drawer paints a
+  // border on the inside edge of the rect it is given, so an outline that sits
+  // outside is a rect grown by its own width: the picture is identical and the
+  // three drawers stay identical with it. The radius grows too, or the curve
+  // under the outline would tighten as the outline thickens.
+  const sw = hasStroke ? it.bgStrokeW : 0;
+  const grow = sw && it.bgStrokeOut ? sw : 0;
+  const r = Math.max(0, (it.bgRadius || 0) + grow);
   if (ctx) ctx.font = canvasFont(it);
   const out = [];
   canvasTextLines(it).forEach((ln, i) => {
@@ -18157,7 +18165,11 @@ const canvasTextBoxes = (it) => {
       : Math.max(0, it.w || 0);
     const x = it.align === "center" ? ((it.w || 0) - tw) / 2
       : it.align === "right" ? (it.w || 0) - tw : 0;
-    out.push({ x: x - pad, y: i * L, w: tw + pad * 2, h: L });
+    out.push({ x: x - pad - grow, y: i * L - grow,
+      w: tw + pad * 2 + grow * 2, h: L + grow * 2,
+      // Never more than half the shorter side, or a rounded rect stops being
+      // a rect at all.
+      r: Math.min(r, (Math.min(tw + pad * 2, L) + grow * 2) / 2) });
   });
   return out;
 };
@@ -18701,7 +18713,7 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
                 {canvasTextBoxes(it).map((b, bi) => (
                   <div key={"bg" + bi} style={{ position: "absolute", left: b.x, top: b.y,
                     width: b.w, height: b.h, boxSizing: "border-box",
-                    borderRadius: it.bgRadius || 0, background: it.bg || "transparent",
+                    borderRadius: b.r, background: it.bg || "transparent",
                     border: it.bgStrokeW && it.bgStroke
                       ? `${it.bgStrokeW}px solid ${it.bgStroke}` : undefined }} />
                 ))}
@@ -22237,7 +22249,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             else ctx.rect(x, y, w2, h2);
           };
           for (const b of canvasTextBoxes(it)) {
-            const r = Math.min(it.bgRadius || 0, Math.min(b.w, b.h) / 2);
+            const r = b.r;
             if (it.bg) {
               ctx.fillStyle = it.bg;
               path(it.x + b.x, it.y + b.y, b.w, b.h, r);
@@ -23056,7 +23068,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 const bgLayer = boxes.map((b, bi) => (
                   <div key={"bg" + bi} style={{ position: "absolute", left: b.x, top: b.y,
                     width: b.w, height: b.h, boxSizing: "border-box",
-                    borderRadius: it.bgRadius || 0,
+                    borderRadius: b.r,
                     background: it.bg || "transparent",
                     border: it.bgStrokeW && it.bgStroke
                       ? `${it.bgStrokeW}px solid ${it.bgStroke}` : undefined,
@@ -23689,6 +23701,32 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         border: (selItem[key] || "").toLowerCase() === c.toLowerCase()
                           ? "2px solid #fff" : "1px solid rgba(255,255,255,0.25)" }} />
                   ))}
+                  {/* An outline is a colour AND a thickness AND a side. Sending
+                      somebody to the sidebar for two of the three is what makes
+                      a toolbar feel like a shortcut that is not one. */}
+                  {barPop === "bgStroke" && selItem.bgStrokeW > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%",
+                      paddingTop: 8, marginTop: 2, borderTop: "1px solid rgba(255,255,255,0.14)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, height: 26,
+                        padding: "0 4px 0 7px", borderRadius: 7, background: "rgba(255,255,255,0.12)" }}>
+                        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}>▭</span>
+                        <NumberField value={selItem.bgStrokeW} min={0}
+                          onCommit={v => patch(selItem.id, { bgStrokeW: Math.max(0, v) })}
+                          style={{ width: 26, border: "none", outline: "none", background: "transparent",
+                            color: "#fff", fontFamily: FONT, fontSize: 12 }} />
+                      </div>
+                      {[[false, de ? "Innen" : "In"], [true, de ? "Außen" : "Out"]].map(([v, l]) => (
+                        <div key={String(v)} onClick={() => patch(selItem.id, { bgStrokeOut: v || undefined })}
+                          style={{ flex: 1, height: 26, borderRadius: 7, display: "flex", alignItems: "center",
+                            justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 11.5,
+                            color: "#fff",
+                            background: !!selItem.bgStrokeOut === v
+                              ? "rgba(255,255,255,0.26)" : "rgba(255,255,255,0.08)" }}>
+                          {l}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -25174,6 +25212,21 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         () => set2({ bgStrokeW: undefined, bgStroke: undefined }))}
                       <div style={{ marginTop: 6 }}>
                         {num(selItem.bgStrokeW, v => set("bgStrokeW", Math.max(0, Number(v) || 0)), "▭")}
+                      </div>
+                      {/* Inside keeps the mark the size it was and eats into
+                          it; outside grows the mark by the width of the line.
+                          Inside is what this shipped as, so a design already
+                          made does not move. */}
+                      <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
+                        {[[false, de ? "Innen" : "Inside"], [true, de ? "Außen" : "Outside"]].map(([v, l]) => (
+                          <div key={String(v)} onClick={() => set("bgStrokeOut", v || undefined)}
+                            style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
+                              justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontSize: 12,
+                              color: theme.text, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
+                              border: `1px solid ${!!selItem.bgStrokeOut === v ? "#15151c" : "transparent"}` }}>
+                            {l}
+                          </div>
+                        ))}
                       </div>
                     </>)}
                   </>)}
