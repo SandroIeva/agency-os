@@ -52,7 +52,7 @@ const translations = {
   "assets.moodboards":         { de: "Moodboards",                en: "Moodboards" },
   "assets.creations":          { de: "Assets",                    en: "Assets" },
   "assets.inspirations":       { de: "Inspirations",              en: "Inspirations" },
-  "assets.creationsEmptyTitle":{ de: "Noch keine Kreationen",     en: "No creations yet" },
+  "assets.creationsEmptyTitle":{ de: "Noch keine Dateien",        en: "No files yet" },
   "assets.creationsEmptyHint": { de: "Mit KI generierte Bilder erscheinen hier automatisch,\noder lade eigene hoch.", en: "AI-generated images show up here automatically,\nor upload your own." },
   "assets.all":                { de: "Alle",                      en: "All" },
   "assets.images":             { de: "Bilder",                    en: "Images" },

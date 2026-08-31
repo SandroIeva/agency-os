@@ -34148,7 +34148,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                 transition={{ type: "spring", stiffness: 160, damping: 18 }}
                 style={{ width: 255, maxWidth: "61%", height: "auto", marginBottom: 16,
                   pointerEvents: "none", userSelect: "none" }} />
-              <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("assets.creationsEmptyTitle") || "Noch keine Kreationen"}</div>
+              <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t("assets.creationsEmptyTitle") || "Noch keine Dateien"}</div>
               {/* pre-line, not a <br/>: the break belongs to the sentence, so it
                   lives in the translated string where each language can put it
                   where its own comma falls. pre-line still wraps, so a narrow
