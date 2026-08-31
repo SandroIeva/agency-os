@@ -31158,7 +31158,7 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
               : null}
             // Smaller than the other empty states draw at: this one was
             // exported large on purpose and does not need the room.
-            imageWidth={230}
+            imageWidth={210}
             title={search ? (de ? "Keine Treffer" : "No matches")
                  : currentFolder != null ? (de ? "Dieser Ordner ist leer" : "This folder is empty")
                  : (de ? "Noch keine Whiteboards" : "No whiteboards yet")}
