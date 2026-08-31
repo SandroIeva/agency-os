@@ -37793,7 +37793,9 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
               carries transparent padding a negative margin has to absorb. */}
           {!search && currentFolder == null && (
             <motion.img
-              src="/visual-NewDocuments.png" alt=""
+              // Two files, one per theme, like the whiteboards drawing: the
+              // light one is a paler blue that would disappear into anthracite.
+              src={darkMode ? "/visual-NewDocuments.png" : "/visual-NewDocuments-Light.png"} alt=""
               onError={(e) => { e.currentTarget.style.display = "none"; }}
               initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
               transition={{ type: "spring", stiffness: 160, damping: 18 }}
