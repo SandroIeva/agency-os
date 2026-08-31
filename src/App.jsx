@@ -37785,6 +37785,21 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
         // than what is left, and an empty tab would grow a scrollbar; there the
         // block simply sits under what is above it, which is where it belongs.
         <div style={{ minHeight: (!showDocFolders && currentFolder == null) ? "calc(100% - 64px)" : undefined, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 9, padding: "20px 20px 48px" }}>
+          {/* The picture only for the case it describes: nothing written yet. A
+              search that found nothing and an empty folder are not that, and an
+              illustration there would be shouting about nothing.
+              210px, the size the whiteboards drawing settled at, and a positive
+              margin under it: this one is cropped close, where the board visual
+              carries transparent padding a negative margin has to absorb. */}
+          {!search && currentFolder == null && (
+            <motion.img
+              src="/visual-NewDocuments.png" alt=""
+              onError={(e) => { e.currentTarget.style.display = "none"; }}
+              initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 160, damping: 18 }}
+              style={{ width: 210, maxWidth: "61%", height: "auto", marginBottom: 10,
+                pointerEvents: "none", userSelect: "none" }} />
+          )}
           <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{search ? (appLanguage === "de" ? "Keine Treffer" : "No matches") : currentFolder != null ? (appLanguage === "de" ? "Dieser Ordner ist leer" : "This folder is empty") : (appLanguage === "de" ? "Noch keine Dokumente" : "No documents yet")}</div>
           <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, maxWidth: 340, lineHeight: 1.55 }}>{search ? (appLanguage === "de" ? "Versuche einen anderen Suchbegriff." : "Try a different search term.") : (appLanguage === "de" ? "Klicke auf Neues Dokument, um loszulegen." : "Click New document to get started.")}</div>
         </div>
