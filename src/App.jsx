@@ -37593,6 +37593,12 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   const docFolderCounts = {};
   for (const d of docs) { const k = d.folder_id; if (k) docFolderCounts[k] = (docFolderCounts[k] || 0) + 1; }
   const showDocFolders = !searching && currentFolder == null && folders.length > 0;
+  // Nothing to search through, nothing to sort, nothing to lay out. The same
+  // rule the whiteboards tab follows, and only when the tab is genuinely bare:
+  // a search that found nothing keeps its box, or there is no way back out of
+  // the search, and an empty folder is not an empty tab.
+  const bare = !loading && docs.length === 0 && folders.length === 0
+    && !searching && currentFolder == null;
   const currentFolderObj = folders.find(f => f.id === currentFolder) || null;
   // Takes the row so a PDF is distinguishable at a glance — same list, and the
   // two behave differently when opened, so they should not look identical.
@@ -37690,6 +37696,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
       )}
       {/* Toolbar: search · sort · view toggle. The same row as Media's,
           down to the gap and the space under it. */}
+      {!bare && (
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap", minHeight: TAB_SEARCH_H }}>
         <div style={tabSearchBox(theme, darkMode)}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
@@ -37709,6 +37716,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
           {viewBtn("list", appLanguage === "de" ? "Listenansicht" : "List view", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>)}
         </div>
       </div>
+      )}
 
       {loading ? (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>Lädt…</div>
