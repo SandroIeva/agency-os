@@ -37799,11 +37799,12 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
               onError={(e) => { e.currentTarget.style.display = "none"; }}
               initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
               transition={{ type: "spring", stiffness: 160, damping: 18 }}
-              // 20px of top margin taken straight back off the bottom: the
-              // picture drops toward the words and the block keeps its height,
-              // so the centring does not move with it.
+              // The two margins always sum to 10, so the block keeps its
+              // height and only the picture moves inside it: raise the top and
+              // the bottom takes the same amount back, and the centring below
+              // does not budge.
               style={{ width: 180, maxWidth: "61%", height: "auto",
-                marginTop: 20, marginBottom: -10,
+                marginTop: 8, marginBottom: 2,
                 pointerEvents: "none", userSelect: "none" }} />
           )}
           <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{search ? (appLanguage === "de" ? "Keine Treffer" : "No matches") : currentFolder != null ? (appLanguage === "de" ? "Dieser Ordner ist leer" : "This folder is empty") : (appLanguage === "de" ? "Noch keine Dokumente" : "No documents yet")}</div>
