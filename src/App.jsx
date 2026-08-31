@@ -37718,9 +37718,9 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
       </div>
       )}
 
-      {loading ? (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>Lädt…</div>
-      ) : (
+      {/* Nothing while it loads. The list arrives in a moment and a word that
+          flashes and goes is more noticeable than the wait it describes. */}
+      {loading ? null : (
       <>
         {/* Breadcrumb when inside a folder */}
         {currentFolder != null && (
