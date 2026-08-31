@@ -8679,7 +8679,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
           background: wbColorPop === kind ? "rgba(255,255,255,0.16)" : "transparent" }}>
         <div style={{ width: 20, height: 20, borderRadius: "50%", position: "relative", overflow: "hidden", flexShrink: 0,
           background: cur === "transparent" ? "#fff" : cur, border: "2px solid rgba(255,255,255,0.5)", boxSizing: "border-box" }}>
-          {cur === "transparent" && <div style={{ position: "absolute", left: -2, top: "50%", width: "140%", height: 1.5, background: "#e5484d", transform: "rotate(-45deg)" }} />}
+          {cur === "transparent" && NO_COLOUR_SLASH()}
         </div>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}><polyline points="6 9 12 15 18 9"/></svg>
       </div>
@@ -8810,7 +8810,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
                   style={{ width: 22, height: 22, borderRadius: "50%", cursor: "pointer", position: "relative", overflow: "hidden",
                     background: c === "transparent" ? "#fff" : c,
                     border: popCurrent === c ? "2.5px solid #4D9FFF" : (c === "#FFFFFF" ? "1.5px solid rgba(255,255,255,0.4)" : "1.5px solid rgba(255,255,255,0.14)"), boxSizing: "border-box" }}>
-                  {c === "transparent" && <div style={{ position: "absolute", left: -3, top: "50%", width: "150%", height: 2, background: "#e5484d", transform: "rotate(-45deg)" }} />}
+                  {c === "transparent" && NO_COLOUR_SLASH("#e5484d", 2)}
                 </div>
               ))}
               {/* Custom colour. The conic ring is the universal "any colour"
@@ -17865,6 +17865,22 @@ function YouTubeMock({ brand, banner, avatar, posts, bannerPx, onOpenBanner, onO
 // The eyedropper, drawn once for both places that offer one: Brainstorm's
 // colour popover and the artboard's colour picker. Two hand-drawn droppers is
 // how a set of icons quietly stops being a set.
+// "No colour": the line across an empty swatch, drawn once for the four places
+// that need one.
+//
+// It has to be centred on its swatch, and centring a rotated bar means moving
+// it by half of ITS OWN size, not by a guessed offset. Every copy of this used
+// `left: -2` with a bar 150% as wide, which puts the bar's middle well to the
+// right of the disc's, and `top: 50%` which puts its TOP edge on the centre
+// line rather than its middle. The parent clips, so what came out was a slash
+// sitting low and to one side.
+const NO_COLOUR_SLASH = (colour = "#e5484d", thickness = 1.5) => (
+  <div style={{ position: "absolute", left: "50%", top: "50%", width: "150%",
+    height: thickness, background: colour, pointerEvents: "none",
+    // Translate first, so the centring is not itself turned by the rotation.
+    transform: "translate(-50%, -50%) rotate(-45deg)" }} />
+);
+
 const EYEDROPPER_ICON = (
   <><path d="M15.5 3.5a2.1 2.1 0 0 1 3 3L9 16l-4 1 1-4z" /><path d="M13 6l5 5" /></>
 );
@@ -23554,8 +23570,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               background: !colour ? "transparent"
                 : ring ? `radial-gradient(circle at 50% 50%, transparent 40%, ${colour} 42%)`
                 : colour }}>
-              {!colour && <div style={{ position: "absolute", left: -2, top: "50%", width: "150%",
-                height: 1.5, background: "#ff8589", transform: "rotate(-45deg)" }} />}
+              {!colour && NO_COLOUR_SLASH("#ff8589")}
             </div>
           </div>
         );
@@ -23786,8 +23801,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     <div onClick={clear} title={de ? "Ohne" : "None"}
                       style={{ width: 22, height: 22, borderRadius: 6, cursor: "pointer", position: "relative",
                         overflow: "hidden", border: "1px solid rgba(255,255,255,0.25)" }}>
-                      <div style={{ position: "absolute", left: -2, top: "50%", width: "150%", height: 1.5,
-                        background: "#ff8589", transform: "rotate(-45deg)" }} />
+                      {NO_COLOUR_SLASH("#ff8589")}
                     </div>
                   )}
                   {[...palette, "#FFFFFF", "#000000"].map(c => (
