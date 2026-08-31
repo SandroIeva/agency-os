@@ -31045,9 +31045,20 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
     );
   };
 
+  // A search box over nothing, a sort over nothing and a choice of two ways to
+  // lay out nothing. Hidden until there IS something, which is also what put a
+  // scrollbar on an otherwise empty page: the empty state is a full-height box,
+  // and the toolbar above it made the pair taller than the space they sit in.
+  //
+  // Only when the section is genuinely bare. A search that found nothing has to
+  // keep its box, or there is no way to take the search back.
+  const bare = boards !== null && boards.length === 0 && folders.length === 0
+    && !search && currentFolder == null;
+
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
       {/* Toolbar: search · sort · view toggle */}
+      {!bare && (
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "none", maxWidth: 340 }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
@@ -31065,6 +31076,7 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
           {viewBtn("list", de ? "Listenansicht" : "List view", <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>)}
         </div>
       </div>
+      )}
 
       {boards === null ? (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>Lädt…</div>
@@ -31134,7 +31146,11 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
           // search that found nothing and an empty folder are not that, and an
           // illustration there would be shouting about nothing.
           <CreationsEmpty theme={theme} darkMode={darkMode}
-            image={!search && currentFolder == null ? "/visual-NewBoard.png" : null}
+            // The board's own drawing, not the stack of photographs the
+            // moodboards use. Supplied under this name, typo and all: keeping
+            // it means a re-export from the same place still lands on the file
+            // the app asks for.
+            image={!search && currentFolder == null ? "/whiteboard-viual-light.png" : null}
             title={search ? (de ? "Keine Treffer" : "No matches")
                  : currentFolder != null ? (de ? "Dieser Ordner ist leer" : "This folder is empty")
                  : (de ? "Noch keine Whiteboards" : "No whiteboards yet")}
