@@ -30061,7 +30061,15 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
           // Not inside a card any more: the other two tabs centre this in the
           // whole area, and a boxed line of text was the odd one out.
           <CreationsEmpty theme={theme} darkMode={darkMode}
-            image={q.trim() ? null : "/visual-NewBoard.png"}
+            // The artboards' own drawing, where the moodboards' fanned
+            // photographs used to stand in for it. Under the name it arrived
+            // with, typo and all, so a re-export lands where the app looks.
+            image={q.trim() ? null : "/artboard-viual.png"}
+            // Smaller than this component's default, like the other sections'
+            // drawings: the default was sized for a picture nothing uses now.
+            // Cropped flush, so a plain gap under it rather than the pull the
+            // board's drawing needs to close its own transparent border.
+            imageWidth={230} imageGap={14}
             title={q.trim()
               ? (de ? "Keine Treffer" : "No matches")
               : canvasFilter === "template"
@@ -44848,8 +44856,8 @@ If you don't know a field, infer a plausible value. Write all text values in the
 // `image` is optional and `action` is optional, so the same component also
 // serves the smaller cases — an empty folder, a search with no matches — where
 // a full illustration would be shouting about nothing.
-function CreationsEmpty({ theme, darkMode, image, imageWidth = 384, title, hint,
-                         actionLabel, onAction }) {
+function CreationsEmpty({ theme, darkMode, image, imageWidth = 384, imageGap = null,
+                         title, hint, actionLabel, onAction }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       height: "100%", minHeight: 320, color: theme.textDim, textAlign: "center", gap: 9,
@@ -44870,9 +44878,13 @@ function CreationsEmpty({ theme, darkMode, image, imageWidth = 384, title, hint,
           // Both scale with the picture. They are the gap between a drawing and
           // the words under it, and a fixed 36px overlap is an eighth of a
           // full-size picture and a quarter of a half-size one.
+          // A picture cropped FLUSH has no transparent border for the pull to
+          // eat, so the words would climb into the artwork. Those pass a plain
+          // gap instead and skip the nudge entirely.
           style={{ width: imageWidth, maxWidth: "78%", height: "auto",
-            marginTop: Math.round(30 * (imageWidth / 384)),
-            marginBottom: Math.round(-36 * (imageWidth / 384)),
+            marginTop: imageGap == null ? Math.round(30 * (imageWidth / 384)) : 0,
+            marginBottom: imageGap == null
+              ? Math.round(-36 * (imageWidth / 384)) : imageGap,
             pointerEvents: "none", userSelect: "none" }} />
       )}
       <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{title}</div>
