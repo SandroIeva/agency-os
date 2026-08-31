@@ -575,7 +575,7 @@ function LiquidOrb({ size = 58, speed = 1.5, hoverSpeed = 2.6, leaving = false,
         // light-mode glow leans on.
         boxShadow: darkMode
           ? (hover
-            ? `0 0 ${ball * 1.05}px rgba(86,150,255,0.18), 0 0 ${ball * 0.66}px rgba(96,158,255,0.30), 0 0 ${ball * 0.28}px rgba(150,196,255,0.22)`
+            ? `0 0 ${ball * 1.05}px rgba(86,86,255,0.18), 0 0 ${ball * 0.66}px rgba(96,158,255,0.30), 0 0 ${ball * 0.28}px rgba(150,196,255,0.22)`
             : `0 0 ${ball * 0.40}px rgba(110,163,242,0.20), 0 0 ${ball * 0.16}px rgba(160,200,255,0.12)`)
           : (hover
             ? `0 0 ${ball * 0.92}px rgba(40,90,240,0.15), 0 0 ${ball * 0.58}px rgba(30,80,235,0.22), 0 0 ${ball * 0.24}px rgba(120,175,255,0.20)`
