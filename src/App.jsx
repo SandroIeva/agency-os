@@ -23033,7 +23033,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 // otherwise inherit that and stop responding.
                 ...(it.locked ? { pointerEvents: "none" } : { pointerEvents: "auto" }),
                 ...(xf ? { transform: xf, transformOrigin: "center" } : {}),
-                outline: on ? `${Math.max(1, 1.5 / cam.s)}px solid #15151c` : "none",
+                // Anthracite while selected, blue while being edited. The blue
+                // selection frame is drawn in a layer of its OWN, above the
+                // artboard's clip, and that layer is switched off during an
+                // edit — which uncovered this outline underneath and made the
+                // frame turn black the moment anybody double-clicked into a
+                // text box. Same blue, so nothing appears to change but the
+                // handles going away.
+                outline: on
+                  ? `${Math.max(1, 1.5 / cam.s)}px solid ${editing === it.id ? "#2F6BFF" : "#15151c"}`
+                  : "none",
                 outlineOffset: 0, cursor: tool === "select" ? "move" : "inherit",
               };
               if (it.type === "comment") {
