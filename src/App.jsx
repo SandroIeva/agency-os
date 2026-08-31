@@ -54171,7 +54171,7 @@ export default function CircularMenu() {
               the whole transform when it does. */}
           <div style={{ cursor: "pointer", marginRight: -7 }}
             onClick={launchVoice}>
-            <LiquidOrb size={74} darkMode={darkMode} leaving={orbLeaving || voiceMode || aiSpeaking} fallback={<AISphere darkMode={darkMode} />} />
+            <LiquidOrb size={82} darkMode={darkMode} leaving={orbLeaving || voiceMode || aiSpeaking} fallback={<AISphere darkMode={darkMode} />} />
           </div>
         </div>
       </div>
