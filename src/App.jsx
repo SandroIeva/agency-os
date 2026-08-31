@@ -111,6 +111,7 @@ const LINEAR_MENU_ITEMS_DEF = [
   ]},
   { id: "create",    labelKey: "linearMenu.create",    sub: [
     { id: "social-post", labelKey: "linearMenu.socialPost" },
+    { id: "artwork", labelKey: "linearMenu.artwork" },
     { id: "brief",    labelKey: "linearMenu.brief" },
     { id: "document", labelKey: "linearMenu.document" },
   ]},
@@ -29563,6 +29564,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
                          orgMembers = [], onOpenBoard = null,
                          // Everything below is for the moodboards, which are a
                          // whole tab of AssetsView rendered inside this one.
+                         blankCanvas = null,
                          onUploadStorage = null, onUploadDrive = null, createNotification = null,
                          getProviderToken = null, ensureValidToken = null, autoReLogin = null,
                          llmProvider = null, llmKeys = null }) {
@@ -29671,6 +29673,20 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
     setRows(r => [data, ...(r || [])]);
     setEditing(data);
   };
+
+  // Erstellen → Artwork lands here. A ref on the STAMP rather than a boolean
+  // flag: the prop stays set while the view is open, and an effect that reads
+  // it plainly would make a second artboard the next time any dependency
+  // changed. Remembering which stamp has been served fires it once.
+  const blankServed = useRef(null);
+  useEffect(() => {
+    const ts = blankCanvas?.ts;
+    if (!ts || blankServed.current === ts || !userOrg?.id) return;
+    blankServed.current = ts;
+    setSection("canvas");
+    createCanvas({ name: de ? "Neues Artboard" : "New artboard", kind: "other", w: 1080, h: 1350 });
+    // eslint-disable-next-line
+  }, [blankCanvas, userOrg?.id]);
 
   const saveCanvas = async (row, doc, exportUrl, thumbUrl) => {
     const patch = { doc, updated_at: new Date().toISOString() };
@@ -45102,6 +45118,10 @@ export default function CircularMenu() {
   const [pushSetupOverlay, setPushSetupOverlay] = useState(null); // null | { status, message, needsPwa }
   const [panelOpen, setPanelOpen] = useState(false);
   const [assetsOpenTab, setAssetsOpenTab] = useState(null); // { tab, ts } — land on a named tab
+  // Erstellen → Artwork. A stamped object rather than a boolean, because the
+  // view it reaches is not mounted yet when the menu is clicked: it arrives as
+  // a prop, and the timestamp is what tells a second request from the first.
+  const [blankCanvas, setBlankCanvas] = useState(null);
   // Which quick action the pointer is over. A CSS :hover rule was tried first
   // and lost to Framer's inline style even with !important — measured: the
   // element reported :hover, the rule was in the sheet, the colour never
@@ -50136,6 +50156,7 @@ export default function CircularMenu() {
               ensureValidToken={ensureValidToken} autoReLogin={autoReLogin}
               llmProvider={llmProvider} llmKeys={llmKeys}
               orgMembers={orgMembers} onOpenBoard={(id) => openWhiteboardFrom(id, "creations")}
+              blankCanvas={blankCanvas}
               onPublish={(file) => { setPostVisual({ file, ts: Date.now() }); setCurrentView("createpost"); }}
               onBack={() => setCurrentView("dashboard")} />
           )}
@@ -50997,6 +51018,15 @@ export default function CircularMenu() {
                     setDocDeepLink({ documentId: data.id, blockId: null, ts: Date.now() });
                     setCurrentView("assets");
                   })();
+                  return;
+                }
+                // Straight into an empty artboard, no format dialog on the
+                // way: the menu already said which thing you wanted. The size
+                // is the one the dialog offers first, and the frame can be
+                // changed inside the editor.
+                if (subId === "artwork") {
+                  setBlankCanvas({ ts: Date.now() });
+                  setCurrentView("creations");
                   return;
                 }
                 if (subId === "social-post") { setCurrentView("createpost"); return; }

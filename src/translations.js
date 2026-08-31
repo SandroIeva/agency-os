@@ -37,6 +37,7 @@ const translations = {
   "linearMenu.brief":         { de: "Brainstorm",       en: "Brainstorm" },
   "linearMenu.document":      { de: "Dokument",         en: "Document" },
   "linearMenu.socialPost":    { de: "Social Media Post", en: "Social Media Post" },
+  "linearMenu.artwork":       { de: "Artwork",          en: "Artwork" },
   // Plan sub-items
   "linearMenu.kanban":        { de: "Kanban Board",     en: "Kanban Board" },
   "linearMenu.timeline":      { de: "Timeline",         en: "Timeline" },
