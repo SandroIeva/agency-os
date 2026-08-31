@@ -110,10 +110,10 @@ const LINEAR_MENU_ITEMS_DEF = [
     { id: "creations",   labelKey: "linearMenu.creations" },
   ]},
   { id: "create",    labelKey: "linearMenu.create",    sub: [
-    { id: "social-post", labelKey: "linearMenu.socialPost" },
     { id: "artwork", labelKey: "linearMenu.artwork" },
     { id: "brief",    labelKey: "linearMenu.brief" },
     { id: "document", labelKey: "linearMenu.document" },
+    { id: "social-post", labelKey: "linearMenu.socialPost" },
   ]},
   { id: "projects",  labelKey: "linearMenu.projects",  sub: [] },
   // Files takes the slot Messenger held. Messenger moved to the bottom bar,
