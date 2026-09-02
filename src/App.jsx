@@ -48168,8 +48168,36 @@ export default function CircularMenu() {
     if (!d) return "";
     if (d.step === "where") return de2 ? "Wohin damit?" : "Where should this go?";
     if (d.step === "board") return de2 ? "In welches Moodboard?" : "Which moodboard?";
+    if (d.step === "name") return de2 ? "Wie soll das Moodboard heißen?" : "What should the moodboard be called?";
     if (d.step === "project") return de2 ? "Zu welchem Projekt?" : "Which project?";
     return "";
+  };
+  // Which question is still open, given what has been answered. A question
+  // whose answer is already decided is never asked: a workspace with no
+  // projects has nothing to choose between, so the file simply goes in, and a
+  // workspace with no moodboards is asked for a NAME rather than to pick from
+  // an empty list. This is the one place that decides, so a question cannot be
+  // skipped in one path and asked in another.
+  const nextDropStep = (d) => {
+    if (d.allImages && !d.dest) return "where";
+    if (d.dest === "moodboard" && !d.board && !d.boardName) {
+      return (d.boards.length && !d.wantNewBoard) ? "board" : "name";
+    }
+    if (d.dest === "files" && d.project === undefined) {
+      return d.projects.length ? "project" : null;
+    }
+    return null;
+  };
+  // Ask the next one, or, when there is none left, do the thing.
+  const advanceDrop = (d) => {
+    const step = nextDropStep(d);
+    if (!step) {
+      setVoiceMode(false);
+      setAiStatus("");
+      runDropUpload({ ...d, step: "busy" });
+      return;
+    }
+    askDrop({ ...d, step });
   };
   // Say one line and resolve when it has finished saying it. Fish Audio first
   // through the endpoint the assistant already speaks with, the browser's own
@@ -48250,22 +48278,34 @@ export default function CircularMenu() {
     const t = (text || "").toLowerCase().trim();
     if (!t) return null;
     if (d.step === "where") {
-      if (/moodboard|mood board|stimmung/.test(t)) return d.boards.length ? { dest: "moodboard", step: "board" } : null;
-      if (/file|datei|asset|manager/.test(t)) return { dest: "files", step: "project" };
+      // Offered whether or not any board exists. With none, the next question
+      // is what to call the first one.
+      if (/moodboard|mood board|stimmung/.test(t)) return { dest: "moodboard" };
+      if (/file|datei|asset|manager/.test(t)) return { dest: "files" };
       return null;
     }
     if (d.step === "board") {
+      if (/^(neu|neues|new)\b/.test(t) || /neues moodboard|new moodboard|new board/.test(t)) {
+        return { wantNewBoard: true };
+      }
       const hit = d.boards.find(b => (b.title || "").length > 2 && t.includes((b.title || "").toLowerCase()));
-      return hit ? { board: hit.id, run: true } : null;
+      return hit ? { board: hit.id } : null;
+    }
+    if (d.step === "name") {
+      // Free text, so anything that is not empty IS the answer. Never matched
+      // on a partial result, for the reason the picture prompt is not either:
+      // half a name is a name, and it would be taken.
+      const name = (text || "").trim();
+      return name ? { boardName: name.slice(0, 80) } : null;
     }
     if (d.step === "project") {
       // kein, keins, keinem, keines: one stem with whatever ending the sentence
       // gave it. Spelling each out missed "keins", which is what people say.
       if (/^(kein\w*|nichts|nein|none|no)\b/.test(t) || /kein projekt|no project/.test(t)) {
-        return { project: null, run: true };
+        return { project: null };
       }
       const hit = d.projects.find(pr => (pr.name || "").length > 2 && t.includes((pr.name || "").toLowerCase()));
-      return hit ? { project: hit.id, run: true } : null;
+      return hit ? { project: hit.id } : null;
     }
     return null;
   };
@@ -48281,51 +48321,64 @@ export default function CircularMenu() {
     try { if (recognitionRef.current) recognitionRef.current.stop(); } catch (_) {}
     recognitionRef.current = null;
     const next = { ...d, ...answer, miss: false };
-    if (answer.run) {
-      setVoiceMode(false);
-      setAiStatus("");
-      runDropUpload(next);
-      return;
-    }
     // Asked out loud like the first one, so the whole thing is a conversation
-    // rather than one spoken question followed by a silent form.
-    askDrop(next);
+    // rather than one spoken question followed by a silent form. advanceDrop
+    // decides whether there is anything left to ask at all.
+    advanceDrop(next);
   };
 
   const openDropAsk = async (files) => {
     if (!files.length || !userOrg?.id || !session?.user?.id) return;
     const allImages = files.every(f => (f.type || "").startsWith("image/"));
-    const first = {
+    const base = {
       files, allImages,
-      // Only images have a choice to make. Everything else has one place it can
-      // go, and a question with one answer is not a question worth asking.
-      step: allImages ? "where" : "project",
+      // Only images have a destination to choose. Everything else has one place
+      // it can go.
       dest: allImages ? null : "files",
-      board: null, project: null, boards: [], projects: [], saved: 0, failed: 0, miss: false,
+      step: null, board: null, boardName: null, wantNewBoard: false,
+      // undefined is "not answered"; null is the answer "no project".
+      project: undefined,
+      boards: [], projects: [], saved: 0, failed: 0, miss: false, speaking: true,
     };
-    setDrop(first);
-    // The assistant you talk to, not a dialog of its own: the orb drops out of
-    // the corner and asks, out loud. 380ms is launchVoice's own delay, the
+    setDrop(base);
+    // The orb drops out of the corner. 380ms is launchVoice's own delay, the
     // animation less the overlap that keeps it from reading as two events.
-    // The lists below arrive while it is still moving.
     setOrbLeaving(true);
-    setTimeout(() => askDrop(first), 380);
-    // The App root keeps neither list: it loads project NAMES for the AI's
-    // context and nothing more, so the questions fetch what they need.
+    const settled = new Promise(r => setTimeout(r, 380));
+    // Loaded BEFORE the first question, because they decide which questions
+    // there are: with no projects there is no project question, and with no
+    // moodboards the question is what to call the first one.
     const [prj, mb] = await Promise.all([
       supabase.from("projects").select("id, name").eq("org_id", userOrg.id).order("name"),
       allImages
         ? supabase.from("moodboards").select("id, title").eq("org_id", userOrg.id).eq("archived", false).order("created_at", { ascending: false })
         : Promise.resolve({ data: [] }),
     ]);
-    setDrop(d => d ? { ...d, projects: prj.data || [], boards: mb.data || [] } : d);
+    await settled;
+    if (!dropRef.current) return;
+    advanceDrop({ ...base, projects: prj.data || [], boards: mb.data || [] });
   };
 
   // Everything the answers add up to, done in one place so the two destinations
   // cannot drift into writing different rows for the same file.
   const runDropUpload = async (answers) => {
-    const { files, dest, board, project } = answers;
+    const { files, dest, project, boardName } = answers;
     setDrop(d => ({ ...d, ...answers, step: "busy", saved: 0, failed: 0 }));
+    let board = answers.board;
+    // A moodboard that does not exist yet. Created here rather than when the
+    // name was spoken, so a name given and then abandoned leaves nothing
+    // behind.
+    if (dest === "moodboard" && !board && boardName) {
+      const { data, error } = await supabase.from("moodboards").insert({
+        org_id: userOrg.id, project_id: null, created_by: session.user.id, title: boardName,
+      }).select("id").single();
+      if (error || !data) {
+        setDrop(d => ({ ...d, step: "done", saved: 0, failed: files.length }));
+        speakLine(appLanguage === "de" ? "Das Moodboard konnte ich nicht anlegen." : "I could not create that moodboard.");
+        return;
+      }
+      board = data.id;
+    }
     let saved = 0, failed = 0;
     for (const file of files) {
       const ext = (file.name.split(".").pop() || "bin").toLowerCase();
@@ -49095,8 +49148,14 @@ export default function CircularMenu() {
         // it needed a click to be heard.
         if (rawText.length > 0) {
           const pend = dropRef.current;
-          if (pend && ["where", "board", "project"].includes(pend.step)) {
-            const answer = matchDropAnswer(rawText, pend) || matchDropAnswer(currentText, pend);
+          if (pend && ["where", "board", "name", "project"].includes(pend.step)) {
+            // A name is the rest of the sentence, and half a name is a name:
+            // matched on a partial result it would take "Sommer" and stop
+            // listening. It waits for the silence, exactly as a picture prompt
+            // does. The fixed answers are phrases, so matching one early only
+            // makes it quicker.
+            const answer = pend.step === "name" ? null
+              : (matchDropAnswer(rawText, pend) || matchDropAnswer(currentText, pend));
             if (answer) {
               commandExecuted = true;
               clearSilenceTimer();
@@ -49165,7 +49224,7 @@ export default function CircularMenu() {
     // command. Read first, or "Moodboard" would be heard as "take me there"
     // and the file would be left behind.
     const pending = dropRef.current;
-    if (pending && ["where", "board", "project"].includes(pending.step)) {
+    if (pending && ["where", "board", "name", "project"].includes(pending.step)) {
       const answer = matchDropAnswer(rawTranscript, pending) || matchDropAnswer(cleaned, pending);
       setTranscript("");
       transcriptRef.current = "";
@@ -51192,7 +51251,7 @@ export default function CircularMenu() {
               {/* A file is waiting, so the orb has something to ask rather than
                   an empty prompt. The question is the heading; LISTENING is
                   what it says when nothing is pending. */}
-              {drop && ["where", "board", "project"].includes(drop.step) ? (
+              {drop && ["where", "board", "name", "project"].includes(drop.step) ? (
                 <div style={{ textAlign: "center", marginBottom: 22, maxWidth: 520, padding: "0 20px" }}>
                   {/* The same sentence that was just spoken, from the same
                       place, so the screen cannot say one thing while the voice
@@ -51229,29 +51288,56 @@ export default function CircularMenu() {
                   only be filed by voice is a file some people cannot file.
                   stopPropagation because the whole overlay is a click target
                   that ends the recording. */}
-              {drop && ["where", "board", "project"].includes(drop.step) && (
+              {drop && ["where", "board", "name", "project"].includes(drop.step) && (
                 <div onClick={(e) => e.stopPropagation()}
                   style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center",
                     marginTop: 26, maxWidth: 560, padding: "0 20px" }}>
                   {drop.step === "where" && (<>
                     <DropPill theme={theme} darkMode={darkMode}
                       label={appLanguage === "de" ? "Files Manager" : "Files Manager"}
-                      onClick={() => applyDropAnswer({ dest: "files", step: "project" })} />
-                    <DropPill theme={theme} darkMode={darkMode} disabled={!drop.boards.length}
+                      onClick={() => applyDropAnswer({ dest: "files" })} />
+                    {/* Offered whether or not a board exists. Greyed out, it
+                        said "not for you" when what it meant was "you have not
+                        made one yet", which is a thing the assistant can fix by
+                        asking for a name. */}
+                    <DropPill theme={theme} darkMode={darkMode}
                       label={appLanguage === "de" ? "Moodboard" : "Moodboard"}
-                      onClick={() => applyDropAnswer({ dest: "moodboard", step: "board" })} />
+                      onClick={() => applyDropAnswer({ dest: "moodboard" })} />
                   </>)}
-                  {drop.step === "board" && drop.boards.map(b => (
-                    <DropPill key={b.id} theme={theme} darkMode={darkMode} label={b.title || "Board"}
-                      onClick={() => applyDropAnswer({ board: b.id, run: true })} />
-                  ))}
+                  {drop.step === "board" && (<>
+                    {drop.boards.map(b => (
+                      <DropPill key={b.id} theme={theme} darkMode={darkMode} label={b.title || "Board"}
+                        onClick={() => applyDropAnswer({ board: b.id })} />
+                    ))}
+                    <DropPill theme={theme} darkMode={darkMode}
+                      label={appLanguage === "de" ? "Neues Moodboard" : "New moodboard"}
+                      onClick={() => applyDropAnswer({ wantNewBoard: true })} />
+                  </>)}
+                  {/* A name has no list to pick from, so the fallback for a
+                      browser with no speech is a field. Same pill, one that
+                      takes typing. */}
+                  {drop.step === "name" && (
+                    <input
+                      autoFocus
+                      placeholder={appLanguage === "de" ? "Name eingeben" : "Type a name"}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        const v = e.currentTarget.value.trim();
+                        if (v) applyDropAnswer({ boardName: v.slice(0, 80) });
+                      }}
+                      style={{ padding: "10px 18px", borderRadius: 999, minWidth: 260,
+                        border: `1px solid ${theme.borderFaint}`, outline: "none",
+                        background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+                        color: theme.text, fontSize: 13, fontFamily: FONT, textAlign: "center" }}
+                    />
+                  )}
                   {drop.step === "project" && (<>
                     <DropPill theme={theme} darkMode={darkMode}
                       label={appLanguage === "de" ? "Kein Projekt" : "No project"}
-                      onClick={() => applyDropAnswer({ project: null, run: true })} />
+                      onClick={() => applyDropAnswer({ project: null })} />
                     {drop.projects.map(pr => (
                       <DropPill key={pr.id} theme={theme} darkMode={darkMode} label={pr.name}
-                        onClick={() => applyDropAnswer({ project: pr.id, run: true })} />
+                        onClick={() => applyDropAnswer({ project: pr.id })} />
                     ))}
                   </>)}
                 </div>
