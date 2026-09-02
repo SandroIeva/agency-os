@@ -101,8 +101,11 @@ the URL, so a ninth cannot forget to.
 - **The SECOND segment is the view**, and there is deliberately no third.
   `VIEW_SLUG` (module scope, beside `slugFromPath`) maps `currentView` to the
   name in the bar, and it is the name people READ, not the internal one: the
-  Files Manager is `assets` in the code and `files-manager` in the address,
-  `chat` is `messenger`, `touchpoints` is `audience`, `createpost` is `post`.
+  Files Manager is `assets` in the code and `files` in the address, `chat` is
+  `messenger`, `touchpoints` is `audience`, `createpost` is `post`. The old
+  Drive browser, which IS `files` internally, has no address at all: its only
+  way in is the circular menu, which is no longer part of the navigation, and a
+  name in the bar would say you can go there.
   The dashboard is absent from the map on purpose, so `/epics` is unchanged and
   every link anybody already holds keeps working with no redirect.
   - The path is WHERE YOU ARE, the query is WHAT YOU HAVE OPEN. Tabs inside a

@@ -17955,8 +17955,14 @@ const VIEW_SLUG = {
   brand: "brand",
   touchpoints: "audience",
   creations: "creations",
-  assets: "files-manager",
-  files: "files",
+  // The Files Manager is `files` in the bar. Its internal name is `assets`,
+  // which is the table it reads, not what anybody calls the place.
+  assets: "files",
+  // `files` internally is something ELSE: the old Drive/storage browser, whose
+  // only way in is the circular menu, which is not part of the app's
+  // navigation any more. It gets no address rather than an invented one,
+  // because a name in the bar says you can go there. If it ever comes back it
+  // can take a name then.
   kanban: "kanban",
   timeline: "timeline",
   calendar: "calendar",
@@ -45734,6 +45740,15 @@ export default function CircularMenu() {
   const [nameGateInput, setNameGateInput] = useState(""); // first-login name prompt
   const [nameSaving, setNameSaving] = useState(false);
   const [editingName, setEditingName] = useState(false);  // settings inline name edit
+  // Three ways out of the name field and they must not argue: Enter keeps it,
+  // Escape drops it, clicking away keeps it. The brand header routes Enter and
+  // Escape through blur() and lets the unmount sort it out, which is a race on
+  // two counts. React does not reliably fire onBlur on unmount (the same reason
+  // the whiteboard has flushEdit), and blur() on an input that never took focus
+  // fires nothing at all — measured in a React probe: with focus withheld,
+  // Enter left the field open and saved nothing. So whichever of the three
+  // arrives first decides, and the others find the door shut.
+  const nameDone = useRef(false);
   const [nameInput, setNameInput] = useState("");
   const avatarInputRef = useRef(null);
   const orgLogoInputRef = useRef(null);
@@ -46337,6 +46352,18 @@ export default function CircularMenu() {
     }
   }, [session?.user?.id, userOrg?.id]);
   // Persist a chosen display name to auth metadata + profiles + localStorage.
+  // Closing the name field, from Enter, Escape or a click somewhere else.
+  // First one through wins, so Enter followed by the blur it causes writes once.
+  const finishNameEdit = (keep) => {
+    if (nameDone.current) return;
+    nameDone.current = true;
+    setEditingName(false);
+    if (!keep) return;
+    const v = nameInput.trim();
+    // An empty name is not a name, and writing back the one already there is a
+    // round trip for nothing.
+    if (v && v !== userName) saveDisplayName(v);
+  };
   const saveDisplayName = async (name) => {
     const clean = (name || "").trim();
     if (!clean || !session?.user?.id) return false;
@@ -52357,40 +52384,37 @@ export default function CircularMenu() {
                     <input ref={avatarInputRef} type="file" accept="image/*" hidden onChange={(e) => { uploadAvatar(e.target.files?.[0]); }} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
+                    {/* Double-click the name, the way the brand header renames a
+                        brand. It was a pencil beside the name that swapped the
+                        heading for a boxed input, an accent-filled Speichern and
+                        an Abbrechen: three controls, and the heading jumped a
+                        size while they were up. The name is the field now, at
+                        the size it already reads, and Enter or clicking away
+                        keeps it. */}
                     {editingName ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <input
-                          autoFocus value={nameInput}
-                          onChange={(e) => setNameInput(e.target.value)}
-                          onKeyDown={async (e) => {
-                            if (e.key === "Enter" && nameInput.trim()) { const ok = await saveDisplayName(nameInput); if (ok) setEditingName(false); }
-                            if (e.key === "Escape") setEditingName(false);
-                          }}
-                          style={{ flex: 1, minWidth: 0, padding: "8px 12px", borderRadius: 10, fontFamily: FONT, fontSize: 18, fontWeight: 600, background: darkMode ? "rgba(255,255,255,0.05)" : "#fff", border: `1px solid ${theme.border}`, color: theme.text, outline: "none" }}
-                        />
-                        <motion.button whileTap={{ scale: 0.95 }} disabled={nameSaving || !nameInput.trim()}
-                          onClick={async () => { const ok = await saveDisplayName(nameInput); if (ok) setEditingName(false); }}
-                          style={{ padding: "8px 14px", borderRadius: 10, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: "pointer", opacity: (nameSaving || !nameInput.trim()) ? 0.6 : 1, flexShrink: 0 }}>
-                          {nameSaving ? "…" : (appLanguage === "de" ? "Speichern" : "Save")}
-                        </motion.button>
-                        <motion.div whileTap={{ scale: 0.95 }} onClick={() => setEditingName(false)}
-                          style={{ padding: "8px 12px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer", flexShrink: 0 }}>
-                          {appLanguage === "de" ? "Abbrechen" : "Cancel"}
-                        </motion.div>
-                      </div>
+                      <input
+                        autoFocus value={nameInput}
+                        onChange={(e) => setNameInput(e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        onBlur={() => finishNameEdit(true)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") finishNameEdit(true);
+                          if (e.key === "Escape") finishNameEdit(false);
+                        }}
+                        style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text,
+                          lineHeight: 1.3, width: "100%", maxWidth: 320, boxSizing: "border-box",
+                          padding: "1px 5px", marginLeft: -5, borderRadius: 6,
+                          background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
+                          border: `1px solid ${theme.borderFaint}`, outline: "none" }}
+                      />
                     ) : (
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, lineHeight: 1.3 }}>
-                          {userName || "User"}
-                        </div>
-                        <motion.div whileHover={{ opacity: 1 }} whileTap={{ scale: 0.9 }}
-                          onClick={() => { setNameInput(userName || ""); setEditingName(true); }}
-                          title={appLanguage === "de" ? "Namen ändern" : "Edit name"}
-                          style={{ opacity: 0.5, cursor: "pointer", display: "flex", flexShrink: 0 }}>
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
-                          </svg>
-                        </motion.div>
+                      <div
+                        onDoubleClick={() => { setNameInput(userName || ""); nameDone.current = false; setEditingName(true); }}
+                        title={appLanguage === "de" ? "Doppelklick zum Umbenennen" : "Double-click to rename"}
+                        style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text,
+                          lineHeight: 1.3, cursor: "text", padding: "1px 5px", marginLeft: -5,
+                          borderRadius: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {userName || "User"}
                       </div>
                     )}
                     <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
