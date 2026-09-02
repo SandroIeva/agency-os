@@ -45722,52 +45722,30 @@ export default function CircularMenu() {
   // whose edge never answers reads as a caption with a line around it.
   const wsRowBtnHover = { borderColor: theme.textDim };
 
-  // The workspace's address. Its own edit, not part of the rename: a name is
-  // for reading and an address is for linking, and quietly re-cutting the
-  // address every time somebody fixes a typo in the name would break every
-  // link anybody had saved.
-  const [orgSlugEdit, setOrgSlugEdit] = useState(false);
+  // ── The workspace's name and its address ─────────────────────────────────
+  // They were two separate edits, and that is what made them look like two
+  // settings: a rename left the address on the old name and nothing said the
+  // two were the same thing seen twice.
+  //
+  // One edit now, and the address FOLLOWS the name while it is still derived
+  // from it. Once somebody has typed an address of their own it stops
+  // following: a chosen address is a decision, and renaming is not a reason to
+  // undo it and break every link that used it.
   const [orgSlugDraft, setOrgSlugDraft] = useState("");
-  const [orgSlugSaving, setOrgSlugSaving] = useState(false);
   const [orgSlugErr, setOrgSlugErr] = useState("");
+  const [slugTracks, setSlugTracks] = useState(true);
   // Typed loosely, stored strictly. Spaces and punctuation become dashes as you
   // type, so the field always shows the address that would result.
   const slugClean = (v) => String(v || "").toLowerCase()
     .replace(/[^a-z0-9]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
-  const saveOrgSlug = async () => {
-    const slug = slugClean(orgSlugDraft);
-    if (!userOrg?.id) return;
-    if (slug === userOrg.slug) { setOrgSlugEdit(false); setOrgSlugErr(""); return; }
-    const de2 = appLanguage === "de";
-    if (slug.length < 2) {
-      setOrgSlugErr(de2 ? "Mindestens zwei Zeichen." : "At least two characters.");
-      return;
-    }
-    if (!slugOk(slug)) {
-      setOrgSlugErr(de2 ? "Dieser Slug ist vergeben, er gehört zur App selbst."
-                        : "That slug belongs to the app itself.");
-      return;
-    }
-    setOrgSlugSaving(true);
-    const { error } = await supabase.from("organizations").update({ slug }).eq("id", userOrg.id);
-    setOrgSlugSaving(false);
-    if (error) {
-      // The unique index is the authority on whether a name is free. Asking
-      // first and writing second would let two people take the same address in
-      // the gap between the two.
-      setOrgSlugErr(error.code === "23505"
-        ? (de2 ? "Dieser Slug ist schon vergeben." : "That slug is already taken.")
-        : (planLimitError(error, de2) || error.message || (de2 ? "Fehlgeschlagen." : "Failed.")));
-      return;
-    }
-    // Both copies, like the rename. The address bar follows on its own: the
-    // effect that mirrors it watches userOrg.
-    setUserOrg(o => o ? { ...o, slug } : o);
-    setUserOrgs(prev => prev.map(o => o.id === userOrg.id ? { ...o, slug } : o));
-    setOrgSlugEdit(false);
-    setOrgSlugErr("");
+  // Is this address still the name's, or did somebody choose it? Derived means
+  // the name itself, or the name with what creation adds when the plain one is
+  // taken: a counter, or the timestamp older workspaces carry.
+  const slugIsDerived = (slug, name) => {
+    const base = slugClean(name);
+    if (!base || !slug) return false;
+    return slug === base || new RegExp(`^${base}-[a-z0-9]+$`).test(slug);
   };
-
   // Making the organisation row. Three places do it — the Settings dropdown and
   // the two routes through onboarding — and they each carried their own copy of
   // the slug arithmetic. One of them changing is how the three drift.
@@ -45795,24 +45773,54 @@ export default function CircularMenu() {
     return { org: data, error };
   };
 
+  const openWorkspaceEdit = () => {
+    setOrgNameDraft(userOrg?.name || "");
+    setOrgSlugDraft(userOrg?.slug || "");
+    setSlugTracks(slugIsDerived(userOrg?.slug, userOrg?.name));
+    setOrgSlugErr("");
+    setOrgNameEdit(true);
+  };
+  const closeWorkspaceEdit = () => { setOrgNameEdit(false); setOrgSlugErr(""); };
+  const saveWorkspace = async () => {
+    const name = orgNameDraft.trim();
+    const slug = slugClean(orgSlugDraft);
+    if (!userOrg?.id || !name) { closeWorkspaceEdit(); return; }
+    const de2 = appLanguage === "de";
+    const slugChanged = slug !== userOrg.slug;
+    if (slugChanged) {
+      if (slug.length < 2) { setOrgSlugErr(de2 ? "Mindestens zwei Zeichen." : "At least two characters."); return; }
+      if (!slugOk(slug)) {
+        setOrgSlugErr(de2 ? "Dieser Slug ist vergeben, er gehört zur App selbst."
+                          : "That slug belongs to the app itself.");
+        return;
+      }
+    }
+    if (name === userOrg.name && !slugChanged) { closeWorkspaceEdit(); return; }
+    setOrgNameSaving(true);
+    // One write. Two would leave the workspace named one thing and addressed
+    // another if the second failed.
+    const patch = slugChanged ? { name, slug } : { name };
+    const { error } = await supabase.from("organizations").update(patch).eq("id", userOrg.id);
+    setOrgNameSaving(false);
+    if (error) {
+      // The unique index is the authority on whether an address is free.
+      // Asking first and writing second would let two people take the same one
+      // in the gap between the question and the answer.
+      setOrgSlugErr(error.code === "23505"
+        ? (de2 ? "Dieser Slug ist schon vergeben." : "That slug is already taken.")
+        : (planLimitError(error, de2) || error.message || (de2 ? "Fehlgeschlagen." : "Failed.")));
+      return;
+    }
+    // Both copies, or the switcher keeps the old name. The address bar follows
+    // on its own: the effect that mirrors it watches userOrg.
+    setUserOrg(o => o ? { ...o, ...patch } : o);
+    setUserOrgs(prev => prev.map(o => o.id === userOrg.id ? { ...o, ...patch } : o));
+    closeWorkspaceEdit();
+  };
+
   const [orgNameEdit, setOrgNameEdit] = useState(false);
   const [orgNameDraft, setOrgNameDraft] = useState("");
   const [orgNameSaving, setOrgNameSaving] = useState(false);
-  const saveOrgName = async () => {
-    const name = orgNameDraft.trim();
-    if (!userOrg?.id || !name || name === userOrg.name) { setOrgNameEdit(false); return; }
-    setOrgNameSaving(true);
-    const { error } = await supabase.from("organizations").update({ name }).eq("id", userOrg.id);
-    setOrgNameSaving(false);
-    if (error) {
-      alert((appLanguage === "de" ? "Umbenennen fehlgeschlagen: " : "Rename failed: ") + (error.message || ""));
-      return;
-    }
-    // Both copies, or the switcher keeps showing the old name.
-    setUserOrg(o => o ? { ...o, name } : o);
-    setUserOrgs(prev => prev.map(o => o.id === userOrg.id ? { ...o, name } : o));
-    setOrgNameEdit(false);
-  };
 
   const removeOrgLogo = async () => {
     if (!userOrg?.id) return;
@@ -52492,42 +52500,98 @@ export default function CircularMenu() {
                     )}
                   </div>
 
-                  {/* Workspace name — admins, same rule as the logo above it. */}
+                  {/* Workspace name and address, in ONE row. They were two, and
+                      two rows say they are two settings: somebody renames the
+                      workspace, the address keeps the old name, and the panel
+                      never mentions that the two are the same thing seen twice.
+
+                      The address follows the name while it is still DERIVED
+                      from it — which is what a fresh workspace's address is, and
+                      what the older ones with a timestamp after the name are
+                      too. Once somebody has typed an address of their own it
+                      stops following, because a chosen address is a decision and
+                      a rename is not a reason to undo it. */}
                   <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}`,
-                    display: "flex", alignItems: "center", gap: 16 }}>
+                    display: "flex", alignItems: orgNameEdit ? "flex-start" : "center", gap: 16 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
-                        {appLanguage === "de" ? "Workspace-Name" : "Workspace name"}
+                        {/* What the row holds, both of it. "Workspace" would
+                            repeat the heading above the panel, and "Name" would
+                            not mention the address under it. */}
+                        {appLanguage === "de" ? "Name & Adresse" : "Name & address"}
                       </div>
-                      {orgNameEdit ? (
+                      {orgNameEdit ? (<>
                         <input
                           autoFocus value={orgNameDraft}
-                          onChange={e => setOrgNameDraft(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === "Enter") saveOrgName();
-                            if (e.key === "Escape") setOrgNameEdit(false);
+                          onChange={e => {
+                            const v = e.target.value;
+                            setOrgNameDraft(v);
+                            // The address comes along while it is still the
+                            // name's own. slugTracks was worked out when the
+                            // edit opened, so it cannot change under the
+                            // typing.
+                            if (slugTracks) { setOrgSlugDraft(slugClean(v)); setOrgSlugErr(""); }
                           }}
-                          style={{ marginTop: 6, width: "100%", maxWidth: 320, height: 34, borderRadius: 10,
+                          onKeyDown={e => {
+                            if (e.key === "Enter") saveWorkspace();
+                            if (e.key === "Escape") closeWorkspaceEdit();
+                          }}
+                          style={{ marginTop: 8, width: "100%", maxWidth: 320, height: 36, borderRadius: 10,
                             border: `1px solid ${theme.border}`, background: theme.inputBg || "transparent",
                             color: theme.text, fontFamily: FONT, fontSize: 13, padding: "0 12px", outline: "none" }}
                         />
-                      ) : (
+                        <div style={{ display: "flex", alignItems: "center", gap: 2, marginTop: 8 }}>
+                          <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textFaint, flexShrink: 0 }}>
+                            app.i7os.com/
+                          </span>
+                          <input
+                            value={orgSlugDraft}
+                            onChange={e => {
+                              setOrgSlugDraft(e.target.value); setOrgSlugErr("");
+                              // Touched by hand: from here the address is a
+                              // decision of its own and stops following.
+                              setSlugTracks(false);
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === "Enter") saveWorkspace();
+                              if (e.key === "Escape") closeWorkspaceEdit();
+                            }}
+                            style={{ width: "100%", maxWidth: 206, height: 36, borderRadius: 10,
+                              border: `1px solid ${orgSlugErr ? "#e5484d" : theme.border}`,
+                              background: theme.inputBg || "transparent",
+                              color: theme.text, fontFamily: FONT, fontSize: 13, padding: "0 12px", outline: "none" }}
+                          />
+                        </div>
+                        <div style={{ fontSize: 11.5, fontFamily: FONT, marginTop: 8, lineHeight: 1.5,
+                          color: orgSlugErr ? "#e5484d" : theme.textFaint }}>
+                          {orgSlugErr
+                            || (slugClean(orgSlugDraft) === userOrg.slug
+                              ? (appLanguage === "de"
+                                ? "Die Adresse bleibt wie sie ist."
+                                : "The address stays as it is.")
+                              : (appLanguage === "de"
+                                ? `Neue Adresse: app.i7os.com/${slugClean(orgSlugDraft) || "…"} . Links mit der alten funktionieren danach nicht mehr.`
+                                : `New address: app.i7os.com/${slugClean(orgSlugDraft) || "…"} . Links using the old one stop working.`))}
+                        </div>
+                      </>) : (
                         <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
                           {userOrg.name}
+                          <span style={{ color: theme.textFaint }}>{"  ·  app.i7os.com/" + (userOrg.slug || "")}</span>
                         </div>
                       )}
                     </div>
                     {(userOrgRole === "admin" || userOrg?.role === "admin") ? (
                       orgNameEdit ? (
                         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                          <motion.div onClick={() => setOrgNameEdit(false)} whileTap={{ scale: 0.97 }}
-                            style={{ padding: "7px 12px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
-                              color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>
+                          <motion.div onClick={closeWorkspaceEdit} whileTap={{ scale: 0.97 }}
+                            whileHover={wsRowBtnHover}
+                            style={{ ...wsRowBtn, minWidth: 0, padding: "0 16px 2px" }}>
                             {appLanguage === "de" ? "Abbrechen" : "Cancel"}
                           </motion.div>
-                          <motion.div onClick={saveOrgName} whileTap={{ scale: 0.97 }}
-                            style={{ padding: "7px 14px", borderRadius: 999, background: "#15151c", color: "#fff",
-                              fontSize: 12, fontWeight: 600, fontFamily: FONT, cursor: "pointer",
+                          <motion.div onClick={saveWorkspace} whileTap={{ scale: 0.97 }}
+                            whileHover={wsRowBtnHover}
+                            style={{ ...wsRowBtn, minWidth: 0, padding: "0 18px 2px",
+                              background: "#15151c", borderColor: "#15151c", color: "#fff", fontWeight: 600,
                               opacity: (orgNameSaving || !orgNameDraft.trim()) ? 0.6 : 1 }}>
                             {orgNameSaving ? (appLanguage === "de" ? "Speichert…" : "Saving…")
                               : (appLanguage === "de" ? "Speichern" : "Save")}
@@ -52535,86 +52599,7 @@ export default function CircularMenu() {
                         </div>
                       ) : (
                         <motion.div whileTap={{ scale: 0.97 }} whileHover={wsRowBtnHover}
-                          onClick={() => { setOrgNameDraft(userOrg.name || ""); setOrgNameEdit(true); }}
-                          style={wsRowBtn}>
-                          {/* The same word as the row under it. Two buttons that
-                              do the same kind of thing, one saying "Umbenennen"
-                              and one "Ändern", is two names for one idea. */}
-                          {appLanguage === "de" ? "Ändern" : "Change"}
-                        </motion.div>
-                      )
-                    ) : (
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, flexShrink: 0 }}>
-                        {appLanguage === "de" ? "Nur Admins" : "Admins only"}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Workspace address — the first part of the path, and what a
-                      link to this workspace carries. Its own row rather than a
-                      second field in the rename above: a name is for reading
-                      and an address is for linking, and re-cutting the address
-                      whenever somebody fixes a typo in the name would break
-                      every link anybody had saved. */}
-                  <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}`,
-                    display: "flex", alignItems: "center", gap: 16 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
-                        Slug
-                      </div>
-                      {orgSlugEdit ? (<>
-                        <div style={{ display: "flex", alignItems: "center", gap: 2, marginTop: 6 }}>
-                          <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textFaint, flexShrink: 0 }}>
-                            app.i7os.com/
-                          </span>
-                          <input
-                            autoFocus value={orgSlugDraft}
-                            onChange={e => { setOrgSlugDraft(e.target.value); setOrgSlugErr(""); }}
-                            onKeyDown={e => {
-                              if (e.key === "Enter") saveOrgSlug();
-                              if (e.key === "Escape") { setOrgSlugEdit(false); setOrgSlugErr(""); }
-                            }}
-                            style={{ width: "100%", maxWidth: 210, height: 34, borderRadius: 10,
-                              border: `1px solid ${orgSlugErr ? "#e5484d" : theme.border}`,
-                              background: theme.inputBg || "transparent",
-                              color: theme.text, fontFamily: FONT, fontSize: 13, padding: "0 12px", outline: "none" }}
-                          />
-                        </div>
-                        {/* What it will actually become, as it is typed: spaces
-                            and punctuation are dashes in an address, and seeing
-                            that after saving is a surprise. */}
-                        <div style={{ fontSize: 11.5, fontFamily: FONT, marginTop: 6, lineHeight: 1.5,
-                          color: orgSlugErr ? "#e5484d" : theme.textFaint }}>
-                          {orgSlugErr || (appLanguage === "de"
-                            ? `Wird zu app.i7os.com/${slugClean(orgSlugDraft) || "…"} . Links mit dem alten Slug funktionieren danach nicht mehr.`
-                            : `Becomes app.i7os.com/${slugClean(orgSlugDraft) || "…"} . Links using the old slug stop working.`)}
-                        </div>
-                      </>) : (
-                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
-                          app.i7os.com/{userOrg.slug}
-                        </div>
-                      )}
-                    </div>
-                    {(userOrgRole === "admin" || userOrg?.role === "admin") ? (
-                      orgSlugEdit ? (
-                        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                          <motion.div onClick={() => { setOrgSlugEdit(false); setOrgSlugErr(""); }} whileTap={{ scale: 0.97 }}
-                            style={{ padding: "7px 12px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
-                              color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>
-                            {appLanguage === "de" ? "Abbrechen" : "Cancel"}
-                          </motion.div>
-                          <motion.div onClick={saveOrgSlug} whileTap={{ scale: 0.97 }}
-                            style={{ padding: "7px 14px", borderRadius: 999, background: "#15151c", color: "#fff",
-                              fontSize: 12, fontWeight: 600, fontFamily: FONT, cursor: "pointer",
-                              opacity: (orgSlugSaving || slugClean(orgSlugDraft).length < 2) ? 0.6 : 1 }}>
-                            {orgSlugSaving ? (appLanguage === "de" ? "Speichert…" : "Saving…")
-                              : (appLanguage === "de" ? "Speichern" : "Save")}
-                          </motion.div>
-                        </div>
-                      ) : (
-                        <motion.div whileTap={{ scale: 0.97 }} whileHover={wsRowBtnHover}
-                          onClick={() => { setOrgSlugDraft(userOrg.slug || ""); setOrgSlugErr(""); setOrgSlugEdit(true); }}
-                          style={wsRowBtn}>
+                          onClick={openWorkspaceEdit} style={wsRowBtn}>
                           {appLanguage === "de" ? "Ändern" : "Change"}
                         </motion.div>
                       )

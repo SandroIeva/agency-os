@@ -84,12 +84,18 @@ the URL, so a ninth cannot forget to.
   number is appended only when that name is taken, and taken is read off the
   write: `23505` means try `name-2`, then `name-3`. Asking first would leave a
   gap in which somebody else takes it.
-- The slug is editable in Settings (**Slug**, under the workspace name) and
-  is its OWN edit: a rename writes `name` and nothing else, or fixing a typo in
-  a name would silently break every link somebody had saved. `organizations.slug`
-  carries a UNIQUE index, and a clash is read off the write (`23505`) rather
-  than asked for first, which would let two people take one address in the gap
-  between the question and the answer.
+- Name and slug are ONE row in Settings (**Name & Adresse**) and one write.
+  `saveWorkspace` sends both, because two writes can leave a workspace named
+  one thing and addressed another. `organizations.slug` carries a UNIQUE index,
+  and a clash is read off the write (`23505`) rather than asked for first,
+  which would let two people take one address in the gap between the question
+  and the answer.
+- **The address follows the name while `slugIsDerived` says it is still the
+  name's**: the slug equals `slugClean(name)`, or that plus what creation adds
+  when the plain one is taken (a counter, or the timestamp older workspaces
+  carry). Once somebody types an address of their own it stops following, and a
+  rename leaves it alone. The rule is settled when the edit OPENS, so it cannot
+  change under the typing.
 - Renaming an address breaks links that used the old one. That is stated in the
   field, not solved: there is no redirect table.
 - The view is NOT in the path yet. `/epics/brand` already loads; making it mean
