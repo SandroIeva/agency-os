@@ -90,12 +90,12 @@ the URL, so a ninth cannot forget to.
   and a clash is read off the write (`23505`) rather than asked for first,
   which would let two people take one address in the gap between the question
   and the answer.
-- **The address follows the name while `slugIsDerived` says it is still the
-  name's**: the slug equals `slugClean(name)`, or that plus what creation adds
-  when the plain one is taken (a counter, or the timestamp older workspaces
-  carry). Once somebody types an address of their own it stops following, and a
-  rename leaves it alone. The rule is settled when the edit OPENS, so it cannot
-  change under the typing.
+- **The address IS the name**: typing in the name field rewrites the slug
+  through `slugClean` on every keystroke. It once followed only while the slug
+  still looked derived from the name, which meant a workspace whose address
+  somebody had chosen quietly stopped following with nothing on screen saying
+  so. The consequence of the simpler rule: typing a name overwrites a
+  hand-typed address. The address field still edits on its own.
 - Renaming an address breaks links that used the old one. That is stated in the
   field, not solved: there is no redirect table.
 - The view is NOT in the path yet. `/epics/brand` already loads; making it mean

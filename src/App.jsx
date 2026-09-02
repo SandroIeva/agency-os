@@ -156,9 +156,6 @@ const deriveWsRole = (m) => {
 };
 
 const FONT = "'Geist', -apple-system, sans-serif";
-// The stack for anything that is an identifier rather than prose: a URL, a
-// slug, a hex value. Even spacing is what stops one being read as a word.
-const MONO_FONT = "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace";
 
 // Which language a first-time visitor gets. German browsers get German;
 // everyone else gets English, including anyone whose language we cannot read.
@@ -14127,7 +14124,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{item.display_name}</div>
                       <div style={{
-                        fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2,
+                        fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3,
                       }}>Nachricht schreiben…</div>
                     </div>
                   </motion.div>
@@ -14704,7 +14701,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
             {/* Header */}
             <div style={{ padding: "18px 22px 14px", borderBottom: `1px solid ${theme.borderFaint}` }}>
               <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Neue Gruppe</div>
-              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>Name vergeben und Mitglieder auswählen</div>
+              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>Name vergeben und Mitglieder auswählen</div>
             </div>
             {/* Name */}
             <div style={{ padding: "16px 22px 8px" }}>
@@ -38167,7 +38164,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
               )}
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{skillSel ? L(skillSel.name) : (appLanguage === "de" ? "Dokument mit Skills erstellen" : "Create document with Skills")}</div>
-                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{skillSel ? (appLanguage === "de" ? "Infos eingeben und erstellen" : "Add info and generate") : (appLanguage === "de" ? "Wähle einen Skill" : "Pick a skill")}</div>
+                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>{skillSel ? (appLanguage === "de" ? "Infos eingeben und erstellen" : "Add info and generate") : (appLanguage === "de" ? "Wähle einen Skill" : "Pick a skill")}</div>
               </div>
             </div>
             {/* Body */}
@@ -38181,7 +38178,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{L(sk.name)}</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{L(sk.subline)}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{L(sk.subline)}</div>
                     </div>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.textFaint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 18l6-6-6-6"/></svg>
                   </div>
@@ -39098,7 +39095,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
             </div>
             <div style={{ padding: "12px 14px" }}>
               <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{p.name || "Persona"}{p.age ? <span style={{ fontWeight: 500, color: theme.textDim, fontSize: 13 }}>  ·  {p.age}</span> : null}</div>
-              {p.role && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{p.role}</div>}
+              {p.role && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>{p.role}</div>}
               {p.consumer_behavior && <div style={{ ...brandChip(theme, darkMode), marginTop: 8 }}>{p.consumer_behavior}</div>}
             </div>
           </motion.div>
@@ -44413,7 +44410,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{t(item.labelKey)}</div>
-                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{t(item.hintKey)}</div>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>{t(item.hintKey)}</div>
                   </div>
                   <div style={{ display: "flex", gap: 4, padding: 3, borderRadius: 10, background: darkMode ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0.04)", flexShrink: 0 }}>
                     {STATES.map(s => {
@@ -45730,25 +45727,20 @@ export default function CircularMenu() {
   // settings: a rename left the address on the old name and nothing said the
   // two were the same thing seen twice.
   //
-  // One edit now, and the address FOLLOWS the name while it is still derived
-  // from it. Once somebody has typed an address of their own it stops
-  // following: a chosen address is a decision, and renaming is not a reason to
-  // undo it and break every link that used it.
+  // One edit, and the address simply IS the name: type Banane and the address
+  // says banane. It followed only while it still looked derived from the name
+  // before, which meant a workspace whose address somebody had once chosen
+  // quietly stopped following and nothing on screen said so.
+  //
+  // The consequence, stated rather than hidden: typing in the name overwrites
+  // an address that was typed by hand. The address field is still editable on
+  // its own, for fixing the address without touching the name.
   const [orgSlugDraft, setOrgSlugDraft] = useState("");
   const [orgSlugErr, setOrgSlugErr] = useState("");
-  const [slugTracks, setSlugTracks] = useState(true);
   // Typed loosely, stored strictly. Spaces and punctuation become dashes as you
   // type, so the field always shows the address that would result.
   const slugClean = (v) => String(v || "").toLowerCase()
     .replace(/[^a-z0-9]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
-  // Is this address still the name's, or did somebody choose it? Derived means
-  // the name itself, or the name with what creation adds when the plain one is
-  // taken: a counter, or the timestamp older workspaces carry.
-  const slugIsDerived = (slug, name) => {
-    const base = slugClean(name);
-    if (!base || !slug) return false;
-    return slug === base || new RegExp(`^${base}-[a-z0-9]+$`).test(slug);
-  };
   // Making the organisation row. Three places do it — the Settings dropdown and
   // the two routes through onboarding — and they each carried their own copy of
   // the slug arithmetic. One of them changing is how the three drift.
@@ -45779,7 +45771,6 @@ export default function CircularMenu() {
   const openWorkspaceEdit = () => {
     setOrgNameDraft(userOrg?.name || "");
     setOrgSlugDraft(userOrg?.slug || "");
-    setSlugTracks(slugIsDerived(userOrg?.slug, userOrg?.name));
     setOrgSlugErr("");
     setOrgNameEdit(true);
   };
@@ -52482,7 +52473,7 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{appLanguage === "de" ? "Workspace-Logo" : "Workspace logo"}</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
                         {userOrg.logo_url
                           ? (appLanguage === "de" ? "Wird in Sidebar & Switcher angezeigt." : "Shown in sidebar & switcher.")
                           : (appLanguage === "de" ? "PNG oder JPG, quadratisch empfohlen." : "PNG or JPG, square recommended.")}
@@ -52524,71 +52515,70 @@ export default function CircularMenu() {
                         Workspace
                       </div>
                       {orgNameEdit ? (<>
+                        {/* Two fields, one shape: same height, same rounding,
+                            same width, stacked with the gap the panel uses
+                            everywhere else. The prefix lives INSIDE the second
+                            one, so the address reads as a single thing being
+                            edited rather than a label with a box beside it. */}
                         <input
                           autoFocus value={orgNameDraft}
                           onChange={e => {
                             const v = e.target.value;
                             setOrgNameDraft(v);
-                            // The address comes along while it is still the
-                            // name's own. slugTracks was worked out when the
-                            // edit opened, so it cannot change under the
-                            // typing.
-                            if (slugTracks) { setOrgSlugDraft(slugClean(v)); setOrgSlugErr(""); }
+                            // The address IS the name. Type Banane and the
+                            // address says banane; there is no second thing to
+                            // keep in step by hand.
+                            setOrgSlugDraft(slugClean(v));
+                            setOrgSlugErr("");
                           }}
                           onKeyDown={e => {
                             if (e.key === "Enter") saveWorkspace();
                             if (e.key === "Escape") closeWorkspaceEdit();
                           }}
-                          style={{ marginTop: 8, width: "100%", maxWidth: 320, height: 36, borderRadius: 10,
+                          style={{ marginTop: 10, width: "100%", maxWidth: 320, height: 38,
+                            borderRadius: 10, boxSizing: "border-box",
                             border: `1px solid ${theme.border}`, background: theme.inputBg || "transparent",
                             color: theme.text, fontFamily: FONT, fontSize: 13, padding: "0 12px", outline: "none" }}
                         />
-                        <div style={{ display: "flex", alignItems: "center", gap: 2, marginTop: 8 }}>
-                          <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textFaint, flexShrink: 0 }}>
+                        <div style={{ marginTop: 8, width: "100%", maxWidth: 320, height: 38,
+                          borderRadius: 10, boxSizing: "border-box", display: "flex", alignItems: "center",
+                          border: `1px solid ${orgSlugErr ? "#e5484d" : theme.border}`,
+                          background: theme.inputBg || "transparent", padding: "0 12px", gap: 1 }}>
+                          <span style={{ fontFamily: FONT, fontSize: 13, color: theme.textFaint, flexShrink: 0 }}>
                             app.i7os.com/
                           </span>
                           <input
                             value={orgSlugDraft}
-                            onChange={e => {
-                              setOrgSlugDraft(e.target.value); setOrgSlugErr("");
-                              // Touched by hand: from here the address is a
-                              // decision of its own and stops following.
-                              setSlugTracks(false);
-                            }}
+                            onChange={e => { setOrgSlugDraft(e.target.value); setOrgSlugErr(""); }}
                             onKeyDown={e => {
                               if (e.key === "Enter") saveWorkspace();
                               if (e.key === "Escape") closeWorkspaceEdit();
                             }}
-                            style={{ width: "100%", maxWidth: 206, height: 36, borderRadius: 10,
-                              border: `1px solid ${orgSlugErr ? "#e5484d" : theme.border}`,
-                              background: theme.inputBg || "transparent",
-                              color: theme.text, fontFamily: FONT, fontSize: 13, padding: "0 12px", outline: "none" }}
+                            style={{ flex: 1, minWidth: 0, border: "none", outline: "none",
+                              background: "transparent", color: theme.text,
+                              fontFamily: FONT, fontSize: 13, padding: 0 }}
                           />
                         </div>
-                        <div style={{ fontSize: 11.5, fontFamily: FONT, marginTop: 8, lineHeight: 1.5,
-                          color: orgSlugErr ? "#e5484d" : theme.textFaint }}>
-                          {orgSlugErr
-                            || (slugClean(orgSlugDraft) === userOrg.slug
-                              ? (appLanguage === "de"
-                                ? "Die Adresse bleibt wie sie ist."
-                                : "The address stays as it is.")
-                              : (appLanguage === "de"
-                                ? `Neue Adresse: app.i7os.com/${slugClean(orgSlugDraft) || "…"} . Links mit der alten funktionieren danach nicht mehr.`
-                                : `New address: app.i7os.com/${slugClean(orgSlugDraft) || "…"} . Links using the old one stop working.`))}
-                        </div>
+                        {/* Only when something is wrong. The line that explained
+                            what the address would become said what the field
+                            beneath it was already showing. */}
+                        {orgSlugErr && (
+                          <div style={{ fontSize: 11.5, fontFamily: FONT, marginTop: 6, color: "#e5484d" }}>
+                            {orgSlugErr}
+                          </div>
+                        )}
                       </>) : (
-                        // The address as an address: the host in the dim grey of
-                        // a caption, the slug in a chip because that is the part
-                        // that belongs to this workspace and the part somebody
-                        // would copy. Both in a monospace stack, which is what
-                        // stops a URL from reading as prose.
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7 }}>
-                          <span style={{ fontSize: 12.5, fontFamily: MONO_FONT, color: theme.textDim }}>
-                            app.i7os.com
-                          </span>
-                          <span style={{ fontSize: 12.5, fontFamily: MONO_FONT, color: theme.textFaint }}>/</span>
-                          <span style={{ fontSize: 12.5, fontFamily: MONO_FONT, color: theme.text,
-                            padding: "4px 12px", borderRadius: 999, letterSpacing: 0.2,
+                        // The same subline as the logo row above it: same font,
+                        // same size, same grey, same 3px under the title. It was
+                        // set in a monospace stack a size larger, which made one
+                        // row of a panel speak in a different voice from the
+                        // one above it. The chip is the only mark left, because
+                        // the slug is the part that belongs to this workspace.
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3,
+                          fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
+                          <span>app.i7os.com</span>
+                          <span style={{ color: theme.textFaint }}>/</span>
+                          <span style={{ color: theme.text, padding: "2px 9px", borderRadius: 999,
                             background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)" }}>
                             {userOrg.slug}
                           </span>
@@ -52853,7 +52843,10 @@ export default function CircularMenu() {
                             )}
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{m.profiles?.display_name || "Unknown"}</div>
-                              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.profiles?.email || ""}</div>
+                              {/* The same 3px every title in this panel puts
+                                  under itself. This line had none and sat at
+                                  whatever the line height left over. */}
+                              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.profiles?.email || ""}</div>
                             </div>
                             {/* Lilac is now a statement — "this person can change
                                 everything" — and it only says that if the other roles
@@ -53148,7 +53141,7 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Appearance</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{darkMode ? t("settings.darkMode") : t("settings.lightMode")}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>{darkMode ? t("settings.darkMode") : t("settings.lightMode")}</div>
                     </div>
                     <ToggleSwitch on={darkMode} darkMode={darkMode}
                       onClick={(e) => { e.stopPropagation(); setDarkMode(!darkMode); }} />
@@ -53172,7 +53165,7 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{t("settings.language")}</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{t("settings.languageSub")}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>{t("settings.languageSub")}</div>
                     </div>
                     <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
                       <select
@@ -53214,7 +53207,7 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{appLanguage === "de" ? "Neue Dokumente" : "New documents"}</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{appLanguage === "de" ? "Standard-Sichtbarkeit beim Erstellen" : "Default visibility on creation"}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>{appLanguage === "de" ? "Standard-Sichtbarkeit beim Erstellen" : "Default visibility on creation"}</div>
                     </div>
                     <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
                       <select
@@ -53255,7 +53248,7 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{t("settings.notifications")}</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{t("settings.notificationsSub")}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>{t("settings.notificationsSub")}</div>
                     </div>
                     {/* Grey, like Slack's and like the members panel: a thing that
                         does not exist yet should not be the loudest on the page. */}
@@ -53413,7 +53406,7 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
                         {appLanguage === "de" ? "AI-Bilder automatisch speichern" : "Auto-save AI images"}
                       </div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, lineHeight: 1.4 }}>
                         {appLanguage === "de"
                           ? "Generierte Bilder werden direkt in deine Dateien-Übersicht gelegt."
                           : "Generated images go straight into your Files view."}
@@ -53667,7 +53660,7 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{t("settings.googleCalDrive")}</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{(session?.user?.app_metadata?.provider === "google" && !googleConnectionBroken) ? t("settings.calFilesSynced") : (appLanguage === "de" ? "Nicht verbunden" : "Not connected")}</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>{(session?.user?.app_metadata?.provider === "google" && !googleConnectionBroken) ? t("settings.calFilesSynced") : (appLanguage === "de" ? "Nicht verbunden" : "Not connected")}</div>
                     </div>
                     <div style={{ width: 8, height: 8, borderRadius: "50%", background: (session?.user?.app_metadata?.provider === "google" && !googleConnectionBroken) ? "#00B894" : (darkMode ? "#ffffff30" : "#c4c4cc") }} />
                   </div>
@@ -53690,7 +53683,7 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Slack</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
                         {!slackReady ? t("settings.slackSub")
                           : slackLink
                             ? (appLanguage === "de" ? "Verbunden. Benachrichtigungen kommen als Direktnachricht." : "Connected. Notifications arrive as a direct message.")
@@ -53741,7 +53734,7 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Pinterest</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {pinConn
                           ? (pinConn.needs_reconnect
                               ? (pinConn.scopes_missing?.length
@@ -53804,7 +53797,7 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Telegram</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
                         {tgLink
                           ? (appLanguage === "de" ? "Verbunden. Alles aus der Glocke kommt auch dort an." : "Connected. Whatever reaches the bell reaches you there too.")
                           : (appLanguage === "de" ? "Einmal verbinden, für alle Workspaces, auch für spätere." : "Connect once, for every workspace, later ones included.")}
@@ -53941,7 +53934,7 @@ export default function CircularMenu() {
                         <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
                           Verbindung unterbrochen
                         </div>
-                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
+                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, lineHeight: 1.4 }}>
                           Calendar & Drive funktionieren nicht. Bitte neu verbinden — danach läuft alles automatisch.
                         </div>
                       </div>
@@ -53991,7 +53984,7 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
                         {pushSubExists ? "Push aktiv" : "Erinnerungen aufs Handy"}
                       </div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, lineHeight: 1.4 }}>
                         {pushSubExists
                           ? "Du erhältst Reminder als Push-Notification auf deinem Gerät."
                           : "Erhalte Reminder direkt als Notification auf deinem Handy."
@@ -54105,7 +54098,7 @@ export default function CircularMenu() {
                     <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
                       {appLanguage === "de" ? "Icons anpassen" : "Customise icons"}
                     </div>
-                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, lineHeight: 1.4 }}>
                       {appLanguage === "de" ? "Eigene Icons für Termine, Aufgaben und mehr" : "Your own icons for events, tasks and more"}
                     </div>
                   </div>
@@ -54137,7 +54130,7 @@ export default function CircularMenu() {
                       <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
                         {appLanguage === "de" ? "Nur diesen Workspace löschen" : "Delete this workspace only"}
                       </div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, lineHeight: 1.4 }}>
                         {appLanguage === "de" ? <>Entfernt <strong style={{ color: theme.text }}>{userOrg?.name}</strong> mit allen Daten unwiderruflich. Dein Account und deine anderen Workspaces bleiben bestehen.</> : <>Permanently removes <strong style={{ color: theme.text }}>{userOrg?.name}</strong> and all of its data. Your account and other workspaces stay.</>}
                       </div>
                     </div>
@@ -54162,7 +54155,7 @@ export default function CircularMenu() {
                           ? (appLanguage === "de" ? (ownedWorkspaces.length > 1 ? "Account & Workspaces löschen" : "Account & Workspace löschen") : (ownedWorkspaces.length > 1 ? "Delete account & workspaces" : "Delete account & workspace"))
                           : (appLanguage === "de" ? "Account löschen" : "Delete account")}
                       </div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2, lineHeight: 1.4 }}>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, lineHeight: 1.4 }}>
                         {ownedWorkspaces.length > 0
                           ? (appLanguage === "de" ? "Account, Workspace und alle Daten & Assets werden dauerhaft gelöscht." : "Account, workspace and all data & assets are permanently deleted.")
                           : (appLanguage === "de" ? "Account und persönliche Daten werden gelöscht. Inhalte bleiben im Workspace." : "Account and personal data are deleted. Content stays in the workspace.")}
@@ -54845,7 +54838,7 @@ export default function CircularMenu() {
               <div style={{ padding: "20px 24px", borderBottom: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div>
                   <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>OS Visuals</div>
-                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{appLanguage === "de" ? "Eigene Icons für die Symbole im OS" : "Your own icons for the OS symbols"}</div>
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>{appLanguage === "de" ? "Eigene Icons für die Symbole im OS" : "Your own icons for the OS symbols"}</div>
                 </div>
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.92 }}
                   onClick={() => setOsVisualsModalOpen(false)}
