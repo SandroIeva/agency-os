@@ -45687,15 +45687,29 @@ export default function CircularMenu() {
   // renamed — the name appeared in Settings as a heading only.
   // Every row in the workspace panel ends in a button, and each of them used to
   // stop at its own label: a wide one beside two narrow ones, which reads as
-  // three unrelated controls rather than one column of settings. They are all
-  // the width of the widest, which is the logo's "Logo entfernen" — measured at
-  // 105px in Geist at 12px, so nothing shrinks and the two short ones grow.
+  // three unrelated controls rather than one column of settings.
+  //
+  // 132 is the width you can see, which is why boxSizing is border-box: a plain
+  // minWidth is the CONTENT box, so 105 there quietly rendered as 131 once the
+  // padding and the border were added — a number in the code that meant
+  // something else on the screen. Measured in Geist at 12px, the widest label
+  // of the four is "Logo entfernen" at 82.8px, so 132 clears it with air and
+  // holds for the English labels too.
   const wsRowBtn = {
-    padding: "7px 12px", minWidth: 105, textAlign: "center", borderRadius: 999,
-    background: "transparent", border: `1px solid ${theme.borderFaint}`,
+    padding: "9px 12px", minWidth: 132, boxSizing: "border-box",
+    textAlign: "center", borderRadius: 999,
+    background: "transparent",
+    // The border as three longhands rather than the shorthand, so the property
+    // the hover animates is the property the base style sets. Measured with
+    // this Framer version: the shorthand animates correctly too, so this is
+    // the arrangement that cannot argue, not a fix for something broken.
+    borderWidth: 1, borderStyle: "solid", borderColor: theme.borderFaint,
     color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer",
     flexShrink: 0,
   };
+  // Under the cursor the outline comes up to the weight of the label. A button
+  // whose edge never answers reads as a caption with a line around it.
+  const wsRowBtnHover = { borderColor: theme.textDim };
 
   // The workspace's address. Its own edit, not part of the rename: a name is
   // for reading and an address is for linking, and quietly re-cutting the
@@ -52450,7 +52464,7 @@ export default function CircularMenu() {
                         <input ref={orgLogoInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadOrgLogo(f); }} style={{ display: "none" }} />
                         {userOrg.logo_url && (
                           <motion.div onClick={removeOrgLogo} whileTap={{ scale: 0.97 }}
-                            style={wsRowBtn}
+                            whileHover={wsRowBtnHover} style={wsRowBtn}
                           // Named, not just "Remove": it sits in the workspace panel,
                           // and a bare "Remove" there reads as the workspace.
                           >{appLanguage === "de" ? "Logo entfernen" : "Remove logo"}</motion.div>
@@ -52505,7 +52519,7 @@ export default function CircularMenu() {
                           </motion.div>
                         </div>
                       ) : (
-                        <motion.div whileTap={{ scale: 0.97 }}
+                        <motion.div whileTap={{ scale: 0.97 }} whileHover={wsRowBtnHover}
                           onClick={() => { setOrgNameDraft(userOrg.name || ""); setOrgNameEdit(true); }}
                           style={wsRowBtn}>
                           {/* The same word as the row under it. Two buttons that
@@ -52583,7 +52597,7 @@ export default function CircularMenu() {
                           </motion.div>
                         </div>
                       ) : (
-                        <motion.div whileTap={{ scale: 0.97 }}
+                        <motion.div whileTap={{ scale: 0.97 }} whileHover={wsRowBtnHover}
                           onClick={() => { setOrgSlugDraft(userOrg.slug || ""); setOrgSlugErr(""); setOrgSlugEdit(true); }}
                           style={wsRowBtn}>
                           {appLanguage === "de" ? "Ändern" : "Change"}
@@ -52752,10 +52766,16 @@ export default function CircularMenu() {
                             alert(planLimitError(e, appLanguage === "de") || e.message || "Failed to send invite");
                           }
                         }}
+                        whileHover={wsRowBtnHover}
+                        // The same width as the three above it. It keeps its
+                        // own filled background and its own rounding: it is the
+                        // action of this row, where those three open an edit.
                         style={{
-                          padding: "10px 16px", borderRadius: 10, flexShrink: 0,
+                          padding: "9px 12px", minWidth: 132, boxSizing: "border-box",
+                          borderRadius: 10, flexShrink: 0,
                           display: "flex", alignItems: "center", justifyContent: "center",
-                          background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`,
+                          background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                          borderWidth: 1, borderStyle: "solid", borderColor: theme.borderFaint,
                           color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT,
                           cursor: "pointer", opacity: inviteEmails.length === 0 && !inviteInputVal ? 0.5 : 1,
                         }}
