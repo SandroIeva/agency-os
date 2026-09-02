@@ -45715,12 +45715,50 @@ export default function CircularMenu() {
     // button drawn in it has too little to say against the panel behind it.
     // One step up in the palette that already exists, in both themes.
     borderWidth: 1, borderStyle: "solid", borderColor: theme.border,
-    color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer",
+    // One weight for every button in this panel. They were three: 400 on the
+    // outlined ones, 500 on the two that sit inside a field and 600 on Save,
+    // which is what made buttons of identical size read as different sizes.
+    // Measured: 39px tall and 132 wide in all eight cases, so the type was the
+    // only thing left that could differ, and it did.
+    color: theme.textDim, fontSize: 12, fontWeight: 500, fontFamily: FONT, cursor: "pointer",
     flexShrink: 0,
   };
   // Under the cursor the outline comes up to the weight of the label. A button
   // whose edge never answers reads as a caption with a line around it.
   const wsRowBtnHover = { borderColor: theme.textDim };
+  // The one button that COMMITS something. Anthracite on white, and inverted on
+  // anthracite: the design system does the same with the nav's selected pill,
+  // because a dark fill on a dark panel is a label, not a button — which is
+  // exactly what Save looked like in the dark theme.
+  const wsPrimaryBtn = {
+    ...wsRowBtn,
+    background: darkMode ? "#F4F4F7" : "#15151c",
+    borderColor: darkMode ? "#F4F4F7" : "#15151c",
+    color: darkMode ? "#15151c" : "#fff",
+  };
+  const wsPrimaryHover = { opacity: 0.88 };
+  // A field in this panel: a pill with a faint wash and no outline, holding
+  // whatever it is for and its buttons at the right. Defined once, because the
+  // invite row and the model keys are the same thing and looked like two.
+  const wsField = {
+    display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6,
+    padding: "6px 6px 6px 18px", borderRadius: 999, minHeight: 52,
+    boxSizing: "border-box",
+    background: darkMode ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.022)",
+  };
+  // The button that lives INSIDE such a field. The same shape as the row
+  // buttons, filled rather than outlined because it is the one thing in the
+  // field that DOES something, and pushed right by an auto margin so it stays
+  // at the edge when the field's contents wrap onto another line.
+  const wsFieldBtn = {
+    ...wsRowBtn, marginLeft: "auto",
+    background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+    color: theme.textSub,
+  };
+  const wsFieldBtnHover = { ...wsRowBtnHover, scale: 1.02 };
+  // Everything inside a field is set in the field's own type, so an input, a
+  // saved-key line and a chip do not each pick their own size.
+  const wsFieldText = { fontSize: 13, fontFamily: FONT, color: theme.text };
 
   // ── The workspace's name and its address ─────────────────────────────────
   // They were two separate edits, and that is what made them look like two
@@ -52502,32 +52540,62 @@ export default function CircularMenu() {
                       workspace, the address keeps the old name, and the panel
                       never mentions that the two are the same thing seen twice.
 
-                      The address follows the name while it is still DERIVED
-                      from it — which is what a fresh workspace's address is, and
-                      what the older ones with a timestamp after the name are
-                      too. Once somebody has typed an address of their own it
-                      stops following, because a chosen address is a decision and
-                      a rename is not a reason to undo it. */}
-                  <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}`,
-                    display: "flex", alignItems: orgNameEdit ? "flex-start" : "center", gap: 16 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
-                        Workspace
+                      The address simply IS the name: type Banane and the
+                      address says banane. It used to follow only while it still
+                      looked derived, which meant a workspace whose address
+                      somebody had once chosen quietly stopped following and
+                      nothing on screen said so. The consequence, stated rather
+                      than hidden: typing in the name overwrites an address that
+                      was typed by hand, and the address field is there to fix
+                      it without touching the name. */}
+                  <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
+                          Workspace
+                        </div>
+                        {!orgNameEdit && (
+                          // The same subline as the logo row above it: same
+                          // font, same size, same grey, same 3px under the
+                          // title. The chip is the only mark, because the slug
+                          // is the part that belongs to this workspace.
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3,
+                            fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
+                            <span>app.i7os.com</span>
+                            <span style={{ color: theme.textFaint }}>/</span>
+                            <span style={{ color: theme.text, padding: "2px 9px", borderRadius: 999,
+                              background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)" }}>
+                              {userOrg.slug}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                      {orgNameEdit ? (<>
-                        {/* Two fields, one shape: same height, same rounding,
-                            same width, stacked with the gap the panel uses
-                            everywhere else. The prefix lives INSIDE the second
-                            one, so the address reads as a single thing being
-                            edited rather than a label with a box beside it. */}
+                      {!orgNameEdit && ((userOrgRole === "admin" || userOrg?.role === "admin") ? (
+                        <motion.div whileTap={{ scale: 0.97 }} whileHover={wsRowBtnHover}
+                          onClick={openWorkspaceEdit} style={wsRowBtn}>
+                          {appLanguage === "de" ? "Ändern" : "Change"}
+                        </motion.div>
+                      ) : (
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, flexShrink: 0 }}>
+                          {appLanguage === "de" ? "Nur Admins" : "Admins only"}
+                        </div>
+                      ))}
+                    </div>
+
+                    {orgNameEdit && (<>
+                      {/* Side by side: the row is wide and two fields stacked
+                          in the left third leave the rest of it empty. Both
+                          the same shape, and the address wider because it
+                          carries the host as well as the name. */}
+                      <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
                         <input
                           autoFocus value={orgNameDraft}
                           onChange={e => {
                             const v = e.target.value;
                             setOrgNameDraft(v);
                             // The address IS the name. Type Banane and the
-                            // address says banane; there is no second thing to
-                            // keep in step by hand.
+                            // address says banane; there is no second thing
+                            // to keep in step by hand.
                             setOrgSlugDraft(slugClean(v));
                             setOrgSlugErr("");
                           }}
@@ -52535,18 +52603,27 @@ export default function CircularMenu() {
                             if (e.key === "Enter") saveWorkspace();
                             if (e.key === "Escape") closeWorkspaceEdit();
                           }}
-                          style={{ marginTop: 10, width: "100%", maxWidth: 320, height: 38,
-                            borderRadius: 10, boxSizing: "border-box",
-                            border: `1px solid ${theme.border}`, background: theme.inputBg || "transparent",
-                            color: theme.text, fontFamily: FONT, fontSize: 13, padding: "0 12px", outline: "none" }}
+                          placeholder={appLanguage === "de" ? "Name" : "Name"}
+                          style={{ flex: "1 1 200px", minWidth: 0, height: 44, borderRadius: 999,
+                            boxSizing: "border-box", border: "none", outline: "none",
+                            background: darkMode ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.022)",
+                            color: theme.text, fontFamily: FONT, fontSize: 13, padding: "0 18px" }}
                         />
-                        <div style={{ marginTop: 8, width: "100%", maxWidth: 320, height: 38,
-                          borderRadius: 10, boxSizing: "border-box", display: "flex", alignItems: "center",
-                          border: `1px solid ${orgSlugErr ? "#e5484d" : theme.border}`,
-                          background: theme.inputBg || "transparent", padding: "0 12px", gap: 1 }}>
+                        <div style={{ flex: "1 1 260px", minWidth: 0, height: 44, borderRadius: 999,
+                          boxSizing: "border-box", display: "flex", alignItems: "center", padding: "0 18px",
+                          background: darkMode ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.022)",
+                          outline: orgSlugErr ? "1px solid #e5484d" : "none" }}>
+                          {/* The slash gets air. Set as one string it read as
+                              app.i7os.com/minddraft with the name jammed against
+                              the host. 6.5px is what two spaces measure in Geist
+                              at 13px, so this is the spacing you would have got
+                              by typing them, without leaving whitespace in a
+                              string where it can be trimmed away. */}
                           <span style={{ fontFamily: FONT, fontSize: 13, color: theme.textFaint, flexShrink: 0 }}>
-                            app.i7os.com/
+                            app.i7os.com
                           </span>
+                          <span style={{ fontFamily: FONT, fontSize: 13, color: theme.textFaint,
+                            flexShrink: 0, padding: "0 6.5px" }}>/</span>
                           <input
                             value={orgSlugDraft}
                             onChange={e => { setOrgSlugDraft(e.target.value); setOrgSlugErr(""); }}
@@ -52559,60 +52636,29 @@ export default function CircularMenu() {
                               fontFamily: FONT, fontSize: 13, padding: 0 }}
                           />
                         </div>
-                        {/* Only when something is wrong. The line that explained
-                            what the address would become said what the field
-                            beneath it was already showing. */}
-                        {orgSlugErr && (
-                          <div style={{ fontSize: 11.5, fontFamily: FONT, marginTop: 6, color: "#e5484d" }}>
-                            {orgSlugErr}
-                          </div>
-                        )}
-                      </>) : (
-                        // The same subline as the logo row above it: same font,
-                        // same size, same grey, same 3px under the title. It was
-                        // set in a monospace stack a size larger, which made one
-                        // row of a panel speak in a different voice from the
-                        // one above it. The chip is the only mark left, because
-                        // the slug is the part that belongs to this workspace.
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3,
-                          fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
-                          <span>app.i7os.com</span>
-                          <span style={{ color: theme.textFaint }}>/</span>
-                          <span style={{ color: theme.text, padding: "2px 9px", borderRadius: 999,
-                            background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)" }}>
-                            {userOrg.slug}
-                          </span>
+                      </div>
+                      {/* Only when something is wrong. The line that explained
+                          what the address would become said what the field
+                          beneath it was already showing. */}
+                      {orgSlugErr && (
+                        <div style={{ fontSize: 11.5, fontFamily: FONT, marginTop: 8, color: "#e5484d" }}>
+                          {orgSlugErr}
                         </div>
                       )}
-                    </div>
-                    {(userOrgRole === "admin" || userOrg?.role === "admin") ? (
-                      orgNameEdit ? (
-                        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                          <motion.div onClick={closeWorkspaceEdit} whileTap={{ scale: 0.97 }}
-                            whileHover={wsRowBtnHover}
-                            style={{ ...wsRowBtn, minWidth: 0, padding: "0 16px 2px" }}>
-                            {appLanguage === "de" ? "Abbrechen" : "Cancel"}
-                          </motion.div>
-                          <motion.div onClick={saveWorkspace} whileTap={{ scale: 0.97 }}
-                            whileHover={wsRowBtnHover}
-                            style={{ ...wsRowBtn, minWidth: 0, padding: "0 18px 2px",
-                              background: "#15151c", borderColor: "#15151c", color: "#fff", fontWeight: 600,
-                              opacity: (orgNameSaving || !orgNameDraft.trim()) ? 0.6 : 1 }}>
-                            {orgNameSaving ? (appLanguage === "de" ? "Speichert…" : "Saving…")
-                              : (appLanguage === "de" ? "Speichern" : "Save")}
-                          </motion.div>
-                        </div>
-                      ) : (
-                        <motion.div whileTap={{ scale: 0.97 }} whileHover={wsRowBtnHover}
-                          onClick={openWorkspaceEdit} style={wsRowBtn}>
-                          {appLanguage === "de" ? "Ändern" : "Change"}
+                      {/* Cancel left, Save right: the commit is the rightmost
+                          thing in the row, where the eye finishes reading it. */}
+                      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                        <motion.div onClick={closeWorkspaceEdit} whileTap={{ scale: 0.97 }}
+                          whileHover={wsRowBtnHover} style={wsRowBtn}>
+                          {appLanguage === "de" ? "Abbrechen" : "Cancel"}
                         </motion.div>
-                      )
-                    ) : (
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, flexShrink: 0 }}>
-                        {appLanguage === "de" ? "Nur Admins" : "Admins only"}
+                        <motion.div onClick={saveWorkspace} whileTap={{ scale: 0.97 }}
+                          whileHover={wsPrimaryHover} style={wsPrimaryBtn}>
+                          {orgNameSaving ? (appLanguage === "de" ? "Speichert…" : "Saving…")
+                            : (appLanguage === "de" ? "Speichern" : "Save")}
+                        </motion.div>
                       </div>
-                    )}
+                    </>)}
                   </div>
 
                   {/* Invite member — admins or members with the invite permission */}
@@ -52622,21 +52668,11 @@ export default function CircularMenu() {
                       {appLanguage === "de" ? "Teammitglied einladen" : "Invite Team Member"}
                     </div>
                     <div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
-                      <div style={{
-                        flex: 1, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6,
-                        // Taller than the key fields further down, because it
-                        // holds the Einladen button: room for it at the right,
-                        // less padding on that side, and enough height that the
-                        // button sits IN the field rather than filling it edge
-                        // to edge.
-                        //
-                        // Round like the button in it, and no outline: the
-                        // button carries the only edge in this row, so a second
-                        // one around the field draws a box around a box. What
-                        // marks the field is a wash barely off the panel.
-                        padding: "6px 6px 6px 18px", borderRadius: 999, minHeight: 52, boxSizing: "border-box",
-                        background: darkMode ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.022)",
-                      }}>
+                      {/* Round like the button in it, and no outline: the
+                          button carries the only edge in the row, so a second
+                          one around the field draws a box around a box. What
+                          marks the field is a wash barely off the panel. */}
+                      <div style={{ ...wsField, flex: 1 }}>
                         {inviteEmails.map((email, idx) => (
                           <motion.div
                             key={idx}
@@ -52695,7 +52731,7 @@ export default function CircularMenu() {
                           // One whileHover, not two. JSX keeps the last of a
                           // repeated prop, so the second was quietly throwing
                           // the first away.
-                          whileHover={inviteReady ? { ...wsRowBtnHover, scale: 1.02 } : undefined}
+                          whileHover={inviteReady ? wsFieldBtnHover : undefined}
                           whileTap={inviteReady ? { scale: 0.97 } : undefined}
                           onClick={async () => {
                             let emails = [...inviteEmails];
@@ -52785,17 +52821,10 @@ export default function CircularMenu() {
                               alert(planLimitError(e, appLanguage === "de") || e.message || "Failed to send invite");
                             }
                           }}
-                          // Inside the field now, at its right edge, and the same
-                          // shape as the buttons above: same width, same height,
-                          // same rounding. `marginLeft: auto` keeps it right even
-                          // when the addresses above it wrap onto another line.
+                          // Inside the field, at its right edge, in the shape
+                          // every in-field button shares.
                           style={{
-                            ...wsRowBtn, marginLeft: "auto",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            // Filled rather than outlined: it is the one thing in
-                            // this field that DOES something.
-                            background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
-                            color: theme.textSub, fontWeight: 500,
+                            ...wsFieldBtn,
                             ...(inviteReady ? {} : {
                               opacity: 0.45, cursor: "default", pointerEvents: "none",
                             }),
@@ -53487,108 +53516,114 @@ export default function CircularMenu() {
                               transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
                               style={{ overflow: "hidden" }}
                             >
+                              {/* The same field as the invite row above, because
+                                  it is the same thing: something you type into,
+                                  with the button that acts on it sitting inside
+                                  at the right. It was a squared-off 10px box
+                                  with an outline and a button beside it, in a
+                                  panel where nothing else is shaped that way,
+                                  and the save button wore the provider's own
+                                  colour, so the same control was terracotta for
+                                  Claude and green for OpenAI. */}
                               <div style={{ padding: "0 20px 18px" }}>
                                 {editingKeyId !== p.id ? (
-                                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                                    <div style={{ flex: 1, height: 42, boxSizing: "border-box", padding: "0 14px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, color: hasKey ? theme.textSub : theme.textDim, fontSize: 12, fontFamily: FONT, display: "flex", alignItems: "center", gap: 8 }}>
-                                      {hasKey && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M20 6L9 17l-5-5" stroke={theme.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                                  <div style={wsField}>
+                                    {/* In a bubble, not loose in the field. A
+                                        bare tick beside a line of text reads as
+                                        punctuation somebody forgot to remove. */}
+                                    {hasKey && (
+                                      <span style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                        background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)" }}>
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke={theme.text} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                                      </span>
+                                    )}
+                                    <span style={{ ...wsFieldText, marginLeft: hasKey ? 2 : 0, color: hasKey ? theme.textSub : theme.textDim }}>
                                       {hasKey ? (appLanguage === "de" ? "Key gespeichert" : "Key saved") : (appLanguage === "de" ? "Kein Key hinterlegt" : "No key set")}
-                                    </div>
-                                    <motion.div whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.11)" : "rgba(0,0,0,0.07)" }} whileTap={{ scale: 0.97 }}
+                                    </span>
+                                    <motion.div whileHover={wsFieldBtnHover} whileTap={{ scale: 0.97 }}
                                       onClick={() => { setEditingKeyId(p.id); setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" })); setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; }); }}
-                                      style={{ height: 42, boxSizing: "border-box", display: "flex", alignItems: "center", padding: "0 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textSub, fontWeight: 500, whiteSpace: "nowrap" }}>
+                                      style={wsFieldBtn}>
                                       {appLanguage === "de" ? "Bearbeiten" : "Edit"}
                                     </motion.div>
                                   </div>
                                 ) : (
-                                  <div style={{ display: "flex", gap: 8 }}>
-                                <div style={{ flex: 1, position: "relative", display: "flex" }}>
-                                <input
-                                  type="password"
-                                  value={llmKeyInputs[p.id] || ""}
-                                  onChange={(e) => setLlmKeyInputs(prev => ({ ...prev, [p.id]: e.target.value }))}
-                                  placeholder={hasKey
-                                    ? (appLanguage === "de" ? "Key gespeichert · zum Ersetzen neuen Key eingeben" : "Key saved · enter a new one to replace")
-                                    : (p.id === "claude" ? "sk-ant-api03-…" : p.id === "openai" ? "sk-…" : "AIza…")}
-                                  style={{
-                                    flex: 1, width: "100%", boxSizing: "border-box", height: 42,
-                                    padding: hasKey ? "0 116px 0 14px" : "0 14px", borderRadius: 10,
-                                    background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                                    border: `1px solid ${theme.borderFaint}`,
-                                    color: theme.text, fontSize: 12, fontFamily: FONT,
-                                    outline: "none",
-                                  }}
-                                  onFocus={(e) => e.target.style.borderColor = p.color + "60"}
-                                  onBlur={(e) => e.target.style.borderColor = theme.borderFaint}
-                                />
-                                {hasKey && (
-                                  <div
-                                    onClick={() => {
-                                      setLlmKeys(prev => { const n = { ...prev }; delete n[p.id]; return n; });
-                                      setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
-                                      setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; });
-                                      setEditingKeyId(null);
-                                    }}
-                                    style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, fontFamily: FONT, color: theme.textDim, textDecoration: "underline", cursor: "pointer", whiteSpace: "nowrap" }}>
-                                    {appLanguage === "de" ? "Zurücksetzen" : "Reset"}
-                                  </div>
-                                )}
-                                </div>
-                                <motion.div
-                                  whileHover={{ backgroundColor: p.color + "33" }}
-                                  whileTap={{ scale: 0.97 }}
-                                  onClick={async () => {
-                                    const key = llmKeyInputs[p.id];
-                                    if (!key && !hasKey) return;
-                                    if (key) {
-                                      // Validate key with a test call
-                                      setLlmKeyStatus(prev => ({ ...prev, [p.id]: "checking" }));
-                                      try {
-                                        const res = await fetch("/api/chat-multi", {
-                                          method: "POST",
-                                          headers: { "Content-Type": "application/json" },
-                                          body: JSON.stringify({
-                                            message: "Say OK",
-                                            provider: p.id,
-                                            apiKey: key,
-                                            systemPrompt: "Respond with just OK",
-                                          }),
-                                        });
-                                        if (res.ok) {
-                                          setLlmKeys(prev => ({ ...prev, [p.id]: key }));
-                                          // Clear the input — never let a real key sit visibly in the field.
+                                  <div style={wsField}>
+                                    <input
+                                      autoFocus
+                                      type="password"
+                                      value={llmKeyInputs[p.id] || ""}
+                                      onChange={(e) => setLlmKeyInputs(prev => ({ ...prev, [p.id]: e.target.value }))}
+                                      placeholder={hasKey
+                                        ? (appLanguage === "de" ? "Neuen Key eingeben" : "Enter a new key")
+                                        : (p.id === "claude" ? "sk-ant-api03-…" : p.id === "openai" ? "sk-…" : "AIza…")}
+                                      style={{
+                                        ...wsFieldText, flex: 1, minWidth: 120, padding: "4px 2px",
+                                        border: "none", outline: "none", background: "transparent",
+                                      }}
+                                    />
+                                    {hasKey && (
+                                      <div
+                                        onClick={() => {
+                                          setLlmKeys(prev => { const n = { ...prev }; delete n[p.id]; return n; });
                                           setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
-                                          setLlmKeyStatus(prev => ({ ...prev, [p.id]: "valid" }));
+                                          setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; });
                                           setEditingKeyId(null);
-                                        } else {
-                                          // 429 = rate limited but key format is valid — save it
-                                          const errData = await res.json().catch(() => ({}));
-                                          if (res.status === 429 || errData.statusCode === 429) {
-                                            setLlmKeys(prev => ({ ...prev, [p.id]: key }));
-                                            setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
-                                            setLlmKeyStatus(prev => ({ ...prev, [p.id]: "valid" }));
-                                          setEditingKeyId(null);
-                                          } else {
+                                        }}
+                                        style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, textDecoration: "underline", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
+                                        {appLanguage === "de" ? "Zurücksetzen" : "Reset"}
+                                      </div>
+                                    )}
+                                    <motion.div
+                                      whileHover={wsFieldBtnHover}
+                                      whileTap={{ scale: 0.97 }}
+                                      onClick={async () => {
+                                        const key = llmKeyInputs[p.id];
+                                        if (!key && !hasKey) return;
+                                        if (key) {
+                                          // Validate key with a test call
+                                          setLlmKeyStatus(prev => ({ ...prev, [p.id]: "checking" }));
+                                          try {
+                                            const res = await fetch("/api/chat-multi", {
+                                              method: "POST",
+                                              headers: { "Content-Type": "application/json" },
+                                              body: JSON.stringify({
+                                                message: "Say OK",
+                                                provider: p.id,
+                                                apiKey: key,
+                                                systemPrompt: "Respond with just OK",
+                                              }),
+                                            });
+                                            if (res.ok) {
+                                              setLlmKeys(prev => ({ ...prev, [p.id]: key }));
+                                              // Clear the input — never let a real key sit visibly in the field.
+                                              setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
+                                              setLlmKeyStatus(prev => ({ ...prev, [p.id]: "valid" }));
+                                              setEditingKeyId(null);
+                                            } else {
+                                              // 429 = rate limited but key format is valid — save it
+                                              const errData = await res.json().catch(() => ({}));
+                                              if (res.status === 429 || errData.statusCode === 429) {
+                                                setLlmKeys(prev => ({ ...prev, [p.id]: key }));
+                                                setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
+                                                setLlmKeyStatus(prev => ({ ...prev, [p.id]: "valid" }));
+                                                setEditingKeyId(null);
+                                              } else {
+                                                setLlmKeyStatus(prev => ({ ...prev, [p.id]: "invalid" }));
+                                              }
+                                            }
+                                          } catch {
                                             setLlmKeyStatus(prev => ({ ...prev, [p.id]: "invalid" }));
                                           }
                                         }
-                                      } catch {
-                                        setLlmKeyStatus(prev => ({ ...prev, [p.id]: "invalid" }));
-                                      }
-                                    }
-                                  }}
-                                  style={{
-                                    padding: "10px 16px", borderRadius: 10, cursor: "pointer",
-                                    background: p.color + "20", border: `1px solid ${p.color}40`,
-                                    fontSize: 12, fontFamily: FONT, color: p.color, fontWeight: 500,
-                                    display: "flex", alignItems: "center", whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  {status === "checking" ? "…" : (appLanguage === "de" ? "Speichern" : "Save")}
-                                </motion.div>
-                                    <motion.div whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }} whileTap={{ scale: 0.97 }}
+                                      }}
+                                      style={wsFieldBtn}
+                                    >
+                                      {status === "checking" ? "…" : (appLanguage === "de" ? "Speichern" : "Save")}
+                                    </motion.div>
+                                    <motion.div whileHover={wsRowBtnHover} whileTap={{ scale: 0.97 }}
                                       onClick={() => { setEditingKeyId(null); setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" })); setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; }); }}
-                                      style={{ padding: "10px 14px", borderRadius: 10, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, fontSize: 12, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap" }}>
+                                      style={wsRowBtn}>
                                       {appLanguage === "de" ? "Abbrechen" : "Cancel"}
                                     </motion.div>
                                   </div>
