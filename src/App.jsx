@@ -45696,8 +45696,11 @@ export default function CircularMenu() {
   // of the four is "Logo entfernen" at 82.8px, so 132 clears it with air and
   // holds for the English labels too.
   const wsRowBtn = {
-    padding: "11px 12px", minWidth: 132, boxSizing: "border-box",
-    textAlign: "center", borderRadius: 999,
+    // Height as a HEIGHT, not as padding: padding works on both sides, so
+    // "one pixel shorter" through it is two. 39 is 40 less one.
+    height: 39, padding: "0 12px", minWidth: 132, boxSizing: "border-box",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    borderRadius: 999,
     background: "transparent",
     // The border as three longhands rather than the shorthand, so the property
     // the hover animates is the property the base style sets. Measured with
@@ -45992,6 +45995,10 @@ export default function CircularMenu() {
   const [teamInvites, setTeamInvites] = useState([]);        // pending invites sent by admin
   const [inviteEmails, setInviteEmails] = useState([]);      // email chips for invite input
   const [inviteInputVal, setInviteInputVal] = useState("");  // current text in invite input
+  // Is there anything to send? A chip already taken, or something being typed.
+  // Named once because the button reads it four times: to disable itself, and
+  // to withhold its hover, its press and its pointer.
+  const inviteReady = inviteEmails.length > 0 || !!inviteInputVal.trim();
 
   // ── Storage preferences (Supabase Storage vs Google Drive folder) ──
   const [preferredStorage, setPreferredStorage] = useState("supabase"); // 'supabase' | 'drive_personal'
@@ -52624,9 +52631,13 @@ export default function CircularMenu() {
                         // less padding on that side, and enough height that the
                         // button sits IN the field rather than filling it edge
                         // to edge.
-                        padding: "6px 6px 6px 14px", borderRadius: 14, minHeight: 52, boxSizing: "border-box",
-                        background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                        border: `1px solid ${theme.borderFaint}`,
+                        //
+                        // Round like the button in it, and no outline: the
+                        // button carries the only edge in this row, so a second
+                        // one around the field draws a box around a box. What
+                        // marks the field is a wash barely off the panel.
+                        padding: "6px 6px 6px 18px", borderRadius: 999, minHeight: 52, boxSizing: "border-box",
+                        background: darkMode ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.022)",
                       }}>
                         {inviteEmails.map((email, idx) => (
                           <motion.div
@@ -52678,11 +52689,16 @@ export default function CircularMenu() {
                           }}
                         />
                         <motion.button
+                          // Off until there is an address to send it to: no
+                          // hover, no press, no pointer. A button that lights up
+                          // under the cursor and then does nothing is the one
+                          // people click twice.
+                          disabled={!inviteReady}
                           // One whileHover, not two. JSX keeps the last of a
                           // repeated prop, so the second was quietly throwing
                           // the first away.
-                          whileHover={{ ...wsRowBtnHover, scale: 1.02 }}
-                          whileTap={{ scale: 0.97 }}
+                          whileHover={inviteReady ? { ...wsRowBtnHover, scale: 1.02 } : undefined}
+                          whileTap={inviteReady ? { scale: 0.97 } : undefined}
                           onClick={async () => {
                             let emails = [...inviteEmails];
                             const remaining = inviteInputVal.replace(/,/g, "").trim();
@@ -52782,7 +52798,9 @@ export default function CircularMenu() {
                             // this field that DOES something.
                             background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
                             color: theme.textSub, fontWeight: 500,
-                            opacity: inviteEmails.length === 0 && !inviteInputVal ? 0.5 : 1,
+                            ...(inviteReady ? {} : {
+                              opacity: 0.45, cursor: "default", pointerEvents: "none",
+                            }),
                           }}
                         >
                           {appLanguage === "de" ? "Einladen" : "Invite"}
