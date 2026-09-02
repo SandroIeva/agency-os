@@ -45731,6 +45731,33 @@ export default function CircularMenu() {
     setOrgSlugErr("");
   };
 
+  // Making the organisation row. Three places do it — the Settings dropdown and
+  // the two routes through onboarding — and they each carried their own copy of
+  // the slug arithmetic. One of them changing is how the three drift.
+  //
+  // The address is simply the name. A number is added only when that name is
+  // already taken, and whether it is taken is read off the WRITE: asking first
+  // and writing second leaves a gap in which somebody else takes it. Ten tries
+  // is far past what a real collision needs.
+  const insertOrganization = async (rawName, userId) => {
+    const name = String(rawName || "").trim();
+    const base0 = slugClean(name) || "workspace";
+    const base = RESERVED_SLUGS.has(base0) ? base0 + "-ws" : base0;
+    for (let n = 1; n <= 10; n++) {
+      const slug = n === 1 ? base : `${base}-${n}`;
+      const { data, error } = await supabase.from("organizations")
+        .insert({ name, slug, created_by: userId }).select().single();
+      if (!error) return { org: data, error: null };
+      if (error.code !== "23505") return { org: null, error };
+    }
+    // Ten in a row taken: a timestamp cannot collide, and an ugly address beats
+    // a workspace that could not be created.
+    const { data, error } = await supabase.from("organizations")
+      .insert({ name, slug: `${base}-${Date.now().toString(36)}`, created_by: userId })
+      .select().single();
+    return { org: data, error };
+  };
+
   const [orgNameEdit, setOrgNameEdit] = useState(false);
   const [orgNameDraft, setOrgNameDraft] = useState("");
   const [orgNameSaving, setOrgNameSaving] = useState(false);
@@ -45875,16 +45902,7 @@ export default function CircularMenu() {
     if (!planAllows("workspaces").ok) { requestUpgrade("workspaces", appLanguage === "de"); return; }
     setCreatingWs(true);
     try {
-      // The slug is the address bar's name for this workspace now, so it has
-      // to be a legal path segment and it may not be one of the paths that
-      // already mean something. The timestamp keeps it unique; without it two
-      // workspaces called the same thing would fight over one address.
-      const base = name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-")
-        .replace(/^-|-$/g, "").slice(0, 40) || "workspace";
-      const slug = (RESERVED_SLUGS.has(base) ? base + "-ws" : base);
-      const { data: org, error: orgErr } = await supabase.from("organizations")
-        .insert({ name, slug: slug + "-" + Date.now().toString(36), created_by: session.user.id })
-        .select().single();
+      const { org, error: orgErr } = await insertOrganization(name, session.user.id);
       if (orgErr) throw orgErr;
       const { error: memErr } = await supabase.from("org_members").insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
       if (memErr) throw memErr;
@@ -49938,8 +49956,7 @@ export default function CircularMenu() {
                         if (e.key !== "Enter" || !wsName.trim() || wsCreating) return;
                         setWsCreating(true); setOnboardingError(null);
                         try {
-                          const slug = wsName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").slice(0, 40);
-                          const { data: org, error: orgErr } = await supabase.from("organizations").insert({ name: wsName.trim(), slug: slug + "-" + Date.now().toString(36), created_by: session.user.id }).select().single();
+                          const { org, error: orgErr } = await insertOrganization(wsName, session.user.id);
                           if (orgErr) throw orgErr;
                           const { error: memErr } = await supabase.from("org_members").insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
                           if (memErr) throw memErr;
@@ -49966,8 +49983,7 @@ export default function CircularMenu() {
                         if (!wsName.trim() || wsCreating) return;
                         setWsCreating(true); setOnboardingError(null);
                         try {
-                          const slug = wsName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").slice(0, 40);
-                          const { data: org, error: orgErr } = await supabase.from("organizations").insert({ name: wsName.trim(), slug: slug + "-" + Date.now().toString(36), created_by: session.user.id }).select().single();
+                          const { org, error: orgErr } = await insertOrganization(wsName, session.user.id);
                           if (orgErr) throw orgErr;
                           const { error: memErr } = await supabase.from("org_members").insert({ org_id: org.id, user_id: session.user.id, role: "admin" });
                           if (memErr) throw memErr;

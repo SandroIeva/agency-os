@@ -78,6 +78,12 @@ the URL, so a ninth cannot forget to.
   The dozen `replaceState` calls that clean those up all preserve `pathname`.
 - The first write of a page replaces, later ones push, so loading leaves no
   history entry but switching a workspace is undoable with Back.
+- A new workspace's address is simply its name (`insertOrganization`, the one
+  function all THREE creators call — the Settings dropdown and the two
+  onboarding routes, which each carried their own copy of the arithmetic). A
+  number is appended only when that name is taken, and taken is read off the
+  write: `23505` means try `name-2`, then `name-3`. Asking first would leave a
+  gap in which somebody else takes it.
 - The slug is editable in Settings (**Adresse**, under the workspace name) and
   is its OWN edit: a rename writes `name` and nothing else, or fixing a typo in
   a name would silently break every link somebody had saved. `organizations.slug`
