@@ -156,6 +156,9 @@ const deriveWsRole = (m) => {
 };
 
 const FONT = "'Geist', -apple-system, sans-serif";
+// The stack for anything that is an identifier rather than prose: a URL, a
+// slug, a hex value. Even spacing is what stops one being read as a word.
+const MONO_FONT = "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace";
 
 // Which language a first-time visitor gets. German browsers get German;
 // everyone else gets English, including anyone whose language we cannot read.
@@ -52444,7 +52447,10 @@ export default function CircularMenu() {
                 style={{ marginTop: 24 }}
               >
                 <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
-                  {appLanguage === "de" ? "Workspace" : "Workspace"} — {userOrg.name}
+                  {/* The name lives here, which is why the row below can show
+                      the address alone. A middot rather than an em dash: the
+                      guide forbids those in anything a user reads. */}
+                  Workspace · {userOrg.name}
                 </div>
                 <div style={{
                   borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`,
@@ -52515,10 +52521,7 @@ export default function CircularMenu() {
                     display: "flex", alignItems: orgNameEdit ? "flex-start" : "center", gap: 16 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
-                        {/* What the row holds, both of it. "Workspace" would
-                            repeat the heading above the panel, and "Name" would
-                            not mention the address under it. */}
-                        {appLanguage === "de" ? "Name & Adresse" : "Name & address"}
+                        Workspace
                       </div>
                       {orgNameEdit ? (<>
                         <input
@@ -52574,9 +52577,21 @@ export default function CircularMenu() {
                                 : `New address: app.i7os.com/${slugClean(orgSlugDraft) || "…"} . Links using the old one stop working.`))}
                         </div>
                       </>) : (
-                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
-                          {userOrg.name}
-                          <span style={{ color: theme.textFaint }}>{"  ·  app.i7os.com/" + (userOrg.slug || "")}</span>
+                        // The address as an address: the host in the dim grey of
+                        // a caption, the slug in a chip because that is the part
+                        // that belongs to this workspace and the part somebody
+                        // would copy. Both in a monospace stack, which is what
+                        // stops a URL from reading as prose.
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7 }}>
+                          <span style={{ fontSize: 12.5, fontFamily: MONO_FONT, color: theme.textDim }}>
+                            app.i7os.com
+                          </span>
+                          <span style={{ fontSize: 12.5, fontFamily: MONO_FONT, color: theme.textFaint }}>/</span>
+                          <span style={{ fontSize: 12.5, fontFamily: MONO_FONT, color: theme.text,
+                            padding: "4px 12px", borderRadius: 999, letterSpacing: 0.2,
+                            background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)" }}>
+                            {userOrg.slug}
+                          </span>
                         </div>
                       )}
                     </div>
