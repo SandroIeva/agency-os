@@ -55303,12 +55303,14 @@ export default function CircularMenu() {
                   boxShadow: "0 6px 22px rgba(86,86,255,0.35)" }} />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                    {/* Only the three states this card is still rendered for.
+                        It carried the question titles too, and they became
+                        unreachable the moment the questions moved into the orb:
+                        a switch whose other arms cannot be reached reads like a
+                        second place the questions live. */}
                     {drop.step === "busy" ? (appLanguage === "de" ? "Wird hochgeladen" : "Uploading")
-                      : drop.step === "done" ? (appLanguage === "de" ? "Fertig" : "Done")
                       : drop.step === "full" ? (appLanguage === "de" ? "Speicher voll" : "Storage full")
-                      : drop.step === "where" ? (appLanguage === "de" ? "Wohin damit?" : "Where should this go?")
-                      : drop.step === "board" ? (appLanguage === "de" ? "In welches Moodboard?" : "Which moodboard?")
-                      : (appLanguage === "de" ? "Zu welchem Projekt?" : "Which project?")}
+                      : (appLanguage === "de" ? "Fertig" : "Done")}
                   </div>
                   <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 3,
                     whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
