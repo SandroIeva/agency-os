@@ -45698,7 +45698,12 @@ export default function CircularMenu() {
   const wsRowBtn = {
     // Height as a HEIGHT, not as padding: padding works on both sides, so
     // "one pixel shorter" through it is two. 39 is 40 less one.
-    height: 39, padding: "0 12px", minWidth: 132, boxSizing: "border-box",
+    // Two pixels of padding under the label and none above it, which with the
+    // centring lifts the text by exactly one. Geist puts its cap height below
+    // the middle of the line box, so a label centred by the box reads as
+    // sitting low in the pill — the same reason the empty states' own button
+    // carries 13 top and bottom rather than 11.
+    height: 39, padding: "0 12px 2px", minWidth: 132, boxSizing: "border-box",
     display: "flex", alignItems: "center", justifyContent: "center",
     borderRadius: 999,
     background: "transparent",
@@ -45706,7 +45711,10 @@ export default function CircularMenu() {
     // the hover animates is the property the base style sets. Measured with
     // this Framer version: the shorthand animates correctly too, so this is
     // the arrangement that cannot argue, not a fix for something broken.
-    borderWidth: 1, borderStyle: "solid", borderColor: theme.borderFaint,
+    // theme.border, not borderFaint: the faint one is for dividing rows, and a
+    // button drawn in it has too little to say against the panel behind it.
+    // One step up in the palette that already exists, in both themes.
+    borderWidth: 1, borderStyle: "solid", borderColor: theme.border,
     color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer",
     flexShrink: 0,
   };
