@@ -7032,12 +7032,20 @@ const DropVeil = ({ label, darkMode }) => (
   <div style={{ position: "absolute", inset: 0, zIndex: 8, pointerEvents: "none",
     display: "flex", alignItems: "center", justifyContent: "center",
     background: darkMode ? "rgba(10,10,14,0.45)" : "rgba(255,255,255,0.55)",
-    backdropFilter: "blur(1.5px)", WebkitBackdropFilter: "blur(1.5px)" }}>
+    // 1.5px was a smudge you had to look for. What is behind the veil should
+    // read as "put down, not here", so it goes properly out of focus.
+    backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}>
     <div style={{ position: "absolute", inset: 14, borderRadius: 18,
       border: `2px dashed ${darkMode ? "rgba(255,255,255,0.32)" : "rgba(0,0,0,0.28)"}` }} />
+    {/* With the theme, not against it. This was inverted, the way the nav
+        menu's selected pill is, and the design system does say to invert THAT
+        one. But this is not a selection: it is a label on a veil that has
+        already dimmed everything behind it, and a pill in the opposite colour
+        on top of that reads as a button somebody is meant to press. Anthracite
+        on dark, white on light, so it reads as a caption. */}
     <div style={{ padding: "10px 18px", borderRadius: 999, fontFamily: FONT, fontSize: 13, fontWeight: 500,
-      background: darkMode ? "rgba(255,255,255,0.94)" : "#15151c",
-      color: darkMode ? "#15151c" : "#fff", boxShadow: "0 8px 30px rgba(0,0,0,0.25)" }}>
+      background: darkMode ? "#15151c" : "#ffffff",
+      color: darkMode ? "#ffffff" : "#15151c", boxShadow: "0 8px 30px rgba(0,0,0,0.25)" }}>
       {label}
     </div>
   </div>
