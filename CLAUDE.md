@@ -55,6 +55,32 @@ src/skills/*/SKILL.md    ← content "skills" imported ?raw into the app (kept i
 vercel.json              ← cleanUrls, SPA rewrite, /i/:slug → api/redirect (short links)
 ```
 
+## The address bar
+
+`app.i7os.com/<workspace>` — the FIRST path segment names the workspace
+(`organizations.slug`), and nothing else in the path means anything yet. It is
+read once at login (the address bar wins over `memberships[0]`, which is
+whatever row Postgres returned first) and written by ONE effect in the App root
+that watches `userOrg`. Eight places switch a workspace; none of them touches
+the URL, so a ninth cannot forget to.
+
+- The server needed no change: the catch-all rewrite in `vercel.json` already
+  sends every dotless path to the app. Verified against `vercel dev`:
+  `/epics` returns the app byte for byte, while `/api/…` and `/i/…` still reach
+  their functions.
+- **`RESERVED_SLUGS` is the list a workspace may not be named after.** It holds
+  the real routes (`api`, `i`, `s`, `slack`, `pinterest`, `assets`) plus names a
+  marketing site would want later (`login`, `pricing`, `help`, …). Adding a
+  top-level route means adding it there FIRST: once a workspace owns the name,
+  taking it back means renaming somebody's workspace.
+- Deep links live in the QUERY (`?wb=`, `?b=`, `?project-invite=`,
+  `?push-setup=`) and the mirror carries the query and hash through untouched.
+  The dozen `replaceState` calls that clean those up all preserve `pathname`.
+- The first write of a page replaces, later ones push, so loading leaves no
+  history entry but switching a workspace is undoable with Back.
+- The view is NOT in the path yet. `/epics/brand` already loads; making it mean
+  something is a separate job.
+
 ## App.jsx internal structure
 
 Top-level function components, in file order (search by name): `createSoundEngine`, `DotGrid`, `AISphere`/`AISpeakingSphere` (Three.js orb), `Dropdown`, `ImageLightbox`, `ChatBubble`, `KanbanBoard`, `TimelineView` (+`TimelineItemModal`), `WhiteboardView` (Brainstorm), `CalendarView`, `FilesView`, `ChatView`, `NotesView`, `ProjectsView`, `PeopleTab`, `TouchpointsView`, `IdeasTab`, `AssetsView` (+`CreationsTab`, moodboards), `DocEditor` (BlockNote-based docs with comments/mentions), `BrandView` area, Settings, and the root `App` component (auth, org, nav, dashboard, voice orb) at the bottom.

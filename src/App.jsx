@@ -17885,6 +17885,33 @@ const EYEDROPPER_ICON = (
   <><path d="M15.5 3.5a2.1 2.1 0 0 1 3 3L9 16l-4 1 1-4z" /><path d="M13 6l5 5" /></>
 );
 
+// ── The workspace in the address bar ───────────────────────────────────────
+// app.i7os.com/<workspace>. The first segment of the path names the workspace,
+// which is what makes a reload, a bookmark and a link land in the right one.
+// Before this the app took `memberships[0]`, the first row Postgres happened to
+// return, so a reload could put somebody in a different workspace than the one
+// they left.
+//
+// Nothing on the server changed for it: the catch-all rewrite already sends
+// every path without a dot to the app. These are the paths that are NOT the
+// app, and no workspace may be named after one of them, or the workspace would
+// swallow a route that already exists.
+const RESERVED_SLUGS = new Set([
+  "api", "i", "s", "slack", "pinterest", "assets", "src", "admin",
+  // Kept free for pages this domain may want later. A workspace called `login`
+  // is only a problem on the day somebody builds /login, and by then it is
+  // somebody's workspace and cannot be taken away.
+  "login", "logout", "signup", "pricing", "help", "docs", "status", "app", "www",
+]);
+const slugOk = (v) => !!v && /^[a-z0-9][a-z0-9-]*$/.test(v) && !RESERVED_SLUGS.has(v);
+// The workspace the address bar is asking for, or null.
+const slugFromPath = () => {
+  try {
+    const seg = decodeURIComponent(window.location.pathname.split("/")[1] || "").toLowerCase();
+    return slugOk(seg) ? seg : null;
+  } catch { return null; }
+};
+
 const CANVAS_MIN_EDIT = 700;
 const CANVAS_LH = 1.2;               // line height, shared by display and export
 const CANVAS_FONT_STACK = "'Geist', -apple-system, sans-serif";
@@ -45529,6 +45556,52 @@ export default function CircularMenu() {
     return () => { alive = false; };
   }, [panelOpen, userOrg?.id, session?.user?.id]);
   const [userOrgs, setUserOrgs] = useState([]);             // all orgs the user belongs to
+  // ── The workspace and the address bar, kept in step ──────────────────────
+  // ONE effect rather than a line at each of the eight places that switch a
+  // workspace: the login pick, creating one, the four onboarding routes and the
+  // switcher in Settings. They all end at `userOrg`, so mirroring from there
+  // cannot be forgotten by the ninth.
+  //
+  // The first pass replaces, later ones push. Loading a page should not leave a
+  // history entry pointing at the same page, but switching a workspace should
+  // be something the back button can undo.
+  const pathSynced = useRef(false);
+  useEffect(() => {
+    const slug = userOrg?.slug;
+    // Only the FIRST segment is ours. Everything after it, and the whole query,
+    // belongs to whatever else put it there — the deep links all live in the
+    // query and must survive this untouched.
+    const rest = window.location.pathname.split("/").slice(2).join("/");
+    // A workspace whose slug is missing or is one of the reserved paths leaves
+    // the address bar alone. Clearing it instead would take a good name out of
+    // the bar because of a row that arrived without one.
+    if (userOrg && !slugOk(slug)) return;
+    const want = slugOk(slug)
+      ? "/" + slug + (rest ? "/" + rest : "")
+      : "/" + rest;
+    const now = window.location.pathname;
+    if (want !== now) {
+      try {
+        window.history[pathSynced.current ? "pushState" : "replaceState"](
+          {}, "", want + window.location.search + window.location.hash);
+      } catch (_) { /* a browser that refuses is not worth an error */ }
+    }
+    if (userOrg) pathSynced.current = true;
+  }, [userOrg?.id, userOrg?.slug]);
+
+  // Back and forward. The address bar is the request; if it names a workspace
+  // this user is in, follow it. If it names one they are not in, leave the app
+  // where it is rather than throwing them somewhere.
+  useEffect(() => {
+    const onPop = () => {
+      const asked = slugFromPath();
+      if (!asked || asked === userOrg?.slug) return;
+      const hit = (userOrgs || []).find(o => o?.slug === asked);
+      if (hit) { setUserOrg(hit); setUserOrgRole(hit.role || "member"); }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [userOrgs, userOrg?.slug]);
   const [userOrgRole, setUserOrgRole] = useState(null);     // role in current org
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false); // workspace switcher dropdown
   const [settingsTab, setSettingsTab] = useState("workspace"); // settings page tab: workspace | ai | appearance | account (billing lives under account)
@@ -45756,7 +45829,13 @@ export default function CircularMenu() {
     if (!planAllows("workspaces").ok) { requestUpgrade("workspaces", appLanguage === "de"); return; }
     setCreatingWs(true);
     try {
-      const slug = name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").slice(0, 40);
+      // The slug is the address bar's name for this workspace now, so it has
+      // to be a legal path segment and it may not be one of the paths that
+      // already mean something. The timestamp keeps it unique; without it two
+      // workspaces called the same thing would fight over one address.
+      const base = name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-")
+        .replace(/^-|-$/g, "").slice(0, 40) || "workspace";
+      const slug = (RESERVED_SLUGS.has(base) ? base + "-ws" : base);
       const { data: org, error: orgErr } = await supabase.from("organizations")
         .insert({ name, slug: slug + "-" + Date.now().toString(36), created_by: session.user.id })
         .select().single();
@@ -46088,9 +46167,15 @@ export default function CircularMenu() {
           // Store all orgs for workspace switcher
           const allOrgs = memberships.map(m => ({ ...m.organizations, role: m.role }));
           setUserOrgs(allOrgs);
-          const org = memberships[0].organizations;
+          // The address bar decides, when it names a workspace this user is
+          // actually in. Otherwise the first membership, as before, and the
+          // effect below writes that name into the path.
+          const asked = slugFromPath();
+          const hit = asked ? memberships.find(m => m.organizations?.slug === asked) : null;
+          const chosen = hit || memberships[0];
+          const org = chosen.organizations;
           setUserOrg(org);
-          setUserOrgRole(memberships[0].role);
+          setUserOrgRole(chosen.role);
           setOnboardingStep(null);
 
           // Load org members for chat etc.
