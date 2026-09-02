@@ -178,6 +178,30 @@ const FONT = "'Geist', -apple-system, sans-serif";
 // Module scope because the two callers are different top-level components, and
 // an outline drawn as an inset shadow rather than a border, so the name does not
 // shift by a pixel the moment you point at it.
+// One answer to one of the assistant's questions. Every question in that panel
+// is a list of these, so they cannot end up looking like three kinds of list.
+function DropChoice({ label, hint, onClick, disabled, theme, darkMode }) {
+  const [over, setOver] = useState(false);
+  return (
+    <motion.div
+      whileTap={disabled ? undefined : { scale: 0.99 }}
+      onClick={disabled ? undefined : onClick}
+      onMouseEnter={() => setOver(true)} onMouseLeave={() => setOver(false)}
+      style={{
+        padding: "12px 16px", borderRadius: 14, cursor: disabled ? "default" : "pointer",
+        border: `1px solid ${over && !disabled ? theme.textDim : theme.borderFaint}`,
+        background: over && !disabled
+          ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)") : "transparent",
+        opacity: disabled ? 0.45 : 1,
+        transition: "background-color 0.15s ease, border-color 0.15s ease",
+      }}
+    >
+      <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{label}</div>
+      {hint && <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{hint}</div>}
+    </motion.div>
+  );
+}
+
 const RENAMABLE = (hovered, theme, darkMode) => ({
   cursor: "text", padding: "1px 5px", marginLeft: -5, borderRadius: 6,
   background: hovered ? (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)") : "transparent",
@@ -48122,6 +48146,95 @@ export default function CircularMenu() {
     return t("greet.night");
   };
   const [voiceMode, setVoiceMode] = useState(false);
+
+  // ── Files dropped on the Startview ──────────────────────────────────────
+  // Drop a file on the dashboard and the assistant asks where it should go
+  // rather than guessing. dragenter and dragleave fire for every child the
+  // pointer crosses, so a counter is the only reliable way to tell that it has
+  // really left the surface: the same counter the whiteboard and the artboard
+  // already keep, for the same reason.
+  const [dropOver, setDropOver] = useState(false);
+  const dropDepth = useRef(0);
+  // One object, because this is one conversation: the files, the question on
+  // screen, and the answers so far.
+  const [drop, setDrop] = useState(null);
+
+  const openDropAsk = async (files) => {
+    if (!files.length || !userOrg?.id || !session?.user?.id) return;
+    const allImages = files.every(f => (f.type || "").startsWith("image/"));
+    setDrop({
+      files, allImages,
+      // Only images have a choice to make. Everything else has one place it can
+      // go, and a question with one answer is not a question worth asking.
+      step: allImages ? "where" : "project",
+      dest: allImages ? null : "files",
+      board: null, project: null, boards: [], projects: [], saved: 0, failed: 0,
+    });
+    // The App root keeps neither list: it loads project NAMES for the AI's
+    // context and nothing more, so the questions fetch what they need.
+    const [prj, mb] = await Promise.all([
+      supabase.from("projects").select("id, name").eq("org_id", userOrg.id).order("name"),
+      allImages
+        ? supabase.from("moodboards").select("id, title").eq("org_id", userOrg.id).eq("archived", false).order("created_at", { ascending: false })
+        : Promise.resolve({ data: [] }),
+    ]);
+    setDrop(d => d ? { ...d, projects: prj.data || [], boards: mb.data || [] } : d);
+  };
+
+  // Everything the answers add up to, done in one place so the two destinations
+  // cannot drift into writing different rows for the same file.
+  const runDropUpload = async (answers) => {
+    const { files, dest, board, project } = answers;
+    setDrop(d => ({ ...d, ...answers, step: "busy", saved: 0, failed: 0 }));
+    let saved = 0, failed = 0;
+    for (const file of files) {
+      const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+      const room = await checkStorageRoom(userOrg.id, file.size,
+        { userId: session.user.id, email: session.user.email });
+      if (!room.ok) {
+        // The pool is full. Stop rather than push the rest through one at a
+        // time and report a number that means nothing.
+        setDrop(d => ({ ...d, step: "full", limit: room.limit, saved, failed }));
+        return;
+      }
+      if (dest === "moodboard") {
+        const path = `moodboards/${board}/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await uploadTracked({ bucket: "brand-assets", path, file,
+          orgId: userOrg.id, userId: session.user.id, contentType: file.type, upsert: true });
+        if (upErr) { failed++; continue; }
+        const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
+        const { error } = await supabase.from("moodboard_items").insert({
+          board_id: board, org_id: userOrg.id, created_by: session.user.id,
+          // `type` and `source` are CHECK whitelists, so these two words are
+          // not free choices: an invented one fails at INSERT.
+          type: "image", url: pub?.publicUrl, source: "upload",
+          position: saved, x: 40 + (saved % 5) * 60, y: 40 + Math.floor(saved / 5) * 60, w: 240,
+        });
+        if (error) { failed++; continue; }
+      } else {
+        const path = `${session.user.id}/dropped/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const { error: upErr } = await uploadTracked({ bucket: "user-files", path, file,
+          orgId: userOrg.id, userId: session.user.id, contentType: file.type });
+        if (upErr) { failed++; continue; }
+        const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(path, 60 * 60 * 24 * 365);
+        // The same row the Files Manager writes for a file picked through its
+        // own button, credentials included, so a dropped file is not a
+        // second-class one.
+        const credentials = await readContentCredentials(file);
+        const { error } = await supabase.from("user_files").insert({
+          user_id: session.user.id, org_id: userOrg.id, project_id: project || null,
+          name: file.name, mime_type: file.type, size_bytes: file.size,
+          storage_path: path, storage_provider: "supabase",
+          public_url: signed?.signedUrl || null,
+          metadata: credentials ? { credentials } : null,
+        });
+        if (error) { failed++; continue; }
+      }
+      saved++;
+      setDrop(d => (d ? { ...d, saved } : d));
+    }
+    setDrop(d => (d ? { ...d, step: "done", saved, failed } : d));
+  };
   // A picture asked for out loud. It is made HERE rather than by sending
   // somebody to the generator: the request was spoken, so the answer should
   // arrive where the question was asked. The orb stays up saying what it is
@@ -50726,6 +50839,27 @@ export default function CircularMenu() {
                 : { opacity: 1, scale: 1, filter: "blur(0px)", y: 0 }}
               exit={{ opacity: 0, y: -10, filter: "blur(4px)" }}
               transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
+              // Files can be dropped anywhere on the Startview. Guarded by
+              // dtHasFiles so dragging a card, a task or a piece of text across
+              // the dashboard does not raise the veil.
+              onDragEnter={(e) => {
+                if (!dtHasFiles(e) || !userOrg?.id) return;
+                e.preventDefault(); dropDepth.current += 1; setDropOver(true);
+              }}
+              onDragOver={(e) => {
+                if (!dtHasFiles(e) || !userOrg?.id) return;
+                e.preventDefault(); e.dataTransfer.dropEffect = "copy";
+              }}
+              onDragLeave={(e) => {
+                if (!dtHasFiles(e)) return;
+                dropDepth.current = Math.max(0, dropDepth.current - 1);
+                if (dropDepth.current === 0) setDropOver(false);
+              }}
+              onDrop={(e) => {
+                if (!dtHasFiles(e) || !userOrg?.id) return;
+                e.preventDefault(); dropDepth.current = 0; setDropOver(false);
+                openDropAsk(Array.from(e.dataTransfer.files || []));
+              }}
               style={{
                 position: "absolute", inset: 0,
                 display: "flex", flexDirection: "column",
@@ -50734,6 +50868,9 @@ export default function CircularMenu() {
                 pointerEvents: menuOpen ? "none" : "auto",
               }}
             >
+              {/* The same dashed frame the whiteboard and the artboard raise,
+                  because it is the same gesture. */}
+              {dropOver && <DropVeil darkMode={darkMode} label={appLanguage === "de" ? "Dateien hier ablegen" : "Drop files here"} />}
               {/* Greeting */}
               <div style={{ marginBottom: 12 }}>
                 <div style={{
@@ -54997,6 +55134,135 @@ export default function CircularMenu() {
           transition: background 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
       `}</style>
+
+      {/* ── Dropped on the Startview: where should it go? (Portal) ── ─────────
+          Portalled to the body rather than rendered in place: the dashboard's
+          root is an animating motion.div, and a transformed ancestor becomes
+          the containing block for anything fixed inside it, so this would have
+          covered that view's box instead of the window. AnimatePresence goes
+          INSIDE the portal, never around it, or it drops the child before it
+          reaches the DOM. */}
+      {createPortal(<AnimatePresence>
+        {drop && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => { if (drop.step !== "busy") setDrop(null); }}
+            style={{ position: "fixed", inset: 0, zIndex: 100005, display: "flex",
+              alignItems: "center", justifyContent: "center", padding: 24,
+              background: darkMode ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.55)",
+              backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
+          >
+            <motion.div
+              initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.97, y: 6 }}
+              transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ width: "100%", maxWidth: 460, borderRadius: 22, overflow: "hidden",
+                background: theme.cardBg, border: `1px solid ${theme.border}`,
+                boxShadow: "0 30px 90px rgba(0,0,0,0.35)" }}
+            >
+              <div style={{ padding: "22px 24px 18px", display: "flex", gap: 14, alignItems: "flex-start" }}>
+                {/* The assistant, as a mark rather than the Three.js orb: that
+                    one pulls its library off a CDN, which is a network request
+                    and a wait for a 44px decoration. */}
+                <div style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0, marginTop: 2,
+                  background: "radial-gradient(circle at 32% 30%, #8B7AFF, #5656FF 62%, #2E2E8F)",
+                  boxShadow: "0 6px 22px rgba(86,86,255,0.35)" }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                    {drop.step === "busy" ? (appLanguage === "de" ? "Wird hochgeladen" : "Uploading")
+                      : drop.step === "done" ? (appLanguage === "de" ? "Fertig" : "Done")
+                      : drop.step === "full" ? (appLanguage === "de" ? "Speicher voll" : "Storage full")
+                      : drop.step === "where" ? (appLanguage === "de" ? "Wohin damit?" : "Where should this go?")
+                      : drop.step === "board" ? (appLanguage === "de" ? "In welches Moodboard?" : "Which moodboard?")
+                      : (appLanguage === "de" ? "Zu welchem Projekt?" : "Which project?")}
+                  </div>
+                  <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 3,
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {drop.files.length === 1 ? drop.files[0].name
+                      : `${drop.files.length} ${appLanguage === "de" ? "Dateien" : "files"}`}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ padding: "0 24px 22px", display: "flex", flexDirection: "column", gap: 8 }}>
+                {drop.step === "where" && (<>
+                  <DropChoice theme={theme} darkMode={darkMode}
+                    label={appLanguage === "de" ? "In den Files Manager" : "To the Files Manager"}
+                    hint={appLanguage === "de" ? "Liegt bei allen Dateien des Workspace" : "Kept with the workspace's files"}
+                    onClick={() => setDrop(d => ({ ...d, dest: "files", step: "project" }))} />
+                  <DropChoice theme={theme} darkMode={darkMode}
+                    label={appLanguage === "de" ? "In ein Moodboard" : "To a moodboard"}
+                    hint={drop.boards.length
+                      ? (appLanguage === "de" ? `${drop.boards.length} Boards` : `${drop.boards.length} boards`)
+                      : (appLanguage === "de" ? "Noch keine Boards" : "No boards yet")}
+                    disabled={!drop.boards.length}
+                    onClick={() => setDrop(d => ({ ...d, dest: "moodboard", step: "board" }))} />
+                </>)}
+
+                {drop.step === "board" && drop.boards.map(b => (
+                  <DropChoice key={b.id} theme={theme} darkMode={darkMode} label={b.title || "Board"}
+                    onClick={() => runDropUpload({ ...drop, board: b.id })} />
+                ))}
+
+                {drop.step === "project" && (<>
+                  <DropChoice theme={theme} darkMode={darkMode}
+                    label={appLanguage === "de" ? "Keinem Projekt" : "No project"}
+                    hint={appLanguage === "de" ? "Gehört dem Workspace" : "Belongs to the workspace"}
+                    onClick={() => runDropUpload({ ...drop, project: null })} />
+                  {drop.projects.map(pr => (
+                    <DropChoice key={pr.id} theme={theme} darkMode={darkMode} label={pr.name}
+                      onClick={() => runDropUpload({ ...drop, project: pr.id })} />
+                  ))}
+                </>)}
+
+                {drop.step === "busy" && (
+                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>
+                    {drop.saved} / {drop.files.length}
+                  </div>
+                )}
+
+                {drop.step === "full" && (
+                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
+                    {appLanguage === "de"
+                      ? `Der Speicher dieses Kontos ist voll (${formatBytesGB(drop.limit)}).`
+                      : `This account's storage is full (${formatBytesGB(drop.limit)}).`}
+                  </div>
+                )}
+
+                {drop.step === "done" && (
+                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
+                    {appLanguage === "de"
+                      ? `${drop.saved} von ${drop.files.length} gespeichert.`
+                      : `${drop.saved} of ${drop.files.length} saved.`}
+                    {drop.failed > 0 && (appLanguage === "de"
+                      ? ` ${drop.failed} fehlgeschlagen.` : ` ${drop.failed} failed.`)}
+                  </div>
+                )}
+
+                {drop.step !== "busy" && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 6, justifyContent: "space-between" }}>
+                    <motion.div whileTap={{ scale: 0.97 }} whileHover={wsRowBtnHover}
+                      onClick={() => setDrop(null)} style={wsRowBtn}>
+                      {drop.step === "done" || drop.step === "full"
+                        ? (appLanguage === "de" ? "Schließen" : "Close")
+                        : (appLanguage === "de" ? "Abbrechen" : "Cancel")}
+                    </motion.div>
+                    {drop.step === "done" && drop.saved > 0 && (
+                      <motion.div whileTap={{ scale: 0.97 }} whileHover={wsPrimaryHover}
+                        onClick={() => {
+                          setDrop(null);
+                          setCurrentView(drop.dest === "moodboard" ? "creations" : "assets");
+                        }} style={wsPrimaryBtn}>
+                        {appLanguage === "de" ? "Ansehen" : "Open"}
+                      </motion.div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>, document.body)}
 
       {/* ── OS Visuals Modal (Portal) ── */}
       {createPortal(<AnimatePresence>
