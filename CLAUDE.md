@@ -78,6 +78,14 @@ the URL, so a ninth cannot forget to.
   The dozen `replaceState` calls that clean those up all preserve `pathname`.
 - The first write of a page replaces, later ones push, so loading leaves no
   history entry but switching a workspace is undoable with Back.
+- The slug is editable in Settings (**Adresse**, under the workspace name) and
+  is its OWN edit: a rename writes `name` and nothing else, or fixing a typo in
+  a name would silently break every link somebody had saved. `organizations.slug`
+  carries a UNIQUE index, and a clash is read off the write (`23505`) rather
+  than asked for first, which would let two people take one address in the gap
+  between the question and the answer.
+- Renaming an address breaks links that used the old one. That is stated in the
+  field, not solved: there is no redirect table.
 - The view is NOT in the path yet. `/epics/brand` already loads; making it mean
   something is a separate job.
 

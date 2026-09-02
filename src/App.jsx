@@ -45685,6 +45685,52 @@ export default function CircularMenu() {
   };
   // Renaming the workspace. It could be created and given a logo, but not
   // renamed — the name appeared in Settings as a heading only.
+  // The workspace's address. Its own edit, not part of the rename: a name is
+  // for reading and an address is for linking, and quietly re-cutting the
+  // address every time somebody fixes a typo in the name would break every
+  // link anybody had saved.
+  const [orgSlugEdit, setOrgSlugEdit] = useState(false);
+  const [orgSlugDraft, setOrgSlugDraft] = useState("");
+  const [orgSlugSaving, setOrgSlugSaving] = useState(false);
+  const [orgSlugErr, setOrgSlugErr] = useState("");
+  // Typed loosely, stored strictly. Spaces and punctuation become dashes as you
+  // type, so the field always shows the address that would result.
+  const slugClean = (v) => String(v || "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+  const saveOrgSlug = async () => {
+    const slug = slugClean(orgSlugDraft);
+    if (!userOrg?.id) return;
+    if (slug === userOrg.slug) { setOrgSlugEdit(false); setOrgSlugErr(""); return; }
+    const de2 = appLanguage === "de";
+    if (slug.length < 2) {
+      setOrgSlugErr(de2 ? "Mindestens zwei Zeichen." : "At least two characters.");
+      return;
+    }
+    if (!slugOk(slug)) {
+      setOrgSlugErr(de2 ? "Diese Adresse ist vergeben, sie gehört zur App selbst."
+                        : "That address belongs to the app itself.");
+      return;
+    }
+    setOrgSlugSaving(true);
+    const { error } = await supabase.from("organizations").update({ slug }).eq("id", userOrg.id);
+    setOrgSlugSaving(false);
+    if (error) {
+      // The unique index is the authority on whether a name is free. Asking
+      // first and writing second would let two people take the same address in
+      // the gap between the two.
+      setOrgSlugErr(error.code === "23505"
+        ? (de2 ? "Diese Adresse ist schon vergeben." : "That address is already taken.")
+        : (planLimitError(error, de2) || error.message || (de2 ? "Fehlgeschlagen." : "Failed.")));
+      return;
+    }
+    // Both copies, like the rename. The address bar follows on its own: the
+    // effect that mirrors it watches userOrg.
+    setUserOrg(o => o ? { ...o, slug } : o);
+    setUserOrgs(prev => prev.map(o => o.id === userOrg.id ? { ...o, slug } : o));
+    setOrgSlugEdit(false);
+    setOrgSlugErr("");
+  };
+
   const [orgNameEdit, setOrgNameEdit] = useState(false);
   const [orgNameDraft, setOrgNameDraft] = useState("");
   const [orgNameSaving, setOrgNameSaving] = useState(false);
@@ -52436,6 +52482,82 @@ export default function CircularMenu() {
                           style={{ padding: "7px 12px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
                             color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer", flexShrink: 0 }}>
                           {appLanguage === "de" ? "Umbenennen" : "Rename"}
+                        </motion.div>
+                      )
+                    ) : (
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, flexShrink: 0 }}>
+                        {appLanguage === "de" ? "Nur Admins" : "Admins only"}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Workspace address — the first part of the path, and what a
+                      link to this workspace carries. Its own row rather than a
+                      second field in the rename above: a name is for reading
+                      and an address is for linking, and re-cutting the address
+                      whenever somebody fixes a typo in the name would break
+                      every link anybody had saved. */}
+                  <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}`,
+                    display: "flex", alignItems: "center", gap: 16 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
+                        {appLanguage === "de" ? "Adresse" : "Address"}
+                      </div>
+                      {orgSlugEdit ? (<>
+                        <div style={{ display: "flex", alignItems: "center", gap: 2, marginTop: 6 }}>
+                          <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textFaint, flexShrink: 0 }}>
+                            app.i7os.com/
+                          </span>
+                          <input
+                            autoFocus value={orgSlugDraft}
+                            onChange={e => { setOrgSlugDraft(e.target.value); setOrgSlugErr(""); }}
+                            onKeyDown={e => {
+                              if (e.key === "Enter") saveOrgSlug();
+                              if (e.key === "Escape") { setOrgSlugEdit(false); setOrgSlugErr(""); }
+                            }}
+                            style={{ width: "100%", maxWidth: 210, height: 34, borderRadius: 10,
+                              border: `1px solid ${orgSlugErr ? "#e5484d" : theme.border}`,
+                              background: theme.inputBg || "transparent",
+                              color: theme.text, fontFamily: FONT, fontSize: 13, padding: "0 12px", outline: "none" }}
+                          />
+                        </div>
+                        {/* What it will actually become, as it is typed: spaces
+                            and punctuation are dashes in an address, and seeing
+                            that after saving is a surprise. */}
+                        <div style={{ fontSize: 11.5, fontFamily: FONT, marginTop: 6, lineHeight: 1.5,
+                          color: orgSlugErr ? "#e5484d" : theme.textFaint }}>
+                          {orgSlugErr || (appLanguage === "de"
+                            ? `Wird zu app.i7os.com/${slugClean(orgSlugDraft) || "…"} . Links mit der alten Adresse funktionieren danach nicht mehr.`
+                            : `Becomes app.i7os.com/${slugClean(orgSlugDraft) || "…"} . Links using the old address stop working.`)}
+                        </div>
+                      </>) : (
+                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                          app.i7os.com/{userOrg.slug}
+                        </div>
+                      )}
+                    </div>
+                    {(userOrgRole === "admin" || userOrg?.role === "admin") ? (
+                      orgSlugEdit ? (
+                        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                          <motion.div onClick={() => { setOrgSlugEdit(false); setOrgSlugErr(""); }} whileTap={{ scale: 0.97 }}
+                            style={{ padding: "7px 12px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
+                              color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>
+                            {appLanguage === "de" ? "Abbrechen" : "Cancel"}
+                          </motion.div>
+                          <motion.div onClick={saveOrgSlug} whileTap={{ scale: 0.97 }}
+                            style={{ padding: "7px 14px", borderRadius: 999, background: "#15151c", color: "#fff",
+                              fontSize: 12, fontWeight: 600, fontFamily: FONT, cursor: "pointer",
+                              opacity: (orgSlugSaving || slugClean(orgSlugDraft).length < 2) ? 0.6 : 1 }}>
+                            {orgSlugSaving ? (appLanguage === "de" ? "Speichert…" : "Saving…")
+                              : (appLanguage === "de" ? "Speichern" : "Save")}
+                          </motion.div>
+                        </div>
+                      ) : (
+                        <motion.div whileTap={{ scale: 0.97 }}
+                          onClick={() => { setOrgSlugDraft(userOrg.slug || ""); setOrgSlugErr(""); setOrgSlugEdit(true); }}
+                          style={{ padding: "7px 12px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
+                            color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer", flexShrink: 0 }}>
+                          {appLanguage === "de" ? "Ändern" : "Change"}
                         </motion.div>
                       )
                     ) : (
