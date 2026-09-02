@@ -98,8 +98,37 @@ the URL, so a ninth cannot forget to.
   hand-typed address. The address field still edits on its own.
 - Renaming an address breaks links that used the old one. That is stated in the
   field, not solved: there is no redirect table.
-- The view is NOT in the path yet. `/epics/brand` already loads; making it mean
-  something is a separate job.
+- **The SECOND segment is the view**, and there is deliberately no third.
+  `VIEW_SLUG` (module scope, beside `slugFromPath`) maps `currentView` to the
+  name in the bar, and it is the name people READ, not the internal one: the
+  Files Manager is `assets` in the code and `files-manager` in the address,
+  `chat` is `messenger`, `touchpoints` is `audience`, `createpost` is `post`.
+  The dashboard is absent from the map on purpose, so `/epics` is unchanged and
+  every link anybody already holds keeps working with no redirect.
+  - The path is WHERE YOU ARE, the query is WHAT YOU HAVE OPEN. Tabs inside a
+    view (brand pillars, settings tabs, the Files Manager's three) stay in
+    state, and a specific record stays in the query, where every deep link
+    already is. Putting a record in the path would mean a UUID in the bar, or
+    giving projects and documents their own unique slugs, which is a feature
+    and not a URL detail.
+  - `viewFromPath()` returns null for no segment, an unknown segment and a
+    `whiteboard` with no `?wb=`. All three mean the dashboard, and the mirror
+    then writes the bar straight. There is no 404.
+  - **`whiteboard` is write-only by name.** A board is always a particular
+    board and it lives in `?wb=`; entering `/epics/whiteboard` by hand would
+    mount the view with `boardId` null, which is a blank screen.
+  - Menu entries that CREATE something (Brainstorm, Dokument, Artwork) and the
+    dashboard's Tasks panel are actions, not places, and must never get a name
+    here: a reload would run them again.
+  - The view is read in the `currentView` useState INITIALIZER, not in an
+    effect. An effect races the mirror, which would write the dashboard over
+    the view the bar asked for.
+- **The mirror writes nothing until there is a `userOrg`.** It used to write
+  regardless, and with no org the answer was `"/"`, so landing logged out on a
+  shared `/epics/brand` wiped the workspace out of the bar before anybody could
+  sign in and the login fell back to `memberships[0]`. Measured against
+  `vercel dev`: the path was gone within three seconds of the login screen, and
+  survives now.
 
 ## App.jsx internal structure
 

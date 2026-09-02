@@ -17920,6 +17920,55 @@ const slugFromPath = () => {
   } catch { return null; }
 };
 
+// ── The view in the address bar ────────────────────────────────────────────
+// app.i7os.com/<workspace>/<view>. ONE level, and deliberately no more: the
+// second segment says which view you are looking at and that is the whole of
+// it. This is orientation, not a site map. Tabs inside a view stay in state,
+// and the record you have open stays in the query, where every deep link
+// already is (?wb=, ?doc=, ?task=). The path is where you are, the query is
+// what you have open.
+//
+// The dashboard has no name. It is what a workspace's own address opens, so
+// /minddraft is unchanged and every link anybody already holds keeps working
+// without a redirect.
+//
+// These are the names people read, not the names the code uses. Internally the
+// Files Manager is `assets`, and `creations` is BOTH a Brand area and the id of
+// the Files Manager's Media tab. One word for two places is survivable in code
+// and no good in an address.
+const VIEW_SLUG = {
+  chat: "messenger",
+  settings: "settings",
+  projects: "projects",
+  brand: "brand",
+  touchpoints: "audience",
+  creations: "creations",
+  assets: "files-manager",
+  files: "files",
+  kanban: "kanban",
+  timeline: "timeline",
+  calendar: "calendar",
+  notes: "notes",
+  whiteboard: "whiteboard",
+  createpost: "post",
+};
+const VIEW_FROM_SLUG = Object.fromEntries(Object.entries(VIEW_SLUG).map(([v, seg]) => [seg, v]));
+// The view the address bar is asking for, or null. Null covers three cases and
+// they all mean the same thing to the caller: no second segment, a segment that
+// names nothing, and the one view that cannot be opened by name.
+const viewFromPath = () => {
+  try {
+    const seg = decodeURIComponent(window.location.pathname.split("/")[2] || "").toLowerCase();
+    const view = VIEW_FROM_SLUG[seg] || null;
+    // A whiteboard is always a particular board, and the board is in ?wb=.
+    // /minddraft/whiteboard on its own would mount the view with boardId null,
+    // which is a blank screen. The name is still WRITTEN while a board is open,
+    // so the bar says where you are; it just cannot be entered without one.
+    if (view === "whiteboard" && !new URLSearchParams(window.location.search).get("wb")) return null;
+    return view;
+  } catch { return null; }
+};
+
 const CANVAS_MIN_EDIT = 700;
 const CANVAS_LH = 1.2;               // line height, shared by display and export
 const CANVAS_FONT_STACK = "'Geist', -apple-system, sans-serif";
@@ -45260,7 +45309,10 @@ export default function CircularMenu() {
       } catch (e) {}
       localStorage.removeItem("agencyos-return-state");
     }
-    return "dashboard";
+    // Read here rather than in an effect, so there is no window in which the
+    // dashboard is the current view and the mirror below writes it over the
+    // view the address bar asked for. An initializer cannot lose that race.
+    return viewFromPath() || "dashboard";
   });
   const [chatTab, setChatTab] = useState("Team");
   const [brandTab, setBrandTab] = useState("identity");
@@ -45576,17 +45628,18 @@ export default function CircularMenu() {
   const pathSynced = useRef(false);
   useEffect(() => {
     const slug = userOrg?.slug;
-    // Only the FIRST segment is ours. Everything after it, and the whole query,
-    // belongs to whatever else put it there — the deep links all live in the
-    // query and must survive this untouched.
-    const rest = window.location.pathname.split("/").slice(2).join("/");
-    // A workspace whose slug is missing or is one of the reserved paths leaves
-    // the address bar alone. Clearing it instead would take a good name out of
-    // the bar because of a row that arrived without one.
-    if (userOrg && !slugOk(slug)) return;
-    const want = slugOk(slug)
-      ? "/" + slug + (rest ? "/" + rest : "")
-      : "/" + rest;
+    // Nothing to mirror until there IS a workspace. It used to write anyway,
+    // and with no org the result was "/" — so landing logged out on
+    // /minddraft/brand had the workspace wiped out of the bar before anybody
+    // could sign in, and the login then fell back to memberships[0]. Measured
+    // against the dev server: /minddraft/brand became / within three seconds of
+    // the login screen appearing. A workspace whose slug is missing or reserved
+    // leaves the bar alone for the same reason.
+    if (!userOrg || !slugOk(slug)) return;
+    // The whole query and hash carry through untouched: every deep link lives
+    // there, and the view segment must not cost them.
+    const seg = VIEW_SLUG[currentView] || "";
+    const want = "/" + slug + (seg ? "/" + seg : "");
     const now = window.location.pathname;
     if (want !== now) {
       try {
@@ -45595,13 +45648,17 @@ export default function CircularMenu() {
       } catch (_) { /* a browser that refuses is not worth an error */ }
     }
     if (userOrg) pathSynced.current = true;
-  }, [userOrg?.id, userOrg?.slug]);
+  }, [userOrg?.id, userOrg?.slug, currentView]);
 
   // Back and forward. The address bar is the request; if it names a workspace
   // this user is in, follow it. If it names one they are not in, leave the app
   // where it is rather than throwing them somewhere.
   useEffect(() => {
     const onPop = () => {
+      // The view first, and unconditionally: a segment that names nothing, or
+      // no segment at all, IS the dashboard, so going back from /brand to
+      // /minddraft has to land somewhere rather than leave the brand view up.
+      setCurrentView(viewFromPath() || "dashboard");
       const asked = slugFromPath();
       if (!asked || asked === userOrg?.slug) return;
       const hit = (userOrgs || []).find(o => o?.slug === asked);
