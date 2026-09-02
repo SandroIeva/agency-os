@@ -145,7 +145,19 @@ const WS_ROLE_PRESETS = {
   branddesigner:  { can_edit_brand: true,  can_edit_design: true,  can_create_projects: false, can_manage_projects: false, can_create_sprints: false, can_manage_sprints: false, can_invite_members: false },
   projektmanager: { can_edit_brand: false, can_edit_design: false, can_create_projects: true,  can_manage_projects: true,  can_create_sprints: true,  can_manage_sprints: true,  can_invite_members: true  },
 };
-const WS_ROLE_LABELS = { member: "Teammitglied", branddesigner: "Branddesigner", projektmanager: "Projektmanager" };
+// The role names, in both languages. This map was German only, so an English
+// workspace read "Teammitglied" off an otherwise English panel.
+const WS_ROLE_LABELS = {
+  // Not "Teammitglied": the panel it sits in is already called Mitglieder, and
+  // the row is a member of this workspace. "Team" in front of it adds a second
+  // word for the same thing.
+  member:         { de: "Mitglied",       en: "Member" },
+  branddesigner:  { de: "Branddesigner",  en: "Brand Designer" },
+  projektmanager: { de: "Projektmanager", en: "Project Manager" },
+};
+// Both callers ask through this, so neither repeats the language ternary and a
+// fourth role cannot arrive in one language only.
+const wsRoleLabel = (role, de) => WS_ROLE_LABELS[role]?.[de ? "de" : "en"] || role;
 // Given a member's flags, return the matching preset key or "custom".
 const deriveWsRole = (m) => {
   for (const role of Object.keys(WS_ROLE_PRESETS)) {
@@ -52739,7 +52751,7 @@ export default function CircularMenu() {
                   {canInviteMembers && (
                   <div style={{ padding: "18px 20px", borderBottom: `1px solid ${theme.borderFaint}` }}>
                     <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 12 }}>
-                      {appLanguage === "de" ? "Teammitglied einladen" : "Invite Team Member"}
+                      {appLanguage === "de" ? "Mitglied einladen" : "Invite Member"}
                     </div>
                     <div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
                       {/* Round like the button in it, and no outline: the
@@ -52930,7 +52942,7 @@ export default function CircularMenu() {
                       const wsRole = isAdminRow ? "admin" : deriveWsRole(m);
                       const roleLabel = isAdminRow
                         ? "Admin"
-                        : (wsRole === "custom" ? (appLanguage === "de" ? "Individuell" : "Custom") : WS_ROLE_LABELS[wsRole]);
+                        : (wsRole === "custom" ? (appLanguage === "de" ? "Individuell" : "Custom") : wsRoleLabel(wsRole, appLanguage === "de"));
                       const expanded = expandedMemberId === m.user_id;
                       const expandable = isOrgAdmin; // admins too — but their row is read-only
                       return (
@@ -52992,7 +53004,7 @@ export default function CircularMenu() {
                                                 : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
                                               color: on ? (darkMode ? "#15151c" : "#fff") : theme.textDim,
                                               border: `1px solid ${on ? "transparent" : theme.borderFaint}` }}>
-                                            {WS_ROLE_LABELS[role]}
+                                            {wsRoleLabel(role, appLanguage === "de")}
                                           </div>
                                         );
                                       })}
