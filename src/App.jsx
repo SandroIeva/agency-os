@@ -178,6 +178,65 @@ const FONT = "'Geist', -apple-system, sans-serif";
 // Module scope because the two callers are different top-level components, and
 // an outline drawn as an inset shadow rather than a border, so the name does not
 // shift by a pixel the moment you point at it.
+// ── Hearing an answer that was not said perfectly ─────────────────────────
+// Speech recognition mishears, and the German recogniser is rough on English
+// words in particular: "Moodboard" comes back as Mutboard, Mudboard, Mut Board.
+// Matching on spelling meant answering the same question three times, so these
+// compare by SOUND-ish shape instead. Written once at module scope so the
+// matcher is testable on its own.
+const heardNorm = (v) => (v || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+// Levenshtein. Short words only, so the plain table is cheap enough.
+const editDistance = (a, b) => {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) {
+      row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = row;
+  }
+  return prev[b.length];
+};
+// How many single-letter slips a word of this length may survive. A similarity
+// RATIO was tried first and cannot separate the mishearings that matter from
+// the words that merely rhyme: measured, "mutboard" scores 0.667 against
+// "moodboard" and "word" scores 0.600 against "board", and only one of those is
+// an answer. A budget that grows with the word does separate them, because a
+// nine-letter word can lose three letters and still be unmistakable where a
+// five-letter one cannot lose two.
+const heardBudget = (len) => Math.max(1, Math.floor(len / 3));
+// Does anything in this sentence sound like that word? Pairs of neighbours are
+// compared too, because a recogniser splits "Moodboard" into "mood board" about
+// as often as it runs them together.
+const heardWord = (text, target) => {
+  const t = heardNorm(text);
+  const g = heardNorm(target);
+  if (!t || !g) return false;
+  if (t.includes(g)) return true;
+  const budget = heardBudget(g.length);
+  const words = t.split(" ");
+  for (let i = 0; i < words.length; i++) {
+    if (editDistance(words[i], g) <= budget) return true;
+    if (i + 1 < words.length && editDistance(words[i] + words[i + 1], g) <= budget) return true;
+  }
+  return false;
+};
+// A name somebody read out: their own board or project. Whole, run together, or
+// word by word, since any of the three is what comes back.
+const heardName = (text, name) => {
+  const g = heardNorm(name);
+  if (g.length < 3) return false;
+  const t = heardNorm(text);
+  if (t.includes(g)) return true;
+  if (heardWord(t, g.replace(/ /g, ""))) return true;
+  const parts = g.split(" ").filter(w => w.length > 3);
+  return parts.length > 0 && parts.every(w => heardWord(t, w));
+};
+
 // One answer to one of the assistant's questions, as it appears inside the orb.
 // A pill rather than a row: they sit in a line under the waveform, where a
 // stack of full-width rows would push the orb's own UI off the screen.
@@ -48275,20 +48334,24 @@ export default function CircularMenu() {
   // a model: it costs nothing per drop, works for the many people with no API
   // key of their own, and cannot put a file somewhere by misreading a sentence.
   const matchDropAnswer = (text, d) => {
-    const t = (text || "").toLowerCase().trim();
+    const t = heardNorm(text);
     if (!t) return null;
     if (d.step === "where") {
-      // Offered whether or not any board exists. With none, the next question
-      // is what to call the first one.
-      if (/moodboard|mood board|stimmung/.test(t)) return { dest: "moodboard" };
-      if (/file|datei|asset|manager/.test(t)) return { dest: "files" };
+      // Two options, so this can afford to be generous. It refuses only when
+      // the sentence points at both or at neither, and then the assistant asks
+      // again rather than filing something where nobody put it.
+      const mood = heardWord(t, "moodboard") || heardWord(t, "board") || heardWord(t, "stimmung");
+      const files = heardWord(t, "files") || heardWord(t, "dateien") || heardWord(t, "datei")
+        || heardWord(t, "manager") || heardWord(t, "assets");
+      if (mood && !files) return { dest: "moodboard" };
+      if (files && !mood) return { dest: "files" };
       return null;
     }
     if (d.step === "board") {
-      if (/^(neu|neues|new)\b/.test(t) || /neues moodboard|new moodboard|new board/.test(t)) {
+      if (/^(neu|neues|new)\b/.test(t) || heardWord(t, "neues") || heardWord(t, "new")) {
         return { wantNewBoard: true };
       }
-      const hit = d.boards.find(b => (b.title || "").length > 2 && t.includes((b.title || "").toLowerCase()));
+      const hit = d.boards.find(b => heardName(t, b.title));
       return hit ? { board: hit.id } : null;
     }
     if (d.step === "name") {
@@ -48299,12 +48362,10 @@ export default function CircularMenu() {
       return name ? { boardName: name.slice(0, 80) } : null;
     }
     if (d.step === "project") {
-      // kein, keins, keinem, keines: one stem with whatever ending the sentence
-      // gave it. Spelling each out missed "keins", which is what people say.
-      if (/^(kein\w*|nichts|nein|none|no)\b/.test(t) || /kein projekt|no project/.test(t)) {
+      if (/^(kein\w*|nichts|nein|none|no)\b/.test(t) || heardWord(t, "keins") || heardWord(t, "nothing")) {
         return { project: null };
       }
-      const hit = d.projects.find(pr => (pr.name || "").length > 2 && t.includes((pr.name || "").toLowerCase()));
+      const hit = d.projects.find(pr => heardName(t, pr.name));
       return hit ? { project: hit.id } : null;
     }
     return null;
