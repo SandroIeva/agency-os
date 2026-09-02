@@ -45685,6 +45685,18 @@ export default function CircularMenu() {
   };
   // Renaming the workspace. It could be created and given a logo, but not
   // renamed — the name appeared in Settings as a heading only.
+  // Every row in the workspace panel ends in a button, and each of them used to
+  // stop at its own label: a wide one beside two narrow ones, which reads as
+  // three unrelated controls rather than one column of settings. They are all
+  // the width of the widest, which is the logo's "Logo entfernen" — measured at
+  // 105px in Geist at 12px, so nothing shrinks and the two short ones grow.
+  const wsRowBtn = {
+    padding: "7px 12px", minWidth: 105, textAlign: "center", borderRadius: 999,
+    background: "transparent", border: `1px solid ${theme.borderFaint}`,
+    color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer",
+    flexShrink: 0,
+  };
+
   // The workspace's address. Its own edit, not part of the rename: a name is
   // for reading and an address is for linking, and quietly re-cutting the
   // address every time somebody fixes a typo in the name would break every
@@ -52438,7 +52450,7 @@ export default function CircularMenu() {
                         <input ref={orgLogoInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadOrgLogo(f); }} style={{ display: "none" }} />
                         {userOrg.logo_url && (
                           <motion.div onClick={removeOrgLogo} whileTap={{ scale: 0.97 }}
-                            style={{ padding: "7px 12px", borderRadius: 999, background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}
+                            style={wsRowBtn}
                           // Named, not just "Remove": it sits in the workspace panel,
                           // and a bare "Remove" there reads as the workspace.
                           >{appLanguage === "de" ? "Logo entfernen" : "Remove logo"}</motion.div>
@@ -52495,9 +52507,11 @@ export default function CircularMenu() {
                       ) : (
                         <motion.div whileTap={{ scale: 0.97 }}
                           onClick={() => { setOrgNameDraft(userOrg.name || ""); setOrgNameEdit(true); }}
-                          style={{ padding: "7px 12px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
-                            color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer", flexShrink: 0 }}>
-                          {appLanguage === "de" ? "Umbenennen" : "Rename"}
+                          style={wsRowBtn}>
+                          {/* The same word as the row under it. Two buttons that
+                              do the same kind of thing, one saying "Umbenennen"
+                              and one "Ändern", is two names for one idea. */}
+                          {appLanguage === "de" ? "Ändern" : "Change"}
                         </motion.div>
                       )
                     ) : (
@@ -52571,8 +52585,7 @@ export default function CircularMenu() {
                       ) : (
                         <motion.div whileTap={{ scale: 0.97 }}
                           onClick={() => { setOrgSlugDraft(userOrg.slug || ""); setOrgSlugErr(""); setOrgSlugEdit(true); }}
-                          style={{ padding: "7px 12px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`,
-                            color: theme.textDim, fontSize: 12, fontFamily: FONT, cursor: "pointer", flexShrink: 0 }}>
+                          style={wsRowBtn}>
                           {appLanguage === "de" ? "Ändern" : "Change"}
                         </motion.div>
                       )
