@@ -178,26 +178,28 @@ const FONT = "'Geist', -apple-system, sans-serif";
 // Module scope because the two callers are different top-level components, and
 // an outline drawn as an inset shadow rather than a border, so the name does not
 // shift by a pixel the moment you point at it.
-// One answer to one of the assistant's questions. Every question in that panel
-// is a list of these, so they cannot end up looking like three kinds of list.
-function DropChoice({ label, hint, onClick, disabled, theme, darkMode }) {
+// One answer to one of the assistant's questions, as it appears inside the orb.
+// A pill rather than a row: they sit in a line under the waveform, where a
+// stack of full-width rows would push the orb's own UI off the screen.
+function DropPill({ label, onClick, disabled, theme, darkMode }) {
   const [over, setOver] = useState(false);
   return (
     <motion.div
-      whileTap={disabled ? undefined : { scale: 0.99 }}
+      whileTap={disabled ? undefined : { scale: 0.97 }}
       onClick={disabled ? undefined : onClick}
       onMouseEnter={() => setOver(true)} onMouseLeave={() => setOver(false)}
       style={{
-        padding: "12px 16px", borderRadius: 14, cursor: disabled ? "default" : "pointer",
+        padding: "10px 18px", borderRadius: 999, cursor: disabled ? "default" : "pointer",
         border: `1px solid ${over && !disabled ? theme.textDim : theme.borderFaint}`,
         background: over && !disabled
-          ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)") : "transparent",
-        opacity: disabled ? 0.45 : 1,
+          ? (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)") : "transparent",
+        color: theme.text, fontSize: 13, fontFamily: FONT, fontWeight: 500,
+        opacity: disabled ? 0.4 : 1, maxWidth: 260,
+        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
         transition: "background-color 0.15s ease, border-color 0.15s ease",
       }}
     >
-      <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{label}</div>
-      {hint && <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{hint}</div>}
+      {label}
     </motion.div>
   );
 }
@@ -48159,6 +48161,61 @@ export default function CircularMenu() {
   // screen, and the answers so far.
   const [drop, setDrop] = useState(null);
 
+  // stopVoice is called from silence timers, whose closures captured an older
+  // render. The ref is what it reads, so the answer is matched against the
+  // question actually on screen.
+  const dropRef = useRef(null);
+  dropRef.current = drop;
+  // The spoken answer to whichever question is up. Matched here rather than by
+  // a model: it costs nothing per drop, works for the many people with no API
+  // key of their own, and cannot put a file somewhere by misreading a sentence.
+  const matchDropAnswer = (text, d) => {
+    const t = (text || "").toLowerCase().trim();
+    if (!t) return null;
+    if (d.step === "where") {
+      if (/moodboard|mood board|stimmung/.test(t)) return d.boards.length ? { dest: "moodboard", step: "board" } : null;
+      if (/file|datei|asset|manager/.test(t)) return { dest: "files", step: "project" };
+      return null;
+    }
+    if (d.step === "board") {
+      const hit = d.boards.find(b => (b.title || "").length > 2 && t.includes((b.title || "").toLowerCase()));
+      return hit ? { board: hit.id, run: true } : null;
+    }
+    if (d.step === "project") {
+      // kein, keins, keinem, keines: one stem with whatever ending the sentence
+      // gave it. Spelling each out missed "keins", which is what people say.
+      if (/^(kein\w*|nichts|nein|none|no)\b/.test(t) || /kein projekt|no project/.test(t)) {
+        return { project: null, run: true };
+      }
+      const hit = d.projects.find(pr => (pr.name || "").length > 2 && t.includes((pr.name || "").toLowerCase()));
+      return hit ? { project: hit.id, run: true } : null;
+    }
+    return null;
+  };
+  // One answer, however it arrived: spoken into the orb or clicked in it.
+  const applyDropAnswer = (answer) => {
+    const d = dropRef.current;
+    if (!d) return;
+    // Clicked rather than spoken, the recogniser is still live: stopVoice never
+    // ran. startVoice replaces the ref without stopping what it replaces, so
+    // without this the next question would be listened for by two recognisers
+    // at once, and the silence timer of the first would answer the second.
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+    try { if (recognitionRef.current) recognitionRef.current.stop(); } catch (_) {}
+    recognitionRef.current = null;
+    const next = { ...d, ...answer, miss: false };
+    if (answer.run) {
+      setVoiceMode(false);
+      setAiStatus("");
+      runDropUpload(next);
+      return;
+    }
+    setDrop(next);
+    // Straight back to listening for the next one, so a whole drop can be
+    // answered without touching the mouse.
+    startVoice();
+  };
+
   const openDropAsk = async (files) => {
     if (!files.length || !userOrg?.id || !session?.user?.id) return;
     const allImages = files.every(f => (f.type || "").startsWith("image/"));
@@ -48168,8 +48225,11 @@ export default function CircularMenu() {
       // go, and a question with one answer is not a question worth asking.
       step: allImages ? "where" : "project",
       dest: allImages ? null : "files",
-      board: null, project: null, boards: [], projects: [], saved: 0, failed: 0,
+      board: null, project: null, boards: [], projects: [], saved: 0, failed: 0, miss: false,
     });
+    // The assistant you talk to, not a dialog of its own: the orb drops out of
+    // the corner and asks. The lists below arrive while it is still animating.
+    launchVoice();
     // The App root keeps neither list: it loads project NAMES for the AI's
     // context and nothing more, so the questions fetch what they need.
     const [prj, mb] = await Promise.all([
@@ -48982,6 +49042,22 @@ export default function CircularMenu() {
     // Read from ref first — `transcript` state may be stale inside closures captured by setTimeout.
     const rawTranscript = (transcriptRef.current || transcript || "").trim();
     const cleaned = correctTranscriptVocab(rawTranscript);
+
+    // A file is waiting to be told where it goes, so this is an ANSWER, not a
+    // command. Read first, or "Moodboard" would be heard as "take me there"
+    // and the file would be left behind.
+    const pending = dropRef.current;
+    if (pending && ["where", "board", "project"].includes(pending.step)) {
+      const answer = matchDropAnswer(rawTranscript, pending) || matchDropAnswer(cleaned, pending);
+      setTranscript("");
+      transcriptRef.current = "";
+      if (answer) { applyDropAnswer(answer); return; }
+      // Not understood. Say so and listen again, rather than guessing at a
+      // destination or dropping the file on the floor.
+      setDrop(d => (d ? { ...d, miss: true } : d));
+      startVoice();
+      return;
+    }
 
     // ── Local voice commands run instantly — match raw text first so vocab correction can't ruin them ──
     const voiceNav = detectVoiceCommand(rawTranscript) || detectVoiceCommand(cleaned);
@@ -50993,16 +51069,74 @@ export default function CircularMenu() {
                 cursor: "pointer", zIndex: 15,
               }}
             >
-              <motion.div
-                animate={{ opacity: [0.5, 1, 0.5] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                style={{
-                  fontSize: 13, fontFamily: FONT, color: darkMode ? "#ffffff50" : "#1a1a2e90",
-                  letterSpacing: 2, marginBottom: 24, fontWeight: 400,
-                }}
-              >LISTENING...</motion.div>
+              {/* A file is waiting, so the orb has something to ask rather than
+                  an empty prompt. The question is the heading; LISTENING is
+                  what it says when nothing is pending. */}
+              {drop && ["where", "board", "project"].includes(drop.step) ? (
+                <div style={{ textAlign: "center", marginBottom: 22, maxWidth: 520, padding: "0 20px" }}>
+                  <div style={{ fontSize: 21, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.35 }}>
+                    {drop.step === "where"
+                      ? (appLanguage === "de" ? "Wohin damit?" : "Where should this go?")
+                      : drop.step === "board"
+                        ? (appLanguage === "de" ? "In welches Moodboard?" : "Which moodboard?")
+                        : (appLanguage === "de" ? "Zu welchem Projekt?" : "Which project?")}
+                  </div>
+                  <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 6,
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {drop.files.length === 1 ? drop.files[0].name
+                      : `${drop.files.length} ${appLanguage === "de" ? "Dateien" : "files"}`}
+                  </div>
+                  {drop.miss && (
+                    <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 8, opacity: 0.8 }}>
+                      {appLanguage === "de" ? "Das habe ich nicht verstanden." : "I did not catch that."}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <motion.div
+                  animate={{ opacity: [0.5, 1, 0.5] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                  style={{
+                    fontSize: 13, fontFamily: FONT, color: darkMode ? "#ffffff50" : "#1a1a2e90",
+                    letterSpacing: 2, marginBottom: 24, fontWeight: 400,
+                  }}
+                >LISTENING...</motion.div>
+              )}
 
               <WaveformEqualizer darkMode={darkMode} />
+
+              {/* Say it, or click it. Speech recognition is not available in
+                  every browser and mishears in all of them, and a file that can
+                  only be filed by voice is a file some people cannot file.
+                  stopPropagation because the whole overlay is a click target
+                  that ends the recording. */}
+              {drop && ["where", "board", "project"].includes(drop.step) && (
+                <div onClick={(e) => e.stopPropagation()}
+                  style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center",
+                    marginTop: 26, maxWidth: 560, padding: "0 20px" }}>
+                  {drop.step === "where" && (<>
+                    <DropPill theme={theme} darkMode={darkMode}
+                      label={appLanguage === "de" ? "Files Manager" : "Files Manager"}
+                      onClick={() => applyDropAnswer({ dest: "files", step: "project" })} />
+                    <DropPill theme={theme} darkMode={darkMode} disabled={!drop.boards.length}
+                      label={appLanguage === "de" ? "Moodboard" : "Moodboard"}
+                      onClick={() => applyDropAnswer({ dest: "moodboard", step: "board" })} />
+                  </>)}
+                  {drop.step === "board" && drop.boards.map(b => (
+                    <DropPill key={b.id} theme={theme} darkMode={darkMode} label={b.title || "Board"}
+                      onClick={() => applyDropAnswer({ board: b.id, run: true })} />
+                  ))}
+                  {drop.step === "project" && (<>
+                    <DropPill theme={theme} darkMode={darkMode}
+                      label={appLanguage === "de" ? "Kein Projekt" : "No project"}
+                      onClick={() => applyDropAnswer({ project: null, run: true })} />
+                    {drop.projects.map(pr => (
+                      <DropPill key={pr.id} theme={theme} darkMode={darkMode} label={pr.name}
+                        onClick={() => applyDropAnswer({ project: pr.id, run: true })} />
+                    ))}
+                  </>)}
+                </div>
+              )}
 
               {/* Live transcript */}
               <AnimatePresence>
@@ -55143,7 +55277,7 @@ export default function CircularMenu() {
           INSIDE the portal, never around it, or it drops the child before it
           reaches the DOM. */}
       {createPortal(<AnimatePresence>
-        {drop && (
+        {drop && ["busy", "done", "full"].includes(drop.step) && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={() => { if (drop.step !== "busy") setDrop(null); }}
@@ -55185,36 +55319,6 @@ export default function CircularMenu() {
               </div>
 
               <div style={{ padding: "0 24px 22px", display: "flex", flexDirection: "column", gap: 8 }}>
-                {drop.step === "where" && (<>
-                  <DropChoice theme={theme} darkMode={darkMode}
-                    label={appLanguage === "de" ? "In den Files Manager" : "To the Files Manager"}
-                    hint={appLanguage === "de" ? "Liegt bei allen Dateien des Workspace" : "Kept with the workspace's files"}
-                    onClick={() => setDrop(d => ({ ...d, dest: "files", step: "project" }))} />
-                  <DropChoice theme={theme} darkMode={darkMode}
-                    label={appLanguage === "de" ? "In ein Moodboard" : "To a moodboard"}
-                    hint={drop.boards.length
-                      ? (appLanguage === "de" ? `${drop.boards.length} Boards` : `${drop.boards.length} boards`)
-                      : (appLanguage === "de" ? "Noch keine Boards" : "No boards yet")}
-                    disabled={!drop.boards.length}
-                    onClick={() => setDrop(d => ({ ...d, dest: "moodboard", step: "board" }))} />
-                </>)}
-
-                {drop.step === "board" && drop.boards.map(b => (
-                  <DropChoice key={b.id} theme={theme} darkMode={darkMode} label={b.title || "Board"}
-                    onClick={() => runDropUpload({ ...drop, board: b.id })} />
-                ))}
-
-                {drop.step === "project" && (<>
-                  <DropChoice theme={theme} darkMode={darkMode}
-                    label={appLanguage === "de" ? "Keinem Projekt" : "No project"}
-                    hint={appLanguage === "de" ? "Gehört dem Workspace" : "Belongs to the workspace"}
-                    onClick={() => runDropUpload({ ...drop, project: null })} />
-                  {drop.projects.map(pr => (
-                    <DropChoice key={pr.id} theme={theme} darkMode={darkMode} label={pr.name}
-                      onClick={() => runDropUpload({ ...drop, project: pr.id })} />
-                  ))}
-                </>)}
-
                 {drop.step === "busy" && (
                   <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>
                     {drop.saved} / {drop.files.length}
