@@ -45696,7 +45696,7 @@ export default function CircularMenu() {
   // of the four is "Logo entfernen" at 82.8px, so 132 clears it with air and
   // holds for the English labels too.
   const wsRowBtn = {
-    padding: "9px 12px", minWidth: 132, boxSizing: "border-box",
+    padding: "11px 12px", minWidth: 132, boxSizing: "border-box",
     textAlign: "center", borderRadius: 999,
     background: "transparent",
     // The border as three longhands rather than the shorthand, so the property
@@ -52619,10 +52619,12 @@ export default function CircularMenu() {
                     <div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
                       <div style={{
                         flex: 1, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6,
-                        // 42, the same as the key fields further down. They sat at
-                        // 40 and 37: near enough to look like a mistake rather than
-                        // a difference, which is exactly how it read.
-                        padding: "8px 14px", borderRadius: 10, minHeight: 42, boxSizing: "border-box",
+                        // Taller than the key fields further down, because it
+                        // holds the Einladen button: room for it at the right,
+                        // less padding on that side, and enough height that the
+                        // button sits IN the field rather than filling it edge
+                        // to edge.
+                        padding: "6px 6px 6px 14px", borderRadius: 14, minHeight: 52, boxSizing: "border-box",
                         background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                         border: `1px solid ${theme.borderFaint}`,
                       }}>
@@ -52675,113 +52677,117 @@ export default function CircularMenu() {
                             caretColor: "#8B7AFF",
                           }}
                         />
-                      </div>
-                      <motion.button
-                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                        onClick={async () => {
-                          let emails = [...inviteEmails];
-                          const remaining = inviteInputVal.replace(/,/g, "").trim();
-                          if (remaining && remaining.includes("@") && remaining.includes(".") && !emails.includes(remaining)) {
-                            emails.push(remaining);
-                          }
-                          if (emails.length === 0) return;
-                          // Bulk invite: check the whole batch against the seats
-                          // still free, so we don't send three emails and have the
-                          // fourth insert fail halfway through the loop.
-                          {
-                            const seatRoom = planAllows("seats");
-                            const free = seatRoom.limit == null ? Infinity : Math.max(0, seatRoom.limit - seatRoom.used);
-                            if (emails.length > free) {
-                              if (free > 0) {
-                                alert(appLanguage === "de"
-                                  ? `Du hast noch ${free} freie(n) Platz/Plätze, willst aber ${emails.length} Personen einladen.`
-                                  : `You have ${free} seat(s) left but are inviting ${emails.length} people.`);
-                              } else {
-                                requestUpgrade("seats", appLanguage === "de");
-                              }
-                              return;
+                        <motion.button
+                          // One whileHover, not two. JSX keeps the last of a
+                          // repeated prop, so the second was quietly throwing
+                          // the first away.
+                          whileHover={{ ...wsRowBtnHover, scale: 1.02 }}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={async () => {
+                            let emails = [...inviteEmails];
+                            const remaining = inviteInputVal.replace(/,/g, "").trim();
+                            if (remaining && remaining.includes("@") && remaining.includes(".") && !emails.includes(remaining)) {
+                              emails.push(remaining);
                             }
-                          }
-                          try {
-                            const failed = []; // { email, reason } — surfaced to the user
-                            for (const email of emails) {
-                              const { data: inv, error } = await supabase.from("invitations")
-                                .insert({ org_id: userOrg.id, email, invited_by: session.user.id, role: "member" })
-                                .select()
-                                .single();
-                              if (error) throw error;
-                              // fetch() does NOT throw on HTTP 4xx/5xx — it only rejects on
-                              // network errors. So we must inspect response.ok explicitly,
-                              // otherwise a Resend rejection (bounce, bad address, limit)
-                              // silently looks like a successful send.
-                              try {
-                                const resp = await fetch("/api/send", {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({
-                                    mode: "invite",
-                                    email,
-                                    token: inv.token,
-                                    orgName: userOrg.name,
-                                    inviterName: userName || "A team member",
-                                  }),
-                                });
-                                if (!resp.ok) {
-                                  const d = await resp.json().catch(() => ({}));
-                                  failed.push({ email, reason: d.error || `HTTP ${resp.status}` });
-                                  console.warn("[Invite] Email send rejected:", email, d);
+                            if (emails.length === 0) return;
+                            // Bulk invite: check the whole batch against the seats
+                            // still free, so we don't send three emails and have the
+                            // fourth insert fail halfway through the loop.
+                            {
+                              const seatRoom = planAllows("seats");
+                              const free = seatRoom.limit == null ? Infinity : Math.max(0, seatRoom.limit - seatRoom.used);
+                              if (emails.length > free) {
+                                if (free > 0) {
+                                  alert(appLanguage === "de"
+                                    ? `Du hast noch ${free} freie(n) Platz/Plätze, willst aber ${emails.length} Personen einladen.`
+                                    : `You have ${free} seat(s) left but are inviting ${emails.length} people.`);
+                                } else {
+                                  requestUpgrade("seats", appLanguage === "de");
                                 }
-                              } catch (emailErr) {
-                                failed.push({ email, reason: emailErr.message || "Netzwerkfehler" });
-                                console.warn("[Invite] Email send failed:", email, emailErr);
+                                return;
                               }
                             }
-                            setInviteEmails([]);
-                            setInviteInputVal("");
-                            const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", userOrg.id).eq("status", "pending");
-                            setTeamInvites(invites || []);
-                            if (failed.length > 0) {
-                              // The email service is a Vercel serverless function — it only
-                              // runs in production. Locally (vite / no RESEND_API_KEY) the send
-                              // always fails, which is expected and not a broken invite.
-                              const envIssue = failed.every(f => /RESEND_API_KEY|not configured|HTTP 404|HTTP 405|Method not allowed|<!DOCTYPE/i.test(f.reason || ""));
-                              if (envIssue) {
-                                alert(appLanguage === "de"
-                                  ? "Die Einladung wurde gespeichert. Der E-Mail-Versand ist nur in der Produktionsumgebung (app.i7os.com) verfügbar — lokal wird keine E-Mail verschickt.\n\nTeile den Invite-Code so lange manuell."
-                                  : "The invitation was saved. Email delivery only works in production (app.i7os.com) — no email is sent locally.\n\nShare the invite code manually for now.");
-                              } else {
-                                const lines = failed.map(f => `• ${f.email}: ${f.reason}`).join("\n");
-                                alert(
-                                  (appLanguage === "de"
-                                    ? "Einladung gespeichert, aber die E-Mail konnte nicht zugestellt werden:\n\n"
-                                    : "Invitation saved, but the email could not be delivered:\n\n") + lines +
-                                  (appLanguage === "de"
-                                    ? "\n\nDer Invite-Code lässt sich auch manuell teilen."
-                                    : "\n\nYou can also share the invite code manually.")
-                                );
+                            try {
+                              const failed = []; // { email, reason } — surfaced to the user
+                              for (const email of emails) {
+                                const { data: inv, error } = await supabase.from("invitations")
+                                  .insert({ org_id: userOrg.id, email, invited_by: session.user.id, role: "member" })
+                                  .select()
+                                  .single();
+                                if (error) throw error;
+                                // fetch() does NOT throw on HTTP 4xx/5xx — it only rejects on
+                                // network errors. So we must inspect response.ok explicitly,
+                                // otherwise a Resend rejection (bounce, bad address, limit)
+                                // silently looks like a successful send.
+                                try {
+                                  const resp = await fetch("/api/send", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      mode: "invite",
+                                      email,
+                                      token: inv.token,
+                                      orgName: userOrg.name,
+                                      inviterName: userName || "A team member",
+                                    }),
+                                  });
+                                  if (!resp.ok) {
+                                    const d = await resp.json().catch(() => ({}));
+                                    failed.push({ email, reason: d.error || `HTTP ${resp.status}` });
+                                    console.warn("[Invite] Email send rejected:", email, d);
+                                  }
+                                } catch (emailErr) {
+                                  failed.push({ email, reason: emailErr.message || "Netzwerkfehler" });
+                                  console.warn("[Invite] Email send failed:", email, emailErr);
+                                }
                               }
+                              setInviteEmails([]);
+                              setInviteInputVal("");
+                              const { data: invites } = await supabase.from("invitations").select("*").eq("org_id", userOrg.id).eq("status", "pending");
+                              setTeamInvites(invites || []);
+                              if (failed.length > 0) {
+                                // The email service is a Vercel serverless function — it only
+                                // runs in production. Locally (vite / no RESEND_API_KEY) the send
+                                // always fails, which is expected and not a broken invite.
+                                const envIssue = failed.every(f => /RESEND_API_KEY|not configured|HTTP 404|HTTP 405|Method not allowed|<!DOCTYPE/i.test(f.reason || ""));
+                                if (envIssue) {
+                                  alert(appLanguage === "de"
+                                    ? "Die Einladung wurde gespeichert. Der E-Mail-Versand ist nur in der Produktionsumgebung (app.i7os.com) verfügbar — lokal wird keine E-Mail verschickt.\n\nTeile den Invite-Code so lange manuell."
+                                    : "The invitation was saved. Email delivery only works in production (app.i7os.com) — no email is sent locally.\n\nShare the invite code manually for now.");
+                                } else {
+                                  const lines = failed.map(f => `• ${f.email}: ${f.reason}`).join("\n");
+                                  alert(
+                                    (appLanguage === "de"
+                                      ? "Einladung gespeichert, aber die E-Mail konnte nicht zugestellt werden:\n\n"
+                                      : "Invitation saved, but the email could not be delivered:\n\n") + lines +
+                                    (appLanguage === "de"
+                                      ? "\n\nDer Invite-Code lässt sich auch manuell teilen."
+                                      : "\n\nYou can also share the invite code manually.")
+                                  );
+                                }
+                              }
+                            } catch (e) {
+                              console.error("[Invite]", e);
+                              alert(planLimitError(e, appLanguage === "de") || e.message || "Failed to send invite");
                             }
-                          } catch (e) {
-                            console.error("[Invite]", e);
-                            alert(planLimitError(e, appLanguage === "de") || e.message || "Failed to send invite");
-                          }
-                        }}
-                        whileHover={wsRowBtnHover}
-                        // The same width as the three above it. It keeps its
-                        // own filled background and its own rounding: it is the
-                        // action of this row, where those three open an edit.
-                        style={{
-                          padding: "9px 12px", minWidth: 132, boxSizing: "border-box",
-                          borderRadius: 10, flexShrink: 0,
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                          borderWidth: 1, borderStyle: "solid", borderColor: theme.borderFaint,
-                          color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT,
-                          cursor: "pointer", opacity: inviteEmails.length === 0 && !inviteInputVal ? 0.5 : 1,
-                        }}
-                      >
-                        {appLanguage === "de" ? "Einladen" : "Invite"}
-                      </motion.button>
+                          }}
+                          // Inside the field now, at its right edge, and the same
+                          // shape as the buttons above: same width, same height,
+                          // same rounding. `marginLeft: auto` keeps it right even
+                          // when the addresses above it wrap onto another line.
+                          style={{
+                            ...wsRowBtn, marginLeft: "auto",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            // Filled rather than outlined: it is the one thing in
+                            // this field that DOES something.
+                            background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+                            color: theme.textSub, fontWeight: 500,
+                            opacity: inviteEmails.length === 0 && !inviteInputVal ? 0.5 : 1,
+                          }}
+                        >
+                          {appLanguage === "de" ? "Einladen" : "Invite"}
+                        </motion.button>
+                      </div>
                     </div>
                   </div>
                   )}
