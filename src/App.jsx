@@ -169,6 +169,22 @@ const deriveWsRole = (m) => {
 
 const FONT = "'Geist', -apple-system, sans-serif";
 
+// A name you rename by double-clicking it. Pointing at it shows the field it is
+// about to become: the same wash and outline the input wears, in the same place.
+// That is the part the title attribute cannot do. The native tooltip waits about
+// a second, looks like the operating system rather than the app, and never
+// appears at all on a touch screen, so on its own it told nobody anything.
+//
+// Module scope because the two callers are different top-level components, and
+// an outline drawn as an inset shadow rather than a border, so the name does not
+// shift by a pixel the moment you point at it.
+const RENAMABLE = (hovered, theme, darkMode) => ({
+  cursor: "text", padding: "1px 5px", marginLeft: -5, borderRadius: 6,
+  background: hovered ? (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)") : "transparent",
+  boxShadow: `inset 0 0 0 1px ${hovered ? theme.borderFaint : "transparent"}`,
+  transition: "background-color 0.15s ease, box-shadow 0.15s ease",
+});
+
 // Which language a first-time visitor gets. German browsers get German;
 // everyone else gets English, including anyone whose language we cannot read.
 // English is the default, not a "detection failed" fallback.
@@ -42869,6 +42885,7 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
   // A project brand is named by its project and is renamed in the project
   // dialog, so this only offers itself on the workspace's own brand.
   const [nameEdit, setNameEdit] = useState(null);   // null = not renaming
+  const [nameHover, setNameHover] = useState(false); // pointing at the name shows the field it becomes
   // The logo has the same story as the name: it is uploaded once, in the
   // onboarding wizard, and that wizard is only reachable while there is no
   // profile yet (isOnboarding = !profile || editMode, and nothing ever sets
@@ -44768,9 +44785,16 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 {(isProjectBrand || nameEdit === null) ? (
                   <span
                     onDoubleClick={isProjectBrand || !canEditBrand ? undefined : () => setNameEdit(profile.name || "")}
+                    onMouseEnter={() => setNameHover(true)}
+                    onMouseLeave={() => setNameHover(false)}
                     title={isProjectBrand || !canEditBrand ? undefined : (appLanguage === "de" ? "Doppelklick zum Umbenennen" : "Double-click to rename")}
                     style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                      cursor: isProjectBrand || !canEditBrand ? "default" : "text", padding: "1px 5px", marginLeft: -5, borderRadius: 6 }}>
+                      // Only where it can actually be renamed. A project brand
+                      // takes its name from the project, and a member without
+                      // the permission would be shown a field that refuses.
+                      ...(isProjectBrand || !canEditBrand
+                        ? { cursor: "default" }
+                        : RENAMABLE(nameHover, theme, darkMode)) }}>
                     {isProjectBrand ? (projectName || profile.name || "Brand") : profile.name}
                   </span>
                 ) : (
@@ -45749,6 +45773,7 @@ export default function CircularMenu() {
   // Enter left the field open and saved nothing. So whichever of the three
   // arrives first decides, and the others find the door shut.
   const nameDone = useRef(false);
+  const [nameHover, setNameHover] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const avatarInputRef = useRef(null);
   const orgLogoInputRef = useRef(null);
@@ -52410,10 +52435,13 @@ export default function CircularMenu() {
                     ) : (
                       <div
                         onDoubleClick={() => { setNameInput(userName || ""); nameDone.current = false; setEditingName(true); }}
+                        onMouseEnter={() => setNameHover(true)}
+                        onMouseLeave={() => setNameHover(false)}
                         title={appLanguage === "de" ? "Doppelklick zum Umbenennen" : "Double-click to rename"}
                         style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text,
-                          lineHeight: 1.3, cursor: "text", padding: "1px 5px", marginLeft: -5,
-                          borderRadius: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                          display: "inline-block", maxWidth: "100%", boxSizing: "border-box",
+                          ...RENAMABLE(nameHover, theme, darkMode) }}>
                         {userName || "User"}
                       </div>
                     )}
