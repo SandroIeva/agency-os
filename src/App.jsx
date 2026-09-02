@@ -48161,6 +48161,83 @@ export default function CircularMenu() {
   // screen, and the answers so far.
   const [drop, setDrop] = useState(null);
 
+  // What the assistant asks, in one place, because it is both said out loud and
+  // put on screen and those two must not drift into different sentences.
+  const dropQuestionText = (d) => {
+    const de2 = appLanguage === "de";
+    if (!d) return "";
+    if (d.step === "where") return de2 ? "Wohin damit?" : "Where should this go?";
+    if (d.step === "board") return de2 ? "In welches Moodboard?" : "Which moodboard?";
+    if (d.step === "project") return de2 ? "Zu welchem Projekt?" : "Which project?";
+    return "";
+  };
+  // Say one line and resolve when it has finished saying it. Fish Audio first
+  // through the endpoint the assistant already speaks with, the browser's own
+  // synthesis when that is unavailable, which is what happens locally where
+  // there is no FISH_API_KEY. Never rejects: a question that cannot be spoken
+  // still has to be listened for.
+  const speakLine = (text) => new Promise((resolve) => {
+    if (!text) { resolve(); return; }
+    let done = false;
+    const finish = () => { if (done) return; done = true; resolve(); };
+    (async () => {
+      try {
+        const res = await fetch("/api/tts", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, voiceId: selectedVoice }),
+        });
+        if (res.ok) {
+          const url = URL.createObjectURL(await res.blob());
+          const audio = new Audio(url);
+          audio.crossOrigin = "anonymous";
+          audioRef.current = audio;
+          audio.onended = () => {
+            teardownAudioAnalyser(); URL.revokeObjectURL(url); audioRef.current = null; finish();
+          };
+          audio.onerror = () => { URL.revokeObjectURL(url); finish(); };
+          // The same analyser the assistant's own answers use, so the sphere
+          // moves with the question instead of sitting still through it.
+          setupAudioAnalyser(audio);
+          audio.play().catch(finish);
+          return;
+        }
+      } catch (_) { /* fall through to the browser */ }
+      try {
+        if (window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance(text);
+          u.lang = appLanguage === "de" ? "de-DE" : "en-US";
+          u.rate = 1.0; u.volume = 0.9;
+          u.onend = finish; u.onerror = finish;
+          window.speechSynthesis.speak(u);
+          return;
+        }
+      } catch (_) { /* no voice at all */ }
+      finish();
+    })();
+  });
+  // Ask, then listen. In that order and never at once: the microphone would
+  // otherwise hear the question and answer it with itself.
+  const askDrop = async (next) => {
+    setMenuOpen(false); setSubOpen(false);
+    if (currentView !== "dashboard") setCurrentView("dashboard");
+    if (panelOpen) setPanelOpen(false);
+    if (tasksOpen) setTasksOpen(false);
+    setVoiceMode(true);
+    setAiSpeaking(false);
+    setTranscript(""); transcriptRef.current = "";
+    setDrop({ ...next, speaking: true });
+    const lead = next.miss
+      ? (appLanguage === "de" ? "Das habe ich nicht verstanden. " : "I did not catch that. ")
+      : "";
+    await speakLine(lead + dropQuestionText(next));
+    // Cancelled while it was talking: the person closed the orb, and there is
+    // nothing left to listen for.
+    if (!dropRef.current) return;
+    setDrop(d => (d ? { ...d, speaking: false } : d));
+    startVoice();
+  };
+
   // stopVoice is called from silence timers, whose closures captured an older
   // render. The ref is what it reads, so the answer is matched against the
   // question actually on screen.
@@ -48210,26 +48287,29 @@ export default function CircularMenu() {
       runDropUpload(next);
       return;
     }
-    setDrop(next);
-    // Straight back to listening for the next one, so a whole drop can be
-    // answered without touching the mouse.
-    startVoice();
+    // Asked out loud like the first one, so the whole thing is a conversation
+    // rather than one spoken question followed by a silent form.
+    askDrop(next);
   };
 
   const openDropAsk = async (files) => {
     if (!files.length || !userOrg?.id || !session?.user?.id) return;
     const allImages = files.every(f => (f.type || "").startsWith("image/"));
-    setDrop({
+    const first = {
       files, allImages,
       // Only images have a choice to make. Everything else has one place it can
       // go, and a question with one answer is not a question worth asking.
       step: allImages ? "where" : "project",
       dest: allImages ? null : "files",
       board: null, project: null, boards: [], projects: [], saved: 0, failed: 0, miss: false,
-    });
+    };
+    setDrop(first);
     // The assistant you talk to, not a dialog of its own: the orb drops out of
-    // the corner and asks. The lists below arrive while it is still animating.
-    launchVoice();
+    // the corner and asks, out loud. 380ms is launchVoice's own delay, the
+    // animation less the overlap that keeps it from reading as two events.
+    // The lists below arrive while it is still moving.
+    setOrbLeaving(true);
+    setTimeout(() => askDrop(first), 380);
     // The App root keeps neither list: it loads project NAMES for the AI's
     // context and nothing more, so the questions fetch what they need.
     const [prj, mb] = await Promise.all([
@@ -48294,6 +48374,17 @@ export default function CircularMenu() {
       setDrop(d => (d ? { ...d, saved } : d));
     }
     setDrop(d => (d ? { ...d, step: "done", saved, failed } : d));
+    // It asked out loud, so it answers out loud. A conversation that ends by
+    // silently changing a card is not one.
+    const de2 = appLanguage === "de";
+    const where = dest === "moodboard"
+      ? (de2 ? "im Moodboard" : "in the moodboard")
+      : (de2 ? "im Files Manager" : "in the Files Manager");
+    speakLine(saved === 0
+      ? (de2 ? "Das hat leider nicht geklappt." : "That did not work.")
+      : saved === 1
+        ? (de2 ? `Erledigt, die Datei liegt ${where}.` : `Done, the file is ${where}.`)
+        : (de2 ? `Erledigt, ${saved} Dateien liegen ${where}.` : `Done, ${saved} files are ${where}.`));
   };
   // A picture asked for out loud. It is made HERE rather than by sending
   // somebody to the generator: the request was spoken, so the answer should
@@ -49054,8 +49145,7 @@ export default function CircularMenu() {
       if (answer) { applyDropAnswer(answer); return; }
       // Not understood. Say so and listen again, rather than guessing at a
       // destination or dropping the file on the floor.
-      setDrop(d => (d ? { ...d, miss: true } : d));
-      startVoice();
+      askDrop({ ...pending, miss: true });
       return;
     }
 
@@ -51061,7 +51151,10 @@ export default function CircularMenu() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.3, ease: [0.22, 0.68, 0.35, 1.0] }}
-              onClick={stopVoice}
+              // Nothing to send while the assistant is still talking: the
+              // recogniser has not started, so stopVoice would read an empty
+              // transcript as an answer it could not place.
+              onClick={() => { if (!drop?.speaking) stopVoice(); }}
               style={{
                 position: "absolute", inset: 0,
                 display: "flex", flexDirection: "column",
@@ -51074,12 +51167,11 @@ export default function CircularMenu() {
                   what it says when nothing is pending. */}
               {drop && ["where", "board", "project"].includes(drop.step) ? (
                 <div style={{ textAlign: "center", marginBottom: 22, maxWidth: 520, padding: "0 20px" }}>
+                  {/* The same sentence that was just spoken, from the same
+                      place, so the screen cannot say one thing while the voice
+                      says another. */}
                   <div style={{ fontSize: 21, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.35 }}>
-                    {drop.step === "where"
-                      ? (appLanguage === "de" ? "Wohin damit?" : "Where should this go?")
-                      : drop.step === "board"
-                        ? (appLanguage === "de" ? "In welches Moodboard?" : "Which moodboard?")
-                        : (appLanguage === "de" ? "Zu welchem Projekt?" : "Which project?")}
+                    {dropQuestionText(drop)}
                   </div>
                   <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 6,
                     whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -51156,7 +51248,7 @@ export default function CircularMenu() {
               <div style={{
                 fontSize: 11, fontFamily: FONT, color: darkMode ? "#ffffff25" : "#1a1a2e70",
                 letterSpacing: 1.5, marginTop: 20,
-              }}>{t("ai.clickToSend")}</div>
+              }}>{drop?.speaking ? "" : t("ai.clickToSend")}</div>
             </motion.div>
           )}
         </AnimatePresence>
