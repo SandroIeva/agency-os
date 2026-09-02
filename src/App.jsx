@@ -45749,7 +45749,13 @@ export default function CircularMenu() {
   // whatever it is for and its buttons at the right. Defined once, because the
   // invite row and the model keys are the same thing and looked like two.
   const wsField = {
-    display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6,
+    // 8 is the gap between everything a field holds: chips, the input, the
+    // round reset, the buttons. It was 6 with two exceptions written on top of
+    // it, a marginLeft on the saved-key line and a marginRight on the reset, so
+    // the spacing inside one field came out three different widths. It is also
+    // the gap the panel's own button rows use, so a field and a row space their
+    // contents alike.
+    display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8,
     padding: "6px 6px 6px 18px", borderRadius: 999, minHeight: 52,
     boxSizing: "border-box",
     background: darkMode ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.022)",
@@ -53549,7 +53555,7 @@ export default function CircularMenu() {
                                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke={theme.text} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>
                                       </span>
                                     )}
-                                    <span style={{ ...wsFieldText, marginLeft: hasKey ? 2 : 0, color: hasKey ? theme.textSub : theme.textDim }}>
+                                    <span style={{ ...wsFieldText, color: hasKey ? theme.textSub : theme.textDim }}>
                                       {hasKey ? (appLanguage === "de" ? "Key gespeichert" : "Key saved") : (appLanguage === "de" ? "Kein Key hinterlegt" : "No key set")}
                                     </span>
                                     <motion.div whileHover={wsFieldBtnHover} whileTap={{ scale: 0.97 }}
@@ -53578,10 +53584,11 @@ export default function CircularMenu() {
                                         Speichern reading as a second label on the
                                         same control, when what it does is throw
                                         the saved key away. A circle says a
-                                        different kind of thing, and the 8px keeps
-                                        it off the button it is not part of. Round
-                                        comes free: wsRowBtn's 999 on a 39 square
-                                        is a circle. */}
+                                        different kind of thing, and it stands off
+                                        Speichern by the field's own gap like
+                                        everything else in here. Round comes free:
+                                        wsRowBtn's 999 on a 39 square is a
+                                        circle. */}
                                     {hasKey && (
                                       <motion.div
                                         whileHover={wsFieldBtnHover} whileTap={{ scale: 0.95 }}
@@ -53592,7 +53599,7 @@ export default function CircularMenu() {
                                           setEditingKeyId(null);
                                         }}
                                         title={appLanguage === "de" ? "Zurücksetzen" : "Reset"}
-                                        style={{ ...wsFieldBtn, width: 39, minWidth: 39, padding: 0, marginRight: 8 }}>
+                                        style={{ ...wsFieldBtn, width: 39, minWidth: 39, padding: 0 }}>
                                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{RESET_ICON}</svg>
                                       </motion.div>
                                     )}
