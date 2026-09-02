@@ -17885,6 +17885,14 @@ const EYEDROPPER_ICON = (
   <><path d="M15.5 3.5a2.1 2.1 0 0 1 3 3L9 16l-4 1 1-4z" /><path d="M13 6l5 5" /></>
 );
 
+// Put a thing back the way it was. The OS Visuals row has drawn this for its
+// own "Zurücksetzen" since before the model keys had one, and two places
+// showing the same symbol have to read it from the same place or they quietly
+// drift into two symbols for one idea.
+const RESET_ICON = (
+  <><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" /><path d="M3 3v5h5" /></>
+);
+
 // ── The workspace in the address bar ───────────────────────────────────────
 // app.i7os.com/<workspace>. The first segment of the path names the workspace,
 // which is what makes a reload, a bookmark and a link land in the right one.
@@ -52645,9 +52653,12 @@ export default function CircularMenu() {
                           {orgSlugErr}
                         </div>
                       )}
-                      {/* Cancel left, Save right: the commit is the rightmost
-                          thing in the row, where the eye finishes reading it. */}
-                      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                      {/* Cancel left, Save hard right: not merely after Cancel
+                          but on the same edge as the address field above it and
+                          the logo row's button above that, so the panel has one
+                          right margin rather than a button floating short of
+                          it. */}
+                      <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "space-between" }}>
                         <motion.div onClick={closeWorkspaceEdit} whileTap={{ scale: 0.97 }}
                           whileHover={wsRowBtnHover} style={wsRowBtn}>
                           {appLanguage === "de" ? "Abbrechen" : "Cancel"}
@@ -53562,17 +53573,28 @@ export default function CircularMenu() {
                                         border: "none", outline: "none", background: "transparent",
                                       }}
                                     />
+                                    {/* Round, and an icon rather than the word. As
+                                        an underlined "Zurücksetzen" it sat against
+                                        Speichern reading as a second label on the
+                                        same control, when what it does is throw
+                                        the saved key away. A circle says a
+                                        different kind of thing, and the 8px keeps
+                                        it off the button it is not part of. Round
+                                        comes free: wsRowBtn's 999 on a 39 square
+                                        is a circle. */}
                                     {hasKey && (
-                                      <div
+                                      <motion.div
+                                        whileHover={wsFieldBtnHover} whileTap={{ scale: 0.95 }}
                                         onClick={() => {
                                           setLlmKeys(prev => { const n = { ...prev }; delete n[p.id]; return n; });
                                           setLlmKeyInputs(prev => ({ ...prev, [p.id]: "" }));
                                           setLlmKeyStatus(prev => { const n = { ...prev }; delete n[p.id]; return n; });
                                           setEditingKeyId(null);
                                         }}
-                                        style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, textDecoration: "underline", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
-                                        {appLanguage === "de" ? "Zurücksetzen" : "Reset"}
-                                      </div>
+                                        title={appLanguage === "de" ? "Zurücksetzen" : "Reset"}
+                                        style={{ ...wsFieldBtn, width: 39, minWidth: 39, padding: 0, marginRight: 8 }}>
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{RESET_ICON}</svg>
+                                      </motion.div>
                                     )}
                                     <motion.div
                                       whileHover={wsFieldBtnHover}
@@ -54925,7 +54947,7 @@ export default function CircularMenu() {
                               display: "flex", alignItems: "center", justifyContent: "center", padding: 0,
                             }}
                           >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{RESET_ICON}</svg>
                           </motion.button>
                         )}
                       </div>
