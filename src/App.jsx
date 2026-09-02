@@ -49087,6 +49087,33 @@ export default function CircularMenu() {
         // Reset silence countdown every time we get a recognition result
         if (rawText.length > 0) armSilenceTimer();
 
+        // A file is waiting to be told where it goes, so these words are an
+        // ANSWER and never a command. Matched HERE and not only in stopVoice,
+        // because a command fires on a partial result: saying "Moodboard" was
+        // caught below as "take me to the moodboards" and carried the view off
+        // with the file still in hand, which is what made the answer feel like
+        // it needed a click to be heard.
+        if (rawText.length > 0) {
+          const pend = dropRef.current;
+          if (pend && ["where", "board", "project"].includes(pend.step)) {
+            const answer = matchDropAnswer(rawText, pend) || matchDropAnswer(currentText, pend);
+            if (answer) {
+              commandExecuted = true;
+              clearSilenceTimer();
+              try { recognition.stop(); } catch (e) {}
+              recognitionRef.current = null;
+              setTranscript("");
+              transcriptRef.current = "";
+              // A tick, so React has finished with the state this handler just
+              // set before the next question replaces it.
+              setTimeout(() => applyDropAnswer(answer), 0);
+            }
+            // Understood or not, the commands below do not run while a file is
+            // waiting. Nothing said to an open question should navigate.
+            return;
+          }
+        }
+
         // Auto-detect voice commands. Run against the RAW transcript first so
         // vocab correction (e.g. "brand" → "BrandX") can't sabotage commands.
         if (rawText.length > 0) {
