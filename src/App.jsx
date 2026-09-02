@@ -45719,8 +45719,8 @@ export default function CircularMenu() {
       return;
     }
     if (!slugOk(slug)) {
-      setOrgSlugErr(de2 ? "Diese Adresse ist vergeben, sie gehört zur App selbst."
-                        : "That address belongs to the app itself.");
+      setOrgSlugErr(de2 ? "Dieser Slug ist vergeben, er gehört zur App selbst."
+                        : "That slug belongs to the app itself.");
       return;
     }
     setOrgSlugSaving(true);
@@ -45731,7 +45731,7 @@ export default function CircularMenu() {
       // first and writing second would let two people take the same address in
       // the gap between the two.
       setOrgSlugErr(error.code === "23505"
-        ? (de2 ? "Diese Adresse ist schon vergeben." : "That address is already taken.")
+        ? (de2 ? "Dieser Slug ist schon vergeben." : "That slug is already taken.")
         : (planLimitError(error, de2) || error.message || (de2 ? "Fehlgeschlagen." : "Failed.")));
       return;
     }
@@ -52531,7 +52531,7 @@ export default function CircularMenu() {
                     display: "flex", alignItems: "center", gap: 16 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
-                        {appLanguage === "de" ? "Adresse" : "Address"}
+                        Slug
                       </div>
                       {orgSlugEdit ? (<>
                         <div style={{ display: "flex", alignItems: "center", gap: 2, marginTop: 6 }}>
@@ -52557,8 +52557,8 @@ export default function CircularMenu() {
                         <div style={{ fontSize: 11.5, fontFamily: FONT, marginTop: 6, lineHeight: 1.5,
                           color: orgSlugErr ? "#e5484d" : theme.textFaint }}>
                           {orgSlugErr || (appLanguage === "de"
-                            ? `Wird zu app.i7os.com/${slugClean(orgSlugDraft) || "…"} . Links mit der alten Adresse funktionieren danach nicht mehr.`
-                            : `Becomes app.i7os.com/${slugClean(orgSlugDraft) || "…"} . Links using the old address stop working.`)}
+                            ? `Wird zu app.i7os.com/${slugClean(orgSlugDraft) || "…"} . Links mit dem alten Slug funktionieren danach nicht mehr.`
+                            : `Becomes app.i7os.com/${slugClean(orgSlugDraft) || "…"} . Links using the old slug stop working.`)}
                         </div>
                       </>) : (
                         <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>

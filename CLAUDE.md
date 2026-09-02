@@ -84,7 +84,7 @@ the URL, so a ninth cannot forget to.
   number is appended only when that name is taken, and taken is read off the
   write: `23505` means try `name-2`, then `name-3`. Asking first would leave a
   gap in which somebody else takes it.
-- The slug is editable in Settings (**Adresse**, under the workspace name) and
+- The slug is editable in Settings (**Slug**, under the workspace name) and
   is its OWN edit: a rename writes `name` and nothing else, or fixing a typo in
   a name would silently break every link somebody had saved. `organizations.slug`
   carries a UNIQUE index, and a clash is read off the write (`23505`) rather
