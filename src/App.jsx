@@ -7054,8 +7054,10 @@ const DropVeil = ({ label, darkMode, fixed = false }) => (
     <div style={{ width: 168, height: 168, borderRadius: "50%", boxSizing: "border-box",
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       gap: 12, padding: "0 18px", textAlign: "center",
-      background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.045)",
-      border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.09)"}` }}>
+      // Solid, and no outline. A wash with a hairline round it was a shape
+      // hedging about whether it was there; against a blurred background it
+      // needs to be the one thing in focus.
+      background: darkMode ? "#15151c" : "#ffffff" }}>
       <svg width="30" height="30" viewBox="0 0 24 24" fill="none"
         stroke={darkMode ? "#F4F4F7" : "#15151c"} strokeWidth="1.8"
         strokeLinecap="round" strokeLinejoin="round">{UPLOAD_ICON}</svg>
