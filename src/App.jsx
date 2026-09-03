@@ -178,6 +178,13 @@ const FONT = "'Geist', -apple-system, sans-serif";
 // Module scope because the two callers are different top-level components, and
 // an outline drawn as an inset shadow rather than a border, so the name does not
 // shift by a pixel the moment you point at it.
+// Put a file in. The avatar's hover overlay has drawn this since before the
+// drop veil existed, and two places showing one symbol drift into two symbols
+// for one idea.
+const UPLOAD_ICON = (
+  <><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></>
+);
+
 // ── Hearing an answer that was not said perfectly ─────────────────────────
 // Speech recognition mishears, and the German recogniser is rough on English
 // words in particular: "Moodboard" comes back as Mutboard, Mudboard, Mut Board.
@@ -7028,25 +7035,34 @@ const measureImageSize = (url) => new Promise((res) => {
 });
 // The dashed frame that says "let go here". Same one on both surfaces, because
 // they are the same gesture.
-const DropVeil = ({ label, darkMode }) => (
-  <div style={{ position: "absolute", inset: 0, zIndex: 8, pointerEvents: "none",
+const DropVeil = ({ label, darkMode, fixed = false }) => (
+  <div style={{ position: fixed ? "fixed" : "absolute", inset: 0,
+    zIndex: fixed ? 100006 : 8, pointerEvents: "none",
     display: "flex", alignItems: "center", justifyContent: "center",
-    background: darkMode ? "rgba(10,10,14,0.45)" : "rgba(255,255,255,0.55)",
-    // 1.5px was a smudge you had to look for. What is behind the veil should
-    // read as "put down, not here", so it goes properly out of focus.
-    backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}>
-    <div style={{ position: "absolute", inset: 14, borderRadius: 18,
-      border: `2px dashed ${darkMode ? "rgba(255,255,255,0.32)" : "rgba(0,0,0,0.28)"}` }} />
-    {/* With the theme, not against it. This was inverted, the way the nav
-        menu's selected pill is, and the design system does say to invert THAT
-        one. But this is not a selection: it is a label on a veil that has
-        already dimmed everything behind it, and a pill in the opposite colour
-        on top of that reads as a button somebody is meant to press. Anthracite
-        on dark, white on light, so it reads as a caption. */}
-    <div style={{ padding: "10px 18px", borderRadius: 999, fontFamily: FONT, fontSize: 13, fontWeight: 500,
-      background: darkMode ? "#15151c" : "#ffffff",
-      color: darkMode ? "#ffffff" : "#15151c", boxShadow: "0 8px 30px rgba(0,0,0,0.25)" }}>
-      {label}
+    // The wash was heavier than the blur, which is why it read as a sheet of
+    // tint rather than as anything going out of focus. Less tint, far more
+    // blur, so the blur is the thing you see.
+    background: darkMode ? "rgba(10,10,14,0.28)" : "rgba(255,255,255,0.35)",
+    backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)" }}>
+    <div style={{ position: "absolute", inset: 14, borderRadius: 20,
+      border: `2px dashed ${darkMode ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.22)"}` }} />
+    {/* A disc, not a pill. A rounded rectangle with a filled background and a
+        drop shadow is the shape this app uses for BUTTONS, so that is what it
+        was read as: something to press rather than somewhere to let go. A
+        circle with the icon over the words, no shadow and barely any fill,
+        says area. */}
+    <div style={{ width: 168, height: 168, borderRadius: "50%", boxSizing: "border-box",
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      gap: 12, padding: "0 18px", textAlign: "center",
+      background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.045)",
+      border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.09)"}` }}>
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none"
+        stroke={darkMode ? "#F4F4F7" : "#15151c"} strokeWidth="1.8"
+        strokeLinecap="round" strokeLinejoin="round">{UPLOAD_ICON}</svg>
+      <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 500, lineHeight: 1.35,
+        color: darkMode ? "#F4F4F7" : "#15151c" }}>
+        {label}
+      </div>
     </div>
   </div>
 );
@@ -16533,7 +16549,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                           <img src={logoPreview || form.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                           {canManageThisProject && (
                             <div className="proj-logo-hover" style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", opacity: 0, transition: "opacity 0.18s ease" }}>
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{UPLOAD_ICON}</svg>
                             </div>
                           )}
                         </>
@@ -32622,7 +32638,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                         {[
                           { key: "local", label: appLanguage === "de" ? "Datei hochladen" : "Upload file",
                             sub: appLanguage === "de" ? "Vom Computer" : "From your computer",
-                            icon: <><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
+                            icon: <>{UPLOAD_ICON}</>,
                             onClick: () => { setAddMenuOpen(false); creationsPick.current?.(); } },
                           { key: "drive", label: appLanguage === "de" ? "Aus Google Drive" : "From Google Drive",
                             sub: appLanguage === "de" ? "Datei aus Drive wählen" : "Pick a file from Drive",
@@ -33374,7 +33390,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                         boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 6 }}>
                       {[
                         { key: "upload", label: appLanguage === "de" ? "Hochladen" : "Upload", sub: appLanguage === "de" ? "Vom Computer" : "From your computer",
-                          icon: <><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
+                          icon: <>{UPLOAD_ICON}</>,
                           onClick: () => { setBoardAddOpen(false); fileInputRef.current?.click(); } },
                         { key: "url", label: "URL", sub: appLanguage === "de" ? "Bild- oder Website-URL" : "Image or website URL",
                           icon: <><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></>,
@@ -35956,7 +35972,7 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
                 ) : (
                   <>
                     <div style={{ width: 52, height: 52, borderRadius: 14, margin: "0 auto 14px", background: accent + "1f", display: "flex", alignItems: "center", justifyContent: "center", color: accent }}>
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{UPLOAD_ICON}</svg>
                     </div>
                     <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 4 }}>Datei auswählen oder hierher ziehen</div>
                     <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>PNG, JPG, GIF, WebP…</div>
@@ -42856,7 +42872,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
                     <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9, padding: "14px 0", borderRadius: 12, cursor: refUploading ? "default" : "pointer",
                       background: "transparent", color: theme.text, border: `1px solid ${theme.border}`, fontSize: 14, fontFamily: FONT, fontWeight: 600, opacity: refUploading ? 0.7 : 1 }}>
                       <input type="file" accept="image/*" disabled={refUploading} style={{ display: "none" }} onChange={handleRefUpload} />
-                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{UPLOAD_ICON}</svg>
                       {refUploading ? (de ? "Wird hochgeladen…" : "Uploading…") : (de ? "Referenzbild hochladen" : "Upload reference image")}
                     </label>
                   )}
@@ -51189,9 +51205,18 @@ export default function CircularMenu() {
                 pointerEvents: menuOpen ? "none" : "auto",
               }}
             >
-              {/* The same dashed frame the whiteboard and the artboard raise,
-                  because it is the same gesture. */}
-              {dropOver && <DropVeil darkMode={darkMode} label={appLanguage === "de" ? "Dateien hier ablegen" : "Drop files here"} />}
+              {/* The same frame the whiteboard and the artboard raise, because
+                  it is the same gesture. Portalled to the body here and fixed,
+                  which the other two do not need: this view's root is an
+                  animating motion.div, and an ancestor with a transform is its
+                  own backdrop root, so the blur reached only what was inside
+                  this box. Measured: with the transform on, the clock and the
+                  weather at the top stayed perfectly sharp while everything
+                  under the veil blurred; with it off, they blurred too. */}
+              {dropOver && createPortal(
+                <DropVeil fixed darkMode={darkMode}
+                  label={appLanguage === "de" ? "Dateien hier ablegen" : "Drop files here"} />,
+                document.body)}
               {/* Greeting */}
               <div style={{ marginBottom: 12 }}>
                 <div style={{
@@ -53180,7 +53205,7 @@ export default function CircularMenu() {
                       )}
                       {(userOrgRole === "admin" || userOrg?.role === "admin") && (
                         <div className="avatar-edit-overlay" style={{ position: "absolute", inset: 0, borderRadius: 12, background: "rgba(0,0,0,0.5)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", opacity: 0, transition: "opacity 0.15s", pointerEvents: "none" }}>
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{UPLOAD_ICON}</svg>
                         </div>
                       )}
                       {orgLogoUploading && (
