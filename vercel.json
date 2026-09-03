@@ -20,6 +20,10 @@
       "destination": "/api/pinterest?mode=callback"
     },
     {
+      "source": "/figma/callback",
+      "destination": "/api/figma?mode=callback"
+    },
+    {
       "source": "/((?!api/|@|node_modules/|src/|i/|s/|.*\\.).*)",
       "destination": "/"
     }
