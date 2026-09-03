@@ -7061,8 +7061,12 @@ const DropVeil = ({ label, darkMode, fixed = false }) => (
       <svg width="30" height="30" viewBox="0 0 24 24" fill="none"
         stroke={darkMode ? "#F4F4F7" : "#15151c"} strokeWidth="1.8"
         strokeLinecap="round" strokeLinejoin="round">{UPLOAD_ICON}</svg>
+      {/* The label steps back from the icon in the light theme: #6b6b76 is
+          theme.textDim, measured off the running app, and DropVeil is module
+          scope so it cannot read the theme object. The icon keeps the full
+          weight, since it is the part that says what the circle is for. */}
       <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 500, lineHeight: 1.35,
-        color: darkMode ? "#F4F4F7" : "#15151c" }}>
+        color: darkMode ? "#F4F4F7" : "#6b6b76" }}>
         {label}
       </div>
     </div>
