@@ -23141,6 +23141,22 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             {suffix && <span style={{ fontSize: 11.5, color: theme.textFaint }}>{suffix}</span>}
           </div>
         );
+        // A number you can read but not set. Same box, same glyph, same place in
+        // the row, so a value that happens to be derived does not look like a
+        // different kind of thing — only the text is dimmed and the cursor stays
+        // an arrow, which is what says it is not a field.
+        const numRead = (value, glyph, title2, suffix = "") => (
+          <div title={title2}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
+              borderRadius: 9, cursor: "default",
+              background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+            <span style={{ fontSize: 11, color: theme.textFaint, minWidth: 13 }}>{glyph}</span>
+            <span style={{ width: "100%", color: theme.textDim, fontFamily: FONT, fontSize: 12.5 }}>
+              {Number.isFinite(value) ? value : ""}
+            </span>
+            {suffix && <span style={{ fontSize: 11.5, color: theme.textFaint }}>{suffix}</span>}
+          </div>
+        );
         const dropdown = (value, options, onChange) => (
           <div style={{ position: "relative", display: "flex", alignItems: "center",
             padding: "8px 10px", borderRadius: 9,
@@ -25562,8 +25578,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               {label(de ? "Maße" : "Layout")}
               <div style={two}>
                 {num(Math.round(selItem.w), v => set2({ w: Math.max(8, Number(v) || 8) }), "W")}
+                {/* A text has no height of its own: it is however tall the words
+                    come out at this width and size, which is what boxOf measures
+                    and what everything else on the canvas already reads. Shown
+                    rather than left as an empty gap, because a row with one
+                    number in it reads as a field that failed to fill. */}
                 {selItem.type === "text"
-                  ? <div />
+                  ? numRead(Math.round(boxOf(selItem).h), "H",
+                      de ? "Ergibt sich aus Text, Breite und Schriftgröße"
+                         : "Follows from the text, the width and the size")
                   : num(Math.round(selItem.h), v => set2({ h: Math.max(8, Number(v) || 8) }), "H")}
               </div>
             </>)}
