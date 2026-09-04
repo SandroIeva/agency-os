@@ -24180,6 +24180,30 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   what made one row of settings look like three unrelated
                   buttons. */}
               {barSwatch("color", selItem[colourKey], de ? "Farbe" : "Colour")}
+              {/* A shape's outline, the way a text's highlight outline already
+                  works: the same swatch, drawn as a ring so it reads as an
+                  edge rather than a fill. Guarded by canStroke, which is the
+                  app's own answer to what can carry one — a rectangle, an
+                  ellipse, an image, a sticky and every polygon shape — rather
+                  than a list of types written out here that would drift from
+                  it. A line or a pen stroke is left out because it is all edge
+                  already. */}
+              {canStroke(selItem) && !isStroke && (<>
+                {barSwatch("stroke", selItem.strokeWidth ? selItem.stroke : null,
+                  de ? "Kontur" : "Outline", true)}
+                {/* Thickness only once there is something to be thick. The same
+                    three weights the line tools offer, drawn the same way, so a
+                    stroke is a stroke wherever it is set. */}
+                {selItem.strokeWidth ? WB_STROKE_WIDTHS.map(w => (
+                  <div key={`sw${w}`} onClick={() => patch(selItem.id, { strokeWidth: w })}
+                    title={de ? `Konturstärke ${w}` : `Outline ${w}`}
+                    style={{ ...iconBtn, background: selItem.strokeWidth === w
+                      ? "rgba(255,255,255,0.22)" : "transparent" }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff"
+                      strokeLinecap="round"><line x1="4" y1="12" x2="20" y2="12" strokeWidth={w} /></svg>
+                  </div>
+                )) : null}
+              </>)}
               {selItem.type === "text" && !canvasArc(selItem) && (<>
                 {barSwatch("bg", selItem.bg, de ? "Texthintergrund" : "Text background")}
                 {barSwatch("bgStroke", selItem.bgStrokeW ? selItem.bgStroke : null,
@@ -24297,11 +24321,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     ...(selItem.bgPad == null ? { bgPad: Math.round((selItem.size || 16) * 0.18) } : {}) });
                 } else if (barPop === "bgStroke") {
                   patch(selItem.id, { bgStroke: c, ...(selItem.bgStrokeW ? {} : { bgStrokeW: 2 }) });
+                } else if (barPop === "stroke") {
+                  // A colour with no width paints nothing, so the first one
+                  // brings a width with it. Same reasoning as the text
+                  // highlight's outline directly above.
+                  patch(selItem.id, { stroke: c, ...(selItem.strokeWidth ? {} : { strokeWidth: 2 }) });
                 } else patch(selItem.id, { [key]: c });
                 setBarPop(null);
               };
               const clear = () => {
                 patch(selItem.id, barPop === "bg" ? { bg: undefined }
+                  : barPop === "stroke" ? { stroke: undefined, strokeWidth: undefined }
                   : { bgStroke: undefined, bgStrokeW: undefined });
                 setBarPop(null);
               };
