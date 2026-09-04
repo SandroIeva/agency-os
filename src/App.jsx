@@ -20218,6 +20218,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // such field and clip — which is what the export has always done, so reading
   // a missing value as "on" keeps them looking the way they were saved.
   const [frameClip, setFrameClip] = useState(bootRef.current[0].clip !== false);
+  // Default ON, and read as "not false" so every board saved before this option
+  // existed keeps the shadow it has always had rather than losing it silently.
+  const [frameShadow, setFrameShadow] = useState(bootRef.current[0].shadow !== false);
   // The colour of the area AROUND the canvas. It is not in the exported file —
   // the file is the canvas — but it decides whether what you are making reads
   // the way it will where it ends up, so it belongs to the document.
@@ -20342,11 +20345,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // that has to see all boards at once.
   const liveBoard = () => ({
     w: W, h: H, bg, radius: frameRadius,
-    radii: frameRadii || undefined, clip: frameClip, items,
+    radii: frameRadii || undefined, clip: frameClip, shadow: frameShadow, items,
   });
   const boardsNow = () => boards.map((b, k) => (k === active ? { ...b, ...liveBoard() } : b));
   const loadBoard = (b) => {
     setFrame({ w: b.w, h: b.h });
+    // Or switching boards would carry the last one's answer onto this one.
+    setFrameShadow(b.shadow !== false);
     setBg(b.bg || palette[1] || "#FFFFFF");
     setFrameRadius(Number(b.radius) || 0);
     setFrameRadii(Array.isArray(b.radii) && b.radii.length === 4 ? b.radii : null);
@@ -20581,7 +20586,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => flush(payload), 700);
     return () => clearTimeout(saveTimer.current);
-  }, [items, bg, frameRadius, frameRadii, frameClip, stageBg, boards, active, W, H]);
+  }, [items, bg, frameRadius, frameRadii, frameClip, frameShadow, stageBg, boards, active, W, H]);
 
   // Closing must not drop the last few hundred milliseconds of work, so the
   // pending save is flushed on the way out.
@@ -23442,7 +23447,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               transformOrigin: "0 0", cursor: "pointer",
               transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s}) translate(${b.x || 0}px, ${b.y || 0}px)`,
               transition: flying ? "transform 620ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
-              boxShadow: "0 18px 60px rgba(0,0,0,0.28)",
+              // Each board carries its own answer, so a row of them need not agree.
+              boxShadow: b.shadow === false ? "none" : "0 18px 60px rgba(0,0,0,0.28)",
               borderRadius: `${Math.max(0, Number(b.radius) || 0)}px` }}>
             <CanvasThumb doc={b} theme={theme} />
             {/* pointerEvents back on, for this label only: the board behind it
@@ -23480,9 +23486,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             // it also cut the selection's own frame, so a shape pulled past the
             // edge could no longer be grabbed.
             overflow: "visible",
-            outline: sel === "frame" ? `${Math.max(1, 2 / cam.s)}px solid #15151c` : "none",
+            // Anthracite at two thirds rather than flat #15151c. Solid, it read
+            // as a black keyline drawn ON the design rather than a selection
+            // around it, and a selection is a state, not part of the artwork.
+            outline: sel === "frame" ? `${Math.max(1, 2 / cam.s)}px solid rgba(21,21,28,0.62)` : "none",
             outlineOffset: 0,
-            boxShadow: "0 18px 60px rgba(0,0,0,0.28)" }}>
+            boxShadow: frameShadow ? "0 18px 60px rgba(0,0,0,0.28)" : "none" }}>
             {/* The board's name above it, and the plus that adds the next one.
                 Both are held at a constant SCREEN size, like the handles: a
                 label that grows with the zoom stops being a label. */}
@@ -25588,6 +25597,30 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   border: `1px solid ${bg === "transparent" ? "#15151c" : line}` }}>
                 {de ? "Transparent" : "None"}
               </span>
+            </div>
+
+            {/* Under the background, because it is the other thing that decides
+                how the board sits on the surface behind it. Built exactly like
+                the clip switch above: one switch in this editor, not two that
+                look almost alike. */}
+            <div onClick={() => { markChange(); setFrameShadow(v => !v); }}
+              style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8,
+                padding: "9px 10px", borderRadius: 9, cursor: "pointer",
+                background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+              <span style={{ flex: 1, minWidth: 0, fontFamily: FONT, fontSize: 12.5, color: theme.text }}>
+                {de ? "Schatten" : "Shadow"}
+              </span>
+              <div style={{ width: 34, height: 20, borderRadius: 999, padding: 2, flexShrink: 0,
+                background: frameShadow ? "#15151c" : (darkMode ? "#3A3A44" : "#D3D3DA"),
+                display: "flex", justifyContent: frameShadow ? "flex-end" : "flex-start",
+                transition: "background 0.15s" }}>
+                <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff" }} />
+              </div>
+            </div>
+            {/* It is how the board looks on the canvas, not part of the file. */}
+            <div style={{ fontSize: 10.5, color: theme.textFaint, marginTop: 6, lineHeight: 1.45 }}>
+              {de ? "Nur auf der Arbeitsfläche. Der Export hat keinen Hintergrund, auf den ein Schatten fallen könnte."
+                  : "On the canvas only. The export has no surface for a shadow to fall on."}
             </div>
           </>
         )}
