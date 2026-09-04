@@ -31891,7 +31891,11 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const [docsImporting, setDocsImporting] = useState(false); // Google-Docs import in progress
   const docsImport = useRef(null); // DocsTab registers its "import from Drive" fn here
   const docsSkills = useRef(null); // DocsTab registers its "open skills" fn here
-  const [boardAddOpen, setBoardAddOpen] = useState(false); // "Hinzufügen" dropdown (inside an open board)
+  // The "Hinzufügen" dropdown inside an open board. It is portalled to the
+  // body, so where it goes has to be measured rather than inherited: this holds
+  // the button's own rectangle at the moment it was clicked.
+  const [boardAddOpen, setBoardAddOpen] = useState(null); // null | { top, right }
+  const boardAddBtnRef = useRef(null);
   const [boardFullscreen, setBoardFullscreen] = useState(false); // board detail in true fullscreen (like the doc editor)
   useEffect(() => {
     if (!boardFullscreen) return;
@@ -31963,7 +31967,11 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     setLoadingItems(false);
   };
 
-  const closeBoard = () => { setBoardFullscreen(false); setZoom(1); setTagFilter(null); setColorFilter(null); setActiveBoard(null); setItems([]); setSelectedItem(null); setShareOpen(false); setShareToken(null); setShareError(""); setTitleEdit(null); loadBoards(); };
+  const closeBoard = () => { setBoardFullscreen(false); setZoom(1); setTagFilter(null); setColorFilter(null); setActiveBoard(null); setItems([]); setSelectedItem(null); setShareOpen(false); setShareToken(null); setShareError(""); setTitleEdit(null);
+    // The menu is portalled to the body, so closing the board no longer takes
+    // it down with it. It has to be closed by hand or it hangs over the
+    // overview, pointing at a button that is gone.
+    setBoardAddOpen(null); loadBoards(); };
 
   // ── The board's public link ──
   const shareUrl = shareToken
@@ -33502,28 +33510,41 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             </motion.div>
             {/* Add dropdown — Upload / URL behind one button, like the Assets header */}
             <div style={{ position: "relative" }}>
-              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setBoardAddOpen(o => !o)}
+              <motion.div ref={boardAddBtnRef} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                onClick={() => setBoardAddOpen(o => {
+                  if (o) return null;
+                  const r = boardAddBtnRef.current?.getBoundingClientRect();
+                  return r ? { top: r.bottom + 8, right: Math.max(8, window.innerWidth - r.right) } : null;
+                })}
                 style={{ ...iconBtn, background: "#23232b", color: "#fff", border: "none", opacity: busy ? 0.6 : 1 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 {appLanguage === "de" ? "Hinzufügen" : "Add"}
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 1, opacity: 0.8 }}><polyline points="6 9 12 15 18 9"/></svg>
               </motion.div>
-              <AnimatePresence>
+              {/* Portalled to the body, not left in the header. Absolutely
+                  positioned here it stayed inside the board's own flex column,
+                  where the canvas below is a later sibling and simply painted
+                  over it: the menu opened, was invisible, and could be glimpsed
+                  for the length of the exit animation once the board closed —
+                  which looked like it had opened in the wrong place.
+                  AnimatePresence goes INSIDE the portal, never around it, or it
+                  drops the child before it reaches the DOM. */}
+              {createPortal(<AnimatePresence>
                 {boardAddOpen && (
                   <>
-                    <div onClick={() => setBoardAddOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                    <div onClick={() => setBoardAddOpen(null)} style={{ position: "fixed", inset: 0, zIndex: 100007 }} />
                     <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }}
                       transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
-                      style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, minWidth: 230,
+                      style={{ position: "fixed", top: boardAddOpen.top, right: boardAddOpen.right, zIndex: 100008, minWidth: 230,
                         background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
                         boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 6 }}>
                       {[
                         { key: "upload", label: appLanguage === "de" ? "Hochladen" : "Upload", sub: appLanguage === "de" ? "Vom Computer" : "From your computer",
                           icon: <>{UPLOAD_ICON}</>,
-                          onClick: () => { setBoardAddOpen(false); fileInputRef.current?.click(); } },
+                          onClick: () => { setBoardAddOpen(null); fileInputRef.current?.click(); } },
                         { key: "url", label: "URL", sub: appLanguage === "de" ? "Bild- oder Website-URL" : "Image or website URL",
                           icon: <><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></>,
-                          onClick: () => { setBoardAddOpen(false); setShowUrlInput(true); } },
+                          onClick: () => { setBoardAddOpen(null); setShowUrlInput(true); } },
                         {
                           key: "pinterest", label: appLanguage === "de" ? "Aus Pinterest" : "From Pinterest",
                           sub: pinConnected
@@ -33531,7 +33552,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             : (appLanguage === "de" ? "Einmal verbinden, dann geht es" : "Connect once, then it works"),
                           fill: true,
                           icon: <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146A12 12 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>,
-                          onClick: () => { setBoardAddOpen(false); if (!needsPinterest("pins")) openPinPick(); },
+                          onClick: () => { setBoardAddOpen(null); if (!needsPinterest("pins")) openPinPick(); },
                         }, {
                           key: "sync",
                           label: appLanguage === "de" ? "Mit Pinterest abgleichen" : "Sync with Pinterest",
@@ -33539,7 +33560,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             ? (appLanguage === "de" ? `Neues aus „${activeBoard.pinterest_board_name}"` : `What is new in "${activeBoard.pinterest_board_name}"`)
                             : (appLanguage === "de" ? "Board wählen und Neues holen" : "Pick a board and fetch what is new"),
                           icon: <><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-7.6-4.2"/><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 7.6 4.2"/><polyline points="20 3 19.6 7.2 15.4 7.2"/><polyline points="4 21 4.4 16.8 8.6 16.8"/></>,
-                          onClick: () => { setBoardAddOpen(false); if (!needsPinterest("sync")) syncPinterestBoard(); },
+                          onClick: () => { setBoardAddOpen(null); if (!needsPinterest("sync")) syncPinterestBoard(); },
                         },
                       ].map(it => (
                         <div key={it.key} onClick={it.onClick} className="hover-row"
@@ -33560,7 +33581,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                     </motion.div>
                   </>
                 )}
-              </AnimatePresence>
+              </AnimatePresence>, document.body)}
             </div>
             <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: "none" }}
               onChange={e => { addImageFiles(Array.from(e.target.files || [])); e.target.value = ""; }} />
