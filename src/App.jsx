@@ -21380,6 +21380,21 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     } finally { setDropBusy(false); }
   };
 
+  // A message about the last thing you tried is about the last thing you tried.
+  // The next click anywhere means moving on, so it goes. Bound on the window
+  // rather than on the stage, because an item's own pointerdown can stop before
+  // the stage ever hears it, and "click somewhere" has to mean anywhere.
+  //
+  // Bound only WHILE something is showing, so the common case costs no listener
+  // at all, and only after the message exists, so the click that produced it
+  // cannot dismiss it before it is read.
+  useEffect(() => {
+    if (!err && !figNote) return;
+    const clear = () => { setErr(""); setFigNote(""); };
+    window.addEventListener("pointerdown", clear, { once: true });
+    return () => window.removeEventListener("pointerdown", clear);
+  }, [err, figNote]);
+
   // ⌘V, both kinds, in one place. A Figma link goes to the importer and
   // anything else falls to the board's own clipboard.
   //
@@ -24802,7 +24817,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           onZoom={(d) => setCam(c => c && ({ ...c, s: Math.min(8, Math.max(0.02, c.s * (d > 0 ? 1.2 : 1 / 1.2))) }))}
           onResetZoom={() => setCam(fitCam())}
           shapes={[...WB_SHAPE_TYPES, "star"]}
-          hide={["zoom"]}
+          // No sticky notes here. A note stuck to a design is a note about it,
+          // and that is what the comment tool is; the whiteboard keeps them,
+          // because there a sticky IS the content.
+          hide={["zoom", "sticky"]}
           theme={theme} darkMode={darkMode} de={de} />
 
         {/* Layers. Collapsed by default — a panel you reach for when the stack
@@ -24830,6 +24848,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
             </div>
 
+            {/* An empty panel reads as one that failed to load. It has a
+                header saying Ebenen and then nothing, which looks like a list
+                that did not arrive rather than a board with nothing on it. */}
+            {!items.length && (
+              <div style={{ padding: "10px 4px 6px", fontFamily: FONT, fontSize: 12, color: theme.textDim }}>
+                {de ? "Noch keine Ebenen" : "No layers yet"}
+              </div>
+            )}
             {/* Topmost first, because that is the order the eye sees them in.
                 Rows drag to reorder, which is the same items order the canvas
                 paints in — the list is that order made visible, not a copy. */}
