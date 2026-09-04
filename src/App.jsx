@@ -20217,7 +20217,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // Whether the frame cuts what hangs over its edge. Older documents have no
   // such field and clip — which is what the export has always done, so reading
   // a missing value as "on" keeps them looking the way they were saved.
-  const [frameClip, setFrameClip] = useState(bootRef.current[0].clip !== false);
+  // A frame always cuts what crosses its edge. It was a switch, and there is no
+  // reading of an artboard where the answer is no: the file IS the frame, so
+  // anything hanging over it is not in the export either way — the switch only
+  // decided whether the screen agreed with the export or not.
   // Default ON, and read as "not false" so every board saved before this option
   // existed keeps the shadow it has always had rather than losing it silently.
   const [frameShadow, setFrameShadow] = useState(bootRef.current[0].shadow !== false);
@@ -20345,7 +20348,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // that has to see all boards at once.
   const liveBoard = () => ({
     w: W, h: H, bg, radius: frameRadius,
-    radii: frameRadii || undefined, clip: frameClip, shadow: frameShadow, items,
+    // Still written, so a stored board says what it is rather than relying on
+    // whoever reads it next to know the rule.
+    radii: frameRadii || undefined, clip: true, shadow: frameShadow, items,
   });
   const boardsNow = () => boards.map((b, k) => (k === active ? { ...b, ...liveBoard() } : b));
   const loadBoard = (b) => {
@@ -20355,7 +20360,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setBg(b.bg || palette[1] || "#FFFFFF");
     setFrameRadius(Number(b.radius) || 0);
     setFrameRadii(Array.isArray(b.radii) && b.radii.length === 4 ? b.radii : null);
-    setFrameClip(b.clip !== false);
     setItems(Array.isArray(b.items) ? b.items : []);
     // A selection belongs to the board it was made on. Carrying ids across is
     // how a Delete on one board reaches into another — the whiteboard learned
@@ -20586,7 +20590,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => flush(payload), 700);
     return () => clearTimeout(saveTimer.current);
-  }, [items, bg, frameRadius, frameRadii, frameClip, frameShadow, stageBg, boards, active, W, H]);
+  }, [items, bg, frameRadius, frameRadii, frameShadow, stageBg, boards, active, W, H]);
 
   // Closing must not drop the last few hundred milliseconds of work, so the
   // pending save is flushed on the way out.
@@ -22665,7 +22669,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // The file is always the frame — a 1080 x 1080 format cannot grow to fit
     // an overhang. What this decides is the frame's SHAPE: unclipped, content
     // may cover the rounded corners instead of being cut by them.
-    if (frameClip && frameCorners().some(v => v > 0) && ctx.roundRect) {
+    if (frameCorners().some(v => v > 0) && ctx.roundRect) {
       ctx.beginPath();
       ctx.roundRect(0, 0, W, H, frameCorners());
       ctx.clip();
@@ -23573,7 +23577,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             ))}
             {/* The drawing, and only the drawing, is cut at the canvas edge. */}
             <div style={{ position: "absolute", inset: 0, borderRadius: "inherit",
-              overflow: frameClip ? "hidden" : "visible" }}>
+              overflow: "hidden" }}>
             {groupShadowWrap(items.filter(it => !it.isMask && !it.hidden), (it) => {
               // Not while a GROUP is selected: the group's own frame says what is
               // selected, and a line around each member says the opposite.
@@ -25547,29 +25551,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               onCorner: (i2, v) => { markChange();
                 setFrameRadii(prev => { const next = [...(prev || [])]; next[i2] = v; return next; }); },
             })}
-
-            {/* Sits with the frame's own shape, because that is what it is:
-                whether the frame cuts what crosses its edge. */}
-            <div onClick={() => { markChange(); setFrameClip(c => !c); }}
-              style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10,
-                padding: "9px 10px", borderRadius: 9, cursor: "pointer",
-                background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
-              <span style={{ flex: 1, minWidth: 0, fontFamily: FONT, fontSize: 12.5,
-                color: theme.text }}>
-                {de ? "Inhalt beschneiden" : "Clip content"}
-              </span>
-              <div style={{ width: 34, height: 20, borderRadius: 999, padding: 2, flexShrink: 0,
-                background: frameClip ? "#15151c" : (darkMode ? "#3A3A44" : "#D3D3DA"),
-                display: "flex", justifyContent: frameClip ? "flex-end" : "flex-start",
-                transition: "background 0.15s" }}>
-                <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff" }} />
-              </div>
-            </div>
-            {/* Said once, here, rather than found out at export time. */}
-            <div style={{ fontSize: 10.5, color: theme.textFaint, marginTop: 6, lineHeight: 1.45 }}>
-              {de ? "Die Datei ist immer der Frame — ein Überstand ist zum Arbeiten sichtbar, nicht im Export."
-                  : "The file is always the frame — an overhang is visible while you work, not in the export."}
-            </div>
 
             {label(de ? "Hintergrund" : "Background")}
             {/* One swatch that opens the picker, like every other colour in the
