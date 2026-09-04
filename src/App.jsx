@@ -24221,8 +24221,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     <NumberField value={selItem.strokeWidth}
                       onCommit={(v) => patch(selItem.id, { strokeWidth: Math.max(0.5, Math.min(200, Number(v) || 0.5)) })}
                       step={1}
+                      // Left, where a number is read from. Right-aligned it
+                      // pushed every short value against the px and left the
+                      // space on the side the eye starts at.
                       style={{ width: 30, border: "none", outline: "none", background: "transparent",
-                        color: "#fff", fontFamily: FONT, fontSize: 12, textAlign: "right" }} />
+                        color: "#fff", fontFamily: FONT, fontSize: 12, textAlign: "left" }} />
                     <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.45)" }}>px</span>
                   </div>
                 ) : null}
