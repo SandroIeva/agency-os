@@ -198,6 +198,37 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
   };
 }
 
+// Everything, scaled by one factor. A Figma frame is whatever size somebody drew
+// it, and an artboard is a fixed one; the drawing layer CLIPS, so a 1440-wide
+// design dropped into a 1080-wide board keeps its background (which starts at
+// 0,0 and covers the visible part) and loses the content that sits past the
+// edge. Which looks exactly like an import that brought only a background.
+//
+// One factor for both axes, never two: a design squeezed to fit is not the
+// design. Anything taller or wider than the board after fitting is still
+// clipped, and that is the honest outcome of a frame with a different shape.
+export function fitItems(items, from, to) {
+  if (!from?.w || !from?.h || !to?.w || !to?.h) return { items, scale: 1 };
+  const k = Math.min(to.w / from.w, to.h / from.h);
+  // Only ever down. Blowing a small frame up to fill a big board would invent
+  // a size nobody chose.
+  if (k >= 1) return { items, scale: 1 };
+  const r = (v) => (typeof v === "number" ? Math.round(v * k) : v);
+  return {
+    scale: k,
+    items: items.map(it => ({
+      ...it,
+      ...(it.x != null ? { x: r(it.x) } : {}), ...(it.y != null ? { y: r(it.y) } : {}),
+      ...(it.w != null ? { w: Math.max(1, r(it.w)) } : {}), ...(it.h != null ? { h: Math.max(1, r(it.h)) } : {}),
+      ...(it.x1 != null ? { x1: r(it.x1), y1: r(it.y1), x2: r(it.x2), y2: r(it.y2) } : {}),
+      // Type scales with the layout or the design stops being the design.
+      ...(it.size != null ? { size: Math.max(4, Math.round(it.size * k)) } : {}),
+      ...(it.radius != null ? { radius: r(it.radius) } : {}),
+      ...(it.strokeWidth != null ? { strokeWidth: Math.max(0.5, it.strokeWidth * k) } : {}),
+    })),
+  };
+}
+
 const round2 = (v) => Math.round(v * 100) / 100;
 const effAlpha = (opacity, paint) => opacity * (paint?.alpha ?? 1);
 

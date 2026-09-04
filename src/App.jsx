@@ -9,6 +9,10 @@ import { supabase } from "./supabase";
 import { notifLines } from "./notificationText";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getTranslation } from "./translations";
+// Shared with api/figma: the browser fits what the endpoint converted, and both
+// sides agree about it because there is one function. Dependency-free, so it
+// loads in the bundle and on the edge alike, the way entitlements.js does.
+import { fitItems as figmaFit } from "../server/figma.js";
 import { openGooglePicker, openGoogleFolderPicker } from "./googlePicker";
 import BillingSettings from "./BillingSettings";
 // The liquid-glass orb's shader. Raw, so the file stays WGSL and can be
@@ -21265,7 +21269,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         } catch (_) { /* one picture short is not the whole import */ }
       }
 
-      const made = (j.items || [])
+      // Fitted to the board. The drawing layer clips, so a frame wider than the
+      // board keeps its background — which starts at 0,0 and covers what you
+      // can see — and loses everything past the edge. Which looks exactly like
+      // an import that brought nothing but a background.
+      const fitted = figmaFit(j.items || [], j.size, { w: W, h: H });
+      const made = fitted.items
         .map(it => (it.type === "image" ? { ...it, url: urls[it.id] || null } : it))
         // An image whose bytes never arrived is an empty box, not a design.
         .filter(it => it.type !== "image" || it.url)
@@ -21288,10 +21297,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         gradient: de ? "Verlauf" : "gradient", "gradient-text": de ? "Textverlauf" : "gradient text",
         "mixed-text-style": de ? "gemischter Textstil" : "mixed text style" };
       const w = (j.warnings || []).filter(x => x.count > 0);
-      if (w.length) {
-        setFigNote((de ? "Übernommen, aber vereinfacht: " : "Imported, with losses: ")
-          + w.map(x => `${x.count}× ${words[x.kind] || x.kind}`).join(", "));
-      }
+      // The count is always said. "Nothing arrived" and "it arrived and you
+      // cannot see it" looked identical from the outside, and that cost a
+      // round of guessing.
+      const head = (de ? `${made.length} Elemente übernommen` : `${made.length} items imported`)
+        + (fitted.scale < 1 ? (de ? `, auf ${Math.round(fitted.scale * 100)}% skaliert` : `, scaled to ${Math.round(fitted.scale * 100)}%`) : "");
+      setFigNote(head + (w.length
+        ? (de ? ". Vereinfacht: " : ". Simplified: ") + w.map(x => `${x.count}× ${words[x.kind] || x.kind}`).join(", ")
+        : ""));
     } catch (e) {
       setErr(de ? "Der Import hat nicht geklappt." : "The import did not work.");
     } finally { setDropBusy(false); }
