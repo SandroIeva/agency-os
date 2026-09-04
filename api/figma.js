@@ -250,9 +250,16 @@ export default async function handler(req) {
       // wait in Retry-After. It is a normal condition rather than a fault, and
       // deserves a sentence somebody can act on instead of a raw status.
       if (res.status === 429) {
+        // X-Figma-Rate-Limit-Type separates two situations that are nothing
+        // alike. "high" is a Full or Dev seat: 10 to 20 requests a MINUTE for
+        // these endpoints, so the wait is a moment. "low" is a Collab or Viewer
+        // seat, and there the same endpoints allow twenty requests a MONTH.
+        // Telling somebody to "try again shortly" in the second case is telling
+        // them something untrue.
         const after = Number(res.headers.get("Retry-After")) || null;
         return json({
           error: "Figma rate limit", code: "rate_limited", retryAfter: after,
+          limitType: res.headers.get("X-Figma-Rate-Limit-Type") || undefined,
           tier: res.headers.get("X-Figma-Plan-Tier") || undefined,
         }, 429);
       }

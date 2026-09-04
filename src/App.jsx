@@ -21240,6 +21240,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // it are already uploaded, so a second paste costs nothing at all.
   const figmaCache = useRef(new Map());
 
+  // Figma's own Retry-After, in the unit that is honest for its size. Saying
+  // "in 0 minutes" for eight seconds, or "in 2880 minutes" for two days, is
+  // technically a number and practically no answer.
+  const waitText = (j, de2) => {
+    const s2 = Number(j?.retryAfter);
+    if (!s2 || !isFinite(s2)) return "";
+    if (s2 < 90) return de2 ? ` In ${Math.ceil(s2)} Sekunden nochmal.` : ` Try again in ${Math.ceil(s2)} seconds.`;
+    if (s2 < 5400) return de2 ? ` In ${Math.ceil(s2 / 60)} Minuten nochmal.` : ` Try again in ${Math.ceil(s2 / 60)} minutes.`;
+    if (s2 < 172800) return de2 ? ` In ${Math.ceil(s2 / 3600)} Stunden nochmal.` : ` Try again in ${Math.ceil(s2 / 3600)} hours.`;
+    return de2 ? ` Erst in ${Math.ceil(s2 / 86400)} Tagen wieder.` : ` Not again for ${Math.ceil(s2 / 86400)} days.`;
+  };
+
   // Everything after the network: fit, place, and say what happened. Shared, so
   // a second paste of the same frame lands exactly where the first one did
   // rather than going down a second code path.
@@ -21309,9 +21321,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         setErr(
           c === "not_connected" ? (de ? "Figma ist für diesen Workspace nicht verbunden. Das geht in den Einstellungen." : "Figma is not connected for this workspace. Connect it in Settings.")
           : c === "reauth" ? (de ? "Die Figma-Verbindung ist abgelaufen. Einmal neu verbinden." : "The Figma connection expired. Connect again.")
+          // Two situations that are nothing alike, told apart by the header
+          // Figma sends. A Full or Dev seat gets 10 to 20 requests a MINUTE for
+          // these endpoints; a Collab or Viewer seat gets twenty a MONTH. "Try
+          // again shortly" would be untrue in the second case.
           : c === "rate_limited"
-            ? (de ? `Figma lässt gerade keine Anfragen mehr durch (Rate Limit).${j.retryAfter ? ` In ${Math.ceil(j.retryAfter / 60)} Minuten nochmal.` : " Gleich nochmal versuchen."}`
-                  : `Figma is rate limiting right now.${j.retryAfter ? ` Try again in ${Math.ceil(j.retryAfter / 60)} minutes.` : " Try again shortly."}`)
+            ? (j.limitType === "low"
+                ? (de ? `Figma-Limit erreicht. Dieser Figma-Sitzplatz (Collab/Viewer) erlaubt nur rund 20 Datei-Abrufe im MONAT. Dafür braucht es einen Full- oder Dev-Sitzplatz.${waitText(j, de)}`
+                      : `Figma limit reached. This Figma seat (Collab/Viewer) allows only about 20 file reads a MONTH. A Full or Dev seat is what lifts that.${waitText(j, de)}`)
+                : (de ? `Figma bremst gerade (Rate Limit).${waitText(j, de) || " Gleich nochmal versuchen."}`
+                      : `Figma is rate limiting right now.${waitText(j, de) || " Try again shortly."}`))
           : c === "no_node" ? (de ? "Wähl in Figma einen Frame aus und kopier den Link dazu." : "Select a frame in Figma and copy the link to it.")
           : c === "forbidden" ? (de ? "Figma lässt diese Datei nicht zu. Gehört sie diesem Account?" : "Figma refused that file. Does this account have it?")
           : c === "not_found" ? (de ? "Diesen Frame gibt es in der Datei nicht." : "That frame is not in the file.")
