@@ -21380,6 +21380,23 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     } finally { setDropBusy(false); }
   };
 
+  // Anything open in the bar closes on a click somewhere else.
+  //
+  // There WAS a layer for this, portalled to the body at z-index 5, and it
+  // never received a click: the artboard editor is a modal at 100004, so a
+  // body-level 5 sits under the entire editor. A z-index only orders things
+  // within one stacking context, and these were never in the same one.
+  //
+  // A window listener has no such problem. The bar stops pointerdown on itself
+  // and every menu is inside it, so anything that reaches the window is by
+  // definition a click somewhere else.
+  useEffect(() => {
+    if (!barPop) return;
+    const close = () => setBarPop(null);
+    window.addEventListener("pointerdown", close);
+    return () => window.removeEventListener("pointerdown", close);
+  }, [barPop]);
+
   // A message about the last thing you tried is about the last thing you tried.
   // The next click anywhere means moving on, so it goes. Bound on the window
   // rather than on the stage, because an item's own pointerdown can stop before
@@ -24191,18 +24208,24 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               {canStroke(selItem) && !isStroke && (<>
                 {barSwatch("stroke", selItem.strokeWidth ? selItem.stroke : null,
                   de ? "Kontur" : "Outline", true)}
-                {/* Thickness only once there is something to be thick. The same
-                    three weights the line tools offer, drawn the same way, so a
-                    stroke is a stroke wherever it is set. */}
-                {selItem.strokeWidth ? WB_STROKE_WIDTHS.map(w => (
-                  <div key={`sw${w}`} onClick={() => patch(selItem.id, { strokeWidth: w })}
-                    title={de ? `Konturstärke ${w}` : `Outline ${w}`}
-                    style={{ ...iconBtn, background: selItem.strokeWidth === w
-                      ? "rgba(255,255,255,0.22)" : "transparent" }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff"
-                      strokeLinecap="round"><line x1="4" y1="12" x2="20" y2="12" strokeWidth={w} /></svg>
+                {/* Thickness only once there is something to be thick, and as a
+                    NUMBER rather than three presets: three weights are the right
+                    answer for a pen, where the stroke IS the mark, and the wrong
+                    one for an outline, where somebody wants the 1.5 the design
+                    calls for. The same field the sidebar carries, in the bar's
+                    own colours, so it is the same control and not a second
+                    opinion — arrow keys step it, Shift steps by ten. */}
+                {selItem.strokeWidth ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, height: BAR_H,
+                    padding: "0 8px", borderRadius: BAR_R, background: "rgba(255,255,255,0.10)" }}>
+                    <NumberField value={selItem.strokeWidth}
+                      onCommit={(v) => patch(selItem.id, { strokeWidth: Math.max(0.5, Math.min(200, Number(v) || 0.5)) })}
+                      step={1}
+                      style={{ width: 30, border: "none", outline: "none", background: "transparent",
+                        color: "#fff", fontFamily: FONT, fontSize: 12, textAlign: "right" }} />
+                    <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.45)" }}>px</span>
                   </div>
-                )) : null}
+                ) : null}
               </>)}
               {selItem.type === "text" && !canvasArc(selItem) && (<>
                 {barSwatch("bg", selItem.bg, de ? "Texthintergrund" : "Text background")}
@@ -24237,20 +24260,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
               </div>
             </div>
-            {/* Anything open closes on a click somewhere else. A menu that
-                stays put while you work behind it is the one that gets clicked
-                through by accident.
-                PORTALLED, and measured before it was believed: this bar's
-                wrapper carries a translateX to centre itself, a transformed
-                ancestor becomes the containing block for fixed children, and
-                the first version of this layer was therefore only as big as
-                the bar. A click beside it landed on the artboard and the menu
-                stayed open. z-index 5 puts it under the bar, which sits at 6,
-                and over everything the bar floats above. */}
-            {barPop && createPortal(
-              <div onPointerDown={(e) => { e.stopPropagation(); setBarPop(null); }}
-                style={{ position: "fixed", inset: 0, zIndex: 5 }} />,
-              document.body)}
+            {/* The dismiss layer that used to sit here is gone. It was
+                portalled to the body at z-index 5 so it would cover the whole
+                window, but the artboard editor is a modal at 100004: a
+                body-level 5 is under the entire editor, so a click on the
+                canvas landed on the canvas and the menu stayed open. Closing
+                is a window listener now, above, which no stacking context can
+                get between. */}
             {barPop === "repeat" && canRepeat(selItem) && (
               <div style={{ position: "absolute", left: "50%", top: "100%", transform: "translate(-50%, 8px)",
                 zIndex: 7, width: 170, padding: 6, borderRadius: 12,
