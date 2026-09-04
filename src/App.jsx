@@ -6854,7 +6854,13 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
         <AnimatePresence>
           {lineToolOpen && (<>
             <div onClick={() => setLineToolOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
-            <div style={flyoutWrap}>
+            {/* 74px lower, for the same reason the shapes panel above it hangs
+                low: centred on its button its top climbed past the button and
+                the menu read as belonging to the tool above. Only on the
+                standing rail. */}
+            <div style={vertical
+              ? { ...flyoutWrap, transform: "translateY(calc(-50% + 74px))" }
+              : flyoutWrap}>
               <div style={flyoutPanel}>
                 {lineTools.map(k => (
                   <motion.div key={k} whileTap={{ scale: 0.9 }}
