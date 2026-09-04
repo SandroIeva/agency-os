@@ -24216,15 +24216,22 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     own colours, so it is the same control and not a second
                     opinion — arrow keys step it, Shift steps by ten. */}
                 {selItem.strokeWidth ? (
+                  // Off the swatch beside it: a field pressed against a colour
+                  // button reads as part of it.
                   <div style={{ display: "flex", alignItems: "center", gap: 4, height: BAR_H,
-                    padding: "0 8px", borderRadius: BAR_R, background: "rgba(255,255,255,0.10)" }}>
+                    marginLeft: 6, padding: "0 8px", borderRadius: BAR_R,
+                    background: "rgba(255,255,255,0.10)" }}>
                     <NumberField value={selItem.strokeWidth}
                       onCommit={(v) => patch(selItem.id, { strokeWidth: Math.max(0.5, Math.min(200, Number(v) || 0.5)) })}
                       step={1}
                       // Left, where a number is read from. Right-aligned it
                       // pushed every short value against the px and left the
                       // space on the side the eye starts at.
-                      style={{ width: 30, border: "none", outline: "none", background: "transparent",
+                      // 23, because three digits is the whole useful range for a
+                      // stroke and 30 was sized for four. Measured at 12px Geist:
+                      // "888" is 21.75 wide and "12.5" is 21.84, so 23 holds both
+                      // with a hair to spare and nothing beyond them.
+                      style={{ width: 23, border: "none", outline: "none", background: "transparent",
                         color: "#fff", fontFamily: FONT, fontSize: 12, textAlign: "left" }} />
                     <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.45)" }}>px</span>
                   </div>
@@ -24386,12 +24393,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       setPicker({ what: "plain", key, x: r.left, y: r.top });
                     }}
                     title={de ? "Eigene Farbe" : "Custom colour"}
+                    // A plus on nothing. It was a rainbow, which is the loudest
+                    // thing in a grid whose entire job is showing colours — the
+                    // one square that is not a colour was shouting the most. It
+                    // is a control, so it looks like one.
                     style={{ width: 22, height: 22, borderRadius: 6, cursor: "pointer",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      border: "1px solid rgba(255,255,255,0.25)",
-                      background: "conic-gradient(#ff5f6d, #ffc371, #47e0a0, #4facfe, #b06ab3, #ff5f6d)" }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff"
-                      strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                      border: "1px solid rgba(255,255,255,0.18)",
+                      background: "rgba(255,255,255,0.08)" }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)"
+                      strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
                   </div>
                   {/* An outline is a colour AND a thickness AND a side. Sending
                       somebody to the sidebar for two of the three is what makes
