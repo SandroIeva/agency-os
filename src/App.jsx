@@ -6750,8 +6750,12 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
     if (keep !== "media") setMediaOpen?.(false);
     if (keep !== "img") setImgMenuOpen?.(false);
   };
-  const flyIn = vertical ? { opacity: 0, x: -8, scale: 0.96 } : { opacity: 0, y: 8, scale: 0.96 };
-  const flyTo = vertical ? { opacity: 1, x: 0, scale: 1 } : { opacity: 1, y: 0, scale: 1 };
+  // The flyouts used to slide and fade in over 0.16s. They do not any more, and
+  // the two states that drove it are gone with them: a panel of tools is not
+  // somewhere you are travelling to, it is the answer to a click, and 160ms
+  // between the click and the answer is exactly long enough to notice. The
+  // emoji flyout never had it, which is why that one felt right and these two
+  // did not.
 
   // A button that opens a flyout carries a chevron; on the standing bar the
   // chevron points right rather than down, since that is where the panel appears.
@@ -6816,8 +6820,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
           {shapesOpen && (<>
             <div onClick={() => setShapesOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
             <div style={flyoutWrap}>
-              <motion.div initial={flyIn} animate={flyTo} exit={flyIn}
-                transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }} style={flyoutPanel}>
+              <div style={flyoutPanel}>
                 {shapes.map(st => (
                   <motion.div key={st} whileTap={{ scale: 0.9 }}
                     onClick={() => { setTool(st); setLastShape(st); setShapesOpen(false); setEditing?.(null); }}
@@ -6827,7 +6830,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
                     {shapeIcon(st)}
                   </motion.div>
                 ))}
-              </motion.div>
+              </div>
             </div>
           </>)}
         </AnimatePresence>
@@ -6844,8 +6847,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
           {lineToolOpen && (<>
             <div onClick={() => setLineToolOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
             <div style={flyoutWrap}>
-              <motion.div initial={flyIn} animate={flyTo} exit={flyIn}
-                transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }} style={flyoutPanel}>
+              <div style={flyoutPanel}>
                 {lineTools.map(k => (
                   <motion.div key={k} whileTap={{ scale: 0.9 }}
                     onClick={() => { setTool(k); setLastLineTool(k); setLineToolOpen(false); setEditing?.(null); }}
@@ -6855,7 +6857,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
                     {lineIcon(k)}
                   </motion.div>
                 ))}
-              </motion.div>
+              </div>
             </div>
           </>)}
         </AnimatePresence>
