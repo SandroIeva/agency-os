@@ -24048,7 +24048,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         const colourKey = isStroke ? "color" : selItem.type === "sticky" ? "fill" : isText ? "color" : "fill";
         // One height and one rounding for every control in this bar. Two fields
         // of different heights side by side is the first thing the eye catches.
-        const BAR_H = 30, BAR_R = 9;
+        // 11 inside, and the bars that hold them are 16. Concentric: an outer
+        // radius equals the inner one plus the padding between them, which is 5
+        // here, so 11 + 5 = 16 and the two curves stay parallel. It was 9 inside
+        // and 11 outside, which is neither as round nor concentric — the outer
+        // corner turned tighter than the corner it was wrapping.
+        const BAR_H = 30, BAR_R = 11;
         // Sizes worth a click. Typing still works: a dropdown that ONLY offers
         // steps is the thing every designer works around within a minute.
         const BAR_SIZES = [16, 24, 32, 48, 64, 80, 96, 128, 160, 200, 260, 320];
@@ -24087,7 +24092,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         if (gMembers && gMembers.length > 1) return (
           <div style={{ position: "fixed", left, top, transform: "translateX(-50%)", zIndex: 6 }}
             onPointerDown={e => e.stopPropagation()}>
-            <div style={{ display: "flex", alignItems: "center", gap: 3, padding: 5, borderRadius: 11,
+            <div style={{ display: "flex", alignItems: "center", gap: 3, padding: 5, borderRadius: 16,
               background: "#15151c", boxShadow: "0 8px 24px rgba(0,0,0,0.28)" }}>
               <div onClick={() => ungroupSel(selGid)}
                 title={de ? "Gruppierung aufheben" : "Ungroup"}
@@ -24122,7 +24127,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         return (
           <div style={{ position: "fixed", left, top, transform: "translateX(-50%)", zIndex: 6 }}
             onPointerDown={e => e.stopPropagation()}>
-            <div style={{ display: "flex", alignItems: "center", gap: 3, padding: 5, borderRadius: 11,
+            <div style={{ display: "flex", alignItems: "center", gap: 3, padding: 5, borderRadius: 16,
               background: "#15151c", boxShadow: "0 8px 24px rgba(0,0,0,0.28)" }}>
               {/* The same two choices Brainstorm's bar carries for a stroke:
                   the width as a set of thicknesses rather than a number to
@@ -24207,15 +24212,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 {/* The letter wearing the thing it does, like the three beside
                     it: B is bold, I is italic, U is underlined, S is struck
                     through.
-                    15 at weight 600, not 13 at 400. Size was only half of why it
-                    read small — B is drawn at weight 800, so matching its font
-                    size still left a noticeably thinner letter, and a rule
-                    through the middle of a thin S takes away more of it again.
-                    Compared side by side at four settings, this is the one that
-                    sits on the same line as B. */}
+                    15 rather than the 13 its neighbours use, because it read
+                    small beside them. The extra WEIGHT that came with the first
+                    attempt is gone: B is bold because bold is what it means, and
+                    an S that heavy said the same thing about a strike. Size
+                    carries it on its own. */}
                 <div onClick={() => patch(selItem.id, { strike: !selItem.strike })}
                   title={de ? "Durchgestrichen" : "Strikethrough"}
-                  style={{ ...iconBtn, fontFamily: FONT, fontSize: 15, fontWeight: 600,
+                  style={{ ...iconBtn, fontFamily: FONT, fontSize: 15,
                     textDecoration: "line-through",
                     background: selItem.strike ? "rgba(255,255,255,0.22)" : "transparent" }}>S</div>
                 {/* Left, centre, right, round again. It toggled between two of
@@ -24333,7 +24337,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 get between. */}
             {barPop === "repeat" && canRepeat(selItem) && (
               <div style={{ position: "absolute", left: "50%", top: "100%", transform: "translate(-50%, 8px)",
-                zIndex: 7, width: 170, padding: 6, borderRadius: 12,
+                zIndex: 7, width: 170, padding: 6, borderRadius: 16,
                 background: "#15151c", border: "1px solid rgba(255,255,255,0.10)",
                 boxShadow: "0 14px 40px rgba(0,0,0,0.35)" }}>
                 {REPEAT_MODES.map(([m, l]) => (
@@ -24359,7 +24363,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               // reads as a keypad rather than as a set of choices: nothing in a
               // grid tells you the numbers run in order.
               <div className="no-scrollbar"
-                style={{ marginTop: 6, padding: 6, borderRadius: 11, background: "#15151c",
+                style={{ marginTop: 6, padding: 6, borderRadius: 16, background: "#15151c",
                   boxShadow: "0 8px 24px rgba(0,0,0,0.28)", width: 92,
                   maxHeight: 248, overflowY: "auto" }}>
                 {BAR_SIZES.map(sz => {
