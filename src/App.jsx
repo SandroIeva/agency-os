@@ -182,6 +182,15 @@ const FONT = "'Geist', -apple-system, sans-serif";
 // Module scope because the two callers are different top-level components, and
 // an outline drawn as an inset shadow rather than a border, so the name does not
 // shift by a pixel the moment you point at it.
+// A note about the thing, not part of it. The plain speech bubble the app
+// already draws in the assistant's header and in the notification list: one
+// rounded box and a tail. The toolbar drew its own instead, a ten-segment
+// outline that reads as a blob at 17px, which is the size it is always shown
+// at. Defined here because three places now show it.
+const COMMENT_ICON = (
+  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+);
+
 // Put a file in. The avatar's hover overlay has drawn this since before the
 // drop veil existed, and two places showing one symbol drift into two symbols
 // for one idea.
@@ -330,7 +339,7 @@ const OS_VISUAL_ICON = {
   task_high: <path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z" />,
   task_default: <g><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3" /></g>,
   note: <g><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></g>,
-  chat_message: <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />,
+  chat_message: COMMENT_ICON,
 };
 const osVisualIcon = (key, size = 22) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#fff"
@@ -6889,7 +6898,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
 
       {!skip("comment") && <>
         {sep}
-        {toolBtn("comment", de ? "Kommentar" : "Comment", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>)}
+        {toolBtn("comment", de ? "Kommentar" : "Comment", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{COMMENT_ICON}</svg>)}
       </>}
 
       {/* Zoom — Brainstorm carries it in the bar. The canvas editor has its own
@@ -20223,7 +20232,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // Set while the asset browser is open ON BEHALF of the picker, so the chosen
   // picture lands in a fill instead of becoming an image of its own.
   const [fillImgFor, setFillImgFor] = useState(null);
-  const [repeatOpen, setRepeatOpen] = useState(false);
   const [advOpen, setAdvOpen] = useState(false);
   // Space held = the hand, borrowed. The chosen tool is untouched, so letting go
   // puts you back where you were rather than making you re-pick the arrow.
@@ -24146,6 +24154,27 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 {barSwatch("bgStroke", selItem.bgStrokeW ? selItem.bgStroke : null,
                   de ? "Kontur des Hintergrunds" : "Background outline", true)}
               </>)}
+              {/* Repeat, over the thing it repeats. It was a button in the left
+                  rail, which is where the TOOLS are: a control that acts on the
+                  current selection belongs with the selection, and it was the
+                  only thing in that rail that did. Shown only for what can
+                  actually repeat, so it is never a dead button — and an emoji
+                  is an image item here, so emojis repeat with everything
+                  else. */}
+              {canRepeat(selItem) && (<>
+                {div2}
+                <div onClick={() => setBarPop(p2 => (p2 === "repeat" ? null : "repeat"))}
+                  title={de ? "Wiederholen" : "Repeat"}
+                  style={{ ...iconBtn,
+                    background: barPop === "repeat" ? "rgba(255,255,255,0.16)"
+                      : isRepeating(selItem) ? "rgba(255,255,255,0.28)" : "transparent" }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="8" cy="8" r="3.2" /><circle cx="16.5" cy="8" r="3.2" />
+                    <circle cx="8" cy="16.5" r="3.2" /><circle cx="16.5" cy="16.5" r="3.2" />
+                  </svg>
+                </div>
+              </>)}
               {div2}
               <div onClick={() => { setItems(list => list.filter(i2 => i2.id !== selItem.id)); setSel(null); }}
                 title={de ? "Löschen" : "Delete"} style={{ ...iconBtn, color: "#ff8589" }}>
@@ -24167,6 +24196,29 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               <div onPointerDown={(e) => { e.stopPropagation(); setBarPop(null); }}
                 style={{ position: "fixed", inset: 0, zIndex: 5 }} />,
               document.body)}
+            {barPop === "repeat" && canRepeat(selItem) && (
+              <div style={{ position: "absolute", left: "50%", top: "100%", transform: "translate(-50%, 8px)",
+                zIndex: 7, width: 170, padding: 6, borderRadius: 12,
+                background: "#15151c", border: "1px solid rgba(255,255,255,0.10)",
+                boxShadow: "0 14px 40px rgba(0,0,0,0.35)" }}>
+                {REPEAT_MODES.map(([m, l]) => (
+                  <div key={m}
+                    onClick={() => { patch(selItem.id, { repeat: defaultRepeat(m, selItem) }); setBarPop(null); }}
+                    style={{ padding: "8px 11px", borderRadius: 8, cursor: "pointer",
+                      fontFamily: FONT, fontSize: 12.5, color: "#fff",
+                      background: selItem.repeat?.mode === m ? "rgba(255,255,255,0.14)" : "transparent" }}>
+                    {de ? l.de : l.en}
+                  </div>
+                ))}
+                {selItem.repeat && (
+                  <div onClick={() => { patch(selItem.id, { repeat: undefined }); setBarPop(null); }}
+                    style={{ padding: "8px 11px", borderRadius: 8, cursor: "pointer",
+                      fontFamily: FONT, fontSize: 12.5, color: "rgba(255,255,255,0.55)" }}>
+                    {de ? "Aufheben" : "Remove"}
+                  </div>
+                )}
+              </div>
+            )}
             {barPop === "size" && (
               // A list, one under the other. It was a three-column grid, which
               // reads as a keypad rather than as a set of choices: nothing in a
@@ -24751,59 +24803,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           onResetZoom={() => setCam(fitCam())}
           shapes={[...WB_SHAPE_TYPES, "star"]}
           hide={["zoom"]}
-          extra={(() => {
-            const target = canRepeat(selItem) ? selItem : null;
-            const put = (mode) => {
-              if (!target) return;
-              patch(target.id, { repeat: mode ? defaultRepeat(mode, target) : undefined });
-              setRepeatOpen(false);
-            };
-            return (
-              <div style={{ position: "relative" }}>
-                <motion.div whileTap={{ scale: 0.9 }}
-                  onClick={() => target && setRepeatOpen(o => !o)}
-                  title={target ? (de ? "Wiederholen" : "Repeat")
-                                : (de ? "Erst eine Form oder ein Bild wählen"
-                                      : "Select a shape or an image first")}
-                  style={{ width: 38, height: 38, borderRadius: 11, display: "flex",
-                    alignItems: "center", justifyContent: "center",
-                    cursor: target ? "pointer" : "default", opacity: target ? 1 : 0.35,
-                    background: isRepeating(selItem) ? "#15151c" : "transparent",
-                    color: isRepeating(selItem) ? "#fff" : theme.text }}>
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="8" cy="8" r="3.2" /><circle cx="16.5" cy="8" r="3.2" />
-                    <circle cx="8" cy="16.5" r="3.2" /><circle cx="16.5" cy="16.5" r="3.2" />
-                  </svg>
-                </motion.div>
-                {repeatOpen && target && (<>
-                  <div onPointerDown={() => setRepeatOpen(false)}
-                    style={{ position: "fixed", inset: 0, zIndex: 30 }} />
-                  <div style={{ position: "absolute", left: "calc(100% + 12px)", top: "50%",
-                    transform: "translateY(-50%)", zIndex: 31, width: 180, padding: 6,
-                    borderRadius: 14, background: panel, border: `1px solid ${line}`,
-                    boxShadow: "0 14px 40px rgba(0,0,0,0.18)" }}>
-                    {REPEAT_MODES.map(([m, l]) => (
-                      <div key={m} onClick={() => put(m)}
-                        style={{ padding: "9px 12px", borderRadius: 9, cursor: "pointer",
-                          fontFamily: FONT, fontSize: 13, color: theme.text,
-                          background: target.repeat?.mode === m
-                            ? (darkMode ? "rgba(255,255,255,0.08)" : "#EDEDF0") : "transparent" }}>
-                        {de ? l.de : l.en}
-                      </div>
-                    ))}
-                    {target.repeat && (
-                      <div onClick={() => put(null)}
-                        style={{ padding: "9px 12px", borderRadius: 9, cursor: "pointer",
-                          fontFamily: FONT, fontSize: 13, color: theme.textDim }}>
-                        {de ? "Aufheben" : "Remove"}
-                      </div>
-                    )}
-                  </div>
-                </>)}
-              </div>
-            );
-          })()}
           theme={theme} darkMode={darkMode} de={de} />
 
         {/* Layers. Collapsed by default — a panel you reach for when the stack
@@ -35867,7 +35866,7 @@ function CommentToolbarButton({ editor, onComment }) {
           if (b) onComment(b.id);
         } catch (_) {}
       }}>
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{COMMENT_ICON}</svg>
     </Components.FormattingToolbar.Button>
   );
 }
@@ -36491,7 +36490,7 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
               style={{ top: b.centerY - 13, color: count > 0 ? accent : theme.textDim, borderColor: active ? accent : (darkMode ? "rgba(255,255,255,0.16)" : "#e0e1e6"), background: darkMode ? "#1c1c26" : "#fff" }}>
               {count > 0 ? (
                 <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{COMMENT_ICON}</svg>
                   <span style={{ fontSize: 11, fontWeight: 600, fontFamily: FONT }}>{count}</span>
                 </span>
               ) : (
@@ -51784,7 +51783,7 @@ export default function CircularMenu() {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}` }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ width: 28, height: 28, borderRadius: 8, background: theme.accent + "20", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{COMMENT_ICON}</svg>
                   </div>
                   <div>
                     <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, lineHeight: 1.2 }}>{appLanguage === "de" ? "i7OS Assistent" : "i7OS Assistant"}</div>
@@ -51832,7 +51831,7 @@ export default function CircularMenu() {
                           color: theme.textDim, fontSize: 11, fontFamily: FONT, fontWeight: 500,
                           display: "flex", alignItems: "center", gap: 6 }}
                       >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{COMMENT_ICON}</svg>
                         <span>{dialogConversations.length}</span>
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                       </motion.div>
