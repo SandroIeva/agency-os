@@ -20375,13 +20375,63 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       // Metadata only. A document is small but twenty of them in a dropdown is
       // not, and none of it is needed until something is actually restored.
       const { data } = await supabase.from("brand_canvas_versions")
-        .select("id, saved_at, item_count")
+        .select("id, saved_at, item_count, types")
         .eq("canvas_id", canvasRow.id)
         .order("saved_at", { ascending: false }).limit(20);
       if (alive) setVersions(data || []);
     })();
     return () => { alive = false; };
   }, [histOpen, canvasRow?.id]);
+
+  // What an item is CALLED, so a version can say "2 Texte, 1 Bild" rather than
+  // "3 Elemente". Anything without a name here keeps its own, which is better
+  // than a made-up one and shows up as something to add.
+  const ITEM_NAMES = {
+    text:    { de: ["Text", "Texte"],         en: ["text", "texts"] },
+    sticky:  { de: ["Notiz", "Notizen"],      en: ["note", "notes"] },
+    image:   { de: ["Bild", "Bilder"],        en: ["image", "images"] },
+    rect:    { de: ["Rechteck", "Rechtecke"], en: ["rectangle", "rectangles"] },
+    ellipse: { de: ["Ellipse", "Ellipsen"],   en: ["ellipse", "ellipses"] },
+    star:    { de: ["Stern", "Sterne"],       en: ["star", "stars"] },
+    line:    { de: ["Linie", "Linien"],       en: ["line", "lines"] },
+    arrow:   { de: ["Pfeil", "Pfeile"],       en: ["arrow", "arrows"] },
+    path:    { de: ["Pfad", "Pfade"],         en: ["path", "paths"] },
+    draw:    { de: ["Zeichnung", "Zeichnungen"], en: ["drawing", "drawings"] },
+    comment: { de: ["Kommentar", "Kommentare"], en: ["comment", "comments"] },
+  };
+  const itemName = (t, n) => {
+    const e = ITEM_NAMES[t];
+    if (!e) return t;
+    return (de ? e.de : e.en)[n === 1 ? 0 : 1];
+  };
+  // "2 Texte, 1 Bild". Biggest group first, because that is what the version is
+  // mostly made of and the thing somebody scanning the list recognises.
+  const composition = (types) => Object.entries(types || {})
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([t, n]) => `${n} ${itemName(t, n)}`)
+    .join(", ");
+  // What happened between the version BELOW this one and this one — the older
+  // snapshot is the one further down the list, so the change that produced this
+  // state is the difference from it.
+  //
+  // Counts only. Two texts where there were two texts is a version that changed
+  // something ABOUT one of them, and this cannot say which without keeping the
+  // documents themselves, so it says "geändert" rather than guessing.
+  const versionChange = (types, prevTypes) => {
+    if (!prevTypes) return "";
+    const keys = [...new Set([...Object.keys(types || {}), ...Object.keys(prevTypes || {})])];
+    const added = [], removed = [];
+    for (const k of keys) {
+      const d = ((types || {})[k] || 0) - ((prevTypes || {})[k] || 0);
+      if (d > 0) added.push(`${d} ${itemName(k, d)}`);
+      if (d < 0) removed.push(`${-d} ${itemName(k, -d)}`);
+    }
+    const parts = [];
+    if (added.length) parts.push((de ? "+ " : "+ ") + added.join(", "));
+    if (removed.length) parts.push((de ? "− " : "− ") + removed.join(", "));
+    return parts.length ? parts.join("  ") : (de ? "geändert" : "edited");
+  };
 
   const restoreVersion = async (v) => {
     setHistBusy(true);
@@ -24771,7 +24821,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   <div style={{ padding: "10px", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
                     {de ? "Noch keine früheren Fassungen." : "No earlier versions yet."}
                   </div>
-                ) : versions.map(v => (
+                ) : versions.map((v, vi) => (
                   <div key={v.id} className="hover-row"
                     onClick={() => { if (!histBusy) restoreVersion(v); }}
                     style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px",
@@ -24779,17 +24829,31 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text }}>
                         {versionAgo(v.saved_at)}
+                        {/* The clock time keeps its place, beside the relative
+                            one rather than under it: two versions can both be
+                            "2 min ago" and the composition line took the row
+                            it used to have. */}
+                        <span style={{ color: theme.textFaint, fontSize: 11 }}>
+                          {" · "}
+                          {new Date(v.saved_at).toLocaleString(de ? "de-DE" : "en-GB",
+                            { hour: "2-digit", minute: "2-digit" })}
+                        </span>
                       </div>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
-                        {new Date(v.saved_at).toLocaleString(de ? "de-DE" : "en-GB",
-                          { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1,
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {/* What it was made of, not how many things it had. A
+                            column of "1 element" tells nobody which version to
+                            go back to, which is the only question this list
+                            exists to answer. */}
+                        {composition(v.types) || (de ? "leer" : "empty")}
                       </div>
                     </div>
-                    {/* The element count is the whole point of this list: the
-                        version to go back to is the one that still had them. */}
-                    <div style={{ fontSize: 11.5, fontFamily: FONT, flexShrink: 0,
-                      color: v.item_count === 0 ? theme.textFaint : theme.textDim }}>
-                      {v.item_count} {de ? (v.item_count === 1 ? "Element" : "Elemente") : (v.item_count === 1 ? "element" : "elements")}
+                    {/* And what changed to get here, against the version below —
+                        the older snapshot is the next one down. */}
+                    <div style={{ fontSize: 11, fontFamily: FONT, flexShrink: 0, textAlign: "right",
+                      color: theme.textFaint, maxWidth: 130, whiteSpace: "nowrap",
+                      overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {versionChange(v.types, versions[vi + 1]?.types)}
                     </div>
                   </div>
                 ))}
