@@ -24206,10 +24206,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     background: selItem.underline ? "rgba(255,255,255,0.22)" : "transparent" }}>U</div>
                 {/* The letter wearing the thing it does, like the three beside
                     it: B is bold, I is italic, U is underlined, S is struck
-                    through. */}
+                    through.
+                    15 at weight 600, not 13 at 400. Size was only half of why it
+                    read small — B is drawn at weight 800, so matching its font
+                    size still left a noticeably thinner letter, and a rule
+                    through the middle of a thin S takes away more of it again.
+                    Compared side by side at four settings, this is the one that
+                    sits on the same line as B. */}
                 <div onClick={() => patch(selItem.id, { strike: !selItem.strike })}
                   title={de ? "Durchgestrichen" : "Strikethrough"}
-                  style={{ ...iconBtn, fontFamily: FONT, fontSize: 13,
+                  style={{ ...iconBtn, fontFamily: FONT, fontSize: 15, fontWeight: 600,
                     textDecoration: "line-through",
                     background: selItem.strike ? "rgba(255,255,255,0.22)" : "transparent" }}>S</div>
                 {/* Left, centre, right, round again. It toggled between two of
