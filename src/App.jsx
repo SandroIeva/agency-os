@@ -21294,7 +21294,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       // what did not come with it, and this list is the only place that says.
       const words = { vector: de ? "Vektor" : "vector", "auto-layout": "Auto-Layout",
         component: de ? "Komponente" : "component", mask: de ? "Maske" : "mask",
-        gradient: de ? "Verlauf" : "gradient", "gradient-text": de ? "Textverlauf" : "gradient text",
+        "gradient-diamond": de ? "Rauten-Verlauf" : "diamond gradient",
+        "gradient-placement": de ? "Verlauf zentriert" : "gradient re-centred",
+        "gradient-text": de ? "Textverlauf" : "gradient text",
         "mixed-text-style": de ? "gemischter Textstil" : "mixed text style" };
       const w = (j.warnings || []).filter(x => x.count > 0);
       // The count is always said. "Nothing arrived" and "it arrived and you

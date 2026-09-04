@@ -49,15 +49,45 @@ const solidFill = (node) => {
 const gradientFill = (node) =>
   visibleFills(node).find(f => typeof f.type === "string" && f.type.startsWith("GRADIENT_")) || null;
 
+// A Figma gradient as the artboard's own: { type, angle, stops:[{at,color,alpha}] }.
+// The artboard already paints these through paintCss, so this is a translation
+// and not the flat approximation it used to be.
+//
+// The angle comes from Figma's two handles, which are normalised to the node's
+// box with y pointing DOWN. CSS measures from straight UP and turns clockwise,
+// so the vector (dx, dy) becomes atan2(dx, -dy): straight down is 180deg, left
+// to right is 90deg. Getting this backwards is invisible on a symmetric
+// gradient and obvious on every other one.
+const GRAD_TYPES = { GRADIENT_LINEAR: "linear", GRADIENT_RADIAL: "radial", GRADIENT_ANGULAR: "angular" };
+const gradientOf = (paint) => {
+  const stops = (paint.gradientStops || []).map(st => ({
+    at: Math.round((st.position ?? 0) * 100),
+    color: hex(st.color || {}),
+    alpha: Math.round(((st.color?.a ?? 1) * (paint.opacity ?? 1)) * 100),
+  }));
+  if (stops.length < 2) return null;
+  const h = paint.gradientHandlePositions || [];
+  let angle = 180;
+  if (h[0] && h[1]) {
+    const deg = (Math.atan2(h[1].x - h[0].x, -(h[1].y - h[0].y)) * 180) / Math.PI;
+    angle = Math.round(((deg % 360) + 360) % 360);
+  }
+  // A diamond has no counterpart here; radial is the nearest shape, and the
+  // caller counts it as a simplification rather than passing it off as exact.
+  return { type: GRAD_TYPES[paint.type] || "radial", angle, stops };
+};
+
 const imageFill = (node) => visibleFills(node).find(f => f.type === "IMAGE" && f.imageRef) || null;
 
-// Figma's own corner radius, or the largest of the four when they differ: the
-// artboard has one radius per rectangle, so four different corners cannot be
-// carried and the nearest single value is the honest answer.
-const radiusOf = (node) => {
-  if (typeof node.cornerRadius === "number") return node.cornerRadius || undefined;
+const radiusOf = (node) => (typeof node.cornerRadius === "number" ? node.cornerRadius || undefined : undefined);
+// Four corners, because the artboard has four. It reads `radii` as [TL, TR, BR,
+// BL] and Figma writes rectangleCornerRadii "starting in the top left and
+// proceeding clockwise", which is the same order — so this needs no rotating,
+// and the largest-of-four it used to collapse to was a loss for nothing.
+const radiiOf = (node) => {
   const r = node.rectangleCornerRadii;
-  return Array.isArray(r) && r.some(Boolean) ? Math.max(...r) : undefined;
+  if (!Array.isArray(r) || r.length !== 4 || !r.some(Boolean)) return null;
+  return r.map(v => Math.max(0, Number(v) || 0));
 };
 
 // Nodes that hold other nodes. A frame may also have a background of its own,
@@ -121,11 +151,17 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
 
     const grad = gradientFill(node);
     const solid = solidFill(node);
-    if (grad && !solid) note("gradient");
+    // The gradient comes across as a gradient. Only the two shapes the artboard
+    // cannot express are counted: a diamond, which becomes radial, and a radial
+    // or angular one, whose centre and radius are always the middle of the box
+    // here and so lose Figma's handles.
+    if (grad && !solid) {
+      if (grad.type === "GRADIENT_DIAMOND") note("gradient-diamond");
+      else if (grad.type !== "GRADIENT_LINEAR") note("gradient-placement");
+    }
 
     const paint = solid
-      // A gradient becomes its first stop. Lossy, and said so in warnings.
-      || (grad ? { color: hex(grad.gradientStops?.[0]?.color || {}), alpha: grad.opacity ?? 1 } : null);
+      || (grad ? { gradient: gradientOf(grad), alpha: 1 } : null);
 
     if (node.type === "ELLIPSE") {
       items.push(shapeItem("ellipse", newId(), b, paint, node, opacity));
@@ -163,8 +199,10 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     const st = strokeOf(node);
     return {
       id, type, x: b.x, y: b.y, w: b.w, h: b.h,
-      fill: paint?.color || "#ffffff",
-      ...(radiusOf(node) ? { radius: radiusOf(node) } : {}),
+      // A gradient object where there is one: the artboard paints fills through
+      // paintCss, which takes either.
+      fill: paint?.gradient || paint?.color || "#ffffff",
+      ...(radiiOf(node) ? { radii: radiiOf(node) } : radiusOf(node) ? { radius: radiusOf(node) } : {}),
       ...(st ? { stroke: st.color, strokeWidth: st.width } : {}),
       ...(effAlpha(opacity, paint) < 1 ? { opacity: round2(effAlpha(opacity, paint)) } : {}),
     };
@@ -248,6 +286,7 @@ export function fitItems(items, from, to) {
       // Type scales with the layout or the design stops being the design.
       ...(it.size != null ? { size: Math.max(4, Math.round(it.size * k)) } : {}),
       ...(it.radius != null ? { radius: r(it.radius) } : {}),
+      ...(Array.isArray(it.radii) ? { radii: it.radii.map(r) } : {}),
       ...(it.strokeWidth != null ? { strokeWidth: Math.max(0.5, it.strokeWidth * k) } : {}),
     })),
   };
