@@ -6819,14 +6819,14 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
         <AnimatePresence>
           {shapesOpen && (<>
             <div onClick={() => setShapesOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
-            {/* 60px lower than the button it belongs to. The others centre on
+            {/* 93px lower than the button it belongs to. The others centre on
                 theirs, but this one is the longest panel in the rail and
                 centring it put its top above the button, which reads as a menu
                 belonging to whatever sits higher up. Only on the standing rail:
                 laid out horizontally the panel is beside the button, not level
                 with it, and there is nothing to push down. */}
             <div style={vertical
-              ? { ...flyoutWrap, transform: "translateY(calc(-50% + 60px))" }
+              ? { ...flyoutWrap, transform: "translateY(calc(-50% + 93px))" }
               : flyoutWrap}>
               <div style={flyoutPanel}>
                 {shapes.map(st => (
