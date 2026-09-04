@@ -21133,7 +21133,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       if (k === "y") { e.preventDefault(); redo(); }
       if (k === "c" && sel) { e.preventDefault(); copySel(); }
       if (k === "d" && sel) { e.preventDefault(); duplicateSel(); }
-      if (k === "v") { e.preventDefault(); pasteClip(null); }
+      // The board's own clipboard wins when it holds something. When it does
+      // not, the default is deliberately NOT prevented, so the browser's paste
+      // event fires and the system clipboard gets a look — that is the only way
+      // a Figma link copied in Figma can reach this canvas at all.
+      if (k === "v" && clipRef.current.length) { e.preventDefault(); pasteClip(null); }
       if (k === "g") {
         e.preventDefault();
         if (e.shiftKey) ungroupSel(selGid || groupOf(sel) || groupOf(pick[0]));
@@ -21220,6 +21224,98 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const c = cloneOf(it, 20, 20);
     setItems(list => [...list, c]); setSel(c.id);
   };
+  // What could not come across. Not an error, so not in the error's red: a
+  // design that arrives with its vectors missing still arrived.
+  const [figNote, setFigNote] = useState("");
+
+  const importFromFigma = async (link) => {
+    if (!orgId || !session?.access_token) return;
+    setErr(""); setFigNote(""); setDropBusy(true);
+    try {
+      const r = await fetch("/api/figma", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ mode: "import", orgId, url: link }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) {
+        const c = j?.code;
+        setErr(
+          c === "not_connected" ? (de ? "Figma ist für diesen Workspace nicht verbunden. Das geht in den Einstellungen." : "Figma is not connected for this workspace. Connect it in Settings.")
+          : c === "reauth" ? (de ? "Die Figma-Verbindung ist abgelaufen. Einmal neu verbinden." : "The Figma connection expired. Connect again.")
+          : c === "no_node" ? (de ? "Wähl in Figma einen Frame aus und kopier den Link dazu." : "Select a frame in Figma and copy the link to it.")
+          : c === "forbidden" ? (de ? "Figma lässt diese Datei nicht zu. Gehört sie diesem Account?" : "Figma refused that file. Does this account have it?")
+          : c === "not_found" ? (de ? "Diesen Frame gibt es in der Datei nicht." : "That frame is not in the file.")
+          : (de ? "Der Import hat nicht geklappt." : "The import did not work."));
+        return;
+      }
+
+      // Figma's image URLs are short-lived and carry no CORS header, so the
+      // bytes come through the app's own proxy and are then uploaded like any
+      // other file. The storage ledger must not have a hole in it just because
+      // a picture arrived from Figma instead of from a file dialog.
+      const urls = {};
+      for (const im of j.images || []) {
+        try {
+          const res = await fetch(`/api/img-proxy?url=${encodeURIComponent(im.url)}`);
+          if (!res.ok) continue;
+          const blob = await res.blob();
+          const up = onUpload ? await onUpload(new File([blob], `figma-${im.id}.png`, { type: blob.type || "image/png" })) : null;
+          if (up) urls[im.id] = up;
+        } catch (_) { /* one picture short is not the whole import */ }
+      }
+
+      const made = (j.items || [])
+        .map(it => (it.type === "image" ? { ...it, url: urls[it.id] || null } : it))
+        // An image whose bytes never arrived is an empty box, not a design.
+        .filter(it => it.type !== "image" || it.url)
+        .map(it => ({ ...it, id: crypto.randomUUID() }));
+      if (!made.length) {
+        setErr(de ? "In diesem Frame war nichts, was hier ankommen kann." : "There was nothing in that frame this board can hold.");
+        return;
+      }
+
+      pushUndo(takeSnap());
+      markChange();
+      setItems(list => [...list, ...made]);
+      setSel(null);
+      setTool("select");
+
+      // Named, not swallowed. Somebody who imported a design deserves to know
+      // what did not come with it, and this list is the only place that says.
+      const words = { vector: de ? "Vektor" : "vector", "auto-layout": "Auto-Layout",
+        component: de ? "Komponente" : "component", mask: de ? "Maske" : "mask",
+        gradient: de ? "Verlauf" : "gradient", "gradient-text": de ? "Textverlauf" : "gradient text",
+        "mixed-text-style": de ? "gemischter Textstil" : "mixed text style" };
+      const w = (j.warnings || []).filter(x => x.count > 0);
+      if (w.length) {
+        setFigNote((de ? "Übernommen, aber vereinfacht: " : "Imported, with losses: ")
+          + w.map(x => `${x.count}× ${words[x.kind] || x.kind}`).join(", "));
+      }
+    } catch (e) {
+      setErr(de ? "Der Import hat nicht geklappt." : "The import did not work.");
+    } finally { setDropBusy(false); }
+  };
+
+  // Copy a frame's link in Figma, come here, paste. The board's own clipboard
+  // has first refusal on ⌘V, so this only ever sees what the board itself did
+  // not want, and it acts on nothing but a figma.com link.
+  const figmaImportRef = useRef(null);
+  figmaImportRef.current = importFromFigma;
+  useEffect(() => {
+    const onPaste = (e) => {
+      if (editing) return;
+      const t = e.target;
+      if (/^(INPUT|TEXTAREA)$/.test(t?.tagName || "") || t?.isContentEditable) return;
+      const text = e.clipboardData?.getData("text") || "";
+      if (!/figma\.com\/(file|design|proto)\//i.test(text)) return;
+      e.preventDefault();
+      figmaImportRef.current?.(text.trim());
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [editing]);
+
   const pasteClip = (at) => {
     if (!clipRef.current.length) return;
     const made = clipRef.current.map(it => {
@@ -24309,6 +24405,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         <div style={{ fontSize: 11.5, color: theme.textDim }}>{W} × {H} px</div>
         <div style={{ flex: 1 }} />
         {err && <div style={{ fontSize: 11.5, color: "#D9342B" }}>{err}</div>}
+        {figNote && <div style={{ fontSize: 11.5, color: theme.textDim }}>{figNote}</div>}
         {onAutoSave && saveState && !err && (
           <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: theme.textDim }}>
             {saveState === "saving" ? (

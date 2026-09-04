@@ -14,11 +14,15 @@
 //   GET  ?mode=callback&code=…        → Figma sends them back here (/figma/callback)
 //   POST { mode: "status",     orgId } → connected, and as whom
 //   POST { mode: "disconnect", orgId } → forget the account
+//   POST { mode: "import", orgId, url } → one Figma frame, as artboard items
 //
 // Every POST carries the caller's Supabase JWT and has to resolve to a member
 // of that workspace: an orgId in a body proves nothing, it is in every share
 // link.
 import { createClient } from "@supabase/supabase-js";
+// The conversion itself is pure and lives in server/, so it can be exercised
+// against a captured node tree without deploying anything.
+import { figmaToItems, parseFigmaUrl } from "../server/figma.js";
 
 export const config = { runtime: "edge" };
 
@@ -229,6 +233,50 @@ export default async function handler(req) {
   if (!row) return json({ error: "Figma is not connected", code: "not_connected" }, 409);
   const token = await usableToken(db, row, clientId, clientSecret);
   if (!token) return json({ error: "Figma needs reconnecting", code: "reauth" }, 409);
+
+  if (body.mode === "import") {
+    const link = parseFigmaUrl(body.url);
+    if (!link) return json({ error: "That is not a Figma link", code: "bad_url" }, 400);
+    // Without a node id we would have to pull the entire file and guess which
+    // frame was meant. Asking is better than guessing wrong on a 200-frame file.
+    if (!link.nodeId) {
+      return json({ error: "Pick a frame in Figma and copy the link to it", code: "no_node" }, 400);
+    }
+
+    const fig = (path) => fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fig(`/files/${link.key}/nodes?ids=${encodeURIComponent(link.nodeId)}`);
+    if (res.status === 403 || res.status === 401) {
+      return json({ error: "Figma refused that file", code: "forbidden" }, 403);
+    }
+    if (!res.ok) return json({ error: `Figma answered ${res.status}`, code: "upstream" }, 502);
+    const j = await res.json().catch(() => null);
+    const doc = j?.nodes?.[link.nodeId]?.document;
+    if (!doc) return json({ error: "That frame is not in the file", code: "not_found" }, 404);
+
+    const out = figmaToItems(doc);
+
+    // The refs are opaque until this call maps them to URLs. One request for the
+    // whole file rather than one per image.
+    if (out.images.length) {
+      const im = await fig(`/files/${link.key}/images`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+      const map = im?.meta?.images || {};
+      out.images = out.images
+        .map(({ id, imageRef }) => ({ id, url: map[imageRef] || null }))
+        .filter(i => i.url);
+    }
+
+    return json({
+      name: out.name,
+      size: out.size,
+      items: out.items,
+      // Figma's own URLs, short-lived and without CORS. The browser pulls them
+      // through api/img-proxy and uploads the bytes itself, so the import lands
+      // in storage through uploadTracked like every other file and the ledger
+      // stays right.
+      images: out.images,
+      warnings: out.warnings,
+    });
+  }
 
   return json({ error: "Not implemented yet", code: "todo", mode: body.mode }, 501);
 }
