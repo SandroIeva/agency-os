@@ -22,7 +22,21 @@ const hex = (c) => {
   return "#" + [b(c.r), b(c.g), b(c.b)].map(v => v.toString(16).padStart(2, "0")).join("");
 };
 
-const visibleFills = (node) => (node.fills || []).filter(f => f.visible !== false && (f.opacity ?? 1) > 0);
+// `fills` is the current field for a frame's background, and the docs say so.
+// But `background` and `backgroundColor` are still what older files come back
+// with, and a frame whose background lives only there arrived with no
+// background at all — which is exactly what an import looked like here.
+// Deprecated is not the same as absent.
+const visibleFills = (node) => {
+  const own = (node.fills || []).filter(f => f.visible !== false && (f.opacity ?? 1) > 0);
+  if (own.length) return own;
+  const legacy = (node.background || []).filter(f => f.visible !== false && (f.opacity ?? 1) > 0);
+  if (legacy.length) return legacy;
+  // The last resort is a bare colour rather than a paint, so it is wrapped into
+  // the shape everything else here expects.
+  const bc = node.backgroundColor;
+  return bc && (bc.a ?? 1) > 0 ? [{ type: "SOLID", color: bc, opacity: bc.a ?? 1 }] : [];
+};
 
 // The first fill that is a flat colour. Gradients are handled separately and
 // deliberately: approximating one with a single colour is a lie worth
@@ -195,6 +209,16 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     warnings: [...warn.entries()].map(([kind, count]) => ({ kind, count })),
     size: { w: Math.round(origin.width), h: Math.round(origin.height) },
     name: root.name || null,
+    // What the top node WAS, so a missing background can be told from a frame
+    // that never had one. Shapes and counts only, never anything from the
+    // design itself. "It did not come" and "there was nothing to come" read
+    // identically without this, and that has now cost two rounds of guessing.
+    root: {
+      type: root.type,
+      children: (root.children || []).length,
+      fills: (root.fills || []).map(f => f.type),
+      legacy: !!(root.background?.length || root.backgroundColor),
+    },
   };
 }
 

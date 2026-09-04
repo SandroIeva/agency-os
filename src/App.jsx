@@ -21301,7 +21301,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       // cannot see it" looked identical from the outside, and that cost a
       // round of guessing.
       const head = (de ? `${made.length} Elemente übernommen` : `${made.length} items imported`)
-        + (fitted.scale < 1 ? (de ? `, auf ${Math.round(fitted.scale * 100)}% skaliert` : `, scaled to ${Math.round(fitted.scale * 100)}%`) : "");
+        + (fitted.scale < 1 ? (de ? `, auf ${Math.round(fitted.scale * 100)}% skaliert` : `, scaled to ${Math.round(fitted.scale * 100)}%`) : "")
+        // What the top node was, said only when it explains something: a frame
+        // with no fill of its own has no background to bring, and that reads
+        // exactly like a background that went missing.
+        + (j.root && !j.root.fills?.length && !j.root.legacy
+            ? (de ? `. Der Frame (${j.root.type}) hat selbst keinen Hintergrund`
+                  : `. The frame (${j.root.type}) has no background of its own`)
+            : "");
       setFigNote(head + (w.length
         ? (de ? ". Vereinfacht: " : ". Simplified: ") + w.map(x => `${x.count}× ${words[x.kind] || x.kind}`).join(", ")
         : ""));

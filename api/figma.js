@@ -275,6 +275,7 @@ export default async function handler(req) {
       // stays right.
       images: out.images,
       warnings: out.warnings,
+      root: out.root,
     });
   }
 
