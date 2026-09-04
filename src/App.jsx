@@ -21251,7 +21251,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           : c === "no_node" ? (de ? "Wähl in Figma einen Frame aus und kopier den Link dazu." : "Select a frame in Figma and copy the link to it.")
           : c === "forbidden" ? (de ? "Figma lässt diese Datei nicht zu. Gehört sie diesem Account?" : "Figma refused that file. Does this account have it?")
           : c === "not_found" ? (de ? "Diesen Frame gibt es in der Datei nicht." : "That frame is not in the file.")
-          : (de ? "Der Import hat nicht geklappt." : "The import did not work."));
+          // Whatever it actually was, in its own words. One catch-all sentence
+          // hid which failure it was, and that is the whole diagnosis.
+          : (j?.error ? `${j.error}${j.detail ? ` — ${String(j.detail).slice(0, 140)}` : ""}`
+             : (de ? "Der Import hat nicht geklappt." : "The import did not work.")));
         return;
       }
 
@@ -21320,7 +21323,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         ? (de ? ". Vereinfacht: " : ". Simplified: ") + w.map(x => `${x.count}× ${words[x.kind] || x.kind}`).join(", ")
         : ""));
     } catch (e) {
-      setErr(de ? "Der Import hat nicht geklappt." : "The import did not work.");
+      // Said apart from a refusal by the server: one is a bug here, the other
+      // is an answer from Figma, and they were reading identically.
+      setErr((de ? "Import abgebrochen: " : "Import broke: ") + (e?.message || String(e)));
     } finally { setDropBusy(false); }
   };
 

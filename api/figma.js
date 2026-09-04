@@ -245,13 +245,28 @@ export default async function handler(req) {
 
     const fig = (path) => fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } });
     const res = await fig(`/files/${link.key}/nodes?ids=${encodeURIComponent(link.nodeId)}`);
-    if (res.status === 403 || res.status === 401) {
-      return json({ error: "Figma refused that file", code: "forbidden" }, 403);
+    if (!res.ok) {
+      // Figma's OWN words, passed through. Collapsing every failure into one
+      // sentence hid which of them it was, and the difference between "no
+      // access", "no such file" and "bad request" is the whole diagnosis.
+      const detail = (await res.text().catch(() => "")).slice(0, 300);
+      return json({
+        error: `Figma answered ${res.status}`,
+        code: res.status === 401 || res.status === 403 ? "forbidden" : "upstream",
+        status: res.status, detail,
+      }, res.status === 401 || res.status === 403 ? 403 : 502);
     }
-    if (!res.ok) return json({ error: `Figma answered ${res.status}`, code: "upstream" }, 502);
     const j = await res.json().catch(() => null);
     const doc = j?.nodes?.[link.nodeId]?.document;
-    if (!doc) return json({ error: "That frame is not in the file", code: "not_found" }, 404);
+    if (!doc) {
+      // Which node was asked for, and which came back. A node id that Figma
+      // spells differently answers 200 with an empty map, and that reads
+      // exactly like a file somebody has no access to.
+      return json({
+        error: "That frame is not in the file", code: "not_found",
+        asked: link.nodeId, got: Object.keys(j?.nodes || {}),
+      }, 404);
+    }
 
     const out = figmaToItems(doc);
 
