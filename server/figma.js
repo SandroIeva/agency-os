@@ -90,6 +90,44 @@ const radiiOf = (node) => {
   return r.map(v => Math.max(0, Number(v) || 0));
 };
 
+// Figma's effects, as the two the artboard has. Both are drawn as one CSS
+// filter there, on screen and in the export alike, so they apply to any item
+// type: a shadow under a text is the same mechanism as a shadow under a box.
+//
+// `alpha` is a percentage here and a 0..1 channel in Figma, and `color` is a
+// hex string rather than a paint.
+const effectsOf = (node, note) => {
+  const fx = (node.effects || []).filter(e => e.visible !== false);
+  if (!fx.length) return {};
+  const out = {};
+  const drops = fx.filter(e => e.type === "DROP_SHADOW");
+  if (drops.length) {
+    const d = drops[0];
+    // One shadow per item here. A stack of them is a look that cannot be
+    // rebuilt from the first one alone, so it is counted.
+    if (drops.length > 1) note("shadow-stack");
+    // CSS drop-shadow() has no spread. A spread shadow is a different shape,
+    // and quietly dropping the spread puts a soft halo where the design has a
+    // hard shoulder.
+    if (d.spread) note("shadow-spread");
+    out.shadow = {
+      x: Math.round(d.offset?.x || 0),
+      y: Math.round(d.offset?.y || 0),
+      blur: Math.round(d.radius || 0),
+      color: hex(d.color || {}),
+      alpha: Math.round((d.color?.a ?? 1) * 100),
+    };
+  }
+  const layer = fx.find(e => e.type === "LAYER_BLUR");
+  if (layer?.radius) out.blur = Math.round(layer.radius);
+  // The filter blurs the element itself, never what is behind it, so a
+  // background blur has nowhere to land. Named rather than dropped: it is the
+  // difference between frosted glass and a plain panel.
+  if (fx.some(e => e.type === "BACKGROUND_BLUR")) note("background-blur");
+  if (fx.some(e => e.type === "INNER_SHADOW")) note("inner-shadow");
+  return out;
+};
+
 // Nodes that hold other nodes. A frame may also have a background of its own,
 // which becomes a rectangle behind its children.
 const CONTAINERS = new Set(["FRAME", "GROUP", "COMPONENT", "COMPONENT_SET", "INSTANCE", "SECTION", "CANVAS"]);
@@ -141,6 +179,7 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
         fit: img.scaleMode === "FIT" ? "contain" : "cover",
         // Filled in by the caller once the ref has been resolved to a URL.
         url: null,
+        ...effectsOf(node, note),
         ...(opacity < 1 ? { opacity: round2(opacity) } : {}),
       });
       images.push({ id, imageRef: img.imageRef });
@@ -202,6 +241,7 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
       // A gradient object where there is one: the artboard paints fills through
       // paintCss, which takes either.
       fill: paint?.gradient || paint?.color || "#ffffff",
+      ...effectsOf(node, note),
       ...(radiiOf(node) ? { radii: radiiOf(node) } : radiusOf(node) ? { radius: radiusOf(node) } : {}),
       ...(st ? { stroke: st.color, strokeWidth: st.width } : {}),
       ...(effAlpha(opacity, paint) < 1 ? { opacity: round2(effAlpha(opacity, paint)) } : {}),
@@ -235,6 +275,7 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
       // both in pixels.
       ...(lineHeightMultiple(st, size) ? { lh: lineHeightMultiple(st, size) } : {}),
       ...(st.letterSpacing ? { ls: round2((st.letterSpacing / size) * 100) } : {}),
+      ...effectsOf(node, note),
       ...(effAlpha(opacity, paint) < 1 ? { opacity: round2(effAlpha(opacity, paint)) } : {}),
     };
   };
@@ -287,6 +328,10 @@ export function fitItems(items, from, to) {
       ...(it.size != null ? { size: Math.max(4, Math.round(it.size * k)) } : {}),
       ...(it.radius != null ? { radius: r(it.radius) } : {}),
       ...(Array.isArray(it.radii) ? { radii: it.radii.map(r) } : {}),
+      // A shadow that keeps its offset while the box halves is a shadow that
+      // has moved. Its colour and opacity are not geometry and stay put.
+      ...(it.shadow ? { shadow: { ...it.shadow, x: r(it.shadow.x), y: r(it.shadow.y), blur: r(it.shadow.blur) } } : {}),
+      ...(it.blur != null ? { blur: r(it.blur) } : {}),
       ...(it.strokeWidth != null ? { strokeWidth: Math.max(0.5, it.strokeWidth * k) } : {}),
     })),
   };

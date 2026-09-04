@@ -21297,6 +21297,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         "gradient-diamond": de ? "Rauten-Verlauf" : "diamond gradient",
         "gradient-placement": de ? "Verlauf zentriert" : "gradient re-centred",
         "gradient-text": de ? "Textverlauf" : "gradient text",
+        "shadow-stack": de ? "mehrere Schatten" : "stacked shadows",
+        "shadow-spread": de ? "Schatten-Spread" : "shadow spread",
+        "background-blur": de ? "Hintergrund-Blur" : "background blur",
+        "inner-shadow": de ? "innerer Schatten" : "inner shadow",
         "mixed-text-style": de ? "gemischter Textstil" : "mixed text style" };
       const w = (j.warnings || []).filter(x => x.count > 0);
       // The count is always said. "Nothing arrived" and "it arrived and you
