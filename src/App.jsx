@@ -24083,7 +24083,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   setItems(list => list.filter(i2 => !ids.has(i2.id)));
                   setSel(null); setPick([]);
                 }}
-                title={de ? "Löschen" : "Delete"} style={{ ...iconBtn, color: "#ff8589" }}>
+                // White, like everything else up here. Red made one button in a
+                // neutral row shout, and it is not a warning: it is undoable and
+                // it acts on the thing already selected. The red in this bar
+                // stays where it carries meaning — the slash that says no
+                // colour.
+                title={de ? "Löschen" : "Delete"} style={iconBtn}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
                   strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
               </div>
@@ -24265,7 +24270,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               </>)}
               {div2}
               <div onClick={() => { setItems(list => list.filter(i2 => i2.id !== selItem.id)); setSel(null); }}
-                title={de ? "Löschen" : "Delete"} style={{ ...iconBtn, color: "#ff8589" }}>
+                // White, like everything else up here. Red made one button in a
+                // neutral row shout, and it is not a warning: it is undoable and
+                // it acts on the thing already selected. The red in this bar
+                // stays where it carries meaning — the slash that says no
+                // colour.
+                title={de ? "Löschen" : "Delete"} style={iconBtn}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
                   strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
               </div>
