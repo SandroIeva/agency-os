@@ -21137,11 +21137,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       if (k === "y") { e.preventDefault(); redo(); }
       if (k === "c" && sel) { e.preventDefault(); copySel(); }
       if (k === "d" && sel) { e.preventDefault(); duplicateSel(); }
-      // The board's own clipboard wins when it holds something. When it does
-      // not, the default is deliberately NOT prevented, so the browser's paste
-      // event fires and the system clipboard gets a look — that is the only way
-      // a Figma link copied in Figma can reach this canvas at all.
-      if (k === "v" && clipRef.current.length) { e.preventDefault(); pasteClip(null); }
+      // No ⌘V here. Both kinds of paste are decided in the paste event below,
+      // which is the only place the system clipboard can actually be read.
+      // Deciding here by "does the board's own clipboard hold anything" looked
+      // equivalent and was not: once you had copied a single element, the board
+      // won ⌘V for the rest of the session and a Figma link could never reach
+      // the canvas again. Which is exactly how this stopped working.
       if (k === "g") {
         e.preventDefault();
         if (e.shiftKey) ungroupSel(selGid || groupOf(sel) || groupOf(pick[0]));
@@ -21323,20 +21324,34 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     } finally { setDropBusy(false); }
   };
 
-  // Copy a frame's link in Figma, come here, paste. The board's own clipboard
-  // has first refusal on ⌘V, so this only ever sees what the board itself did
-  // not want, and it acts on nothing but a figma.com link.
+  // ⌘V, both kinds, in one place. A Figma link goes to the importer and
+  // anything else falls to the board's own clipboard.
+  //
+  // It has to be decided HERE and not in the keydown handler, because this is
+  // the only moment the system clipboard can be read. Splitting it the other
+  // way — keydown takes ⌘V whenever the board's clipboard is non-empty, and
+  // otherwise lets the event through — reads as equivalent and is not: copying
+  // one element makes the board's clipboard non-empty forever, and from then on
+  // no Figma link can reach the canvas.
+  //
+  // Through refs, because this listener is bound once and both functions are
+  // rebuilt on every render.
   const figmaImportRef = useRef(null);
   figmaImportRef.current = importFromFigma;
+  const pasteClipRef = useRef(null);
   useEffect(() => {
     const onPaste = (e) => {
       if (editing) return;
       const t = e.target;
       if (/^(INPUT|TEXTAREA)$/.test(t?.tagName || "") || t?.isContentEditable) return;
       const text = e.clipboardData?.getData("text") || "";
-      if (!/figma\.com\/(file|design|proto)\//i.test(text)) return;
-      e.preventDefault();
-      figmaImportRef.current?.(text.trim());
+      if (/figma\.com\/(file|design|proto)\//i.test(text)) {
+        e.preventDefault();
+        figmaImportRef.current?.(text.trim());
+        return;
+      }
+      // Not a link we know: whatever the board itself last copied.
+      if (clipRef.current.length) { e.preventDefault(); pasteClipRef.current?.(null); }
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
@@ -21352,6 +21367,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setItems(list => [...list, ...made]);
     setSel(made[made.length - 1].id);
   };
+  pasteClipRef.current = pasteClip;
   // Deletes what is SELECTED, which after a marquee is several things and no
   // single `sel` at all — the old version read one id and quietly did nothing.
   const deleteSel = (id = sel) => {
