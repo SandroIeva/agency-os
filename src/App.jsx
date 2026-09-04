@@ -47648,6 +47648,96 @@ export default function CircularMenu() {
     }
   }, []); // eslint-disable-line
 
+  // ── Figma ────────────────────────────────────────────────────────────────
+  // Also a workspace connection rather than a personal one: the files a team
+  // imports designs from are the team's.
+  const [figReady, setFigReady] = useState(false);
+  const [figConn, setFigConn] = useState(null);   // { connected, handle, email }
+  const [figBusy, setFigBusy] = useState(false);
+  const [figErr, setFigErr] = useState("");
+
+  const readFigma = useCallback(async () => {
+    if (!userOrg?.id) return null;
+    try {
+      const r = await fetch("/api/figma", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ mode: "status", orgId: userOrg.id }),
+      });
+      if (!r.ok) return null;
+      const j = await r.json().catch(() => null);
+      return j?.connected ? j : null;
+    } catch { return null; }
+  }, [userOrg?.id, session?.access_token]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/figma?check=1");
+        const info = r.ok ? await r.json().catch(() => null) : null;
+        // The whole row stays hidden until the app itself is wired, so an
+        // instance without the credentials never shows a button that cannot work.
+        if (alive) setFigReady(!!info?.configured);
+      } catch { if (alive) setFigReady(false); }
+      const row = await readFigma();
+      if (alive) setFigConn(row);
+    })();
+    return () => { alive = false; };
+  }, [readFigma]);
+
+  // Figma sends people back to /?figma=<status>. Read once, then taken out of
+  // the URL so a reload does not replay it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("figma");
+    if (!status) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("figma");
+    window.history.replaceState({}, "", url.pathname + (url.search || ""));
+    if (status === "connected") {
+      readFigma().then(setFigConn);
+      setSettingsTab("account");
+      setCurrentView("settings");
+    } else if (status !== "cancelled") {
+      setFigErr(appLanguage === "de"
+        ? "Die Verbindung zu Figma ist nicht zustande gekommen. Versuch es noch einmal."
+        : "The Figma connection did not go through. Try again.");
+    }
+  }, []); // eslint-disable-line
+
+  const startFigmaConnect = async () => {
+    setFigBusy(true); setFigErr("");
+    try {
+      const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
+        p_org: userOrg?.id || null, p_kind: "figma", p_lang: appLanguage === "en" ? "en" : "de",
+      });
+      if (error || !token) throw error || new Error("token");
+      // Full navigation, not a popup: Figma's consent screen is a page, and a
+      // blocked popup would look like a dead button.
+      window.location.href = `/api/figma?mode=install&state=${encodeURIComponent(token)}`;
+    } catch (e) {
+      setFigErr(appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection.");
+      setFigBusy(false);
+    }
+  };
+
+  const disconnectFigma = async () => {
+    if (!userOrg?.id) return;
+    setFigBusy(true); setFigErr("");
+    try {
+      await fetch("/api/figma", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ mode: "disconnect", orgId: userOrg.id }),
+      });
+      setFigConn(null);
+    } catch (e) {
+      setFigErr(appLanguage === "de" ? "Trennen hat nicht funktioniert." : "Disconnecting did not work.");
+    }
+    setFigBusy(false);
+  };
+
   const startPinterestConnect = async () => {
     setPinBusy(true); setPinErr("");
     try {
@@ -54526,6 +54616,60 @@ export default function CircularMenu() {
                   )}
                   {pinErr && (
                     <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{pinErr}</div>
+                  )}
+                  {/* Figma. Like Pinterest, this belongs to the workspace and
+                      not to the person signed in, so it says whose account it
+                      is: a team sharing a workspace shares the connection. */}
+                  {figReady && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px", borderTop: `1px solid ${theme.borderFaint}`,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      {/* Figma's mark: five shapes, five colours. A brand logo
+                          is content and not chrome, so it keeps its own colours
+                          the way the Pinterest and Google marks beside it do. */}
+                      <svg width="14" height="21" viewBox="0 0 38 57" aria-hidden="true">
+                        <path fill="#1ABCFE" d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z"/>
+                        <path fill="#0ACF83" d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z"/>
+                        <path fill="#FF7262" d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z"/>
+                        <path fill="#F24E1E" d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z"/>
+                        <path fill="#A259FF" d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Figma</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {figConn
+                          ? (figConn.last_error
+                              ? (appLanguage === "de" ? "Die Verbindung ist abgelaufen. Einmal neu verbinden." : "The connection expired. Connect again.")
+                              : (appLanguage === "de"
+                                  ? `Verbunden${figConn.handle ? ` als ${figConn.handle}` : ""}. Gilt für diesen Workspace.`
+                                  : `Connected${figConn.handle ? ` as ${figConn.handle}` : ""}. Applies to this workspace.`))
+                          : (appLanguage === "de"
+                              ? "Designs aus Figma in Artboards holen."
+                              : "Bring designs from Figma into Artboards.")}
+                      </div>
+                    </div>
+                    <motion.button whileTap={{ scale: 0.97 }}
+                      onClick={figBusy ? undefined : (figConn ? disconnectFigma : startFigmaConnect)}
+                      style={{ padding: "8px 14px", borderRadius: 10, cursor: figBusy ? "wait" : "pointer",
+                        border: `1px solid ${figConn ? theme.borderFaint : "transparent"}`,
+                        background: figConn ? "transparent" : "#15151c",
+                        color: figConn ? theme.text : "#fff",
+                        fontFamily: FONT, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0,
+                        opacity: figBusy ? 0.6 : 1 }}>
+                      {figConn ? (appLanguage === "de" ? "Trennen" : "Disconnect")
+                        : (appLanguage === "de" ? "Verbinden" : "Connect")}
+                    </motion.button>
+                  </div>
+                  )}
+                  {figErr && (
+                    <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{figErr}</div>
                   )}
                   {/* Telegram, in the list with the others. It used to be a
                       section of its own on the Account tab, which is not where
