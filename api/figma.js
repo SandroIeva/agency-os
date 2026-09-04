@@ -298,6 +298,11 @@ export default async function handler(req) {
     }
 
     return json({
+      // What Figma says about the seat this request was spent from. It rides
+      // along on a SUCCESSFUL answer too, so the seat type can be learned
+      // without provoking a 429 — and the difference between ten a minute and
+      // twenty a month is worth knowing before it is hit rather than after.
+      seat: res.headers.get("X-Figma-Rate-Limit-Type") || undefined,
       name: out.name,
       size: out.size,
       items: out.items,

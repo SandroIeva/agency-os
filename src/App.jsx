@@ -21290,6 +21290,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       + (fitted.scale < 1 ? (de ? `, auf ${Math.round(fitted.scale * 100)}% skaliert` : `, scaled to ${Math.round(fitted.scale * 100)}%`) : "")
       // Said, so a paste that spent no request does not look like one that did.
       + (fromCache ? (de ? ", aus dem Zwischenspeicher" : ", from cache") : "")
+      // Only for the seat that has a monthly budget, and only on the way IN:
+      // twenty a month is worth knowing before it runs out rather than after.
+      + (data.seat === "low"
+          ? (de ? ". Achtung: dieser Figma-Sitzplatz erlaubt nur ~20 Abrufe im Monat"
+                : ". Note: this Figma seat allows only ~20 reads a month")
+          : "")
       // What the top node was, said only when it explains something: a frame
       // with no fill of its own has no background to bring.
       + (data.root && !data.root.fills?.length && !data.root.legacy
@@ -21356,7 +21362,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         } catch (_) { /* one picture short is not the whole import */ }
       }
 
-      const ready = { items: withUrls, size: j.size, warnings: j.warnings, root: j.root };
+      const ready = { items: withUrls, size: j.size, warnings: j.warnings, root: j.root, seat: j.seat };
       figmaCache.current.set(link, { at: Date.now(), data: ready });
       placeFigmaItems(ready, false);
     } catch (e) {
