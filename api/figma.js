@@ -246,6 +246,16 @@ export default async function handler(req) {
     const fig = (path) => fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } });
     const res = await fig(`/files/${link.key}/nodes?ids=${encodeURIComponent(link.nodeId)}`);
     if (!res.ok) {
+      // Figma runs a leaky bucket and answers 429 when it is full, with the
+      // wait in Retry-After. It is a normal condition rather than a fault, and
+      // deserves a sentence somebody can act on instead of a raw status.
+      if (res.status === 429) {
+        const after = Number(res.headers.get("Retry-After")) || null;
+        return json({
+          error: "Figma rate limit", code: "rate_limited", retryAfter: after,
+          tier: res.headers.get("X-Figma-Plan-Tier") || undefined,
+        }, 429);
+      }
       // Figma's OWN words, passed through. Collapsing every failure into one
       // sentence hid which of them it was, and the difference between "no
       // access", "no such file" and "bad request" is the whole diagnosis.

@@ -21233,10 +21233,71 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // design that arrives with its vectors missing still arrived.
   const [figNote, setFigNote] = useState("");
 
+  // What the last few imports came back with, by link. Figma runs a leaky
+  // bucket and its own docs say to cache: pasting the same frame twice while
+  // arranging it should not spend a request from a budget that is measured in
+  // a handful per minute. Only the converted result is kept, and the images in
+  // it are already uploaded, so a second paste costs nothing at all.
+  const figmaCache = useRef(new Map());
+
+  // Everything after the network: fit, place, and say what happened. Shared, so
+  // a second paste of the same frame lands exactly where the first one did
+  // rather than going down a second code path.
+  const placeFigmaItems = (data, fromCache) => {
+    // Fitted to the board. The drawing layer clips, so a frame wider than the
+    // board keeps its background — which starts at 0,0 and covers what you can
+    // see — and loses everything past the edge. Which looks exactly like an
+    // import that brought nothing but a background.
+    const fitted = figmaFit(data.items || [], data.size, { w: W, h: H });
+    const made = fitted.items.map(it => ({ ...it, id: crypto.randomUUID() }));
+    if (!made.length) {
+      setErr(de ? "In diesem Frame war nichts, was hier ankommen kann." : "There was nothing in that frame this board can hold.");
+      return;
+    }
+    pushUndo(takeSnap());
+    markChange();
+    setItems(list => [...list, ...made]);
+    setSel(null);
+    setTool("select");
+
+    const words = { vector: de ? "Vektor" : "vector", "auto-layout": "Auto-Layout",
+      component: de ? "Komponente" : "component", mask: de ? "Maske" : "mask",
+      "gradient-diamond": de ? "Rauten-Verlauf" : "diamond gradient",
+      "gradient-placement": de ? "Verlauf zentriert" : "gradient re-centred",
+      "gradient-text": de ? "Textverlauf" : "gradient text",
+      "shadow-stack": de ? "mehrere Schatten" : "stacked shadows",
+      "shadow-spread": de ? "Schatten-Spread" : "shadow spread",
+      "background-blur": de ? "Hintergrund-Blur" : "background blur",
+      "inner-shadow": de ? "innerer Schatten" : "inner shadow",
+      "mixed-text-style": de ? "gemischter Textstil" : "mixed text style" };
+    const w = (data.warnings || []).filter(x => x.count > 0);
+    // The count is always said. "Nothing arrived" and "it arrived and you
+    // cannot see it" looked identical from the outside, and that cost a round
+    // of guessing.
+    const head = (de ? `${made.length} Elemente übernommen` : `${made.length} items imported`)
+      + (fitted.scale < 1 ? (de ? `, auf ${Math.round(fitted.scale * 100)}% skaliert` : `, scaled to ${Math.round(fitted.scale * 100)}%`) : "")
+      // Said, so a paste that spent no request does not look like one that did.
+      + (fromCache ? (de ? ", aus dem Zwischenspeicher" : ", from cache") : "")
+      // What the top node was, said only when it explains something: a frame
+      // with no fill of its own has no background to bring.
+      + (data.root && !data.root.fills?.length && !data.root.legacy
+          ? (de ? `. Der Frame (${data.root.type}) hat selbst keinen Hintergrund`
+                : `. The frame (${data.root.type}) has no background of its own`)
+          : "");
+    setFigNote(head + (w.length
+      ? (de ? ". Vereinfacht: " : ". Simplified: ") + w.map(x => `${x.count}× ${words[x.kind] || x.kind}`).join(", ")
+      : ""));
+  };
+
   const importFromFigma = async (link) => {
     if (!orgId || !session?.access_token) return;
     setErr(""); setFigNote(""); setDropBusy(true);
     try {
+      const cached = figmaCache.current.get(link);
+      if (cached && Date.now() - cached.at < 10 * 60 * 1000) {
+        placeFigmaItems(cached.data, true);
+        return;
+      }
       const r = await fetch("/api/figma", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
@@ -21248,6 +21309,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         setErr(
           c === "not_connected" ? (de ? "Figma ist für diesen Workspace nicht verbunden. Das geht in den Einstellungen." : "Figma is not connected for this workspace. Connect it in Settings.")
           : c === "reauth" ? (de ? "Die Figma-Verbindung ist abgelaufen. Einmal neu verbinden." : "The Figma connection expired. Connect again.")
+          : c === "rate_limited"
+            ? (de ? `Figma lässt gerade keine Anfragen mehr durch (Rate Limit).${j.retryAfter ? ` In ${Math.ceil(j.retryAfter / 60)} Minuten nochmal.` : " Gleich nochmal versuchen."}`
+                  : `Figma is rate limiting right now.${j.retryAfter ? ` Try again in ${Math.ceil(j.retryAfter / 60)} minutes.` : " Try again shortly."}`)
           : c === "no_node" ? (de ? "Wähl in Figma einen Frame aus und kopier den Link dazu." : "Select a frame in Figma and copy the link to it.")
           : c === "forbidden" ? (de ? "Figma lässt diese Datei nicht zu. Gehört sie diesem Account?" : "Figma refused that file. Does this account have it?")
           : c === "not_found" ? (de ? "Diesen Frame gibt es in der Datei nicht." : "That frame is not in the file.")
@@ -21273,55 +21337,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         } catch (_) { /* one picture short is not the whole import */ }
       }
 
-      // Fitted to the board. The drawing layer clips, so a frame wider than the
-      // board keeps its background — which starts at 0,0 and covers what you
-      // can see — and loses everything past the edge. Which looks exactly like
-      // an import that brought nothing but a background.
-      const fitted = figmaFit(j.items || [], j.size, { w: W, h: H });
-      const made = fitted.items
-        .map(it => (it.type === "image" ? { ...it, url: urls[it.id] || null } : it))
-        // An image whose bytes never arrived is an empty box, not a design.
-        .filter(it => it.type !== "image" || it.url)
-        .map(it => ({ ...it, id: crypto.randomUUID() }));
-      if (!made.length) {
-        setErr(de ? "In diesem Frame war nichts, was hier ankommen kann." : "There was nothing in that frame this board can hold.");
-        return;
-      }
-
-      pushUndo(takeSnap());
-      markChange();
-      setItems(list => [...list, ...made]);
-      setSel(null);
-      setTool("select");
-
-      // Named, not swallowed. Somebody who imported a design deserves to know
-      // what did not come with it, and this list is the only place that says.
-      const words = { vector: de ? "Vektor" : "vector", "auto-layout": "Auto-Layout",
-        component: de ? "Komponente" : "component", mask: de ? "Maske" : "mask",
-        "gradient-diamond": de ? "Rauten-Verlauf" : "diamond gradient",
-        "gradient-placement": de ? "Verlauf zentriert" : "gradient re-centred",
-        "gradient-text": de ? "Textverlauf" : "gradient text",
-        "shadow-stack": de ? "mehrere Schatten" : "stacked shadows",
-        "shadow-spread": de ? "Schatten-Spread" : "shadow spread",
-        "background-blur": de ? "Hintergrund-Blur" : "background blur",
-        "inner-shadow": de ? "innerer Schatten" : "inner shadow",
-        "mixed-text-style": de ? "gemischter Textstil" : "mixed text style" };
-      const w = (j.warnings || []).filter(x => x.count > 0);
-      // The count is always said. "Nothing arrived" and "it arrived and you
-      // cannot see it" looked identical from the outside, and that cost a
-      // round of guessing.
-      const head = (de ? `${made.length} Elemente übernommen` : `${made.length} items imported`)
-        + (fitted.scale < 1 ? (de ? `, auf ${Math.round(fitted.scale * 100)}% skaliert` : `, scaled to ${Math.round(fitted.scale * 100)}%`) : "")
-        // What the top node was, said only when it explains something: a frame
-        // with no fill of its own has no background to bring, and that reads
-        // exactly like a background that went missing.
-        + (j.root && !j.root.fills?.length && !j.root.legacy
-            ? (de ? `. Der Frame (${j.root.type}) hat selbst keinen Hintergrund`
-                  : `. The frame (${j.root.type}) has no background of its own`)
-            : "");
-      setFigNote(head + (w.length
-        ? (de ? ". Vereinfacht: " : ". Simplified: ") + w.map(x => `${x.count}× ${words[x.kind] || x.kind}`).join(", ")
-        : ""));
+      const ready = { items: withUrls, size: j.size, warnings: j.warnings, root: j.root };
+      figmaCache.current.set(link, { at: Date.now(), data: ready });
+      placeFigmaItems(ready, false);
     } catch (e) {
       // Said apart from a refusal by the server: one is a bug here, the other
       // is an answer from Figma, and they were reading identically.
