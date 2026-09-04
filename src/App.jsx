@@ -18478,16 +18478,32 @@ const drawStraightText = (ctx, it) => {
   // The same lines the screen shows. Splitting on newlines here and
   // letting the editor wrap would put the break in a different place and
   // the exported artboard would not be the one anybody approved.
-  // A canvas has no underline, so it is drawn: one bar per line, under that
-  // line's own baseline and only as wide as the line is. Faked as a rectangle
-  // under the WHOLE box it would run on past the words, which is the tell of
-  // an underline that was never measured.
+  // A canvas has neither an underline nor a strikethrough, so both are drawn:
+  // one bar per line, as wide as that line actually is. Faked as a rectangle
+  // across the WHOLE box either would run on past the words, which is the tell
+  // of a rule that was never measured.
+  //
+  // The two differ only in where the bar sits: an underline hangs below the
+  // baseline, a strike crosses the middle of the lower-case letters. Both come
+  // out of the size, so they follow it.
   const rule = (line, y) => {
-    if (!it.underline || !line) return;
+    if ((!it.underline && !it.strike) || !line) return;
     const w2 = ctx.measureText(line).width + (ls && !canSpace ? ls * line.length : 0);
     const x0 = it.align === "center" ? it.x + it.w / 2 - w2 / 2
       : it.align === "right" ? it.x + it.w - w2 : it.x;
-    ctx.fillRect(x0, y + it.size * 0.12, w2, Math.max(1, it.size / 15));
+    // Where the BROWSER puts them, measured rather than chosen: the same words
+    // rendered with and without each decoration, and the rows of pixels that
+    // differ read off. In Geist at 96px both rules come out 9px thick, the
+    // underline centred 0.103 of the size below the baseline and the strike
+    // 0.335 above it.
+    //
+    // The underline was 0.12 as a TOP edge and a third thinner, so the export
+    // drew it about five pixels low at that size and lighter than the screen.
+    // Nobody had measured it; it looked like an underline, which is exactly how
+    // that survives.
+    const thick = Math.max(1, it.size * 0.094);
+    if (it.underline) ctx.fillRect(x0, y + it.size * 0.103 - thick / 2, w2, thick);
+    if (it.strike) ctx.fillRect(x0, y - it.size * 0.335 - thick / 2, w2, thick);
   };
   canvasTextLines(it).forEach((line, i) => {
     const y = it.y + i * L + base;
@@ -18906,7 +18922,11 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
                   : { background: paintCss(it.fill, it.fillAlpha) }),
                 ...(isText ? { font: canvasFont(it), color: it.color,
                   lineHeight: `${canvasLH(it)}px`, textAlign: it.align || "left",
-                  textDecoration: it.underline ? "underline" : undefined,
+                  // Both at once when both are set: "underline line-through" is one
+                  // value, and a ternary picking one of them would silently drop
+                  // the other.
+                  textDecoration: [it.underline && "underline", it.strike && "line-through"]
+                    .filter(Boolean).join(" ") || undefined,
                   whiteSpace: "pre", overflow: "hidden",
                   padding: it.type === "sticky" ? Math.round(bw * 0.08) : 0,
                   boxSizing: "border-box" } : {}) }}>
@@ -23605,7 +23625,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     {depthWrap(it,
                     <div style={{ clipPath: maskClip(it), font: canvasFont(it), color: it.color,
                       lineHeight: `${canvasLH(it)}px`, textAlign: it.align || "left",
-                      textDecoration: it.underline ? "underline" : undefined,
+                      // Both at once when both are set: "underline line-through" is one
+                  // value, and a ternary picking one of them would silently drop
+                  // the other.
+                  textDecoration: [it.underline && "underline", it.strike && "line-through"]
+                    .filter(Boolean).join(" ") || undefined,
                       letterSpacing: `${canvasLS(it)}px`, opacity: it.opacity == null ? 1 : it.opacity,
                       mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
                       filter: effectFilter(it),
@@ -24180,6 +24204,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   style={{ ...iconBtn, fontFamily: FONT, fontSize: 13,
                     textDecoration: "underline", textUnderlineOffset: 2,
                     background: selItem.underline ? "rgba(255,255,255,0.22)" : "transparent" }}>U</div>
+                {/* The letter wearing the thing it does, like the three beside
+                    it: B is bold, I is italic, U is underlined, S is struck
+                    through. */}
+                <div onClick={() => patch(selItem.id, { strike: !selItem.strike })}
+                  title={de ? "Durchgestrichen" : "Strikethrough"}
+                  style={{ ...iconBtn, fontFamily: FONT, fontSize: 13,
+                    textDecoration: "line-through",
+                    background: selItem.strike ? "rgba(255,255,255,0.22)" : "transparent" }}>S</div>
                 {/* Left, centre, right, round again. It toggled between two of
                     them, so right alignment could only be reached from the
                     sidebar — and the icon showed the state, not the ends. */}
@@ -24261,7 +24293,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   style={{ ...iconBtn,
                     background: barPop === "repeat" ? "rgba(255,255,255,0.16)"
                       : isRepeating(selItem) ? "rgba(255,255,255,0.28)" : "transparent" }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  {/* 17, not the 15 the neighbours use. This drawing fills only
+                      14.9 of its 24 units, where the delete and the alignment
+                      fill 18 and 16, so at a matching WIDTH it came out a fifth
+                      smaller on screen. Sized by what is drawn rather than by
+                      the box around it: 17 × 14.9/24 is 10.6px, which is where
+                      the others land. */}
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="8" cy="8" r="3.2" /><circle cx="16.5" cy="8" r="3.2" />
                     <circle cx="8" cy="16.5" r="3.2" /><circle cx="16.5" cy="16.5" r="3.2" />
