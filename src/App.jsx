@@ -36338,8 +36338,14 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}
       // No backdrop blur: this dialog opens over a canvas the user is working
       // on, and blurring the board underneath loses the context they picked the
-      // image for. A plain dim is enough to mark it as modal.
-      style={{ position: "fixed", inset: 0, zIndex: 100010, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      // image for. A plain dim is enough to mark it as modal — and 0.4 of black
+      // was not a dim, it was a curtain. The panel is opaque and carries a
+      // shadow of its own, so it stands off the page without the page being put
+      // out. Lighter still in the light theme, where the same veil reads much
+      // heavier against white.
+      style={{ position: "fixed", inset: 0, zIndex: 100010,
+        background: darkMode ? "rgba(0,0,0,0.22)" : "rgba(0,0,0,0.14)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} onClick={e => e.stopPropagation()}
         style={{ width: "100%", maxWidth: 640, height: "min(620px, 82vh)", display: "flex", flexDirection: "column", borderRadius: 20, overflow: "hidden", background: darkMode ? "rgba(22,22,30,0.99)" : "#ffffff", border: `1px solid ${theme.border}`, boxShadow: "0 24px 70px rgba(0,0,0,0.4)" }}>
         <div style={{ padding: "18px 20px 14px", borderBottom: `1px solid ${theme.borderFaint}` }}>
