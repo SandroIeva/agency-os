@@ -46067,6 +46067,7 @@ export default function CircularMenu() {
   // credentials: they name a public voice the way a font name does.
   const VOICE_OPTIONS = [
     { id: "b347db033a6549378b48d00acb0d06cd", name: "Selene", gender: "female" },
+    { id: "d46efea6abbc4c1e97cef112f0f12d7c", name: "Nora", gender: "female" },
     { id: "bf322df2096a46f18c579d0baa36f41d", name: "Adrian", gender: "male" },
     { id: "860323c9e1354f6ea14079788b0bca0d", name: "Milan", gender: "male" },
   ];
