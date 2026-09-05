@@ -46070,6 +46070,7 @@ export default function CircularMenu() {
     { id: "6ab4c6b0f37f4243a99046478647be94", name: "Voice 01", gender: "female" },
     { id: "5dcc50822a864e9d943d9bcde0d70e10", name: "Voice 02", gender: "male" },
     { id: "860323c9e1354f6ea14079788b0bca0d", name: "Voice 03", gender: "male" },
+    { id: "bf322df2096a46f18c579d0baa36f41d", name: "Adrian", gender: "male" },
   ];
   const OLD_DEFAULT_VOICE = "6ab4c6b0f37f4243a99046478647be94";
   const [selectedVoice, setSelectedVoice] = useState(() => {
