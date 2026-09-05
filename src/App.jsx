@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
 import { notifLines } from "./notificationText";
 import { buildSystemPrompt } from "./systemPrompt";
+import { isDaylight } from "./daylight";
 import { getTranslation } from "./translations";
 // Shared with api/figma: the browser fits what the endpoint converted, and both
 // sides agree about it because there is one function. Dependency-free, so it
@@ -170,6 +171,49 @@ const deriveWsRole = (m) => {
   }
   return "custom";
 };
+
+// Where the weather endpoint last said this browser is. Written by the weather
+// effect, read by the theme on the following load: knowing the coordinates is
+// what lets light/dark follow the real sunset here instead of a fixed hour.
+const GEO_CACHE_KEY = "i7os.weather.geo.v2";   // { lat, lon, ts }
+
+function makeTheme(darkMode) {
+  return darkMode ? {
+    bg: "#111117",
+    cardBg: "rgba(22, 22, 30, 0.92)",
+    text: "#ffffffCC",
+    textDim: "#ffffff55",
+    textFaint: "#ffffff42",
+    textSub: "#ffffff75",
+    border: "rgba(255,255,255,0.1)",
+    borderFaint: "rgba(255,255,255,0.06)",
+    hoverBg: "rgba(255,255,255,0.05)",
+    overlay: "rgba(0,0,0,0.4)",
+    accent: "#8B7AFF",
+    accentBg: "rgba(139,122,255,0.15)",
+    accentBorder: "rgba(139,122,255,0.35)",
+    svgFill: "white",
+    svgStroke: "#ffffff60",
+    iconColor: "#717678",
+  } : {
+    bg: "#F5F5F7",
+    cardBg: "rgba(255, 255, 255, 0.92)",
+    text: "#1a1a2eEE",
+    textDim: "#1a1a2eA8",
+    textFaint: "#1a1a2e78",
+    textSub: "#1a1a2eBB",
+    border: "rgba(0,0,0,0.12)",
+    borderFaint: "rgba(0,0,0,0.08)",
+    hoverBg: "rgba(0,0,0,0.04)",
+    overlay: "rgba(255,255,255,0.5)",
+    accent: "#6C5CE7",
+    accentBg: "rgba(108,92,231,0.1)",
+    accentBorder: "rgba(108,92,231,0.3)",
+    svgFill: "#1a1a2e",
+    svgStroke: "#1a1a2e99",
+    iconColor: "#444444",
+  };
+}
 
 const FONT = "'Geist', -apple-system, sans-serif";
 
@@ -1621,8 +1665,8 @@ const TOUR_SEEN = "agencyos-tour-seen";
 // in the accent of its own slide, drawn from the same 24-unit grid and 1.8
 // stroke as every other icon in the app. No text on it: a label like "image
 // follows" is right for a week and wrong forever after.
-function TourArt({ kind, tint }) {
-  const stroke = { fill: "none", stroke: "rgba(255,255,255,0.34)", strokeWidth: 1.1, strokeLinecap: "round", strokeLinejoin: "round" };
+function TourArt({ kind, tint, theme, darkMode }) {
+  const stroke = { fill: "none", stroke: darkMode ? "rgba(255,255,255,0.34)" : "rgba(26,26,46,0.38)", strokeWidth: 1.1, strokeLinecap: "round", strokeLinejoin: "round" };
   const art = {
     // A brand: a mark, a palette, a line of type.
     brand: (<>
@@ -1670,8 +1714,14 @@ function TourArt({ kind, tint }) {
   }[kind] || null;
   return (
     <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", borderRadius: 28, overflow: "hidden",
-      background: `linear-gradient(140deg, ${tint}2e 0%, rgba(255,255,255,0.04) 55%, rgba(255,255,255,0.02) 100%)`,
-      border: "1px solid rgba(255,255,255,0.09)" }}>
+      // The wash has to sit AWAY from the page, and the page moves. On the dark
+      // canvas that means lifting off it with white; on the light one the same
+      // white made the panel paler than the page behind it and it disappeared.
+      // Light mode goes the other way, down into grey.
+      background: darkMode
+        ? `linear-gradient(140deg, ${tint}2e 0%, rgba(255,255,255,0.04) 55%, rgba(255,255,255,0.02) 100%)`
+        : `linear-gradient(140deg, ${tint}33 0%, rgba(26,26,46,0.05) 55%, rgba(26,26,46,0.03) 100%)`,
+      border: `1px solid ${theme.borderFaint}` }}>
       <svg viewBox="0 0 102 76" preserveAspectRatio="xMidYMid meet"
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", padding: "14%", boxSizing: "border-box" }}>
         {art}
@@ -1680,7 +1730,7 @@ function TourArt({ kind, tint }) {
   );
 }
 
-function OnboardingTour({ appLanguage = "de", userName = "", onFinish }) {
+function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = true, onFinish }) {
   const de = appLanguage === "de";
   const [idx, setIdx] = useState(0);
   // The key is NOT asked for here. It was the last slide once, and ending a
@@ -1728,10 +1778,10 @@ function OnboardingTour({ appLanguage = "de", userName = "", onFinish }) {
   const next = () => (idx < LAST ? setIdx(i => i + 1) : onFinish?.());
 
   const ghost = { padding: "12px 20px", borderRadius: 13, background: "transparent",
-    border: "1px solid rgba(255,255,255,0.14)", color: "#ffffff70",
+    border: `1px solid ${theme.border}`, color: theme.textSub,
     fontSize: 13.5, fontWeight: 500, fontFamily: FONT, cursor: "pointer" };
   const solid = { padding: "12px 24px", borderRadius: 13, border: "none",
-    background: PRIMARY_BTN_DARK.background, color: PRIMARY_BTN_DARK.color,
+    background: primaryBtn(darkMode).background, color: primaryBtn(darkMode).color,
     fontSize: 13.5, fontWeight: 600, fontFamily: FONT, cursor: "pointer" };
 
   return (
@@ -1747,8 +1797,8 @@ function OnboardingTour({ appLanguage = "de", userName = "", onFinish }) {
           {slide.image
             ? <img src={slide.image} alt=""
                 style={{ width: "100%", aspectRatio: "4 / 3", objectFit: "cover", borderRadius: 28, display: "block",
-                  border: "1px solid rgba(255,255,255,0.09)" }} />
-            : <TourArt kind={slide.art} tint={slide.tint} />}
+                  border: `1px solid ${theme.borderFaint}` }} />
+            : <TourArt kind={slide.art} tint={slide.tint} theme={theme} darkMode={darkMode} />}
         </motion.div>
 
         <motion.div key={`txt-${idx}`}
@@ -1757,8 +1807,8 @@ function OnboardingTour({ appLanguage = "de", userName = "", onFinish }) {
           <div style={{ fontSize: 11.5, fontFamily: FONT, fontWeight: 600, letterSpacing: 1.4,
             textTransform: "uppercase", color: slide.tint, marginBottom: 12 }}>{slide.kicker}</div>
           <div style={{ fontSize: 27, fontWeight: 300, letterSpacing: -0.6, lineHeight: 1.25,
-            color: "#ffffffdd", fontFamily: FONT, marginBottom: 14 }}>{slide.title}</div>
-          <div style={{ fontSize: 14, lineHeight: 1.7, color: "#ffffff62", fontFamily: FONT }}>{slide.body}</div>
+            color: theme.text, fontFamily: FONT, marginBottom: 14 }}>{slide.title}</div>
+          <div style={{ fontSize: 14, lineHeight: 1.7, color: theme.textSub, fontFamily: FONT }}>{slide.body}</div>
 
         </motion.div>
       </div>
@@ -1770,14 +1820,14 @@ function OnboardingTour({ appLanguage = "de", userName = "", onFinish }) {
           {SLIDES.map((_, i) => (
             <div key={i} onClick={() => setIdx(i)}
               style={{ width: i === idx ? 22 : 7, height: 7, borderRadius: 999, cursor: "pointer",
-                background: i === idx ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.2)",
+                background: i === idx ? theme.text : theme.border,
                 transition: "width 0.3s ease, background 0.3s ease" }} />
           ))}
         </div>
         {/* No Back. The dots go anywhere, both ways, and a third button beside
             them was spending the row on a direction nobody walks. */}
         <motion.button whileTap={{ scale: 0.97 }} onClick={onFinish}
-          style={{ ...ghost, border: "none", color: "#ffffff45" }}>
+          style={{ ...ghost, border: "none", color: theme.textFaint }}>
           {de ? "Überspringen" : "Skip"}
         </motion.button>
         <motion.button whileTap={{ scale: 0.97 }} onClick={next} style={solid}>
@@ -46494,9 +46544,25 @@ export default function CircularMenu() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [calendarNotifiedIds, setCalendarNotifiedIds] = useState(new Set());
   const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem("agencyos-dark-mode");
-    return saved !== null ? JSON.parse(saved) : true; // default dark
+    // A chosen theme always wins, and it is only ever written when somebody
+    // actually picks one (see the effect below). Otherwise: light while the sun
+    // is up where this person is, dark once it has set.
+    try {
+      const saved = localStorage.getItem("agencyos-dark-mode");
+      if (saved !== null) return JSON.parse(saved);
+    } catch (_) { /* no storage: fall through to the sun */ }
+    let geo = null;
+    // Coordinates left behind by the weather call on an earlier visit. On the
+    // very first load there are none and isDaylight falls back to the clock,
+    // which is already the user's own local time and only drifts from the real
+    // sunset near the solstices.
+    try { geo = JSON.parse(localStorage.getItem(GEO_CACHE_KEY) || "null"); } catch (_) {}
+    return !isDaylight(new Date(), geo?.lat ?? null, geo?.lon ?? null);
   });
+  // Decided once, at load. Flipping the whole app to dark under somebody at
+  // sunset while they are working is a worse surprise than opening in the
+  // wrong scheme, and anybody who minds can simply pick one.
+  const themeChosen = useRef(false);
   // A stored choice wins; otherwise the browser decides. Only an explicit pick
   // is written back, so someone who never touched the setting keeps following
   // their browser instead of being frozen into whatever we detected once.
@@ -46570,48 +46636,21 @@ export default function CircularMenu() {
   const [activeMeetCall, setActiveMeetCall] = useState(null); // { link, title, windowRef }
   const meetWindowRef = useRef(null);
 
-  // Persist dark mode preference
-  useEffect(() => { localStorage.setItem("agencyos-dark-mode", JSON.stringify(darkMode)); }, [darkMode]);
+  // Persist dark mode, but ONLY once it has been chosen. Writing on mount, as
+  // this did, stamped a preference on everybody who had merely opened the app,
+  // which is indistinguishable from a real choice afterwards and would freeze
+  // every existing browser out of the daylight default forever. Same rule the
+  // language setting already follows two dozen lines up.
+  useEffect(() => {
+    if (!themeChosen.current) { themeChosen.current = true; return; }
+    try { localStorage.setItem("agencyos-dark-mode", JSON.stringify(darkMode)); } catch (_) {}
+  }, [darkMode]);
   // Personal default visibility for newly created documents (Darstellung).
   const [docDefaultVisibility, setDocDefaultVisibility] = useState(() => { try { return localStorage.getItem("agencyos-doc-default-visibility") || "workspace"; } catch { return "workspace"; } });
   useEffect(() => { try { localStorage.setItem("agencyos-doc-default-visibility", docDefaultVisibility); } catch (_) {} }, [docDefaultVisibility]);
 
   // Theme based on dark/light mode
-  const theme = darkMode ? {
-    bg: "#111117",
-    cardBg: "rgba(22, 22, 30, 0.92)",
-    text: "#ffffffCC",
-    textDim: "#ffffff55",
-    textFaint: "#ffffff42",
-    textSub: "#ffffff75",
-    border: "rgba(255,255,255,0.1)",
-    borderFaint: "rgba(255,255,255,0.06)",
-    hoverBg: "rgba(255,255,255,0.05)",
-    overlay: "rgba(0,0,0,0.4)",
-    accent: "#8B7AFF",
-    accentBg: "rgba(139,122,255,0.15)",
-    accentBorder: "rgba(139,122,255,0.35)",
-    svgFill: "white",
-    svgStroke: "#ffffff60",
-    iconColor: "#717678",
-  } : {
-    bg: "#F5F5F7",
-    cardBg: "rgba(255, 255, 255, 0.92)",
-    text: "#1a1a2eEE",
-    textDim: "#1a1a2eA8",
-    textFaint: "#1a1a2e78",
-    textSub: "#1a1a2eBB",
-    border: "rgba(0,0,0,0.12)",
-    borderFaint: "rgba(0,0,0,0.08)",
-    hoverBg: "rgba(0,0,0,0.04)",
-    overlay: "rgba(255,255,255,0.5)",
-    accent: "#6C5CE7",
-    accentBg: "rgba(108,92,231,0.1)",
-    accentBorder: "rgba(108,92,231,0.3)",
-    svgFill: "#1a1a2e",
-    svgStroke: "#1a1a2e99",
-    iconColor: "#444444",
-  };
+  const theme = makeTheme(darkMode);
 
   // Open Meet in popup window
   const openMeetCall = useCallback((link, title) => {
@@ -49713,8 +49752,7 @@ export default function CircularMenu() {
     // v2 cache keys — bumped so old (potentially bad) wttr.in values are dropped on
     // the next reload. Don't downgrade the version without thinking about it.
     const WEATHER_CACHE_KEY = "i7os.weather.cache.v2";  // { temp, ts }
-    const GEO_CACHE_KEY     = "i7os.weather.geo.v2";    // { lat, lon, ts }
-    const GEO_TTL_MS        = 24 * 60 * 60 * 1000;    // 24h — IP location rarely changes
+    const GEO_TTL_MS        = 24 * 60 * 60 * 1000;    // 24h, IP location rarely changes
     const TEMP_TTL_MS       = 30 * 60 * 1000;         // 30 min stale-while-revalidate
     const REFRESH_INTERVAL  = 15 * 60 * 1000;         // refresh every 15 min
 
@@ -49750,6 +49788,13 @@ export default function CircularMenu() {
         const r = await fetchWithTimeout("/api/fetch-brand?mode=weather", 8000);
         if (!r.ok) { console.warn("[weather] backend returned", r.status); return; }
         const data = await r.json();
+        // The endpoint looks the coordinates up anyway and they were being
+        // thrown away: GEO_CACHE_KEY was declared here and never once written.
+        // The theme reads them on the NEXT load to know when the sun actually
+        // sets here, which is the one thing a clock cannot tell it.
+        if (typeof data?.lat === "number" && typeof data?.lon === "number") {
+          try { localStorage.setItem(GEO_CACHE_KEY, JSON.stringify({ lat: data.lat, lon: data.lon, ts: Date.now() })); } catch (e) {}
+        }
         if (typeof data?.temp === "number") {
           console.info("[weather] temp →", data.temp, "°C", data.city ? `(${data.city})` : "");
           setWeather(data.temp);
@@ -51449,7 +51494,7 @@ export default function CircularMenu() {
             transition={{ duration: 0.6, ease: [0.22, 0.68, 0.35, 1.0] }}
             style={{
               position: "absolute", inset: 0, zIndex: 100,
-              background: "#111117",
+              background: theme.bg,
               display: "flex", flexDirection: "column",
               alignItems: "center", justifyContent: "center",
             }}
@@ -51477,14 +51522,14 @@ export default function CircularMenu() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4, duration: 0.6, ease: [0.22, 0.68, 0.35, 1.0] }}
-                style={{ fontSize: 28, fontWeight: 300, color: "#ffffffCC", fontFamily: FONT, letterSpacing: -0.5, marginBottom: 6 }}
+                style={{ fontSize: 28, fontWeight: 300, color: theme.text, fontFamily: FONT, letterSpacing: -0.5, marginBottom: 6 }}
               >{t("auth.welcome")}</motion.div>
 
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.55, duration: 0.5 }}
-                style={{ fontSize: 14, color: "#ffffff60", fontFamily: FONT, marginBottom: 40 }}
+                style={{ fontSize: 14, color: theme.textSub, fontFamily: FONT, marginBottom: 40 }}
               >{t("auth.signInPrompt")}</motion.div>
 
               <motion.button
@@ -51497,9 +51542,9 @@ export default function CircularMenu() {
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 14,
                   width: 320, maxWidth: "80vw", boxSizing: "border-box",
-                  background: "#16161E", border: "1px solid #ffffff15", borderRadius: 16,
+                  background: "#16161E", border: `1px solid ${theme.border}`, borderRadius: 16,
                   padding: "16px 32px", cursor: "pointer",
-                  fontSize: 16, fontFamily: FONT, color: "#ffffffdd", fontWeight: 400,
+                  fontSize: 16, fontFamily: FONT, color: theme.text, fontWeight: 400,
                   letterSpacing: 0.2,
                 }}
               >
@@ -51518,25 +51563,25 @@ export default function CircularMenu() {
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7, duration: 0.5 }}
                 style={{ display: "flex", alignItems: "center", gap: 12, width: 320, maxWidth: "80vw", margin: "22px 0 18px" }}
               >
-                <div style={{ flex: 1, height: 1, background: "#ffffff18" }} />
-                <div style={{ fontSize: 12, color: "#ffffff45", fontFamily: FONT }}>{appLanguage === "de" ? "oder" : "or"}</div>
-                <div style={{ flex: 1, height: 1, background: "#ffffff18" }} />
+                <div style={{ flex: 1, height: 1, background: theme.border }} />
+                <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT }}>{appLanguage === "de" ? "oder" : "or"}</div>
+                <div style={{ flex: 1, height: 1, background: theme.border }} />
               </motion.div>
 
               {/* Magic-link e-mail login */}
               {magicSent ? (
                 <motion.div
                   initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                  style={{ width: 320, maxWidth: "80vw", textAlign: "center", background: "#16161E", border: "1px solid #ffffff15", borderRadius: 16, padding: "20px 22px" }}
+                  style={{ width: 320, maxWidth: "80vw", textAlign: "center", background: "#16161E", border: `1px solid ${theme.border}`, borderRadius: 16, padding: "20px 22px" }}
                 >
                   <div style={{ fontSize: 22, marginBottom: 8 }}>✉️</div>
-                  <div style={{ fontSize: 14, color: "#ffffffdd", fontFamily: FONT, fontWeight: 500, marginBottom: 6 }}>
+                  <div style={{ fontSize: 14, color: theme.text, fontFamily: FONT, fontWeight: 500, marginBottom: 6 }}>
                     {appLanguage === "de" ? "Login-Link gesendet" : "Login link sent"}
                   </div>
-                  <div style={{ fontSize: 13, color: "#ffffff70", fontFamily: FONT, lineHeight: 1.5 }}>
+                  <div style={{ fontSize: 13, color: theme.textSub, fontFamily: FONT, lineHeight: 1.5 }}>
                     {appLanguage === "de"
-                      ? <>Wir haben dir einen Anmelde-Link an <strong style={{ color: "#ffffffcc" }}>{loginEmail.trim().toLowerCase()}</strong> geschickt. Öffne ihn auf diesem Gerät.</>
-                      : <>We sent a sign-in link to <strong style={{ color: "#ffffffcc" }}>{loginEmail.trim().toLowerCase()}</strong>. Open it on this device.</>}
+                      ? <>Wir haben dir einen Anmelde-Link an <strong style={{ color: theme.text }}>{loginEmail.trim().toLowerCase()}</strong> geschickt. Öffne ihn auf diesem Gerät.</>
+                      : <>We sent a sign-in link to <strong style={{ color: theme.text }}>{loginEmail.trim().toLowerCase()}</strong>. Open it on this device.</>}
                   </div>
                   <div onClick={() => { setMagicSent(false); }} style={{ marginTop: 14, fontSize: 12, color: "#8B7AFF", fontFamily: FONT, cursor: "pointer" }}>
                     {appLanguage === "de" ? "Andere E-Mail verwenden" : "Use a different email"}
@@ -51554,7 +51599,7 @@ export default function CircularMenu() {
                     placeholder={appLanguage === "de" ? "deine@email.com" : "you@email.com"}
                     style={{
                       width: "100%", boxSizing: "border-box", padding: "15px 18px", borderRadius: 16,
-                      background: "#16161E", border: "1px solid #ffffff15", color: "#ffffffdd",
+                      background: "#16161E", border: `1px solid ${theme.border}`, color: theme.text,
                       fontSize: 15, fontFamily: FONT, outline: "none", caretColor: "#8B7AFF",
                     }}
                   />
@@ -51588,11 +51633,11 @@ export default function CircularMenu() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 1, duration: 0.5 }}
-                style={{ position: "absolute", bottom: 32, left: 0, right: 0, fontSize: 13, color: "#ffffff50", fontFamily: FONT, textAlign: "center", lineHeight: 1.6, zIndex: 2 }}
-              ><div style={{ fontSize: 12, color: "#ffffff40" }}>
-                  <a href="https://i7os.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "#ffffff70", textDecoration: "none", margin: "0 8px" }}>{t("legal.privacy")}</a>
-                  <span style={{ color: "#ffffff30" }}>·</span>
-                  <a href="https://i7os.com/terms" target="_blank" rel="noopener noreferrer" style={{ color: "#ffffff70", textDecoration: "none", margin: "0 8px" }}>{t("legal.terms")}</a>
+                style={{ position: "absolute", bottom: 32, left: 0, right: 0, fontSize: 13, color: theme.textDim, fontFamily: FONT, textAlign: "center", lineHeight: 1.6, zIndex: 2 }}
+              ><div style={{ fontSize: 12, color: theme.textDim }}>
+                  <a href="https://i7os.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: theme.textSub, textDecoration: "none", margin: "0 8px" }}>{t("legal.privacy")}</a>
+                  <span style={{ color: theme.textFaint }}>·</span>
+                  <a href="https://i7os.com/terms" target="_blank" rel="noopener noreferrer" style={{ color: theme.textSub, textDecoration: "none", margin: "0 8px" }}>{t("legal.terms")}</a>
                 </div>
               </motion.div>
           </motion.div>
@@ -51656,7 +51701,7 @@ export default function CircularMenu() {
             transition={{ duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
             style={{
               position: "absolute", inset: 0, zIndex: 99,
-              background: "#111117",
+              background: theme.bg,
               display: "flex", flexDirection: "column",
               alignItems: "center",
               // The steps before the tour ask one question and always fit, so
@@ -51675,7 +51720,7 @@ export default function CircularMenu() {
               boxSizing: "border-box",
             }}
           >
-            <DotGrid darkMode={true} />
+            <DotGrid darkMode={darkMode} />
             {/* No AnimatedBlob here. On a screen that asks one question it was the brightest thing on it,
                 and it sat in the corner where nothing is. */}
             <div style={{ position: "relative", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "center",
@@ -51685,7 +51730,8 @@ export default function CircularMenu() {
               margin: onboardingStep === "tour" ? "auto 0" : 0, flexShrink: 0 }}>
 
               {onboardingStep === "tour" && (
-                <OnboardingTour appLanguage={appLanguage} userName={userName} onFinish={closeTour} />
+                <OnboardingTour appLanguage={appLanguage} userName={userName}
+                  theme={theme} darkMode={darkMode} onFinish={closeTour} />
               )}
 
               {/* ── Step: Choose ── */}
@@ -51693,21 +51739,21 @@ export default function CircularMenu() {
                 <motion.div
                   initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1, duration: 0.5 }}
-                  style={{ fontSize: 13, fontFamily: FONT, color: "#ffffff40", marginBottom: 8 }}
+                  style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 8 }}
                 >
                   {appLanguage === "de" ? `Hallo, ${userName.split(" ")[0]}` : `Hi, ${userName.split(" ")[0]}`} 👋
                 </motion.div>
                 <motion.div
                   initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2, duration: 0.5 }}
-                  style={{ fontSize: 26, fontWeight: 300, color: "#ffffffcc", fontFamily: FONT, letterSpacing: -0.5, marginBottom: 8, textAlign: "center" }}
+                  style={{ fontSize: 26, fontWeight: 300, color: theme.text, fontFamily: FONT, letterSpacing: -0.5, marginBottom: 8, textAlign: "center" }}
                 >
                   {appLanguage === "de" ? "Wie möchtest du starten?" : "How would you like to start?"}
                 </motion.div>
                 <motion.div
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                   transition={{ delay: 0.3, duration: 0.4 }}
-                  style={{ fontSize: 14, color: "#ffffff50", fontFamily: FONT, marginBottom: 40, textAlign: "center" }}
+                  style={{ fontSize: 14, color: theme.textDim, fontFamily: FONT, marginBottom: 40, textAlign: "center" }}
                 >
                   {appLanguage === "de" ? "Erstelle einen neuen Workspace oder tritt einem bestehenden bei." : "Create a new workspace or join an existing one."}
                 </motion.div>
@@ -51739,10 +51785,10 @@ export default function CircularMenu() {
                         <path d="M12 5v14M5 12h14" stroke="#8B7AFF" strokeWidth="2" strokeLinecap="round" />
                       </svg>
                     </div>
-                    <div style={{ fontSize: 15, fontWeight: 500, color: "#ffffffdd", fontFamily: FONT }}>
+                    <div style={{ fontSize: 15, fontWeight: 500, color: theme.text, fontFamily: FONT }}>
                       {appLanguage === "de" ? "Workspace erstellen" : "Create Workspace"}
                     </div>
-                    <div style={{ fontSize: 12, color: "#ffffff40", fontFamily: FONT, textAlign: "center", lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, textAlign: "center", lineHeight: 1.5 }}>
                       {appLanguage === "de" ? "Erstelle dein eigenes Team und lade Mitglieder ein" : "Set up your own team and invite members"}
                     </div>
                   </motion.div>
@@ -51751,12 +51797,12 @@ export default function CircularMenu() {
                   <motion.div
                     initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4, duration: 0.4 }}
-                    whileHover={{ scale: 1.02, borderColor: "rgba(255,255,255,0.15)" }}
+                    whileHover={{ scale: 1.02, borderColor: theme.border }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setOnboardingStep("join")}
                     style={{
                       flex: 1, padding: "28px 24px", borderRadius: 20, cursor: "pointer",
-                      background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+                      background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`,
                       backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
                       display: "flex", flexDirection: "column", alignItems: "center", gap: 14,
                       transition: "all 0.25s ease",
@@ -51764,19 +51810,19 @@ export default function CircularMenu() {
                   >
                     <div style={{
                       width: 48, height: 48, borderRadius: 14,
-                      background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+                      background: theme.hoverBg, border: `1px solid ${theme.border}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                        <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="#ffffff70" strokeWidth="1.8" strokeLinecap="round" />
-                        <circle cx="8.5" cy="7" r="4" stroke="#ffffff70" strokeWidth="1.8" />
-                        <path d="M20 8v6M17 11h6" stroke="#ffffff70" strokeWidth="1.8" strokeLinecap="round" />
+                        <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke={theme.textSub} strokeWidth="1.8" strokeLinecap="round" />
+                        <circle cx="8.5" cy="7" r="4" stroke={theme.textSub} strokeWidth="1.8" />
+                        <path d="M20 8v6M17 11h6" stroke={theme.textSub} strokeWidth="1.8" strokeLinecap="round" />
                       </svg>
                     </div>
-                    <div style={{ fontSize: 15, fontWeight: 500, color: "#ffffffdd", fontFamily: FONT }}>
+                    <div style={{ fontSize: 15, fontWeight: 500, color: theme.text, fontFamily: FONT }}>
                       {appLanguage === "de" ? "Einladung annehmen" : "Join Workspace"}
                     </div>
-                    <div style={{ fontSize: 12, color: "#ffffff40", fontFamily: FONT, textAlign: "center", lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, textAlign: "center", lineHeight: 1.5 }}>
                       {appLanguage === "de" ? "Tritt einem bestehenden Team mit Einladungscode bei" : "Join an existing team with an invite code"}
                     </div>
                   </motion.div>
@@ -51788,14 +51834,14 @@ export default function CircularMenu() {
                   <motion.div
                     initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1, duration: 0.4 }}
-                    style={{ fontSize: 24, fontWeight: 300, color: "#ffffffcc", fontFamily: FONT, letterSpacing: -0.5, marginBottom: 8 }}
+                    style={{ fontSize: 24, fontWeight: 300, color: theme.text, fontFamily: FONT, letterSpacing: -0.5, marginBottom: 8 }}
                   >
                     {appLanguage === "de" ? "Workspace erstellen" : "Create your Workspace"}
                   </motion.div>
                   <motion.div
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                     transition={{ delay: 0.15, duration: 0.3 }}
-                    style={{ fontSize: 14, color: "#ffffff45", fontFamily: FONT, marginBottom: 32 }}
+                    style={{ fontSize: 14, color: theme.textDim, fontFamily: FONT, marginBottom: 32 }}
                   >
                     {appLanguage === "de" ? "Gib deinem Workspace einen Namen" : "Give your workspace a name"}
                   </motion.div>
@@ -51829,8 +51875,8 @@ export default function CircularMenu() {
                       placeholder={appLanguage === "de" ? "z.B. Meine Agentur" : "e.g. My Agency"}
                       style={{
                         width: "100%", padding: "14px 18px", borderRadius: 14,
-                        background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-                        color: "#ffffffdd", fontSize: 15, fontFamily: FONT, outline: "none",
+                        background: theme.hoverBg, border: `1px solid ${theme.border}`,
+                        color: theme.text, fontSize: 15, fontFamily: FONT, outline: "none",
                         caretColor: "#8B7AFF",
                       }}
                     />
@@ -51858,8 +51904,8 @@ export default function CircularMenu() {
                         width: "100%", marginTop: 16, padding: "14px 24px", borderRadius: 14,
                         // Onboarding is always on a dark canvas, so the inverted
                         // (near-white) primary fill applies regardless of theme.
-                        background: wsName.trim() ? PRIMARY_BTN_DARK.background : "rgba(255,255,255,0.06)",
-                        border: "none", color: wsName.trim() ? PRIMARY_BTN_DARK.color : "#ffffff30",
+                        background: wsName.trim() ? primaryBtn(darkMode).background : theme.hoverBg,
+                        border: "none", color: wsName.trim() ? primaryBtn(darkMode).color : theme.textFaint,
                         fontSize: 14, fontWeight: 500, fontFamily: FONT, cursor: wsName.trim() ? "pointer" : "default",
                         transition: "all 0.25s ease", opacity: wsCreating ? 0.6 : 1,
                       }}
@@ -51876,8 +51922,8 @@ export default function CircularMenu() {
                       onClick={() => { setOnboardingStep("choose"); setOnboardingError(null); setWsName(""); setWsCreating(false); }}
                       style={{
                         width: "100%", marginTop: 12, padding: "14px 24px", borderRadius: 14,
-                        background: "transparent", border: "1px solid rgba(255,255,255,0.12)",
-                        color: "#ffffff60", fontSize: 14, fontWeight: 500, fontFamily: FONT,
+                        background: "transparent", border: `1px solid ${theme.border}`,
+                        color: theme.textSub, fontSize: 14, fontWeight: 500, fontFamily: FONT,
                         cursor: "pointer", transition: "all 0.25s ease",
                       }}
                     >
@@ -51891,7 +51937,7 @@ export default function CircularMenu() {
                   <motion.div
                     initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1, duration: 0.4 }}
-                    style={{ fontSize: 24, fontWeight: 300, color: "#ffffffcc", fontFamily: FONT, letterSpacing: -0.5, marginBottom: 8 }}
+                    style={{ fontSize: 24, fontWeight: 300, color: theme.text, fontFamily: FONT, letterSpacing: -0.5, marginBottom: 8 }}
                   >
                     {appLanguage === "de" ? "Workspace beitreten" : "Join a Workspace"}
                   </motion.div>
@@ -51903,7 +51949,7 @@ export default function CircularMenu() {
                       transition={{ delay: 0.15, duration: 0.3 }}
                       style={{ width: "100%", maxWidth: 360, marginTop: 20, marginBottom: 24 }}
                     >
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff45", marginBottom: 10, letterSpacing: 0.5, textTransform: "uppercase" }}>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 10, letterSpacing: 0.5, textTransform: "uppercase" }}>
                         {appLanguage === "de" ? "Offene Einladungen" : "Pending Invitations"}
                       </div>
                       {pendingInvites.map(inv => (
@@ -51928,8 +51974,8 @@ export default function CircularMenu() {
                           }}
                         >
                           <div>
-                            <div style={{ fontSize: 14, fontWeight: 500, color: "#ffffffdd", fontFamily: FONT }}>{inv.organizations?.name}</div>
-                            <div style={{ fontSize: 11, color: "#ffffff40", fontFamily: FONT, marginTop: 2 }}>
+                            <div style={{ fontSize: 14, fontWeight: 500, color: theme.text, fontFamily: FONT }}>{inv.organizations?.name}</div>
+                            <div style={{ fontSize: 11, color: theme.textDim, fontFamily: FONT, marginTop: 2 }}>
                               {appLanguage === "de" ? `Eingeladen als ${inv.role}` : `Invited as ${inv.role}`}
                             </div>
                           </div>
@@ -51947,7 +51993,7 @@ export default function CircularMenu() {
                     transition={{ delay: 0.2, duration: 0.3 }}
                     style={{ width: "100%", maxWidth: 360, marginTop: pendingInvites.length > 0 ? 0 : 24 }}
                   >
-                    <div style={{ fontSize: 12, fontFamily: FONT, color: "#ffffff45", marginBottom: 10, letterSpacing: 0.5, textTransform: "uppercase" }}>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 10, letterSpacing: 0.5, textTransform: "uppercase" }}>
                       {appLanguage === "de" ? "Einladungscode eingeben" : "Enter Invite Code"}
                     </div>
                     <input
@@ -51970,8 +52016,8 @@ export default function CircularMenu() {
                       placeholder={appLanguage === "de" ? "Code einfügen..." : "Paste invite code..."}
                       style={{
                         width: "100%", padding: "14px 18px", borderRadius: 14,
-                        background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-                        color: "#ffffffdd", fontSize: 15, fontFamily: FONT, outline: "none",
+                        background: theme.hoverBg, border: `1px solid ${theme.border}`,
+                        color: theme.text, fontSize: 15, fontFamily: FONT, outline: "none",
                         caretColor: "#8B7AFF",
                       }}
                     />
@@ -51993,8 +52039,8 @@ export default function CircularMenu() {
                       disabled={!inviteCode.trim() || joining}
                       style={{
                         width: "100%", marginTop: 16, padding: "14px 24px", borderRadius: 14,
-                        background: inviteCode.trim() ? PRIMARY_BTN_DARK.background : "rgba(255,255,255,0.06)",
-                        border: "none", color: inviteCode.trim() ? PRIMARY_BTN_DARK.color : "#ffffff30",
+                        background: inviteCode.trim() ? primaryBtn(darkMode).background : theme.hoverBg,
+                        border: "none", color: inviteCode.trim() ? primaryBtn(darkMode).color : theme.textFaint,
                         fontSize: 14, fontWeight: 500, fontFamily: FONT, cursor: inviteCode.trim() ? "pointer" : "default",
                         transition: "all 0.25s ease", opacity: joining ? 0.6 : 1,
                       }}
@@ -52011,8 +52057,8 @@ export default function CircularMenu() {
                       onClick={() => { setOnboardingStep("choose"); setOnboardingError(null); setInviteCode(""); setJoining(false); }}
                       style={{
                         width: "100%", marginTop: 12, padding: "14px 24px", borderRadius: 14,
-                        background: "transparent", border: "1px solid rgba(255,255,255,0.12)",
-                        color: "#ffffff60", fontSize: 14, fontWeight: 500, fontFamily: FONT,
+                        background: "transparent", border: `1px solid ${theme.border}`,
+                        color: theme.textSub, fontSize: 14, fontWeight: 500, fontFamily: FONT,
                         cursor: "pointer", transition: "all 0.25s ease",
                       }}
                     >
