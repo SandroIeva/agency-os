@@ -1659,15 +1659,17 @@ function TourArt({ kind, tint }) {
       <circle cx="54" cy="58" r="3.5" {...stroke} />
       <circle cx="79" cy="58" r="3.5" {...stroke} />
     </>),
-    // The assistant: the sphere, and sound coming off it.
-    ai: (<>
-      <circle cx="40" cy="38" r="20" {...stroke} />
-      <path d="M26 30c7 5 21 5 28 0M26 46c7-5 21-5 28 0" {...stroke} />
-      <path d="M68 26a18 18 0 010 24M76 20a26 26 0 010 36" {...stroke} />
+    // Reach: a post going out, and the numbers coming back.
+    reach: (<>
+      <rect x="12" y="12" width="34" height="26" rx="5" {...stroke} />
+      <path d="M19 21h20M19 28h13" {...stroke} />
+      <path d="M52 25h16M62 19l6 6-6 6" {...stroke} />
+      <path d="M12 64h78" {...stroke} />
+      <path d="M22 64V52M38 64V44M54 64V48M70 64V34M86 64V26" {...stroke} />
     </>),
   }[kind] || null;
   return (
-    <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", borderRadius: 20, overflow: "hidden",
+    <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", borderRadius: 28, overflow: "hidden",
       background: `linear-gradient(140deg, ${tint}2e 0%, rgba(255,255,255,0.04) 55%, rgba(255,255,255,0.02) 100%)`,
       border: "1px solid rgba(255,255,255,0.09)" }}>
       <svg viewBox="0 0 102 76" preserveAspectRatio="xMidYMid meet"
@@ -1678,20 +1680,12 @@ function TourArt({ kind, tint }) {
   );
 }
 
-function OnboardingTour({ appLanguage = "de", userName = "", onFinish, onSaveKey }) {
+function OnboardingTour({ appLanguage = "de", userName = "", onFinish }) {
   const de = appLanguage === "de";
   const [idx, setIdx] = useState(0);
-  // The key slide's own two fields, same shape as AiKeyIntro's: never seeded
-  // from a stored key, because a password field that echoes one back gets
-  // pasted into and silently concatenates.
-  const KEY_PROVIDERS = [
-    { id: "gemini", name: "Gemini",  sub: "Google",    placeholder: "AIza...",          url: "https://aistudio.google.com/apikey" },
-    { id: "claude", name: "Claude",  sub: "Anthropic", placeholder: "sk-ant-api03-...", url: "https://console.anthropic.com/settings/keys" },
-    { id: "openai", name: "ChatGPT", sub: "OpenAI",    placeholder: "sk-...",           url: "https://platform.openai.com/api-keys" },
-  ];
-  const [pick, setPick] = useState("gemini");
-  const [draft, setDraft] = useState("");
-  const chosen = KEY_PROVIDERS.find(x => x.id === pick) || KEY_PROVIDERS[0];
+  // The key is NOT asked for here. It was the last slide once, and ending a
+  // tour of what the app does with a credentials form made the tour about the
+  // form. AiKeyIntro asks on the dashboard, straight after this closes.
 
   // What the app is, in the order somebody would meet it: define, make, keep,
   // plan. Then the one thing it needs from them.
@@ -1699,7 +1693,7 @@ function OnboardingTour({ appLanguage = "de", userName = "", onFinish, onSaveKey
     { art: "brand", tint: "#5B8DEF", image: null, kicker: "Brand",
       title: "Deine Marke, an einem Ort",
       body: "Strategie, Identität und Design System liegen zusammen: Vision und Personas, Claim und Tonalität, Logo, Farben und Typografie. Eine bestehende Marke liest i7OS aus einer Website, einem Brand Book oder einer Figma-Datei ein. Jedes Projekt kann seine eigene Marke haben, was für eine Agentur der entscheidende Teil ist." },
-    { art: "make", tint: "#E88D67", image: null, kicker: "Erstellen",
+    { art: "make", tint: "#E88D67", image: null, kicker: "Kreieren",
       title: "Hier wird gearbeitet, nicht nur verwaltet",
       body: "Artboards für Layouts, mit Text, Formen, Verläufen und Ebenen, und Designs aus Figma kommen editierbar herein. Brainstorm ist eine unendliche Leinwand für Notizen, Skizzen und Mindmaps, zu mehreren gleichzeitig. Dazu Dokumente mit Kommentaren und ein Composer für Social Posts." },
     { art: "keep", tint: "#00B894", image: null, kicker: "Files",
@@ -1708,9 +1702,9 @@ function OnboardingTour({ appLanguage = "de", userName = "", onFinish, onSaveKey
     { art: "plan", tint: "#F59E0B", image: null, kicker: "Planen",
       title: "Und der Rest des Tages",
       body: "Aufgaben, Kanban, Timeline für Sprints und ein Kalender, der sich mit Google abgleicht. Der Messenger hält das Team zusammen, und Benachrichtigungen erreichen dich auch in Telegram oder Slack, wo du direkt darauf reagieren kannst." },
-    { art: "ai", tint: "#8B7AFF", image: null, kicker: "Assistent", key: true,
-      title: "Und einer, der mitdenkt",
-      body: "Der Assistent kennt deine Marke und deine Projekte. Er schreibt Taglines und Texte, baut Personas, analysiert Wettbewerber und leitet Prompts aus Bildern ab. Sprich ihn an oder tipp ihm. Er läuft über deinen eigenen Schlüssel beim Anbieter, wir rechnen nichts dafür ab." },
+    { art: "reach", tint: "#8B7AFF", image: null, kicker: "Analytics",
+      title: "Raus damit, und sehen was es gebracht hat",
+      body: "Verbinde LinkedIn, Instagram, Threads, X und Pinterest. Schreib einen Post, leg ein Visual dazu und schick ihn an mehrere Kanäle auf einmal, sofort oder geplant. Danach zeigt Analytics Follower, Impressionen, Interaktionen und die Beiträge, die am besten liefen. Die Strategie-Analyse liest deine Kanäle und sagt dir, wo Stärken und Lücken sind." },
   ] : [
     { art: "brand", tint: "#5B8DEF", image: null, kicker: "Brand",
       title: "Your brand, in one place",
@@ -1724,15 +1718,14 @@ function OnboardingTour({ appLanguage = "de", userName = "", onFinish, onSaveKey
     { art: "plan", tint: "#F59E0B", image: null, kicker: "Plan",
       title: "And the rest of the day",
       body: "Tasks, Kanban, a timeline for sprints and a calendar that syncs with Google. Messenger keeps the team together, and notifications reach you in Telegram or Slack, where you can act on them directly." },
-    { art: "ai", tint: "#8B7AFF", image: null, kicker: "Assistant", key: true,
-      title: "And one that thinks along",
-      body: "The assistant knows your brand and your projects. It writes taglines and copy, builds personas, analyses competitors and derives prompts from images. Speak to it or type. It runs on your own key with the provider, and we charge nothing for it." },
+    { art: "reach", tint: "#8B7AFF", image: null, kicker: "Analytics",
+      title: "Send it out, then see what it did",
+      body: "Connect LinkedIn, Instagram, Threads, X and Pinterest. Write a post, add a visual and send it to several channels at once, now or scheduled. Analytics then shows followers, impressions, interactions and the posts that did best. The strategy analysis reads your channels and tells you where the strengths and the gaps are." },
   ];
 
   const LAST = SLIDES.length - 1;
   const slide = SLIDES[idx];
   const next = () => (idx < LAST ? setIdx(i => i + 1) : onFinish?.());
-  const saveKey = () => { const k = draft.trim(); if (k) onSaveKey?.(chosen.id, k); onFinish?.(); };
 
   const ghost = { padding: "12px 20px", borderRadius: 13, background: "transparent",
     border: "1px solid rgba(255,255,255,0.14)", color: "#ffffff70",
@@ -1746,14 +1739,14 @@ function OnboardingTour({ appLanguage = "de", userName = "", onFinish, onSaveKey
       {/* Image left, words right. Below 820 they stack, picture first, because a
           half-width picture beside a half-width paragraph is unreadable on a
           phone. */}
-      <div style={{ display: "grid", gap: 40, alignItems: "center",
+      <div style={{ display: "grid", gap: 64, alignItems: "center",
         gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
         <motion.div key={`art-${idx}`}
           initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1] }}>
           {slide.image
             ? <img src={slide.image} alt=""
-                style={{ width: "100%", aspectRatio: "4 / 3", objectFit: "cover", borderRadius: 20, display: "block",
+                style={{ width: "100%", aspectRatio: "4 / 3", objectFit: "cover", borderRadius: 28, display: "block",
                   border: "1px solid rgba(255,255,255,0.09)" }} />
             : <TourArt kind={slide.art} tint={slide.tint} />}
         </motion.div>
@@ -1767,43 +1760,6 @@ function OnboardingTour({ appLanguage = "de", userName = "", onFinish, onSaveKey
             color: "#ffffffdd", fontFamily: FONT, marginBottom: 14 }}>{slide.title}</div>
           <div style={{ fontSize: 14, lineHeight: 1.7, color: "#ffffff62", fontFamily: FONT }}>{slide.body}</div>
 
-          {/* The last slide asks for the key, in place. Pointing at a settings
-              tab from inside a tour would end the tour to do one thing. */}
-          {slide.key && (
-            <div style={{ marginTop: 22 }}>
-              <div style={{ display: "flex", gap: 7, marginBottom: 10 }}>
-                {KEY_PROVIDERS.map(pr => {
-                  const on = pr.id === pick;
-                  return (
-                    <motion.div key={pr.id} whileTap={{ scale: 0.97 }}
-                      onClick={() => { setPick(pr.id); setDraft(""); }}
-                      style={{ flex: 1, padding: "9px 8px", borderRadius: 11, cursor: "pointer", textAlign: "center",
-                        transition: "all 0.18s ease",
-                        background: on ? PRIMARY_BTN_DARK.background : "rgba(255,255,255,0.05)",
-                        border: `1px solid ${on ? PRIMARY_BTN_DARK.background : "rgba(255,255,255,0.12)"}` }}>
-                      <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
-                        color: on ? PRIMARY_BTN_DARK.color : "#ffffffcc" }}>{pr.name}</div>
-                      <div style={{ fontSize: 10.5, fontFamily: FONT, marginTop: 1,
-                        color: on ? "rgba(21,21,28,0.55)" : "#ffffff40" }}>{pr.sub}</div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-              <input type="password" value={draft} autoComplete="off"
-                onChange={e => setDraft(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") saveKey(); }}
-                placeholder={chosen.placeholder}
-                style={{ width: "100%", boxSizing: "border-box", padding: "12px 15px", borderRadius: 12,
-                  background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-                  color: "#ffffffdd", fontSize: 13.5, fontFamily: FONT, outline: "none" }} />
-              <div style={{ marginTop: 8, textAlign: "right" }}>
-                <a href={chosen.url} target="_blank" rel="noopener noreferrer"
-                  style={{ fontSize: 11.5, fontFamily: FONT, color: "#ffffff50", textDecoration: "none" }}>
-                  {de ? `Schlüssel bei ${chosen.sub} holen` : `Get a key from ${chosen.sub}`}
-                </a>
-              </div>
-            </div>
-          )}
         </motion.div>
       </div>
 
@@ -1818,19 +1774,14 @@ function OnboardingTour({ appLanguage = "de", userName = "", onFinish, onSaveKey
                 transition: "width 0.3s ease, background 0.3s ease" }} />
           ))}
         </div>
-        {idx > 0 && (
-          <motion.button whileTap={{ scale: 0.97 }} onClick={() => setIdx(i => i - 1)} style={ghost}>
-            {de ? "Zurück" : "Back"}
-          </motion.button>
-        )}
+        {/* No Back. The dots go anywhere, both ways, and a third button beside
+            them was spending the row on a direction nobody walks. */}
         <motion.button whileTap={{ scale: 0.97 }} onClick={onFinish}
           style={{ ...ghost, border: "none", color: "#ffffff45" }}>
           {de ? "Überspringen" : "Skip"}
         </motion.button>
-        <motion.button whileTap={{ scale: 0.97 }} onClick={idx === LAST ? saveKey : next} style={solid}>
-          {idx === LAST
-            ? (draft.trim() ? (de ? "Speichern und loslegen" : "Save and get started") : (de ? "Loslegen" : "Get started"))
-            : (de ? "Weiter" : "Next")}
+        <motion.button whileTap={{ scale: 0.97 }} onClick={next} style={solid}>
+          {idx === LAST ? (de ? "Loslegen" : "Get started") : (de ? "Weiter" : "Next")}
         </motion.button>
       </div>
     </div>
@@ -46872,12 +46823,12 @@ export default function CircularMenu() {
     setOnboardingStep(seen ? null : "tour");
   };
   const closeTour = () => {
-    try {
-      localStorage.setItem(TOUR_SEEN, "1");
-      // The tour's last slide IS the key dialog. Whoever has just been through
-      // it must not be met by the same question again on the dashboard.
-      localStorage.setItem("agencyos-ai-key-intro", "seen");
-    } catch (_) {}
+    // Only the tour is marked seen. It used to mark the key dialog seen as
+    // well, because its last slide WAS that dialog; that slide is gone, so
+    // doing it now would mean nobody is ever asked for a key, and the tour
+    // would have quietly swallowed the one thing half the app needs.
+    // AiKeyIntro comes up on the dashboard the moment this closes.
+    try { localStorage.setItem(TOUR_SEEN, "1"); } catch (_) {}
     setOnboardingStep(null);
   };
   const [orgMembers, setOrgMembers] = useState([]);          // team members for chat etc.
@@ -51695,14 +51646,7 @@ export default function CircularMenu() {
               margin: onboardingStep === "tour" ? "auto 0" : 0, flexShrink: 0 }}>
 
               {onboardingStep === "tour" && (
-                <OnboardingTour appLanguage={appLanguage} userName={userName}
-                  onFinish={closeTour}
-                  onSaveKey={(provider, key) => {
-                    // The same two writes the settings panel makes, so a key
-                    // entered here is the key the app uses.
-                    setLlmKeys(prev => ({ ...prev, [provider]: key }));
-                    setLlmProvider(provider);
-                  }} />
+                <OnboardingTour appLanguage={appLanguage} userName={userName} onFinish={closeTour} />
               )}
 
               {/* ── Step: Choose ── */}
