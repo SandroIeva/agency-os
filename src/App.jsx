@@ -1733,6 +1733,9 @@ function TourArt({ kind, tint, theme, darkMode }) {
 function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = true, onFinish }) {
   const de = appLanguage === "de";
   const [idx, setIdx] = useState(0);
+  // A picture that 404s falls back to the drawing rather than leaving a hole,
+  // which also means the tour still works if a file is ever renamed.
+  const [brokenArt, setBrokenArt] = useState([]);
   // The key is NOT asked for here. It was the last slide once, and ending a
   // tour of what the app does with a credentials form made the tour about the
   // form. AiKeyIntro asks on the dashboard, straight after this closes.
@@ -1740,35 +1743,35 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
   // What the app is, in the order somebody would meet it: define, make, keep,
   // plan. Then the one thing it needs from them.
   const SLIDES = de ? [
-    { art: "brand", tint: "#5B8DEF", image: null, kicker: "Brand",
+    { art: "brand", tint: "#5B8DEF", image: "/Brand.jpg", kicker: "Brand",
       title: "Deine Marke, an einem Ort",
       body: "Wofür ihr steht, wie ihr klingt, wie ihr aussieht. Einmal festgehalten, und jede Arbeit danach hat einen Maßstab statt einer Meinung." },
-    { art: "make", tint: "#E88D67", image: null, kicker: "Kreieren",
+    { art: "make", tint: "#E88D67", image: "/Create.jpg", kicker: "Kreieren",
       title: "Vom Einfall zum Layout",
       body: "Die Idee ist noch unscharf? Wirf sie auf die Leinwand, dreh sie mit dem Team, und wenn sie trägt, bau sie im Artboard zu Ende." },
-    { art: "keep", tint: "#00B894", image: null, kicker: "Files",
+    { art: "keep", tint: "#00B894", image: "/Files.jpg", kicker: "Files",
       title: "Alles, was entsteht, bleibt beieinander",
       body: "Nichts verschwindet mehr in einem Chatverlauf. Was ihr sammelt, erzeugt oder hochladet, liegt da, wo ihr es das nächste Mal sucht." },
-    { art: "plan", tint: "#F59E0B", image: null, kicker: "Planen",
+    { art: "plan", tint: "#F59E0B", image: "/Plan.jpg", kicker: "Planen",
       title: "Und der Rest des Tages",
       body: "Wer macht was bis wann, ohne dass jemand nachfragen muss. Und wenn sich etwas verschiebt, erfährst du es da, wo du ohnehin gerade bist." },
-    { art: "reach", tint: "#8B7AFF", image: null, kicker: "Social Media",
+    { art: "reach", tint: "#8B7AFF", image: "/Analyse.jpg", kicker: "Social Media",
       title: "Posten, und sehen was es gebracht hat",
       body: "Ein Gedanke, fünf Kanäle, ein Klick. Und ein paar Tage später weißt du, ob er angekommen ist, statt es zu vermuten." },
   ] : [
-    { art: "brand", tint: "#5B8DEF", image: null, kicker: "Brand",
+    { art: "brand", tint: "#5B8DEF", image: "/Brand.jpg", kicker: "Brand",
       title: "Your brand, in one place",
       body: "What you stand for, how you sound, how you look. Pinned down once, so everything made after it has a standard to meet instead of an opinion." },
-    { art: "make", tint: "#E88D67", image: null, kicker: "Create",
+    { art: "make", tint: "#E88D67", image: "/Create.jpg", kicker: "Create",
       title: "From idea to layout",
       body: "Still half an idea? Throw it on the canvas, turn it over with the team, and once it holds, build the thing out properly on an artboard." },
-    { art: "keep", tint: "#00B894", image: null, kicker: "Files",
+    { art: "keep", tint: "#00B894", image: "/Files.jpg", kicker: "Files",
       title: "Everything you make stays together",
       body: "Nothing disappears into a chat thread again. Whatever you collect, generate or upload sits where you will go looking for it next time." },
-    { art: "plan", tint: "#F59E0B", image: null, kicker: "Plan",
+    { art: "plan", tint: "#F59E0B", image: "/Plan.jpg", kicker: "Plan",
       title: "And the rest of the day",
       body: "Who does what by when, without anyone having to chase it. And when something moves, you hear about it wherever you already are." },
-    { art: "reach", tint: "#8B7AFF", image: null, kicker: "Social Media",
+    { art: "reach", tint: "#8B7AFF", image: "/Analyse.jpg", kicker: "Social Media",
       title: "Post it, then see what it did",
       body: "One thought, five channels, one click. And a few days later you know whether it landed, instead of guessing at it." },
   ];
@@ -1776,6 +1779,16 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
   const LAST = SLIDES.length - 1;
   const slide = SLIDES[idx];
   const next = () => (idx < LAST ? setIdx(i => i + 1) : onFinish?.());
+  // Fetch the NEXT slide's picture while this one is being read. They are about
+  // half a megabyte each, so loading all five up front would hold up the first
+  // slide for the sake of four nobody has reached yet, and loading none early
+  // shows a blank box on every "Weiter".
+  useEffect(() => {
+    const nextImage = SLIDES[idx + 1]?.image;
+    if (!nextImage) return;
+    const img = new Image();
+    img.src = nextImage;
+  }, [idx]); // eslint-disable-line
 
   const ghost = { padding: "12px 20px", borderRadius: 13, background: "transparent",
     border: `1px solid ${theme.border}`, color: theme.textSub,
@@ -1794,8 +1807,9 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
         <motion.div key={`art-${idx}`}
           initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1] }}>
-          {slide.image
-            ? <img src={slide.image} alt=""
+          {slide.image && !brokenArt.includes(slide.art)
+            ? <img src={slide.image} alt="" draggable={false}
+                onError={() => setBrokenArt(b => b.includes(slide.art) ? b : [...b, slide.art])}
                 style={{ width: "100%", aspectRatio: "4 / 3", objectFit: "cover", borderRadius: 28, display: "block",
                   border: `1px solid ${theme.borderFaint}` }} />
             : <TourArt kind={slide.art} tint={slide.tint} theme={theme} darkMode={darkMode} />}
@@ -1804,8 +1818,11 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
         <motion.div key={`txt-${idx}`}
           initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.06, ease: [0.22, 0.68, 0.35, 1] }}>
+          {/* One neutral tone for all five. Each slide used to colour its own
+              kicker in its own accent, which made five labels doing the same
+              job look like five different kinds of thing. */}
           <div style={{ fontSize: 11.5, fontFamily: FONT, fontWeight: 600, letterSpacing: 1.4,
-            textTransform: "uppercase", color: slide.tint, marginBottom: 12 }}>{slide.kicker}</div>
+            textTransform: "uppercase", color: theme.textSub, marginBottom: 12 }}>{slide.kicker}</div>
           <div style={{ fontSize: 27, fontWeight: 300, letterSpacing: -0.6, lineHeight: 1.25,
             color: theme.text, fontFamily: FONT, marginBottom: 14 }}>{slide.title}</div>
           <div style={{ fontSize: 14, lineHeight: 1.7, color: theme.textSub, fontFamily: FONT }}>{slide.body}</div>
