@@ -175,6 +175,11 @@ const deriveWsRole = (m) => {
 // Where the weather endpoint last said this browser is. Written by the weather
 // effect, read by the theme on the following load: knowing the coordinates is
 // what lets light/dark follow the real sunset here instead of a fixed hour.
+// A theme somebody actually picked, "light" or "dark". Deliberately NOT the
+// old "agencyos-dark-mode": that one was written on every mount, so its value
+// is indistinguishable from never having chosen at all.
+const THEME_KEY = "agencyos-theme";
+
 const GEO_CACHE_KEY = "i7os.weather.geo.v2";   // { lat, lon, ts }
 
 function makeTheme(darkMode) {
@@ -46561,12 +46566,21 @@ export default function CircularMenu() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [calendarNotifiedIds, setCalendarNotifiedIds] = useState(new Set());
   const [darkMode, setDarkMode] = useState(() => {
-    // A chosen theme always wins, and it is only ever written when somebody
-    // actually picks one (see the effect below). Otherwise: light while the sun
-    // is up where this person is, dark once it has set.
+    // A chosen theme always wins. Otherwise: light while the sun is up where
+    // this person is, dark once it has set.
+    //
+    // The choice is read from THEME_KEY and NOT from the old
+    // "agencyos-dark-mode", which cannot be trusted: until today an effect
+    // wrote it on every mount, so merely opening the app once left a value
+    // that looks exactly like a deliberate pick. Honouring it meant the
+    // daylight default could never run for anybody who had used the app
+    // before, which is how a 21:00 login still came up in the light scheme
+    // with the sun down since 19:48. The old key is dropped rather than
+    // migrated, because there is no way to tell the two cases apart.
     try {
-      const saved = localStorage.getItem("agencyos-dark-mode");
-      if (saved !== null) return JSON.parse(saved);
+      const chosen = localStorage.getItem(THEME_KEY);
+      if (chosen === "light") return false;
+      if (chosen === "dark") return true;
     } catch (_) { /* no storage: fall through to the sun */ }
     let geo = null;
     // Coordinates left behind by the weather call on an earlier visit. On the
@@ -46574,12 +46588,25 @@ export default function CircularMenu() {
     // which is already the user's own local time and only drifts from the real
     // sunset near the solstices.
     try { geo = JSON.parse(localStorage.getItem(GEO_CACHE_KEY) || "null"); } catch (_) {}
-    return !isDaylight(new Date(), geo?.lat ?? null, geo?.lon ?? null);
+    const light = isDaylight(new Date(), geo?.lat ?? null, geo?.lon ?? null);
+    // Said out loud, because "why is it light" is otherwise unanswerable from
+    // the outside. The weather line above it already does the same.
+    console.info(`[theme] no choice stored → ${light ? "light" : "dark"}`,
+      geo ? `(sun at ${geo.lat.toFixed(2)}, ${geo.lon.toFixed(2)})` : "(no coordinates yet, going by the clock)");
+    return !light;
   });
   // Decided once, at load. Flipping the whole app to dark under somebody at
   // sunset while they are working is a worse surprise than opening in the
   // wrong scheme, and anybody who minds can simply pick one.
-  const themeChosen = useRef(false);
+  //
+  // What the daylight decided, so a WRITE can be told apart from a mount. A
+  // "skip the first run" ref cannot do that job under StrictMode, which runs
+  // effects twice: the second pass saw the flag already set and wrote a
+  // preference nobody had expressed, which is the very bug being fixed here
+  // wearing a different hat. Comparing values is idempotent, so it survives
+  // being run any number of times.
+  const themeAtLoad = useRef(darkMode);
+  const themeEverChanged = useRef(false);
   // A stored choice wins; otherwise the browser decides. Only an explicit pick
   // is written back, so someone who never touched the setting keeps following
   // their browser instead of being frozen into whatever we detected once.
@@ -46659,8 +46686,18 @@ export default function CircularMenu() {
   // every existing browser out of the daylight default forever. Same rule the
   // language setting already follows two dozen lines up.
   useEffect(() => {
-    if (!themeChosen.current) { themeChosen.current = true; return; }
-    try { localStorage.setItem("agencyos-dark-mode", JSON.stringify(darkMode)); } catch (_) {}
+    if (!themeEverChanged.current) {
+      // Still whatever the sun said. Retire the untrustworthy old key on the
+      // way past, so it cannot haunt a later reader, and write nothing.
+      if (darkMode === themeAtLoad.current) {
+        try { localStorage.removeItem("agencyos-dark-mode"); } catch (_) {}
+        return;
+      }
+      // It moved, so somebody moved it. From here on every change is a choice,
+      // including one that lands back on the value we started from.
+      themeEverChanged.current = true;
+    }
+    try { localStorage.setItem(THEME_KEY, darkMode ? "dark" : "light"); } catch (_) {}
   }, [darkMode]);
   // Personal default visibility for newly created documents (Darstellung).
   const [docDefaultVisibility, setDocDefaultVisibility] = useState(() => { try { return localStorage.getItem("agencyos-doc-default-visibility") || "workspace"; } catch { return "workspace"; } });
