@@ -50266,6 +50266,8 @@ export default function CircularMenu() {
       const systemPrompt = buildSystemPrompt({
         currentView,
         userName,
+        language: appLanguage,
+        surface: "chat",
         provider: llmProvider,
         workspace: userOrg ? { name: userOrg.name, role: userOrgRole } : null,
         brand: brandProfile,
@@ -50335,9 +50337,26 @@ export default function CircularMenu() {
     }
   };
 
+  // What has been said to the sphere so far, and what it answered. A ref rather
+  // than state: nothing on screen draws from it, and a re-render per turn would
+  // interrupt the speaking animation.
+  //
+  // The sphere used to send ONE message per question, while the typed dialog
+  // sent the whole exchange. So the typed one could be talked with and the
+  // spoken one could not: every question was its first, it could not be asked
+  // "and the other one?", and it re-introduced itself each time. That is what
+  // made it sound like a row of prepared texts rather than a conversation.
+  //
+  // Bounded at eight turns. A spoken exchange that has run longer than that has
+  // moved on, and the far end costs tokens on every question.
+  const voiceHistoryRef = useRef([]);
+  const VOICE_HISTORY_TURNS = 8;
+
   // Send the transcript to the AI (called by both stopVoice and any external invokers)
   const submitVoiceMessage = async (overrideText) => {
     const userMessage = (overrideText ?? "").trim() || "Hello, what can you help me with?";
+    const history = [...voiceHistoryRef.current, { role: "user", content: userMessage }]
+      .slice(-VOICE_HISTORY_TURNS * 2);
     setAiSpeaking(true);
     setAiStatus("thinking");
     aiStoppedRef.current = false;
@@ -50347,6 +50366,10 @@ export default function CircularMenu() {
       const systemPrompt = buildSystemPrompt({
         currentView,
         userName,
+        language: appLanguage,
+        // Spoken, heard once, no scrolling back. A different register from the
+        // typed dialog, which is why the prompt is told which one it is.
+        surface: "voice",
         provider: llmProvider,
         workspace: userOrg ? { name: userOrg.name, role: userOrgRole } : null,
         brand: brandProfile,
@@ -50363,7 +50386,7 @@ export default function CircularMenu() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            message: userMessage,
+            messages: history,
             systemPrompt,
             provider: llmProvider,
             apiKey: activeKey || undefined,
@@ -50386,7 +50409,7 @@ export default function CircularMenu() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  message: userMessage,
+                  messages: history,
                   systemPrompt,
                   provider: llmProvider,
                   oauthToken: freshToken,
@@ -50405,6 +50428,11 @@ export default function CircularMenu() {
       let aiText;
       if (data.content?.[0]?.text) {
         aiText = data.content[0].text;
+        // Committed here and nowhere else. An error message is not something
+        // the assistant said, and a question with no answer is a user turn with
+        // no assistant turn after it, which breaks the alternation the next
+        // request depends on.
+        voiceHistoryRef.current = [...history, { role: "assistant", content: aiText }];
       } else if (data.error) {
         // Make it sound conversational — prepend with a soft tone
         const providerName = data.provider ? data.provider.charAt(0).toUpperCase() + data.provider.slice(1) : "Die KI";
@@ -50543,6 +50571,10 @@ export default function CircularMenu() {
     }
     try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch(e) {}
     setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript("");
+    // Leaving the sphere ends the exchange. Coming back should not have it
+    // still holding half of the last one. askAgain does NOT do this: asking
+    // again is the same conversation carrying on.
+    voiceHistoryRef.current = [];
   };
 
   // Ask another question from the speaking view: interrupt any current speech
