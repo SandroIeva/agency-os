@@ -28223,6 +28223,47 @@ async function zernioRequest(session, body) {
   if (!res.ok) { const e = new Error(data.error || "Zernio request failed"); e.code = data.code; throw e; }
   return data;
 }
+
+// One chip for connecting a channel, wherever the offer is made. It was local
+// to the Analytics tab, so the post composer had no way to show it and sent
+// people over to Analytics instead: you clicked "connect a channel" while
+// writing a post and landed in a dashboard, which is not where you were going.
+//
+// Kept dumb on purpose. The caller owns the busy state and what connecting
+// means, because the two places disagree about where you end up afterwards and
+// about nothing else.
+function ChannelConnectChip({ uiKey, big = false, busy = false, blocked = false, theme, de, onConnect }) {
+  const p = TOUCHPOINT_PLATFORMS.find(x => x.key === uiKey);
+  if (!p) return null;
+  return (
+    <motion.div whileTap={blocked ? {} : { scale: 0.97 }}
+      onClick={() => { if (!busy && !blocked) onConnect?.(uiKey); }}
+      style={{ display: "flex", alignItems: "center", gap: 9,
+        padding: big ? "12px 16px" : "7px 13px 7px 8px", borderRadius: big ? 14 : 999,
+        border: `1px solid ${theme.borderFaint}`, cursor: blocked ? "default" : "pointer",
+        opacity: busy ? 0.6 : 1 }}>
+      <div style={{ width: big ? 30 : 22, height: big ? 30 : 22, borderRadius: big ? 9 : 7, background: p.color,
+        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <svg width={tpGlyphSize(uiKey, big ? 16 : 13)} height={tpGlyphSize(uiKey, big ? 16 : 13)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
+      </div>
+      <span style={{ fontSize: big ? 13.5 : 12.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{p.label}</span>
+      <span style={{ fontSize: 11.5, fontFamily: FONT, fontWeight: 600, color: theme.textDim, marginLeft: big ? "auto" : 2 }}>
+        {busy ? "…" : (de ? "Verbinden" : "Connect")}
+      </span>
+    </motion.div>
+  );
+}
+
+// Where to come back to after Zernio's OAuth. The redirect leaves the app
+// entirely and returns to a bare url, so the screen somebody left from cannot
+// travel in the request. Stashed here and read exactly once, which is the same
+// thing startPinterestOAuth does with its own returnTo and for the same reason.
+const ZERNIO_RETURN_KEY = "agencyos-zernio-return";
+const stashZernioReturn = (view) => { try { localStorage.setItem(ZERNIO_RETURN_KEY, view); } catch (_) {} };
+const takeZernioReturn = () => {
+  try { const v = localStorage.getItem(ZERNIO_RETURN_KEY); localStorage.removeItem(ZERNIO_RETURN_KEY); return v; }
+  catch (_) { return null; }
+};
 // Compact number for metric readouts — "12,4 K" / "1,3 M" (locale-aware comma).
 const fmtMetric = (n, de = true) => {
   n = Number(n) || 0;
@@ -29299,23 +29340,10 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
   const errorText = zernioErrorText(error, de);
 
   // Reusable connect chip (icon + "Verbinden") for a platform.
-  const ConnectChip = ({ uiKey, big = false }) => {
-    const p = platformMeta(uiKey);
-    const busy = busyKey === uiKey;
-    return (
-      <motion.div whileTap={socialBlocked ? {} : { scale: 0.97 }} onClick={() => !busy && !socialBlocked && connect(uiKey)}
-        style={{ display: "flex", alignItems: "center", gap: 9, padding: big ? "12px 16px" : "7px 13px 7px 8px", borderRadius: big ? 14 : 999,
-          border: `1px solid ${theme.borderFaint}`, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>
-        <div style={{ width: big ? 30 : 22, height: big ? 30 : 22, borderRadius: big ? 9 : 7, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <svg width={tpGlyphSize(uiKey, big ? 16 : 13)} height={tpGlyphSize(uiKey, big ? 16 : 13)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
-        </div>
-        <span style={{ fontSize: big ? 13.5 : 12.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{p.label}</span>
-        <span style={{ fontSize: 11.5, fontFamily: FONT, fontWeight: 600, color: theme.textDim, marginLeft: big ? "auto" : 2 }}>
-          {busy ? "…" : (de ? "Verbinden" : "Connect")}
-        </span>
-      </motion.div>
-    );
-  };
+  const ConnectChip = ({ uiKey, big = false }) => (
+    <ChannelConnectChip uiKey={uiKey} big={big} theme={theme} de={de}
+      busy={busyKey === uiKey} blocked={socialBlocked} onConnect={connect} />
+  );
 
   // A website is a channel like any other, so it sits beside the social numbers
   // rather than in a place of its own. Same switch as the messenger uses.
@@ -29357,8 +29385,8 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
           background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
           <span>
             {de
-              ? "Social-Accounts verbinden ist Teil eines bezahlten Plans — in der Testphase noch nicht enthalten."
-              : "Connecting social accounts is part of a paid plan — not included during the trial."}
+              ? "Social-Accounts verbinden gehört zu einem bezahlten Plan. In der Testphase ist es noch nicht enthalten."
+              : "Connecting social accounts is part of a paid plan. It is not included during the trial."}
           </span>
           <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
             onClick={() => openBillingSettings()}
@@ -29638,18 +29666,94 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
 const POST_CHAR_LIMITS = { x: 280, threads: 500, pinterest: 500, instagram: 2200, linkedin: 3000 };
 const POST_OVERLAY_COLORS = ["#FFFFFF", "#15151c", "#F5C518", "#E86767", "#4D9FFF"];
 
-function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage = "de", onOpenAudience, incomingVisual = null }) {
+function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage = "de", incomingVisual = null }) {
   const de = appLanguage === "de";
   const L = (o) => (de ? o.de : o.en);
-  const steps = [{ de: "Text", en: "Text" }, { de: "Visual", en: "Visual" }, { de: "Kanäle", en: "Channels" }];
+  // The picture comes first. Writing a caption for a post you have not seen yet
+  // is the wrong way round, and it is the picture that decides what the text
+  // has to say. "Beschreibung" rather than "Text", because that is what it is:
+  // the words under the image, not the post.
+  const steps = [{ de: "Visual", en: "Visual" }, { de: "Beschreibung", en: "Description" }, { de: "Kanäle", en: "Channels" }];
+  // Named, not counted. Three panels are matched on this index and they are
+  // written in a different order than they are shown, so swapping two steps by
+  // editing bare numbers is how a panel ends up under the wrong tab.
+  const S_VISUAL = 0, S_TEXT = 1, S_CHANNELS = 2;
   const LAST = steps.length - 1;
   const [stepIdx, setStepIdx] = useState(0);
   const [hoverTab, setHoverTab] = useState(null);
 
-  // Accounts (step 1)
+  // Accounts (step 03, Kanäle)
   const [accounts, setAccounts] = useState(null);   // null = loading
   const [selectedIds, setSelectedIds] = useState([]);
-  // Visual (step 2)
+  // Connecting happens HERE now. It used to hand you over to Audience, which
+  // answered "connect a channel" by moving you to an analytics dashboard, in
+  // the middle of writing a post. Same offer, same chip, same OAuth, on the
+  // screen you are already on.
+  const [connectBusy, setConnectBusy] = useState(null);   // uiKey mid-OAuth
+  // Advisory, like the one in Analytics: the real gate is api/zernio.js,
+  // because connecting bills us upstream. This only shows the reason before the
+  // click rather than after it.
+  const socialSlots = currentEntitlements.limits?.socialAccounts ?? 0;
+  const socialBlocked = currentEntitlements.loaded && socialSlots === 0;
+  // Connecting must not cost the post. Text, visual and overlays live in this
+  // component and nowhere else, so a full-page redirect to the consent screen
+  // takes them with it. That was already true of the old "connect a channel"
+  // button, which is why the line above it promising they were saved was not
+  // true. The consent screen goes in a POPUP instead and this window never
+  // navigates, so there is nothing to save in the first place.
+  //
+  // The popup is opened SYNCHRONOUSLY, before the await. Opened afterwards it
+  // is no longer attributable to the click and browsers block it.
+  const connectChannel = async (uiKey) => {
+    if (connectBusy) return;
+    setConnectBusy(uiKey); setError(null);
+    const popup = (() => {
+      // noopener explicitly OFF: the popup reports back through window.opener,
+      // and a browser that defaulted it on would leave it unable to say so.
+      try { return window.open("", "zernio-connect", "width=680,height=760,noopener=no"); }
+      catch (_) { return null; }
+    })();
+    try {
+      const r = await zernioRequest(session, { mode: "connect", orgId: userOrg?.id, platform: zernioKeyFor(uiKey) });
+      if (popup && !popup.closed) {
+        popup.location.href = r.authUrl;
+        // Somebody who shuts the consent screen without finishing sends no
+        // message, and the chip would sit on "…" for the rest of the session.
+        // Watching the window is the only signal there is: the popup is on
+        // another origin for most of its life, so nothing else can be read
+        // from it.
+        const watch = setInterval(() => {
+          if (!popup.closed) return;
+          clearInterval(watch);
+          setConnectBusy(null);
+          // It may have closed BECAUSE it succeeded. Asking costs one request
+          // and settles it either way.
+          loadAccounts();
+        }, 600);
+        return;
+      }
+      // Blocked, or opened into nothing. Fall back to the whole-page redirect
+      // and at least come back to this view rather than to Analytics.
+      stashZernioReturn("createpost");
+      window.location.assign(r.authUrl);
+    } catch (e) {
+      try { popup?.close(); } catch (_) {}
+      setError(e); setConnectBusy(null);
+    }
+  };
+  // The popup says it is done and closes itself (see main.jsx). Reload the
+  // accounts, and the new one is simply there.
+  useEffect(() => {
+    const onMsg = (ev) => {
+      if (ev.origin !== window.location.origin) return;
+      if (ev.data?.type !== "zernio-connected") return;
+      setConnectBusy(null);
+      loadAccounts();
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [userOrg?.id, session?.access_token]);
+  // Visual (step 01)
   const [visual, setVisual] = useState(null);       // { url, w, h } — local object URL + natural dims
   const imageFileRef = useRef(null);
   const [overlays, setOverlays] = useState([]);     // [{ id, text, x, y, size, color, bold }] — x/y/size relative to image
@@ -29696,7 +29800,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const stageRef = useRef(null);
   const overlayDragRef = useRef(null);
   const fileRef = useRef(null);
-  // Text (step 3) + publish (step 4)
+  // Beschreibung (step 02) + publish, which happens on the last step
   const [text, setText] = useState("");
   const [schedule, setSchedule] = useState("");
   const [busy, setBusy] = useState(null);           // "post" | "draft"
@@ -29704,14 +29808,16 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const [error, setError] = useState(null);
   const orgId = userOrg?.id;
 
-  useEffect(() => {
+  // One loader, called on mount and again when a channel has just been
+  // connected in the popup. Named rather than inlined into the effect, because
+  // it now has a second caller and two copies of it would drift.
+  const loadAccounts = useCallback(async () => {
     if (!orgId) return;
-    let on = true;
-    zernioRequest(session, { mode: "status", orgId })
-      .then(r => { if (on) setAccounts(r.accounts || []); })
-      .catch(e => { if (on) { setAccounts([]); setError(e); } });
-    return () => { on = false; };
-  }, [orgId]); // eslint-disable-line
+    try { const r = await zernioRequest(session, { mode: "status", orgId }); setAccounts(r.accounts || []); }
+    catch (e) { setAccounts([]); setError(e); }
+  }, [orgId, session?.access_token]); // eslint-disable-line
+
+  useEffect(() => { loadAccounts(); }, [loadAccounts]);
 
   // Track the editor stage width so overlay font sizes (fractions of the image
   // width) render correctly at any layout size.
@@ -29964,7 +30070,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     color: active ? "#fff" : theme.text, transition: "background .38s cubic-bezier(0.33, 1, 0.68, 1)" }}>
                   <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.5)" : theme.textDim }}>{String(i + 1).padStart(2, "0")}</span>
                   <span style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{L(s)}</span>
-                  {i === 2 && selected.length > 0 && <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.6)" : theme.textDim }}>{selected.length}</span>}
+                  {i === S_CHANNELS && selected.length > 0 && <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.6)" : theme.textDim }}>{selected.length}</span>}
                 </div>
               );
             })}
@@ -29985,7 +30091,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
               <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
 
                 {/* ── 03 Kanäle, and publishing ── */}
-                {stepIdx === 2 && (<>
+                {stepIdx === S_CHANNELS && (<>
                   {(accounts || []).length > 0 && stepHead(de ? "Kanäle" : "Channels",
                     de ? "Wohin soll der Post? Rechts siehst du, wie er ankommt." : "Where should this post go? On the right you see how it arrives.")}
                   {accounts == null ? (
@@ -30009,13 +30115,32 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         {de ? "Noch kein Kanal verbunden" : "No channel connected yet"}
                       </div>
                       <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 420 }}>
-                        {de ? "Dein Text und dein Visual sind gespeichert. Verbinde einen Kanal, dann erscheinen hier die Accounts, der Zeitpunkt und die Vorschau."
-                            : "Your text and visual are kept. Connect a channel and the accounts, the timing and the preview appear here."}
+                        {de ? "Dein Visual und deine Beschreibung sind gespeichert. Verbinde einen Kanal, dann erscheinen hier die Accounts, der Zeitpunkt und die Vorschau."
+                            : "Your visual and your description are kept. Connect a channel and the accounts, the timing and the preview appear here."}
                       </div>
-                      <motion.button whileTap={{ scale: 0.97 }} onClick={onOpenAudience}
-                        style={{ ...footBtn, marginTop: 15, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff" }}>
-                        {de ? "Kanal verbinden" : "Connect a channel"}
-                      </motion.button>
+                      {socialBlocked ? (
+                        <div style={{ marginTop: 15, padding: "12px 16px", borderRadius: 14, maxWidth: 460,
+                          display: "flex", alignItems: "center", justifyContent: "center", gap: 14, flexWrap: "wrap",
+                          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                          border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
+                          <span>{de
+                            ? "Social-Accounts verbinden gehört zu einem bezahlten Plan. In der Testphase ist es noch nicht enthalten."
+                            : "Connecting social accounts is part of a paid plan. It is not included during the trial."}</span>
+                          <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => openBillingSettings()}
+                            style={{ ...primaryBtn(darkMode), padding: "7px 15px", borderRadius: 999, border: "none", flexShrink: 0,
+                              fontFamily: FONT, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                            {de ? "Plan wählen" : "Choose a plan"}
+                          </motion.button>
+                        </div>
+                      ) : (
+                        /* The same chips Analytics offers, on this screen. */
+                        <div style={{ marginTop: 15, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+                          {ZERNIO_UI_PLATFORMS.map(k => (
+                            <ChannelConnectChip key={k} uiKey={k} big theme={theme} de={de}
+                              busy={connectBusy === k} onConnect={connectChannel} />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : (<>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -30036,12 +30161,18 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           </motion.div>
                         );
                       })}
+                      {!socialBlocked && ZERNIO_UI_PLATFORMS
+                        .filter(k => !accounts.some(a => uiKeyFor(a.platform) === k))
+                        .map(k => (
+                          <ChannelConnectChip key={k} uiKey={k} theme={theme} de={de}
+                            busy={connectBusy === k} onConnect={connectChannel} />
+                        ))}
                     </div>
                   </>)}
                 </>)}
 
                 {/* ── 02 Visual — mini creator: image + draggable text overlays ── */}
-                {stepIdx === 1 && (<>
+                {stepIdx === S_VISUAL && (<>
                   {stepHead("Visual", de ? "Woher kommt das Bild?" : "Where does the picture come from?")}
                   <input ref={fileRef} type="file" accept="image/*" onChange={onPickImage} style={{ display: "none" }} />
                   {!visual ? (
@@ -30126,8 +30257,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 </>)}
 
                 {/* ── 01 Text ── */}
-                {stepIdx === 0 && (<>
-                  {stepHead(de ? "Text" : "Text", de ? "Schreib, was du teilen willst. Die Kanäle kommen zum Schluss, dann steht auch das Zeichenlimit fest." : "Write what you want to share. Channels come last, and so does the character limit.")}
+                {stepIdx === S_TEXT && (<>
+                  {stepHead(de ? "Beschreibung" : "Description", de ? "Schreib, was du teilen willst. Die Kanäle kommen zum Schluss, dann steht auch das Zeichenlimit fest." : "Write what you want to share. Channels come last, and so does the character limit.")}
                   {/* The field takes the height that is there. It used to be a
                       fixed 320 inside a box that fills the panel, which left
                       the box scrolling around a half-empty field. */}
@@ -47133,11 +47264,19 @@ export default function CircularMenu() {
       setSettingsTab("account"); // billing now lives under the Account tab
       setCurrentView("settings");
     }
-    // Zernio OAuth return (?zernio=connected&connected={platform}&accountId=…):
-    // jump straight back to Audience → Analytics so the user sees the new account.
+    // Zernio OAuth return (?zernio=connected&connected={platform}&accountId=…).
+    // Back to whichever screen asked, which for everything except the post
+    // composer is Audience → Analytics, where the new account is shown. The
+    // composer stashes its own name before it leaves: connecting a channel
+    // mid-post used to end in a dashboard, with the post still upstairs.
     if (params.get("zernio") === "connected") {
-      setAudienceInitialTab("analytics");
-      setCurrentView("touchpoints");
+      const back = takeZernioReturn();
+      if (back === "createpost") {
+        setCurrentView("createpost");
+      } else {
+        setAudienceInitialTab("analytics");
+        setCurrentView("touchpoints");
+      }
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [session?.user?.id, userOrg?.id]);
@@ -51898,8 +52037,7 @@ export default function CircularMenu() {
         {/* CREATE SOCIAL MEDIA POST */}
         <AnimatePresence>
           {currentView === "createpost" && (
-            <CreatePostView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} appLanguage={appLanguage} incomingVisual={postVisual} onBack={() => setCurrentView("dashboard")}
-              onOpenAudience={() => { setAudienceInitialTab("analytics"); setCurrentView("touchpoints"); }} />
+            <CreatePostView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} appLanguage={appLanguage} incomingVisual={postVisual} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
