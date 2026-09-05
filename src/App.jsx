@@ -1606,6 +1606,237 @@ function Dropdown({ value, onChange, options = [], placeholder = "Auswählen", t
 // Deliberately not one of the start-view first steps. Those are things to try;
 // this is a setting, and it needs the reason spelled out before someone goes
 // looking for an API key.
+// ── The tour, shown once, between "your workspace exists" and the dashboard ──
+//
+// A workspace opens on a dashboard that assumes you know what the app is for.
+// Five slides say what it is, and the last one asks for the thing without which
+// half of it does nothing: a model key.
+//
+// The pictures are NOT here yet. Every slide carries `image: null` and the
+// renderer draws a placeholder for it, so handing over the real ones later is
+// one line per slide and nothing else moves.
+const TOUR_SEEN = "agencyos-tour-seen";
+
+// A placeholder that looks meant rather than missing. Line work on a soft wash,
+// in the accent of its own slide, drawn from the same 24-unit grid and 1.8
+// stroke as every other icon in the app. No text on it: a label like "image
+// follows" is right for a week and wrong forever after.
+function TourArt({ kind, tint }) {
+  const stroke = { fill: "none", stroke: "rgba(255,255,255,0.34)", strokeWidth: 1.1, strokeLinecap: "round", strokeLinejoin: "round" };
+  const art = {
+    // A brand: a mark, a palette, a line of type.
+    brand: (<>
+      <circle cx="26" cy="24" r="9" {...stroke} />
+      <path d="M46 15h30M46 24h22M46 33h26" {...stroke} />
+      <rect x="14" y="46" width="16" height="16" rx="4" {...stroke} />
+      <rect x="34" y="46" width="16" height="16" rx="4" {...stroke} />
+      <rect x="54" y="46" width="16" height="16" rx="4" {...stroke} />
+      <rect x="74" y="46" width="16" height="16" rx="4" {...stroke} />
+    </>),
+    // Making: a canvas with a shape and a caret on it.
+    make: (<>
+      <rect x="12" y="12" width="54" height="40" rx="5" {...stroke} />
+      <circle cx="30" cy="28" r="7" {...stroke} />
+      <path d="M20 46l14-13 12 11 8-6 12 8" {...stroke} />
+      <path d="M74 26l7 7-7 7" {...stroke} />
+      <path d="M72 58h20M72 66h14" {...stroke} />
+    </>),
+    // Keeping: stacked sheets and a folder tab.
+    keep: (<>
+      <path d="M12 24v34a3 3 0 003 3h34a3 3 0 003-3V22a3 3 0 00-3-3H30l-4-5H15a3 3 0 00-3 3z" {...stroke} />
+      <rect x="60" y="14" width="30" height="22" rx="4" {...stroke} />
+      <rect x="60" y="42" width="30" height="22" rx="4" {...stroke} />
+      <path d="M66 25h18M66 53h12" {...stroke} />
+    </>),
+    // Planning: three columns with cards, and a line of time under them.
+    plan: (<>
+      <rect x="12" y="12" width="22" height="14" rx="3" {...stroke} />
+      <rect x="12" y="31" width="22" height="14" rx="3" {...stroke} />
+      <rect x="40" y="12" width="22" height="14" rx="3" {...stroke} />
+      <rect x="68" y="12" width="22" height="22" rx="3" {...stroke} />
+      <path d="M12 58h78" {...stroke} />
+      <circle cx="26" cy="58" r="3.5" {...stroke} />
+      <circle cx="54" cy="58" r="3.5" {...stroke} />
+      <circle cx="79" cy="58" r="3.5" {...stroke} />
+    </>),
+    // The assistant: the sphere, and sound coming off it.
+    ai: (<>
+      <circle cx="40" cy="38" r="20" {...stroke} />
+      <path d="M26 30c7 5 21 5 28 0M26 46c7-5 21-5 28 0" {...stroke} />
+      <path d="M68 26a18 18 0 010 24M76 20a26 26 0 010 36" {...stroke} />
+    </>),
+  }[kind] || null;
+  return (
+    <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", borderRadius: 20, overflow: "hidden",
+      background: `linear-gradient(140deg, ${tint}2e 0%, rgba(255,255,255,0.04) 55%, rgba(255,255,255,0.02) 100%)`,
+      border: "1px solid rgba(255,255,255,0.09)" }}>
+      <svg viewBox="0 0 102 76" preserveAspectRatio="xMidYMid meet"
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", padding: "14%", boxSizing: "border-box" }}>
+        {art}
+      </svg>
+    </div>
+  );
+}
+
+function OnboardingTour({ appLanguage = "de", userName = "", onFinish, onSaveKey }) {
+  const de = appLanguage === "de";
+  const [idx, setIdx] = useState(0);
+  // The key slide's own two fields, same shape as AiKeyIntro's: never seeded
+  // from a stored key, because a password field that echoes one back gets
+  // pasted into and silently concatenates.
+  const KEY_PROVIDERS = [
+    { id: "gemini", name: "Gemini",  sub: "Google",    placeholder: "AIza...",          url: "https://aistudio.google.com/apikey" },
+    { id: "claude", name: "Claude",  sub: "Anthropic", placeholder: "sk-ant-api03-...", url: "https://console.anthropic.com/settings/keys" },
+    { id: "openai", name: "ChatGPT", sub: "OpenAI",    placeholder: "sk-...",           url: "https://platform.openai.com/api-keys" },
+  ];
+  const [pick, setPick] = useState("gemini");
+  const [draft, setDraft] = useState("");
+  const chosen = KEY_PROVIDERS.find(x => x.id === pick) || KEY_PROVIDERS[0];
+
+  // What the app is, in the order somebody would meet it: define, make, keep,
+  // plan. Then the one thing it needs from them.
+  const SLIDES = de ? [
+    { art: "brand", tint: "#5B8DEF", image: null, kicker: "Brand",
+      title: "Deine Marke, an einem Ort",
+      body: "Strategie, Identität und Design System liegen zusammen: Vision und Personas, Claim und Tonalität, Logo, Farben und Typografie. Eine bestehende Marke liest i7OS aus einer Website, einem Brand Book oder einer Figma-Datei ein. Jedes Projekt kann seine eigene Marke haben, was für eine Agentur der entscheidende Teil ist." },
+    { art: "make", tint: "#E88D67", image: null, kicker: "Erstellen",
+      title: "Hier wird gearbeitet, nicht nur verwaltet",
+      body: "Artboards für Layouts, mit Text, Formen, Verläufen und Ebenen, und Designs aus Figma kommen editierbar herein. Brainstorm ist eine unendliche Leinwand für Notizen, Skizzen und Mindmaps, zu mehreren gleichzeitig. Dazu Dokumente mit Kommentaren und ein Composer für Social Posts." },
+    { art: "keep", tint: "#00B894", image: null, kicker: "Files",
+      title: "Alles, was entsteht, bleibt beieinander",
+      body: "Medien, Dokumente und gespeicherte Links in einem Ort, mit Ordnern und Suche. Moodboards sammeln Referenzen, auch direkt von einem verbundenen Pinterest-Board." },
+    { art: "plan", tint: "#F59E0B", image: null, kicker: "Planen",
+      title: "Und der Rest des Tages",
+      body: "Aufgaben, Kanban, Timeline für Sprints und ein Kalender, der sich mit Google abgleicht. Der Messenger hält das Team zusammen, und Benachrichtigungen erreichen dich auch in Telegram oder Slack, wo du direkt darauf reagieren kannst." },
+    { art: "ai", tint: "#8B7AFF", image: null, kicker: "Assistent", key: true,
+      title: "Und einer, der mitdenkt",
+      body: "Der Assistent kennt deine Marke und deine Projekte. Er schreibt Taglines und Texte, baut Personas, analysiert Wettbewerber und leitet Prompts aus Bildern ab. Sprich ihn an oder tipp ihm. Er läuft über deinen eigenen Schlüssel beim Anbieter, wir rechnen nichts dafür ab." },
+  ] : [
+    { art: "brand", tint: "#5B8DEF", image: null, kicker: "Brand",
+      title: "Your brand, in one place",
+      body: "Strategy, identity and design system sit together: vision and personas, claim and tone of voice, logo, colours and typography. An existing brand can be read straight out of a website, a brand book or a Figma file. Every project can carry a brand of its own, which is the part that matters for an agency." },
+    { art: "make", tint: "#E88D67", image: null, kicker: "Create",
+      title: "A place to make things, not just track them",
+      body: "Artboards for layouts, with text, shapes, gradients and layers, and designs from Figma arrive editable. Brainstorm is an infinite canvas for notes, sketches and mind maps, with several people at once. Plus documents with comments and a composer for social posts." },
+    { art: "keep", tint: "#00B894", image: null, kicker: "Files",
+      title: "Everything you make stays together",
+      body: "Media, documents and saved links in one place, with folders and search. Moodboards collect references, including straight from a connected Pinterest board." },
+    { art: "plan", tint: "#F59E0B", image: null, kicker: "Plan",
+      title: "And the rest of the day",
+      body: "Tasks, Kanban, a timeline for sprints and a calendar that syncs with Google. Messenger keeps the team together, and notifications reach you in Telegram or Slack, where you can act on them directly." },
+    { art: "ai", tint: "#8B7AFF", image: null, kicker: "Assistant", key: true,
+      title: "And one that thinks along",
+      body: "The assistant knows your brand and your projects. It writes taglines and copy, builds personas, analyses competitors and derives prompts from images. Speak to it or type. It runs on your own key with the provider, and we charge nothing for it." },
+  ];
+
+  const LAST = SLIDES.length - 1;
+  const slide = SLIDES[idx];
+  const next = () => (idx < LAST ? setIdx(i => i + 1) : onFinish?.());
+  const saveKey = () => { const k = draft.trim(); if (k) onSaveKey?.(chosen.id, k); onFinish?.(); };
+
+  const ghost = { padding: "12px 20px", borderRadius: 13, background: "transparent",
+    border: "1px solid rgba(255,255,255,0.14)", color: "#ffffff70",
+    fontSize: 13.5, fontWeight: 500, fontFamily: FONT, cursor: "pointer" };
+  const solid = { padding: "12px 24px", borderRadius: 13, border: "none",
+    background: PRIMARY_BTN_DARK.background, color: PRIMARY_BTN_DARK.color,
+    fontSize: 13.5, fontWeight: 600, fontFamily: FONT, cursor: "pointer" };
+
+  return (
+    <div style={{ width: "100%" }}>
+      {/* Image left, words right. Below 820 they stack, picture first, because a
+          half-width picture beside a half-width paragraph is unreadable on a
+          phone. */}
+      <div style={{ display: "grid", gap: 40, alignItems: "center",
+        gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
+        <motion.div key={`art-${idx}`}
+          initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1] }}>
+          {slide.image
+            ? <img src={slide.image} alt=""
+                style={{ width: "100%", aspectRatio: "4 / 3", objectFit: "cover", borderRadius: 20, display: "block",
+                  border: "1px solid rgba(255,255,255,0.09)" }} />
+            : <TourArt kind={slide.art} tint={slide.tint} />}
+        </motion.div>
+
+        <motion.div key={`txt-${idx}`}
+          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.06, ease: [0.22, 0.68, 0.35, 1] }}>
+          <div style={{ fontSize: 11.5, fontFamily: FONT, fontWeight: 600, letterSpacing: 1.4,
+            textTransform: "uppercase", color: slide.tint, marginBottom: 12 }}>{slide.kicker}</div>
+          <div style={{ fontSize: 27, fontWeight: 300, letterSpacing: -0.6, lineHeight: 1.25,
+            color: "#ffffffdd", fontFamily: FONT, marginBottom: 14 }}>{slide.title}</div>
+          <div style={{ fontSize: 14, lineHeight: 1.7, color: "#ffffff62", fontFamily: FONT }}>{slide.body}</div>
+
+          {/* The last slide asks for the key, in place. Pointing at a settings
+              tab from inside a tour would end the tour to do one thing. */}
+          {slide.key && (
+            <div style={{ marginTop: 22 }}>
+              <div style={{ display: "flex", gap: 7, marginBottom: 10 }}>
+                {KEY_PROVIDERS.map(pr => {
+                  const on = pr.id === pick;
+                  return (
+                    <motion.div key={pr.id} whileTap={{ scale: 0.97 }}
+                      onClick={() => { setPick(pr.id); setDraft(""); }}
+                      style={{ flex: 1, padding: "9px 8px", borderRadius: 11, cursor: "pointer", textAlign: "center",
+                        transition: "all 0.18s ease",
+                        background: on ? PRIMARY_BTN_DARK.background : "rgba(255,255,255,0.05)",
+                        border: `1px solid ${on ? PRIMARY_BTN_DARK.background : "rgba(255,255,255,0.12)"}` }}>
+                      <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
+                        color: on ? PRIMARY_BTN_DARK.color : "#ffffffcc" }}>{pr.name}</div>
+                      <div style={{ fontSize: 10.5, fontFamily: FONT, marginTop: 1,
+                        color: on ? "rgba(21,21,28,0.55)" : "#ffffff40" }}>{pr.sub}</div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+              <input type="password" value={draft} autoComplete="off"
+                onChange={e => setDraft(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") saveKey(); }}
+                placeholder={chosen.placeholder}
+                style={{ width: "100%", boxSizing: "border-box", padding: "12px 15px", borderRadius: 12,
+                  background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
+                  color: "#ffffffdd", fontSize: 13.5, fontFamily: FONT, outline: "none" }} />
+              <div style={{ marginTop: 8, textAlign: "right" }}>
+                <a href={chosen.url} target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize: 11.5, fontFamily: FONT, color: "#ffffff50", textDecoration: "none" }}>
+                  {de ? `Schlüssel bei ${chosen.sub} holen` : `Get a key from ${chosen.sub}`}
+                </a>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      </div>
+
+      {/* Dots left, buttons right. The dots are clickable: a tour you can only
+          go forwards through is a slideshow. */}
+      <div style={{ marginTop: 38, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 7, marginRight: "auto" }}>
+          {SLIDES.map((_, i) => (
+            <div key={i} onClick={() => setIdx(i)}
+              style={{ width: i === idx ? 22 : 7, height: 7, borderRadius: 999, cursor: "pointer",
+                background: i === idx ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.2)",
+                transition: "width 0.3s ease, background 0.3s ease" }} />
+          ))}
+        </div>
+        {idx > 0 && (
+          <motion.button whileTap={{ scale: 0.97 }} onClick={() => setIdx(i => i - 1)} style={ghost}>
+            {de ? "Zurück" : "Back"}
+          </motion.button>
+        )}
+        <motion.button whileTap={{ scale: 0.97 }} onClick={onFinish}
+          style={{ ...ghost, border: "none", color: "#ffffff45" }}>
+          {de ? "Überspringen" : "Skip"}
+        </motion.button>
+        <motion.button whileTap={{ scale: 0.97 }} onClick={idx === LAST ? saveKey : next} style={solid}>
+          {idx === LAST
+            ? (draft.trim() ? (de ? "Speichern und loslegen" : "Save and get started") : (de ? "Loslegen" : "Get started"))
+            : (de ? "Weiter" : "Next")}
+        </motion.button>
+      </div>
+    </div>
+  );
+}
+
 function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, onSaveKey }) {
   const de = appLanguage === "de";
   // Where each key comes from. Named rather than described: somebody who has
@@ -46625,8 +46856,30 @@ export default function CircularMenu() {
   const [newWsName, setNewWsName] = useState("");
   const [creatingWs, setCreatingWs] = useState(false);
   const [orgLoading, setOrgLoading] = useState(true);       // loading org check
-  const [onboardingStep, setOnboardingStep] = useState(null); // null = skip, "choose" | "create" | "join"
+  const [onboardingStep, setOnboardingStep] = useState(null); // null = skip, "choose" | "create" | "join" | "tour"
   const [onboardingError, setOnboardingError] = useState(null);
+
+  // Where onboarding goes once there IS a workspace. Five places arrive here,
+  // two ways of creating one and three of joining, and a step added to four of
+  // them is a step half the people never see. Same reasoning as
+  // insertOrganization, which exists because the same arithmetic got copied.
+  //
+  // Shown once ever, not once per workspace: somebody making their second
+  // workspace has already read it.
+  const finishOnboarding = () => {
+    let seen = false;
+    try { seen = localStorage.getItem(TOUR_SEEN) === "1"; } catch (_) { /* no storage, show it */ }
+    setOnboardingStep(seen ? null : "tour");
+  };
+  const closeTour = () => {
+    try {
+      localStorage.setItem(TOUR_SEEN, "1");
+      // The tour's last slide IS the key dialog. Whoever has just been through
+      // it must not be met by the same question again on the dashboard.
+      localStorage.setItem("agencyos-ai-key-intro", "seen");
+    } catch (_) {}
+    setOnboardingStep(null);
+  };
   const [orgMembers, setOrgMembers] = useState([]);          // team members for chat etc.
   const [docDeepLink, setDocDeepLink] = useState(null);      // open a document from a notification: { documentId, blockId, ts }
   const [assetDeepLink, setAssetDeepLink] = useState(null);  // open an asset from a notification: { url, ts }
@@ -51410,13 +51663,42 @@ export default function CircularMenu() {
               position: "absolute", inset: 0, zIndex: 99,
               background: "#111117",
               display: "flex", flexDirection: "column",
-              alignItems: "center", justifyContent: "center",
+              alignItems: "center",
+              // The steps before the tour ask one question and always fit, so
+              // they simply centre. The tour is a picture, a paragraph, three
+              // chips and a field, and stacked on a phone that is 796px:
+              // measured against a 375x667 screen the "Loslegen" button sat 129
+              // below the fold, in a container that does not scroll, so the last
+              // slide could not be finished at all.
+              //
+              // justifyContent centre plus overflow clips the TOP instead of
+              // scrolling to it. Margin auto on the child is the pattern that
+              // does both: centred while it fits, scrollable once it does not.
+              justifyContent: onboardingStep === "tour" ? "flex-start" : "center",
+              overflowY: onboardingStep === "tour" ? "auto" : "visible",
+              padding: onboardingStep === "tour" ? "40px 0" : 0,
+              boxSizing: "border-box",
             }}
           >
             <DotGrid darkMode={true} />
             {/* No AnimatedBlob here. On a screen that asks one question it was the brightest thing on it,
                 and it sat in the corner where nothing is. */}
-            <div style={{ position: "relative", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "center", maxWidth: 480, width: "100%", padding: "0 24px" }}>
+            <div style={{ position: "relative", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "center",
+              // The tour is a picture beside a paragraph, so it needs the room
+              // the one-question screens before it deliberately do not take.
+              maxWidth: onboardingStep === "tour" ? 1000 : 480, width: "100%", padding: "0 24px",
+              margin: onboardingStep === "tour" ? "auto 0" : 0, flexShrink: 0 }}>
+
+              {onboardingStep === "tour" && (
+                <OnboardingTour appLanguage={appLanguage} userName={userName}
+                  onFinish={closeTour}
+                  onSaveKey={(provider, key) => {
+                    // The same two writes the settings panel makes, so a key
+                    // entered here is the key the app uses.
+                    setLlmKeys(prev => ({ ...prev, [provider]: key }));
+                    setLlmProvider(provider);
+                  }} />
+              )}
 
               {/* ── Step: Choose ── */}
               {onboardingStep === "choose" && (<>
@@ -51553,7 +51835,7 @@ export default function CircularMenu() {
                           // immediately, not only after the next full login.
                           const orgWithRole = { ...org, role: "admin" };
                           setUserOrgs(prev => [...prev.filter(o => o.id !== org.id), orgWithRole]);
-                          setUserOrg(orgWithRole); setUserOrgRole("admin"); setOnboardingStep(null); setWsName("");
+                          setUserOrg(orgWithRole); setUserOrgRole("admin"); finishOnboarding(); setWsName("");
                         } catch (err) { console.error("[Onboarding]", err); setOnboardingError(planLimitError(err, appLanguage === "de") || (appLanguage === "de" ? "Fehler beim Erstellen. Bitte versuche es erneut." : "Failed to create workspace. Please try again.")); setWsCreating(false); }
                       }}
                       placeholder={appLanguage === "de" ? "z.B. Meine Agentur" : "e.g. My Agency"}
@@ -51580,7 +51862,7 @@ export default function CircularMenu() {
                           // immediately, not only after the next full login.
                           const orgWithRole = { ...org, role: "admin" };
                           setUserOrgs(prev => [...prev.filter(o => o.id !== org.id), orgWithRole]);
-                          setUserOrg(orgWithRole); setUserOrgRole("admin"); setOnboardingStep(null); setWsName("");
+                          setUserOrg(orgWithRole); setUserOrgRole("admin"); finishOnboarding(); setWsName("");
                         } catch (err) { console.error("[Onboarding]", err); setOnboardingError(planLimitError(err, appLanguage === "de") || (appLanguage === "de" ? "Fehler beim Erstellen. Bitte versuche es erneut." : "Failed to create workspace. Please try again.")); setWsCreating(false); }
                       }}
                       disabled={!wsName.trim() || wsCreating}
@@ -51648,7 +51930,7 @@ export default function CircularMenu() {
                               if (memErr) throw memErr;
                               await supabase.from("invitations").update({ status: "accepted" }).eq("id", inv.id);
                               const { data: org } = await supabase.from("organizations").select("*").eq("id", inv.org_id).single();
-                              setUserOrg(org); setOnboardingStep(null);
+                              setUserOrg(org); finishOnboarding();
                             } catch (e) { setOnboardingError(joinBlockedMessage(e, appLanguage === "de") || (appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join.")); setJoining(false); }
                           }}
                           style={{
@@ -51694,7 +51976,7 @@ export default function CircularMenu() {
                           if (memErr) throw memErr;
                           await supabase.from("invitations").update({ status: "accepted" }).eq("id", inv.id);
                           const { data: org } = await supabase.from("organizations").select("*").eq("id", inv.org_id).single();
-                          setUserOrg(org); setOnboardingStep(null); setInviteCode("");
+                          setUserOrg(org); finishOnboarding(); setInviteCode("");
                         } catch (err) { setOnboardingError(joinBlockedMessage(err, appLanguage === "de") || (appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join.")); setJoining(false); }
                       }}
                       placeholder={appLanguage === "de" ? "Code einfügen..." : "Paste invite code..."}
@@ -51717,7 +51999,7 @@ export default function CircularMenu() {
                           if (memErr) throw memErr;
                           await supabase.from("invitations").update({ status: "accepted" }).eq("id", inv.id);
                           const { data: org } = await supabase.from("organizations").select("*").eq("id", inv.org_id).single();
-                          setUserOrg(org); setOnboardingStep(null); setInviteCode("");
+                          setUserOrg(org); finishOnboarding(); setInviteCode("");
                         } catch (err) { setOnboardingError(joinBlockedMessage(err, appLanguage === "de") || (appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join.")); setJoining(false); }
                       }}
                       disabled={!inviteCode.trim() || joining}
