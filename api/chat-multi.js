@@ -79,20 +79,44 @@ async function postJSONRetry(url, headers, body, label, retries = 2) {
   return last;
 }
 
-// Best-effort: translate raw provider errors into something a user can act on.
-function hintFor(provider, statusCode, raw) {
+// Where a key is entered, named the same as the tab it is in. The server used
+// to say "Settings → AI-Modelle", which is not what that tab is called.
+const AI_SETTINGS = { de: "Einstellungen → KI & Modelle", en: "Settings → AI & Models" };
+
+// Best-effort: translate raw provider errors into something a user can act on,
+// in the language the app is running in. These strings were German only, so an
+// English workspace read a German sentence off an otherwise English screen.
+// The client sends `language`; anything it does not send falls back to German,
+// which is what the product defaults to.
+function hintFor(provider, statusCode, raw, lang = "de") {
+  const de = lang !== "en";
+  const where = de ? AI_SETTINGS.de : AI_SETTINGS.en;
   const msg = (raw || "").toLowerCase();
   if (statusCode === 401 || /invalid.*api.?key|unauthor/i.test(msg)) {
-    return `${provider} API-Key ist ungültig oder fehlt. Bitte Settings → AI-Modelle prüfen.`;
+    return de
+      ? `Der ${provider}-Key ist ungültig oder fehlt. Bitte unter ${where} prüfen.`
+      : `The ${provider} key is invalid or missing. Check ${where}.`;
   }
   if (statusCode === 403 || /permission|forbidden|access.*denied/i.test(msg)) {
-    return `${provider} API-Key hat keinen Zugriff auf dieses Modell. Eventuell muss der Key freigeschaltet werden.`;
+    return de
+      ? `Der ${provider}-Key hat keinen Zugriff auf dieses Modell. Eventuell muss er dafür freigeschaltet werden.`
+      : `The ${provider} key has no access to this model. It may need to be enabled for it.`;
   }
   if (statusCode === 429 || /rate.?limit|quota|exceeded/i.test(msg)) {
-    return `${provider} hat dich gerade rate-limited. Kurz warten und nochmal probieren.`;
+    return de
+      ? `${provider} hat gerade zu viele Anfragen von dir. Kurz warten, dann nochmal.`
+      : `${provider} is rate limiting you right now. Wait a moment, then try again.`;
   }
-  if (statusCode >= 500) return `${provider} hat einen Server-Fehler — ist meist temporär.`;
-  if (/model.*not.*found|invalid.*model/i.test(msg)) return `Modell wurde von ${provider} nicht gefunden. Anderes Modell wählen.`;
+  if (statusCode >= 500) {
+    return de
+      ? `${provider} hat einen Serverfehler. Das ist meistens vorübergehend.`
+      : `${provider} returned a server error. That is usually temporary.`;
+  }
+  if (/model.*not.*found|invalid.*model/i.test(msg)) {
+    return de
+      ? `${provider} kennt dieses Modell nicht. Wähl ein anderes unter ${where}.`
+      : `${provider} does not know this model. Pick another one under ${where}.`;
+  }
   return null;
 }
 
@@ -104,7 +128,8 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { message, messages, systemPrompt, provider = "claude", apiKey, oauthToken, model, maxTokens, wantsImage, image, imageOrientation, orgId, userId, feature } = req.body || {};
+  const { message, messages, systemPrompt, provider = "claude", apiKey, oauthToken, model, maxTokens, wantsImage, image, imageOrientation, orgId, userId, feature, language } = req.body || {};
+  const lang = language === "en" ? "en" : "de";
   // Everything is BYOK today (user's own key / Google OAuth). When a managed
   // company key is added later, that path will pass byok:false to bill credits.
   const byok = Boolean(apiKey || oauthToken);
@@ -123,7 +148,10 @@ export default async function handler(req, res) {
   if (conversation.length === 0) return res.status(400).json({ error: "Keine Nachricht erhalten." });
   if (!apiKey && !oauthToken) {
     return res.status(400).json({
-      error: `Kein API-Key für ${provider} hinterlegt. Settings → AI-Modelle.`,
+      error: lang === "en"
+        ? `No API key stored for ${provider}. Add one under ${AI_SETTINGS.en}.`
+        : `Kein API-Key für ${provider} hinterlegt. Einzutragen unter ${AI_SETTINGS.de}.`,
+      code: "no_ai",
       provider,
     });
   }
@@ -177,7 +205,7 @@ export default async function handler(req, res) {
       if (!response.ok) {
         const raw = data.error?.message || JSON.stringify(data.error) || "";
         return res.status(response.status).json({
-          error: hintFor("Claude", response.status, raw) || raw || "Claude API-Fehler",
+          error: hintFor("Claude", response.status, raw, lang) || raw || (lang === "en" ? "Claude API error" : "Claude API-Fehler"),
           provider: "claude",
           statusCode: response.status,
           rawError: raw,
@@ -268,7 +296,7 @@ export default async function handler(req, res) {
           const verifyHit = /must be verified|verify.*organization/i.test(raw);
           const hint = verifyHit
             ? "OpenAI verlangt für die Bild-Generierung eine verifizierte Organisation. Im OpenAI-Dashboard unter Settings → Organization → Verification kannst du das anstoßen. Alternativ: Gemini-API wählen (funktioniert ohne Verifikation)."
-            : (hintFor("OpenAI Image", r.status, raw) || raw);
+            : (hintFor("OpenAI Image", r.status, raw, lang) || raw);
           return res.status(r.status).json({
             error: hint,
             provider: "openai",
@@ -307,7 +335,7 @@ export default async function handler(req, res) {
       if (!response.ok) {
         const raw = data.error?.message || JSON.stringify(data.error) || "";
         return res.status(response.status).json({
-          error: hintFor("OpenAI", response.status, raw) || raw || "OpenAI API-Fehler",
+          error: hintFor("OpenAI", response.status, raw, lang) || raw || (lang === "en" ? "OpenAI API error" : "OpenAI API-Fehler"),
           provider: "openai",
           statusCode: response.status,
           rawError: raw,
@@ -538,7 +566,7 @@ export default async function handler(req, res) {
         if (response.status !== 404 && !/model.*not.*found|not.*supported|is not available/i.test(raw)) {
           console.error("Gemini API error:", raw);
           return res.status(response.status).json({
-            error: hintFor("Gemini", response.status, raw) || raw || "Gemini API-Fehler",
+            error: hintFor("Gemini", response.status, raw, lang) || raw || (lang === "en" ? "Gemini API error" : "Gemini API-Fehler"),
             provider: "gemini",
             statusCode: response.status,
             rawError: raw,
@@ -548,7 +576,7 @@ export default async function handler(req, res) {
 
       if (!response.ok) {
         return res.status(response.status).json({
-          error: hintFor("Gemini", response.status, lastRaw) || lastRaw || "Gemini API-Fehler",
+          error: hintFor("Gemini", response.status, lastRaw, lang) || lastRaw || (lang === "en" ? "Gemini API error" : "Gemini API-Fehler"),
           provider: "gemini",
           statusCode: response.status,
           rawError: lastRaw,

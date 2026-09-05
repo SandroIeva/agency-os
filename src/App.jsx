@@ -11227,6 +11227,70 @@ function setCurrentEntitlements(e) {
 let openBillingSettings = () => {};
 function setBillingSettingsOpener(fn) { openBillingSettings = typeof fn === "function" ? fn : () => {}; }
 
+// Same again for the AI settings, and for the same reason: a dozen places have
+// to be able to say "connect a model" and none of them can switch a view.
+let openAiSettings = () => {};
+function setAiSettingsOpener(fn) { openAiSettings = typeof fn === "function" ? fn : () => {}; }
+
+// ── Is there a model behind the AI features? ─────────────────────────────────
+// ONE answer, read by every feature that needs one, because the app used to
+// have four copies of this expression and they all said the same wrong thing:
+//
+//     (llmKeys[llmProvider]) || llmProvider === "gemini"
+//
+// The second half made Gemini count as connected on its own, and "gemini" is
+// the default provider for an account that has never opened the settings. So a
+// new workspace was told it had AI, offered every AI feature, and got a refusal
+// from each one. The most common state in the product was the one nothing
+// warned about.
+//
+// Gemini earns no exemption. It authenticates with the user's Google sign-in,
+// and this app asks Google for exactly two scopes, drive.file and
+// calendar.events. Neither of them opens generativelanguage.googleapis.com. The
+// token is real, it is just not a key for this.
+//
+// Everything is BYOK today: api/chat-multi refuses a request carrying no
+// credential at all, so a stored key for the CHOSEN provider is the whole
+// question. Choosing Claude does not make an OpenAI key work.
+function aiReady(provider, keys) {
+  return !!(provider && keys && keys[provider]);
+}
+
+// The place a key is entered, spelled the same everywhere. It had five names
+// ("Settings → AI-Modelle" from the server, "Settings → KI & Modelle",
+// "Settings → AI", "Einstellungen → KI & Modelle", "Settings"), and a route
+// somebody has to find is not one to describe loosely.
+const AI_SETTINGS_NAME = { de: "Einstellungen → KI & Modelle", en: "Settings → AI & Models" };
+
+// The one notice a blocked AI feature shows. Before this there were five
+// different behaviours across the app: a browser alert() in two places, an
+// inline error line in one, a message posted into the conversation in two, and
+// in the Bildsprache tab a button that did nothing at all, silently.
+//
+// It is the pill the messenger already showed above an agent thread, lifted to
+// module scope so there is one of them. Not a modal: this is a precondition,
+// not an error, and it should sit where the feature would have been rather than
+// interrupt.
+function AiNotConnected({ theme, darkMode, appLanguage = "de", label = null, style = {} }) {
+  const de = appLanguage === "de";
+  return (
+    <motion.div whileTap={{ scale: 0.97 }} whileHover={{ scale: 1.02 }}
+      onClick={(e) => { e.stopPropagation(); openAiSettings(); }}
+      style={{ display: "inline-flex", alignItems: "center", gap: 8,
+        padding: "7px 14px", borderRadius: 999, cursor: "pointer",
+        border: `1px solid ${theme.borderFaint}`,
+        background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+        fontFamily: FONT, fontSize: 12, color: theme.text, ...style }}>
+      {/* A dot, not a warning triangle. Nothing has gone wrong, something is
+          simply not set up yet. */}
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E84393", flexShrink: 0 }} />
+      {label || (de ? "Kein KI-Modell verbunden" : "No AI model connected")}
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={theme.textDim}
+        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+    </motion.div>
+  );
+}
+
 // Primary action button fill. Anthracite on light, INVERTED on dark (near-white
 // pill, anthracite label) — the same rule the main nav's selected pill follows.
 // Defined once so the colour can't drift back into per-button hex codes; purple
@@ -13479,10 +13543,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
   // carries no key and no OAuth token — everything is BYOK today — and "gemini"
   // is the default provider, so treating it as always-available hid this
   // warning from the one account that needed it: a new one with no keys at all.
-  const aiConnected = !!(
-    (llmKeys && llmProvider && llmKeys[llmProvider]) ||
-    ((llmProvider || "gemini") === "gemini" && getProviderToken?.())
-  );
+  const aiConnected = aiReady(llmProvider, llmKeys);
   const [search, setSearch] = useState("");
   const [conversations, setConversations] = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
@@ -13787,6 +13848,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       const resp = await fetch("/api/chat-multi", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          language: appLanguage,
           message: history[history.length - 1]?.text || "",
           history: history.slice(0, -1).map(m => ({
             role: m.agent_id ? "assistant" : "user", content: m.text || "",
@@ -14355,19 +14417,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                         and a refusal after the fact is a worse way to learn a
                         precondition than a line saying so up front. */}
                     {activeConv.agent_id && !aiConnected && (
-                      <motion.div whileTap={{ scale: 0.97 }}
-                        onClick={() => onOpenAiSettings?.()}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 8,
-                          padding: "7px 14px", borderRadius: 999, cursor: "pointer",
-                          border: `1px solid ${theme.borderFaint}`,
-                          background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                          fontFamily: FONT, fontSize: 12, color: theme.text }}>
-                        <span style={{ width: 6, height: 6, borderRadius: "50%",
-                          background: "#E84393", flexShrink: 0 }} />
-                        {appLanguage === "de" ? "Kein KI-Modell verknüpft" : "No AI model connected"}
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={theme.textDim}
-                          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-                      </motion.div>
+                      <AiNotConnected theme={theme} darkMode={darkMode} appLanguage={appLanguage} />
                     )}
                   </div>
                 </div>
@@ -15102,7 +15152,7 @@ const NOTE_COLORS = {
   stone:    { light: "#EFEDEA", dark: "rgba(180, 175, 170, 0.10)", accent: "#7A7570", border: "rgba(122, 117, 112, 0.25)" },
 };
 
-function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidToken, llmKeys, llmProvider }) {
+function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", ensureValidToken, llmKeys, llmProvider }) {
   const [notes, setNotes] = useState([]);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -15250,8 +15300,13 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, ensureValidTo
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          language: appLanguage,
           message: dictatedPart,
-          systemPrompt: "Du bist ein Text-Editor. Korrigiere Grammatik, Rechtschreibung und Zeichensetzung des folgenden diktierten Texts auf Deutsch. Behalte den Sinn und den lockeren Sprachstil bei. Gib NUR den korrigierten Text zurück, ohne Anmerkungen oder Anführungszeichen.",
+          // Was German whatever language the app was set to, so an English note
+          // came back translated rather than tidied.
+          systemPrompt: appLanguage === "en"
+            ? "You are a text editor. Fix the grammar, spelling and punctuation of the dictated text below, in English. Keep the meaning and the casual register. Return ONLY the corrected text, with no notes and no quotation marks."
+            : "Du bist ein Text-Editor. Korrigiere Grammatik, Rechtschreibung und Zeichensetzung des folgenden diktierten Texts auf Deutsch. Behalte den Sinn und den lockeren Sprachstil bei. Gib NUR den korrigierten Text zurück, ohne Anmerkungen oder Anführungszeichen.",
           provider,
           apiKey: apiKey || undefined,
           oauthToken: (!apiKey && oauthToken) ? oauthToken : undefined,
@@ -35428,7 +35483,7 @@ function MoodboardItemDetail({ item, items = [], containers = [], currentContain
   const recognitionRef = useRef(null);
   const flashShare = (msg) => { setShareMsg(msg); setTimeout(() => setShareMsg(m => m === msg ? null : m), 1900); };
   const prompt = item.metadata?.prompt || "";
-  const aiConnected = !!((llmKeys && llmProvider && llmKeys[llmProvider]) || llmProvider === "gemini");
+  const aiConnected = aiReady(llmProvider, llmKeys);
   const colorInputRef = useRef(null);
   const colors = item.colors || [];
   const tags = item.tags || [];
@@ -35494,7 +35549,9 @@ function MoodboardItemDetail({ item, items = [], containers = [], currentContain
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
     let oauthToken = null;
     if (llmProvider === "gemini" && !apiKey && ensureValidToken) { try { oauthToken = await ensureValidToken(); } catch (_) {} }
-    if (!apiKey && !oauthToken) { alert(de ? "Kein KI-Modell verbunden. Bitte in Settings einen Key hinterlegen." : "No AI model connected. Add a key in Settings."); return; }
+    // The UI already says so where the button would have been; this is the
+    // backstop for a key removed while the panel is open.
+    if (!apiKey && !oauthToken) { openAiSettings(); return; }
     setGenLoading(true);
     try {
       const sys = de
@@ -35505,7 +35562,7 @@ function MoodboardItemDetail({ item, items = [], containers = [], currentContain
         : "Analyse this image very thoroughly and turn it into ONE detailed, reusable image-generation prompt in English that lets an AI produce a new image in exactly the same aesthetic. Capture subject, environment, composition, lighting, colour palette/mood, style/medium, textures and (for photos) camera character. Write ONE flowing, vivid prompt (about 5–8 sentences), not bullet points. Reply with ONLY the prompt — no preamble, heading or quotation marks.";
       const resp = await fetch("/api/chat-multi", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg, systemPrompt: sys, image: item.url, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 3000, orgId: currentAiContext.orgId, userId: currentAiContext.userId, feature: "image-to-prompt" }),
+        body: JSON.stringify({ language: appLanguage, message: msg, systemPrompt: sys, image: item.url, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 3000, orgId: currentAiContext.orgId, userId: currentAiContext.userId, feature: "image-to-prompt" }),
       });
       const data = await resp.json().catch(() => ({}));
       const text = ((data?.content || []).find(c => c.type === "text")?.text || data?.content?.[0]?.text || "").trim();
@@ -35846,6 +35903,11 @@ function MoodboardItemDetail({ item, items = [], containers = [], currentContain
                 </div>
               ) : prompt ? (
                 <div className="no-scrollbar" style={{ maxHeight: 150, overflowY: "auto", padding: "11px 13px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 12.5, fontFamily: FONT, lineHeight: 1.55, whiteSpace: "pre-wrap", userSelect: "text" }}>{prompt}</div>
+              ) : !aiConnected ? (
+                /* Said before the click, not after it. This was a button that
+                   looked ready and answered with a browser alert(). */
+                <AiNotConnected theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+                  style={{ width: "100%", justifyContent: "center" }} />
               ) : (
                 <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98, backgroundColor: darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.09)" }} onClick={generatePrompt}
                   style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9, padding: "11px 0", borderRadius: 999, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)", border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 13, fontFamily: FONT, fontWeight: 500 }}>
@@ -38291,7 +38353,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   useEffect(() => () => { try { skillRecRef.current?.stop(); } catch (_) {} }, []);
 
   // Generate a document from the selected skill + the user's input.
-  const aiConnected = !!((llmKeys && llmProvider && llmKeys[llmProvider]) || llmProvider === "gemini");
+  const aiConnected = aiReady(llmProvider, llmKeys);
   const runSkill = async () => {
     if (!skillSel || skillBusy) return;
     const de = appLanguage === "de";
@@ -38299,7 +38361,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
     let oauthToken = null;
     if (llmProvider === "gemini" && !apiKey && ensureValidToken) { try { oauthToken = await ensureValidToken(); } catch (_) {} }
-    if (!apiKey && !oauthToken) { alert(de ? "Kein KI-Modell verbunden. Bitte in den Einstellungen einen Key hinterlegen." : "No AI model connected. Add a key in Settings."); return; }
+    if (!apiKey && !oauthToken) { openAiSettings(); return; }
     setSkillBusy(true);
     try {
       const base = (typeof skillSel.system === "string" ? skillSel.system : (skillSel.system?.[de ? "de" : "en"] || skillSel.system?.de || ""));
@@ -38308,7 +38370,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
         : "\n\n---\nImportant: Follow the skill instruction above and its output structure exactly. Return ONLY the finished document as Markdown (headings, lists, bold, etc.) — no preamble, no explanations, no code fences. Write in English.");
       const resp = await fetch("/api/chat-multi", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: skillInput.trim(), systemPrompt: sys, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 4000, orgId: userOrg?.id, userId: session?.user?.id, feature: "skill" }),
+        body: JSON.stringify({ language: appLanguage, message: skillInput.trim(), systemPrompt: sys, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 4000, orgId: userOrg?.id, userId: session?.user?.id, feature: "skill" }),
       });
       const data = await resp.json().catch(() => ({}));
       let md = ((data?.content || []).find(c => c.type === "text")?.text || data?.content?.[0]?.text || "").trim();
@@ -38882,11 +38944,17 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
             )}
             {/* Footer (stage 2 only) */}
             {skillSel && (
-              <div style={{ padding: "14px 22px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <div style={{ padding: "14px 22px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 }}>
+                {/* Left of the buttons, so the reason the Create button is dead
+                    is next to the Create button rather than behind a click. */}
+                {!aiConnected && (
+                  <AiNotConnected theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+                    style={{ marginRight: "auto" }} />
+                )}
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => { if (!skillBusy) setSkillsOpen(false); }}
                   style={{ padding: "10px 18px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 13, fontWeight: 500, fontFamily: FONT }}>{appLanguage === "de" ? "Abbrechen" : "Cancel"}</motion.button>
-                <motion.button whileTap={{ scale: 0.97 }} onClick={runSkill} disabled={skillBusy || !skillInput.trim()}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 22px", borderRadius: 999, cursor: (skillBusy || !skillInput.trim()) ? "not-allowed" : "pointer", background: (skillBusy || !skillInput.trim()) ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)") : accent, border: "none", color: (skillBusy || !skillInput.trim()) ? theme.textDim : "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
+                <motion.button whileTap={{ scale: 0.97 }} onClick={runSkill} disabled={skillBusy || !skillInput.trim() || !aiConnected}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 22px", borderRadius: 999, cursor: (skillBusy || !skillInput.trim() || !aiConnected) ? "not-allowed" : "pointer", background: (skillBusy || !skillInput.trim() || !aiConnected) ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)") : accent, border: "none", color: (skillBusy || !skillInput.trim() || !aiConnected) ? theme.textDim : "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
                   {skillBusy && <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }} style={{ width: 13, height: 13, borderRadius: "50%", border: "2px solid currentColor", borderTopColor: "transparent" }} />}
                   {skillBusy ? (appLanguage === "de" ? "Erstellt…" : "Creating…") : (appLanguage === "de" ? "Erstellen" : "Create")}
                 </motion.button>
@@ -39410,7 +39478,7 @@ const SAMPLE_PERSONA = () => ({
   created_at: new Date().toISOString(),
 });
 
-function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, darkMode, t, canEdit = true }) {
+function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, darkMode, t, appLanguage = "de", aiHere = true, canEdit = true }) {
   // Ignore legacy auto-generated website stubs — they shouldn't show an overview
   // before the user has actually created a persona. They get dropped on next save.
   const personas = (Array.isArray(value) ? value : []).filter(p => p && p.source !== "website");
@@ -39553,10 +39621,14 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
           placeholder="z.B. Lily, 24, Deutschlehrerin in Queens. Probiert ständig neue Skincare-Produkte, hat aber wenig Zeit für Recherche und ärgert sich über Fehlkäufe…"
           style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
         {genError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT }}>{genError}</div>}
+        {!aiHere && (
+          <AiNotConnected theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+            label={appLanguage === "de" ? "Personas generieren: kein KI-Modell verbunden" : "Generate personas: no AI model connected"} />
+        )}
         <div>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={doGenerate} disabled={!manualText.trim() || generating}
-            style={{ padding: "11px 20px", borderRadius: 12, border: "none", cursor: manualText.trim() && !generating ? "pointer" : "default",
-              background: acc, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: manualText.trim() && !generating ? 1 : 0.5, display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={doGenerate} disabled={!manualText.trim() || generating || !aiHere}
+            style={{ padding: "11px 20px", borderRadius: 12, border: "none", cursor: manualText.trim() && !generating && aiHere ? "pointer" : "default",
+              background: acc, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: manualText.trim() && !generating && aiHere ? 1 : 0.5, display: "inline-flex", alignItems: "center", gap: 8 }}>
             {generating ? "Generiere…" : "Persona generieren"}
             {!generating && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg>}
           </motion.button>
@@ -39885,7 +39957,7 @@ function CompAccordion({ label, children, theme, darkMode, defaultOpen = false }
   );
 }
 
-function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, theme, darkMode, t, canEdit = true }) {
+function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, theme, darkMode, t, appLanguage = "de", aiHere = true, canEdit = true }) {
   const competitors = Array.isArray(value) ? value : [];
   const [screen, setScreen] = useState("auto"); // auto | choice | describe | direct | detail | edit
   const [selIdx, setSelIdx] = useState(0);
@@ -40084,6 +40156,10 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
         </div>
 
         {genError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT }}>{genError}</div>}
+        {!aiHere && (
+          <AiNotConnected theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+            label={appLanguage === "de" ? "Wettbewerber analysieren: kein KI-Modell verbunden" : "Analyse competitors: no AI model connected"} />
+        )}
         {generating && genStatus && (
           <div style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, fontFamily: FONT, color: theme.textSub }}>
             <motion.svg animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: "linear" }}
@@ -41838,7 +41914,7 @@ function BrandImagery({ value, editing, onChange, uploadFile, llmProvider, llmKe
   const itemsRef = useRef(items);
   itemsRef.current = items;
 
-  const aiConnected = !!((llmKeys && llmProvider && llmKeys[llmProvider]) || llmProvider === "gemini");
+  const aiConnected = aiReady(llmProvider, llmKeys);
   // Ask the connected AI to look at the image and write a reusable style prompt.
   const generatePrompt = async (item) => {
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
@@ -41880,6 +41956,7 @@ Write it as ONE flowing, highly vivid and detailed prompt (about 5–8 sentences
       const resp = await fetch("/api/chat-multi", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          language: appLanguage,
           message: msg,
           systemPrompt: sys,
           image: item.url,
@@ -41984,6 +42061,15 @@ Write it as ONE flowing, highly vivid and detailed prompt (about 5–8 sentences
   }
 
   return (
+    <>
+      {!aiConnected && items.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <AiNotConnected theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+            label={appLanguage === "de"
+              ? "Prompts automatisch schreiben lassen: kein KI-Modell verbunden"
+              : "Write prompts automatically: no AI model connected"} />
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
         {items.map(it => (
           <div key={it.id} className="imagery-tile" style={{ position: "relative", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", aspectRatio: "4 / 3" }}>
@@ -42045,6 +42131,7 @@ Write it as ONE flowing, highly vivid and detailed prompt (about 5–8 sentences
           </>
         )}
       </div>
+    </>
   );
 }
 
@@ -42677,7 +42764,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     try {
       const resp = await fetch("/api/chat-multi", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: promptStr, provider: llmProvider, apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, wantsImage: true, imageOrientation: "portrait", orgId: currentAiContext.orgId, userId: currentAiContext.userId, feature: "brand-avatar" }),
+        body: JSON.stringify({ language: appLanguage, message: promptStr, provider: llmProvider, apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, wantsImage: true, imageOrientation: "portrait", orgId: currentAiContext.orgId, userId: currentAiContext.userId, feature: "brand-avatar" }),
       });
       const data = await resp.json().catch(() => ({}));
       const img = (data?.content || []).find(c => c.type === "image")?.url;
@@ -43586,6 +43673,7 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
   const competitorsTimer = useRef(null);
   const profileRef = useRef(null);
   // Generate a structured persona from a free-text description via the LLM.
+  const aiHere = aiReady(llmProvider, llmKeys);
   const generatePersona = async (description) => {
     const system = `You create ONE detailed marketing buyer persona from a short description. Respond with ONLY valid minified JSON (no markdown, no commentary) matching exactly this shape:
 {"name":"","age":"","role":"","gender":"","location":"","consumer_behavior":"","quote":"","motivations":[{"label":"","value":70}],"goals":[""],"pains":[""],"product_expectation":""}
@@ -43596,6 +43684,7 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        language: appLanguage,
         message: description,
         systemPrompt: system,
         provider: llmProvider || "gemini",
@@ -43699,7 +43788,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         headers: { "Content-Type": "application/json" },
         // Several full competitor profiles in one response need a high token ceiling,
         // otherwise the JSON gets truncated and only the main profile survives (fallback).
-        body: JSON.stringify({ message, systemPrompt: system, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 8000, orgId: userOrg?.id, userId: session?.user?.id, feature: "brand-onboarding" }),
+        body: JSON.stringify({ language: appLanguage, message, systemPrompt: system, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 8000, orgId: userOrg?.id, userId: session?.user?.id, feature: "brand-onboarding" }),
       });
       const data = await resp.json();
       let txt = (data?.content?.[0]?.text || "").replace(/```json|```/g, "").trim();
@@ -45651,10 +45740,12 @@ If you don't know a field, infer a plausible value. Write all text values in the
                     <>
                       {k === "strategy/personas" ? (
                         <BrandPersonas value={profile.personas} onChange={savePersonas} generatePersona={generatePersona}
-                          cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t} canEdit={canEditCurrent} />
+                          cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t}
+                          appLanguage={appLanguage} aiHere={aiHere} canEdit={canEditCurrent} />
                       ) : k === "strategy/competitors" ? (
                         <BrandCompetitors value={profile.competitors} onChange={saveCompetitors} generateCompetitor={generateCompetitor}
-                          cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t} canEdit={canEditCurrent} />
+                          cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t}
+                          appLanguage={appLanguage} aiHere={aiHere} canEdit={canEditCurrent} />
                       ) : k === "strategy/positioning" ? (
                         <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} onEditingChange={setVisionEditing} canEdit={canEditCurrent} />
                       ) : k === "design/colors" ? (
@@ -50287,6 +50378,7 @@ export default function CircularMenu() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          language: appLanguage,
           messages: nextMessages.map(m => ({ role: m.role, content: m.content })),
           systemPrompt,
           provider: llmProvider,
@@ -50386,6 +50478,7 @@ export default function CircularMenu() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            language: appLanguage,
             messages: history,
             systemPrompt,
             provider: llmProvider,
@@ -50409,6 +50502,7 @@ export default function CircularMenu() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
+                  language: appLanguage,
                   messages: history,
                   systemPrompt,
                   provider: llmProvider,
@@ -50847,7 +50941,8 @@ export default function CircularMenu() {
   }, [bannerH]);
   useEffect(() => {
     setBillingSettingsOpener(() => { setSettingsTab("account"); setCurrentView("settings"); });
-    return () => setBillingSettingsOpener(null);
+    setAiSettingsOpener(() => { setSettingsTab("ai"); setCurrentView("settings"); });
+    return () => { setBillingSettingsOpener(null); setAiSettingsOpener(null); };
   }, []);
 
   return (
@@ -51674,7 +51769,7 @@ export default function CircularMenu() {
         {/* NOTES VIEW */}
         <AnimatePresence>
           {currentView === "notes" && (
-            <NotesView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} onBack={() => setCurrentView("dashboard")} ensureValidToken={ensureValidToken} llmKeys={llmKeys} llmProvider={llmProvider} />
+            <NotesView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} onBack={() => setCurrentView("dashboard")} ensureValidToken={ensureValidToken} llmKeys={llmKeys} llmProvider={llmProvider} />
           )}
         </AnimatePresence>
 
@@ -52418,6 +52513,17 @@ export default function CircularMenu() {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* The sphere is the first AI anybody meets, and with no model
+                  behind it the answer was a spoken sentence and a dead end.
+                  The way to fix it belongs under the sentence saying so. */}
+              {aiResponse && !aiReady(llmProvider, llmKeys) && (
+                <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5, duration: 0.4 }} style={{ marginTop: 20 }}>
+                  <AiNotConnected theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+                    label={appLanguage === "de" ? "KI-Modell verbinden" : "Connect an AI model"} />
+                </motion.div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -54929,6 +55035,7 @@ export default function CircularMenu() {
                                               method: "POST",
                                               headers: { "Content-Type": "application/json" },
                                               body: JSON.stringify({
+                                                language: appLanguage,
                                                 message: "Say OK",
                                                 provider: p.id,
                                                 apiKey: key,
