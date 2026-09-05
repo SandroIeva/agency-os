@@ -46817,9 +46817,33 @@ export default function CircularMenu() {
   //
   // Shown once ever, not once per workspace: somebody making their second
   // workspace has already read it.
-  const finishOnboarding = () => {
-    let seen = false;
-    try { seen = localStorage.getItem(TOUR_SEEN) === "1"; } catch (_) { /* no storage, show it */ }
+  // Whether the tour has been seen is a fact about the PERSON, and it now lives
+  // on their profile row. It used to live only in localStorage, which had two
+  // consequences: the same person met the tour again on a second device, and a
+  // test account reset from the database could not clear it, because it was
+  // never in the database. localStorage is still written and still believed,
+  // as a fast local answer and as the fallback when the row cannot be read.
+  const finishOnboarding = async () => {
+    // The ROW decides, and localStorage is only its cache. Asking the browser
+    // first would mean a stale local flag can never be cleared from anywhere,
+    // which is precisely the state that made a reset look like it had not
+    // worked: the account was empty, the browser still said "seen", and no
+    // tour appeared.
+    let seen = null;
+    if (session?.user?.id) {
+      try {
+        const { data, error } = await supabase.from("profiles").select("tour_seen_at").eq("id", session.user.id).maybeSingle();
+        if (!error) seen = Boolean(data?.tour_seen_at);
+      } catch (_) { /* fall through to the cache */ }
+    }
+    if (seen === null) {
+      // Offline, blocked, or no session. The cache is all there is.
+      try { seen = localStorage.getItem(TOUR_SEEN) === "1"; } catch (_) { seen = false; }
+    } else {
+      // Keep the cache honest in BOTH directions, so clearing the row clears
+      // the browser too the next time round.
+      try { seen ? localStorage.setItem(TOUR_SEEN, "1") : localStorage.removeItem(TOUR_SEEN); } catch (_) {}
+    }
     setOnboardingStep(seen ? null : "tour");
   };
   const closeTour = () => {
@@ -46829,6 +46853,12 @@ export default function CircularMenu() {
     // would have quietly swallowed the one thing half the app needs.
     // AiKeyIntro comes up on the dashboard the moment this closes.
     try { localStorage.setItem(TOUR_SEEN, "1"); } catch (_) {}
+    // Fire and forget, but it must END in a then: a supabase-js builder that is
+    // neither awaited nor thened never sends the request at all.
+    if (session?.user?.id) {
+      supabase.from("profiles").update({ tour_seen_at: new Date().toISOString() })
+        .eq("id", session.user.id).then(() => {});
+    }
     setOnboardingStep(null);
   };
   const [orgMembers, setOrgMembers] = useState([]);          // team members for chat etc.
