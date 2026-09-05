@@ -49210,10 +49210,15 @@ export default function CircularMenu() {
 
   useEffect(() => {
     if (!session || !onDashboard) return;
+    // Not while onboarding is still on screen. currentView is already
+    // "dashboard" behind that overlay, so without this the popup opened at
+    // z-index 100003 straight over the tour, whose last slide asks the very
+    // same question at z-index 99.
+    if (onboardingStep) return;
     if (localStorage.getItem("agencyos-ai-key-intro") === "seen") return;
     if (Object.values(llmKeys || {}).some(Boolean)) return;
     setAiIntroOpen(true);
-  }, [session, onDashboard, llmKeys]);
+  }, [session, onDashboard, onboardingStep, llmKeys]);
   const closeAiIntro = () => { localStorage.setItem("agencyos-ai-key-intro", "seen"); setAiIntroOpen(false); };
 
   // Re-read on every return to the dashboard, which is where the cards are: a
