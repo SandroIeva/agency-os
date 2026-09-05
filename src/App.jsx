@@ -1606,16 +1606,35 @@ function Dropdown({ value, onChange, options = [], placeholder = "Auswählen", t
 // Deliberately not one of the start-view first steps. Those are things to try;
 // this is a setting, and it needs the reason spelled out before someone goes
 // looking for an API key.
-function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss }) {
+function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, onSaveKey }) {
   const de = appLanguage === "de";
+  // Where each key comes from. Named rather than described: somebody who has
+  // never made one needs the address, not the advice.
+  const PROVIDERS = [
+    { id: "gemini", name: "Gemini",  sub: "Google",    placeholder: "AIza...",          url: "https://aistudio.google.com/apikey" },
+    { id: "claude", name: "Claude",  sub: "Anthropic", placeholder: "sk-ant-api03-...", url: "https://console.anthropic.com/settings/keys" },
+    { id: "openai", name: "ChatGPT", sub: "OpenAI",    placeholder: "sk-...",           url: "https://platform.openai.com/api-keys" },
+  ];
+  const [pick, setPick] = useState("gemini");
+  // Never seeded from a stored key: this dialog only opens when there is none,
+  // and a password field that echoes one back gets pasted into, which silently
+  // concatenates.
+  const [draft, setDraft] = useState("");
+  const chosen = PROVIDERS.find(x => x.id === pick) || PROVIDERS[0];
+  // One definition for both the chosen chip and the Save button, so they cannot
+  // disagree about what "selected" looks like.
+  const sel = primaryBtn(darkMode);
+  const save = () => { const k = draft.trim(); if (k) onSaveKey?.(chosen.id, k); };
+  // What actually stops working without a key. Named as the places they are,
+  // not as capabilities in the abstract.
   const benefits = de ? [
-    ["Brand analysieren", "Website einlesen, Positionierung und Tonalität vorschlagen"],
-    ["Texte entwerfen", "In Dokumenten und Notizen schreiben, kürzen, übersetzen"],
-    ["Assets beschreiben", "Bilder benennen, Farben und Moodboards auswerten"],
+    ["Der Assistent", "Die Sphäre auf dem Dashboard und der Messenger, gesprochen und getippt"],
+    ["Strategie und Wettbewerb", "Personas erstellen, Wettbewerber analysieren, Brand aus einer Website lesen"],
+    ["Texte und Bild-Prompts", "Dokumente aus Skills schreiben, Diktate korrigieren, Prompts aus Bildern ableiten"],
   ] : [
-    ["Analyse a brand", "Read a website, propose positioning and tone of voice"],
-    ["Draft text", "Write, shorten and translate inside documents and notes"],
-    ["Describe assets", "Name images, read out colours and moodboards"],
+    ["The assistant", "The sphere on the dashboard and the messenger, spoken and typed"],
+    ["Strategy and competitors", "Build personas, analyse competitors, read a brand off a website"],
+    ["Copy and image prompts", "Write documents from skills, tidy dictation, derive prompts from images"],
   ];
   return createPortal(
     <div onClick={onDismiss}
@@ -1632,8 +1651,8 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss })
           </div>
           <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 5, lineHeight: 1.55 }}>
             {de
-              ? "Die KI-Funktionen laufen über deinen eigenen Schlüssel bei Anthropic, OpenAI oder Google — hinterlegt in einer Minute."
-              : "The AI features run on your own key from Anthropic, OpenAI or Google — set up in a minute."}
+              ? "Die KI-Funktionen laufen über deinen eigenen Schlüssel bei Anthropic, OpenAI oder Google. Hinterlegt in einer Minute."
+              : "The AI features run on your own key from Anthropic, OpenAI or Google. Set up in a minute."}
           </div>
         </div>
 
@@ -1660,16 +1679,67 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss })
             : "The key stays in this browser and is only used for your own requests. Your provider bills you directly."}
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        {/* Pick one, paste the key, done. */}
+        <div style={{ display: "flex", gap: 7 }}>
+          {PROVIDERS.map(pr => {
+            const on = pr.id === pick;
+            return (
+              <motion.div key={pr.id} whileTap={{ scale: 0.97 }}
+                onClick={() => { setPick(pr.id); setDraft(""); }}
+                style={{ flex: 1, padding: "9px 8px", borderRadius: 11, cursor: "pointer", textAlign: "center",
+                  transition: "all 0.18s ease",
+                  // The selected state is anthracite on light and INVERTED on
+                  // dark, which is what the main nav's pill does. Drawn as
+                  // #15151c in both, it sat on the dialog's own #16161e and was
+                  // invisible: measured at one value apart.
+                  background: on ? sel.background : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)"),
+                  border: `1px solid ${on ? sel.background : theme.borderFaint}` }}>
+                <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
+                  color: on ? sel.color : theme.text }}>{pr.name}</div>
+                <div style={{ fontSize: 10.5, fontFamily: FONT, marginTop: 1,
+                  color: on ? sel.color + "8c" : theme.textDim }}>{pr.sub}</div>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        <div>
+          <input type="password" value={draft} autoComplete="off"
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") save(); }}
+            placeholder={chosen.placeholder}
+            style={{ width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 11,
+              background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+              border: `1px solid ${theme.borderFaint}`, color: theme.text,
+              fontSize: 13, fontFamily: FONT, outline: "none" }} />
+          <div style={{ marginTop: 7, textAlign: "right" }}>
+            <a href={chosen.url} target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, textDecoration: "none" }}>
+              {de ? `Schlüssel bei ${chosen.sub} holen` : `Get a key from ${chosen.sub}`}
+            </a>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+          {/* Still reachable, for somebody who would rather see the whole panel
+              or has a key for a provider not offered here. */}
+          <motion.button whileTap={{ scale: 0.97 }} onClick={onGoToSettings}
+            style={{ marginRight: "auto", padding: "9px 0", border: "none", background: "transparent",
+              color: theme.textDim, fontFamily: FONT, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+            {de ? "In den Einstellungen" : "Open settings"}
+          </motion.button>
           <motion.button whileTap={{ scale: 0.97 }} onClick={onDismiss}
             style={{ padding: "9px 16px", borderRadius: 11, border: `1px solid ${theme.borderFaint}`, background: "transparent",
               color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
             {de ? "Später" : "Later"}
           </motion.button>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={onGoToSettings}
-            style={{ padding: "9px 18px", borderRadius: 11, border: "none", background: "#15151c", color: "#fff",
-              fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-            {de ? "Schlüssel hinterlegen" : "Add a key"}
+          <motion.button whileTap={{ scale: 0.97 }} onClick={save} disabled={!draft.trim()}
+            style={{ padding: "9px 18px", borderRadius: 11, border: "none",
+              background: draft.trim() ? sel.background : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)"),
+              color: draft.trim() ? sel.color : theme.textDim,
+              fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
+              cursor: draft.trim() ? "pointer" : "default" }}>
+            {de ? "Speichern" : "Save"}
           </motion.button>
         </div>
       </motion.div>
@@ -55993,6 +56063,11 @@ export default function CircularMenu() {
       {aiIntroOpen && (
         <AiKeyIntro theme={theme} darkMode={darkMode} appLanguage={appLanguage}
           onDismiss={closeAiIntro}
+          onSaveKey={(provider, key) => {
+            setLlmKeys(prev => ({ ...prev, [provider]: key }));
+            setLlmProvider(provider);
+            closeAiIntro();
+          }}
           onGoToSettings={() => { closeAiIntro(); setSettingsTab("ai"); setCurrentView("settings"); }} />
       )}
 
