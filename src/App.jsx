@@ -46067,32 +46067,21 @@ export default function CircularMenu() {
   // credentials: they name a public voice the way a font name does.
   const VOICE_OPTIONS = [
     { id: "b347db033a6549378b48d00acb0d06cd", name: "Selene", gender: "female" },
-    { id: "6ab4c6b0f37f4243a99046478647be94", name: "Voice 01", gender: "female" },
-    { id: "5dcc50822a864e9d943d9bcde0d70e10", name: "Voice 02", gender: "male" },
-    { id: "860323c9e1354f6ea14079788b0bca0d", name: "Voice 03", gender: "male" },
     { id: "bf322df2096a46f18c579d0baa36f41d", name: "Adrian", gender: "male" },
+    { id: "860323c9e1354f6ea14079788b0bca0d", name: "Milan", gender: "male" },
   ];
-  const OLD_DEFAULT_VOICE = "6ab4c6b0f37f4243a99046478647be94";
   const [selectedVoice, setSelectedVoice] = useState(() => {
-    const stored = localStorage.getItem("agencyos-voice-id");
-    // Changing the first entry is not enough on its own. The effect below writes
-    // the selection to storage on MOUNT, so the old default was saved for
-    // everybody whether they had chosen it or not — a stored "Voice 01" cannot
-    // be read as a decision, and without this nobody would ever hear the new
-    // default, including the person who asked for it.
+    let stored = null;
+    try { stored = localStorage.getItem("agencyos-voice-id"); } catch (_) { /* no storage, no memory */ }
+    // A stored id that is no longer offered falls back to the default. Two
+    // voices were dropped from this list, and anybody still holding one of them
+    // would otherwise have a selection that no row in Settings can show as
+    // chosen — while the assistant went on speaking in it.
     //
-    // Once, and marked, so somebody who really does pick Voice 01 afterwards
-    // keeps it.
-    try {
-      // The key keeps the old spelling on purpose: it is already set in the
-      // browsers this has run in, and renaming it would run the migration a
-      // second time and overwrite a choice somebody made in between.
-      if (!localStorage.getItem("agencyos-voice-default-selin")) {
-        localStorage.setItem("agencyos-voice-default-selin", "1");
-        if (!stored || stored === OLD_DEFAULT_VOICE) return VOICE_OPTIONS[0].id;
-      }
-    } catch (_) { /* a browser with no storage still gets the default */ }
-    return stored || VOICE_OPTIONS[0].id;
+    // This also does the work the one-time migration used to: the old default
+    // is simply not in the list any more, so everybody who never chose lands on
+    // Selene without a special case for it.
+    return VOICE_OPTIONS.some(v => v.id === stored) ? stored : VOICE_OPTIONS[0].id;
   });
   const [voicePreviewPlaying, setVoicePreviewPlaying] = useState(null); // voice id currently playing
   const voicePreviewRef = useRef(null);
