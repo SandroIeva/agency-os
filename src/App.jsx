@@ -46846,6 +46846,15 @@ export default function CircularMenu() {
     }
     setOnboardingStep(seen ? null : "tour");
   };
+  // Watching it again. It does NOT clear tour_seen_at: having seen it is still
+  // true, and clearing it would bring the tour back unasked the next time a
+  // workspace is created. The step is simply set, and closeTour writes the
+  // timestamp again on the way out, which is harmless.
+  // The view underneath is deliberately NOT changed. The onboarding overlay is
+  // absolutely positioned over whatever is there, so closing the tour puts
+  // somebody back in Settings where they clicked, rather than on a dashboard
+  // they never asked for.
+  const replayTour = () => setOnboardingStep("tour");
   const closeTour = () => {
     // Only the tour is marked seen. It used to mark the key dialog seen as
     // well, because its last slide WAS that dialog; that slide is gone, so
@@ -55184,6 +55193,45 @@ export default function CircularMenu() {
                     <div style={{ padding: "4px 10px", borderRadius: 20, fontSize: 11, fontFamily: FONT,
                       background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)", color: theme.textDim }}>{appLanguage === "de" ? "Bald verfügbar" : "Coming soon"}</div>
                   </div>
+
+                  {/* The tour, again. It is shown once on the way into a first
+                      workspace and then never, which is right for a tour and
+                      wrong for anybody who wants a second look: what the app
+                      can do is exactly what somebody goes hunting for later.
+                      It also means nobody has to be reset to see it again. */}
+                  <motion.div
+                    whileHover={{ backgroundColor: theme.hoverBg }}
+                    onClick={replayTour}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 14,
+                      padding: "16px 20px", cursor: "pointer",
+                      borderTop: `1px solid ${theme.borderFaint}`,
+                    }}
+                  >
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      {/* Slides: one sheet with two behind it. Not a play
+                          triangle, which means video. */}
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.svgStroke}
+                        strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="5" width="13" height="14" rx="2.5" />
+                        <path d="M19 8v9.5a2.5 2.5 0 01-2.5 2.5H8" />
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
+                        {appLanguage === "de" ? "Tour erneut ansehen" : "Replay the tour"}
+                      </div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
+                        {appLanguage === "de" ? "Die fünf Slides von der Einrichtung" : "The five slides from setup"}
+                      </div>
+                    </div>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim}
+                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                  </motion.div>
                 </div>
               </motion.div>
               )}
