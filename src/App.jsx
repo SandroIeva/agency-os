@@ -46063,12 +46063,33 @@ export default function CircularMenu() {
   const [editingKeyId, setEditingKeyId] = useState(null); // which provider's key is being edited
 
   // Voice selection state
+  // First is the default, so Selin leads. These are Fish Audio model ids, not
+  // credentials: they name a public voice the way a font name does.
   const VOICE_OPTIONS = [
+    { id: "b347db033a6549378b48d00acb0d06cd", name: "Selin", gender: "female" },
     { id: "6ab4c6b0f37f4243a99046478647be94", name: "Voice 01", gender: "female" },
     { id: "5dcc50822a864e9d943d9bcde0d70e10", name: "Voice 02", gender: "male" },
     { id: "860323c9e1354f6ea14079788b0bca0d", name: "Voice 03", gender: "male" },
   ];
-  const [selectedVoice, setSelectedVoice] = useState(() => localStorage.getItem("agencyos-voice-id") || VOICE_OPTIONS[0].id);
+  const OLD_DEFAULT_VOICE = "6ab4c6b0f37f4243a99046478647be94";
+  const [selectedVoice, setSelectedVoice] = useState(() => {
+    const stored = localStorage.getItem("agencyos-voice-id");
+    // Changing the first entry is not enough on its own. The effect below writes
+    // the selection to storage on MOUNT, so the old default was saved for
+    // everybody whether they had chosen it or not — a stored "Voice 01" cannot
+    // be read as a decision, and without this nobody would ever hear the new
+    // default, including the person who asked for it.
+    //
+    // Once, and marked, so somebody who really does pick Voice 01 afterwards
+    // keeps it.
+    try {
+      if (!localStorage.getItem("agencyos-voice-default-selin")) {
+        localStorage.setItem("agencyos-voice-default-selin", "1");
+        if (!stored || stored === OLD_DEFAULT_VOICE) return VOICE_OPTIONS[0].id;
+      }
+    } catch (_) { /* a browser with no storage still gets the default */ }
+    return stored || VOICE_OPTIONS[0].id;
+  });
   const [voicePreviewPlaying, setVoicePreviewPlaying] = useState(null); // voice id currently playing
   const voicePreviewRef = useRef(null);
 
@@ -54655,7 +54676,11 @@ export default function CircularMenu() {
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{voice.name}</div>
                           <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
-                            {voice.gender === "male" ? "Male" : "Female"}
+                            {/* Was English in both languages, in a panel that is
+                                otherwise translated throughout. */}
+                            {voice.gender === "male"
+                              ? (appLanguage === "de" ? "Männlich" : "Male")
+                              : (appLanguage === "de" ? "Weiblich" : "Female")}
                           </div>
                         </div>
                         {/* Selected radio */}
