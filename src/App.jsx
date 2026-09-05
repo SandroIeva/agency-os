@@ -46063,10 +46063,10 @@ export default function CircularMenu() {
   const [editingKeyId, setEditingKeyId] = useState(null); // which provider's key is being edited
 
   // Voice selection state
-  // First is the default, so Selin leads. These are Fish Audio model ids, not
+  // First is the default, so Selene leads. These are Fish Audio model ids, not
   // credentials: they name a public voice the way a font name does.
   const VOICE_OPTIONS = [
-    { id: "b347db033a6549378b48d00acb0d06cd", name: "Selin", gender: "female" },
+    { id: "b347db033a6549378b48d00acb0d06cd", name: "Selene", gender: "female" },
     { id: "6ab4c6b0f37f4243a99046478647be94", name: "Voice 01", gender: "female" },
     { id: "5dcc50822a864e9d943d9bcde0d70e10", name: "Voice 02", gender: "male" },
     { id: "860323c9e1354f6ea14079788b0bca0d", name: "Voice 03", gender: "male" },
@@ -46084,6 +46084,9 @@ export default function CircularMenu() {
     // Once, and marked, so somebody who really does pick Voice 01 afterwards
     // keeps it.
     try {
+      // The key keeps the old spelling on purpose: it is already set in the
+      // browsers this has run in, and renaming it would run the migration a
+      // second time and overwrite a choice somebody made in between.
       if (!localStorage.getItem("agencyos-voice-default-selin")) {
         localStorage.setItem("agencyos-voice-default-selin", "1");
         if (!stored || stored === OLD_DEFAULT_VOICE) return VOICE_OPTIONS[0].id;
