@@ -35344,15 +35344,28 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
             style={{ width: "min(560px, 100%)", display: "flex", flexDirection: "column", gap: 14,
               background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 18,
               boxShadow: "0 30px 80px rgba(0,0,0,0.35)", padding: 22 }}>
-            <div>
-              <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-                {appLanguage === "de" ? "Mit KI erstellen" : "Create with AI"}
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                  {appLanguage === "de" ? "Mit KI erstellen" : "Create with AI"}
+                </div>
+                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
+                  {genWaiting
+                    ? (appLanguage === "de" ? "Das Bild wird erzeugt." : "Your image is being generated.")
+                    : (appLanguage === "de" ? "Beschreibe das Bild, das du erzeugen möchtest." : "Describe the image you want to create.")}
+                </div>
               </div>
-              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
-                {genWaiting
-                  ? (appLanguage === "de" ? "Das Bild wird erzeugt." : "Your image is being generated.")
-                  : (appLanguage === "de" ? "Beschreibe das Bild, das du erzeugen möchtest." : "Describe the image you want to create.")}
-              </div>
+              {/* The close is an X in the corner now, the way every other
+                  overlay in the app is dismissed. As a "Schließen" button in
+                  the footer it sat beside the one thing you came here to do,
+                  reading as an equal choice to it. */}
+              <motion.div whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.9 }} onClick={() => { if (!genBusy) closeGen(); }}
+                title={appLanguage === "de" ? "Schließen" : "Close"}
+                style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center",
+                  justifyContent: "center", cursor: genBusy ? "default" : "pointer", opacity: genBusy ? 0.5 : 1,
+                  color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </motion.div>
             </div>
 
             {genWaiting ? (() => {
@@ -35455,12 +35468,6 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                 </motion.button>
               ) : (
                 <>
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={closeGen} disabled={genBusy}
-                    style={{ padding: "9px 16px", borderRadius: 11, border: `1px solid ${theme.borderFaint}`, background: "transparent",
-                      color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
-                      cursor: genBusy ? "default" : "pointer", opacity: genBusy ? 0.55 : 1 }}>
-                    {appLanguage === "de" ? "Schließen" : "Close"}
-                  </motion.button>
                   <motion.button whileTap={{ scale: 0.97 }} onClick={runGeneration} disabled={genBusy || !genPrompt.trim()}
                     style={{ padding: "9px 18px", borderRadius: 11, border: "none", background: "#15151c", color: "#fff",
                       fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
@@ -39391,7 +39398,20 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
             <motion.div initial={{ scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 8 }}
               transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }} onClick={e => e.stopPropagation()}
               style={{ width: "100%", maxWidth: 420, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)" }}>
-              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 6, letterSpacing: -0.2 }}>{appLanguage === "de" ? "Neuer Ordner" : "New folder"}</div>
+              {/* The X in the corner, the way every other overlay closes.
+                  "Abbrechen" beside "Erstellen" made leaving look like an
+                  equal half of the decision, when the dialog exists to do one
+                  thing. Escape and a click outside still cancel. */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 6 }}>
+                <div style={{ flex: 1, minWidth: 0, fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.2 }}>{appLanguage === "de" ? "Neuer Ordner" : "New folder"}</div>
+                <motion.div whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.9 }} onClick={() => !creatingFolder && setFolderModalOpen(false)}
+                  title={appLanguage === "de" ? "Schließen" : "Close"}
+                  style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center",
+                    justifyContent: "center", cursor: creatingFolder ? "default" : "pointer", opacity: creatingFolder ? 0.5 : 1,
+                    color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </motion.div>
+              </div>
               <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 18, lineHeight: 1.5 }}>{appLanguage === "de" ? "Gib dem Ordner einen Namen." : "Give the folder a name."}</div>
               <input autoFocus value={folderName} onChange={e => setFolderName(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && folderName.trim() && !creatingFolder) submitFolder(); if (e.key === "Escape" && !creatingFolder) setFolderModalOpen(false); }}
@@ -39399,9 +39419,6 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
                 style={{ width: "100%", boxSizing: "border-box", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "12px 14px", fontSize: 14, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.text }}
               />
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
-                <motion.button onClick={() => !creatingFolder && setFolderModalOpen(false)} whileTap={{ scale: 0.97 }}
-                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: creatingFolder ? "not-allowed" : "pointer", background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: creatingFolder ? 0.5 : 1 }}
-                >{appLanguage === "de" ? "Abbrechen" : "Cancel"}</motion.button>
                 <motion.button onClick={submitFolder} whileTap={{ scale: 0.97 }} disabled={!folderName.trim() || creatingFolder}
                   style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: (!folderName.trim() || creatingFolder) ? "not-allowed" : "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", background: (!folderName.trim() || creatingFolder) ? (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)") : "#15151c", border: "none", color: (!folderName.trim() || creatingFolder) ? theme.textFaint : "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, transition: "background 0.18s ease" }}
                 >{creatingFolder ? (appLanguage === "de" ? "Erstellt…" : "Creating…") : (appLanguage === "de" ? "Erstellen" : "Create")}</motion.button>
