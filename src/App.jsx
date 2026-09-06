@@ -220,6 +220,18 @@ function makeTheme(darkMode) {
   };
 }
 
+// How long a browser may keep a stored file before asking for it again.
+// supabase-js sends `cache-control: max-age=<this>` and defaults to "3600", so
+// until now every picture in the app was re-fetched once an hour, by every
+// person, all day. Disk is not the limit this project runs into; egress is, and
+// this is what spends it.
+//
+// A path written ONCE can be kept for a year. A path written with `upsert` is
+// reused, so the file behind it can change and a long cache would keep showing
+// yesterday's logo; those keep the hour they already had.
+const UPLOAD_CACHE_IMMUTABLE = "31536000";   // a year, for unique paths
+const UPLOAD_CACHE_MUTABLE = "3600";         // an hour, for upsert paths
+
 const FONT = "'Geist', -apple-system, sans-serif";
 
 // The Settings panel's field and button shapes. They were declared inside the
@@ -1429,7 +1441,7 @@ async function saveStockImage(item, { orgId, userId, email }) {
 
   const ext = (blob.type.split("/")[1] || "jpg").replace("jpeg", "jpg").split("+")[0];
   const path = `stock/${orgId}/${crypto.randomUUID()}.${ext}`;
-  const { error } = await supabase.storage.from("brand-assets").upload(path, blob, { contentType: blob.type });
+  const { error } = await supabase.storage.from("brand-assets").upload(path, blob, { cacheControl: UPLOAD_CACHE_IMMUTABLE, contentType: blob.type });
   if (error) return { ok: false, reason: "upload", message: error.message };
 
   trackStorageUpload({ orgId, userId, bucket: "brand-assets", path, sizeBytes: blob.size });
@@ -3312,7 +3324,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
       const ext = file.name.split(".").pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
       const filePath = `${userOrg?.id || session.user.id}/${fileName}`;
-      const { error } = await supabase.storage.from("project-logos").upload(filePath, file, { upsert: true });
+      const { error } = await supabase.storage.from("project-logos").upload(filePath, file, { cacheControl: UPLOAD_CACHE_MUTABLE, upsert: true });
       if (error) throw error;
       const { data: urlData } = supabase.storage.from("project-logos").getPublicUrl(filePath);
       setProjectForm(p => ({ ...p, logo_url: urlData.publicUrl }));
@@ -8561,7 +8573,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
     const path = `whiteboards/${userOrg.id}/${crypto.randomUUID()}.${ext}`;
     const room = await checkStorageRoom(userOrg?.id, file.size, { userId: session?.user?.id, email: session?.user?.email });
     if (!room.ok) { alert(de ? `Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.` : `Storage full (${formatBytesGB(room.limit)}) — please upgrade.`); return null; }
-    const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type });
+    const { error } = await supabase.storage.from("brand-assets").upload(path, file, { cacheControl: UPLOAD_CACHE_IMMUTABLE, contentType: file.type });
     if (error) { alert((de ? "Bild-Upload fehlgeschlagen: " : "Image upload failed: ") + error.message); return null; }
     trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: file.size });
     const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
@@ -11551,7 +11563,10 @@ async function refreshUserFileUrls(rows) {
 }
 
 async function uploadTracked({ bucket, path, file, orgId, userId, contentType, upsert = false, sizeBytes }) {
-  const res = await supabase.storage.from(bucket).upload(path, file, { contentType, upsert });
+  const res = await supabase.storage.from(bucket).upload(path, file, {
+    contentType, upsert,
+    cacheControl: upsert ? UPLOAD_CACHE_MUTABLE : UPLOAD_CACHE_IMMUTABLE,
+  });
   if (!res.error) trackStorageUpload({ orgId, userId, bucket, path, sizeBytes: sizeBytes ?? file?.size ?? 0 });
   return res;
 }
@@ -12728,10 +12743,8 @@ function FilesView({ onBack, session, getProviderToken, autoReLogin, ensureValid
           const path = `${session.user.id}/${Date.now()}_${safeName}`;
           const room = await checkStorageRoom(userOrg?.id, file.size, { userId: session?.user?.id, email: session?.user?.email });
           if (!room.ok) { setError(`Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.`); continue; }
-          const { error: upErr } = await supabase.storage.from("user-files").upload(path, file, {
-            contentType: file.type || "application/octet-stream",
-            upsert: false,
-          });
+          const { error: upErr } = await supabase.storage.from("user-files").upload(path, file, { cacheControl: UPLOAD_CACHE_IMMUTABLE, contentType: file.type || "application/octet-stream",
+            upsert: false });
           if (upErr) { console.error("Storage upload error:", upErr); setError(`Upload fehlgeschlagen: ${file.name}`); continue; }
           trackStorageUpload({ orgId: userOrg?.id, userId: session.user.id, bucket: "user-files", path, sizeBytes: file.size });
           const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(path, 60 * 60 * 24 * 365);
@@ -14181,7 +14194,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       const path = `${myId}/${Date.now()}_${safeName}`;
       const room = await checkStorageRoom(userOrg?.id, file.size, { userId: session?.user?.id, email: session?.user?.email });
       if (!room.ok) { alert(`Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.`); setUploadingAttachment(false); return null; }
-      const { data: up, error } = await supabase.storage.from("chat-attachments").upload(path, file, { contentType: file.type });
+      const { data: up, error } = await supabase.storage.from("chat-attachments").upload(path, file, { cacheControl: UPLOAD_CACHE_IMMUTABLE, contentType: file.type });
       if (error) { console.error("Upload error:", error); alert("Upload fehlgeschlagen: " + error.message); setUploadingAttachment(false); return null; }
       trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "chat-attachments", path, sizeBytes: file.size });
       const { data: pub } = supabase.storage.from("chat-attachments").getPublicUrl(up.path);
@@ -16720,7 +16733,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
     try {
       const ext = (file.name.split(".").pop() || "png").toLowerCase();
       const path = `${session.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { error } = await supabase.storage.from("project-logos").upload(path, file, { contentType: file.type, upsert: true });
+      const { error } = await supabase.storage.from("project-logos").upload(path, file, { cacheControl: UPLOAD_CACHE_MUTABLE, contentType: file.type, upsert: true });
       if (error) throw error;
       const { data: pub } = supabase.storage.from("project-logos").getPublicUrl(path);
       setForm(prev => ({ ...prev, logo_url: pub.publicUrl }));
@@ -33282,7 +33295,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       const path = `moodboards/${activeBoard.id}/${crypto.randomUUID()}.${ext}`;
       const room = await checkStorageRoom(userOrg?.id, file.size, { userId: session?.user?.id, email: session?.user?.email });
       if (!room.ok) { alert(appLanguage === "de" ? `Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.` : `Storage full (${formatBytesGB(room.limit)}) — please upgrade.`); break; }
-      const { error: upErr } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type, upsert: true });
+      const { error: upErr } = await supabase.storage.from("brand-assets").upload(path, file, { cacheControl: UPLOAD_CACHE_MUTABLE, contentType: file.type, upsert: true });
       if (upErr) continue;
       trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: file.size });
       const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
@@ -35087,7 +35100,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
       const path = `${session.user.id}/creations/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
       const room = await checkStorageRoom(userOrg?.id, file.size, { userId: session?.user?.id, email: session?.user?.email });
       if (!room.ok) { alert(appLanguage === "de" ? `Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.` : `Storage full (${formatBytesGB(room.limit)}) — please upgrade.`); break; }
-      const { error: upErr } = await supabase.storage.from("user-files").upload(path, file, { contentType: file.type, upsert: false });
+      const { error: upErr } = await supabase.storage.from("user-files").upload(path, file, { cacheControl: UPLOAD_CACHE_IMMUTABLE, contentType: file.type, upsert: false });
       if (upErr) continue;
       trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "user-files", path, sizeBytes: file.size });
       const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(path, 60 * 60 * 24 * 365);
@@ -35167,7 +35180,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         const path = `${session.user.id}/creations/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
         const room = await checkStorageRoom(userOrg?.id, blob.size, { userId: session?.user?.id, email: session?.user?.email });
         if (!room.ok) { failures.push({ label, reason: de ? `Speicher voll (${formatBytesGB(room.limit)})` : `Storage full (${formatBytesGB(room.limit)})` }); break; }
-        const { error: upErr } = await supabase.storage.from("user-files").upload(path, blob, { contentType: mime, upsert: false });
+        const { error: upErr } = await supabase.storage.from("user-files").upload(path, blob, { cacheControl: UPLOAD_CACHE_IMMUTABLE, contentType: mime, upsert: false });
         if (upErr) { console.error("[drive-import]", label, "storage upload failed", upErr); failures.push({ label, reason: de ? "konnte nicht gespeichert werden" : "couldn't be saved" }); continue; }
         trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "user-files", path, sizeBytes: blob.size });
         const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(path, 60 * 60 * 24 * 365);
@@ -38552,7 +38565,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   const uploadDocImage = useCallback(async (file) => {
     const ext = (file.name?.split(".").pop() || "png").toLowerCase();
     const path = `documents/${userOrg?.id || "shared"}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type, upsert: true });
+    const { error } = await supabase.storage.from("brand-assets").upload(path, file, { cacheControl: UPLOAD_CACHE_MUTABLE, contentType: file.type, upsert: true });
     if (error) throw error;
     trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: file.size });
     const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
@@ -38689,7 +38702,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
       }
       const path = `documents/${userOrg.id}/${crypto.randomUUID()}.pdf`;
       const { error: upErr } = await supabase.storage.from("brand-assets")
-        .upload(path, file, { contentType: "application/pdf" });
+        .upload(path, file, { cacheControl: UPLOAD_CACHE_IMMUTABLE, contentType: "application/pdf" });
       if (upErr) { alert((de ? "Upload fehlgeschlagen: " : "Upload failed: ") + upErr.message); return; }
       trackStorageUpload({ orgId: userOrg.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: file.size });
       const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
@@ -38863,7 +38876,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
         }
         const path = `documents/${userOrg.id}/${crypto.randomUUID()}.pdf`;
         const { error: upErr } = await supabase.storage.from("brand-assets")
-          .upload(path, blob, { contentType: "application/pdf" });
+          .upload(path, blob, { cacheControl: UPLOAD_CACHE_IMMUTABLE, contentType: "application/pdf" });
         if (upErr) { console.error("[doc-import]", label, "upload failed", upErr); failures.push(label); continue; }
         trackStorageUpload({ orgId: userOrg.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: blob.size });
         const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
@@ -40109,7 +40122,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
     try {
       const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
       const path = `personas/${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage.from("brand-assets").upload(path, file, { upsert: true, contentType: file.type });
+      const { error } = await supabase.storage.from("brand-assets").upload(path, file, { cacheControl: UPLOAD_CACHE_MUTABLE, upsert: true, contentType: file.type });
       if (!error) {
         const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
         setDraft(d => ({ ...d, photo_url: data.publicUrl }));
@@ -42319,7 +42332,7 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
       for (const file of files) {
         const ext = (file.name.split(".").pop() || "woff2").toLowerCase();
         const path = `fonts/${crypto.randomUUID()}.${ext}`;
-        const { error } = await supabase.storage.from("brand-assets").upload(path, file, { upsert: true, contentType: file.type || "font/woff2" });
+        const { error } = await supabase.storage.from("brand-assets").upload(path, file, { cacheControl: UPLOAD_CACHE_MUTABLE, upsert: true, contentType: file.type || "font/woff2" });
         if (error) continue;
         trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: file.size });
         const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
@@ -44733,7 +44746,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
   const uploadFile = async (file, pathPrefix) => {
     const safeName = file.name.replace(/[^\w.-]/g, "_");
     const path = `${userOrg.id}/${pathPrefix}-${Date.now()}-${safeName}`;
-    const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type || "application/octet-stream", upsert: true });
+    const { error } = await supabase.storage.from("brand-assets").upload(path, file, { cacheControl: UPLOAD_CACHE_MUTABLE, contentType: file.type || "application/octet-stream", upsert: true });
     if (error) throw error;
     trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "brand-assets", path, sizeBytes: file.size });
     const { data: pub } = supabase.storage.from("brand-assets").getPublicUrl(path);
@@ -44959,7 +44972,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       const blob = new Blob([bytes], { type: mime });
       const filePath = `${userOrg?.id || session.user.id}/${hint}-${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("project-logos").upload(filePath, blob, { upsert: true, contentType: mime });
+      const { error } = await supabase.storage.from("project-logos").upload(filePath, blob, { cacheControl: UPLOAD_CACHE_MUTABLE, upsert: true, contentType: mime });
       if (error) { console.warn("Logo persist failed", error); return dataUrl; }
       const { data: urlData } = supabase.storage.from("project-logos").getPublicUrl(filePath);
       return urlData.publicUrl;
@@ -47187,7 +47200,7 @@ export default function CircularMenu() {
       const ext = (file.name.split(".").pop() || "png").toLowerCase();
       const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
       const filePath = `org/${userOrg.id}/${fileName}`;
-      const { error } = await supabase.storage.from("project-logos").upload(filePath, file, { upsert: true, contentType: file.type });
+      const { error } = await supabase.storage.from("project-logos").upload(filePath, file, { cacheControl: UPLOAD_CACHE_MUTABLE, upsert: true, contentType: file.type });
       if (error) throw error;
       const { data: urlData } = supabase.storage.from("project-logos").getPublicUrl(filePath);
       const newUrl = urlData.publicUrl;
@@ -47326,7 +47339,7 @@ export default function CircularMenu() {
       const ext = (file.name.split(".").pop() || "png").toLowerCase();
       const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
       const filePath = `avatars/${session.user.id}/${fileName}`;
-      const { error } = await supabase.storage.from("project-logos").upload(filePath, file, { upsert: true, contentType: file.type });
+      const { error } = await supabase.storage.from("project-logos").upload(filePath, file, { cacheControl: UPLOAD_CACHE_MUTABLE, upsert: true, contentType: file.type });
       if (error) throw error;
       const { data: urlData } = supabase.storage.from("project-logos").getPublicUrl(filePath);
       const newUrl = urlData.publicUrl;
@@ -48420,7 +48433,7 @@ export default function CircularMenu() {
     try {
       const ext = (file.name.split(".").pop() || "png").toLowerCase();
       const path = `${session.user.id}/${slotKey}-${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("os-visuals").upload(path, file, { contentType: file.type, upsert: true });
+      const { error: upErr } = await supabase.storage.from("os-visuals").upload(path, file, { cacheControl: UPLOAD_CACHE_MUTABLE, contentType: file.type, upsert: true });
       if (upErr) throw upErr;
       const { data: pub } = supabase.storage.from("os-visuals").getPublicUrl(path);
       const iconUrl = pub.publicUrl + "?t=" + Date.now(); // cache-bust
@@ -50866,7 +50879,7 @@ export default function CircularMenu() {
     try {
       const room = await checkStorageRoom(userOrg?.id, blob.size, { userId: session?.user?.id, email: session?.user?.email });
       if (!room.ok) { console.warn("[AI auto-save] storage full — skipping save"); return null; }
-      const { error: upErr } = await supabase.storage.from("user-files").upload(storagePath, blob, { contentType: blob.type, upsert: false });
+      const { error: upErr } = await supabase.storage.from("user-files").upload(storagePath, blob, { cacheControl: UPLOAD_CACHE_IMMUTABLE, contentType: blob.type, upsert: false });
       if (upErr) throw upErr;
       trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "user-files", path: storagePath, sizeBytes: blob.size });
       const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(storagePath, 60 * 60 * 24 * 365);
@@ -50900,7 +50913,7 @@ export default function CircularMenu() {
     const path = `ai-images/${userOrg.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const room = await checkStorageRoom(userOrg?.id, blob.size, { userId: session?.user?.id, email: session?.user?.email });
     if (!room.ok) throw new Error(`Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.`);
-    const { error } = await supabase.storage.from("chat-attachments").upload(path, blob, { contentType: blob.type, upsert: false });
+    const { error } = await supabase.storage.from("chat-attachments").upload(path, blob, { cacheControl: UPLOAD_CACHE_IMMUTABLE, contentType: blob.type, upsert: false });
     if (error) throw new Error(error.message);
     trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "chat-attachments", path, sizeBytes: blob.size });
     const { data: pub } = supabase.storage.from("chat-attachments").getPublicUrl(path);
