@@ -46769,9 +46769,19 @@ export default function CircularMenu() {
     try { return localStorage.getItem("agencyos-language") || detectLanguage(); }
     catch (_) { return detectLanguage(); }
   });
+  // The session, mirrored into a ref. chooseLanguage is defined ABOVE the
+  // session state, so naming it in a dependency array would read it before its
+  // initialiser runs. The same trick openBrainstormRef uses a few hundred lines
+  // down, and for the same reason.
+  const sessionRef = useRef(null);
   const chooseLanguage = useCallback((lang) => {
     setAppLanguage(lang);
-    localStorage.setItem("agencyos-language", lang);
+    try { localStorage.setItem("agencyos-language", lang); } catch (_) {}
+    // And onto the profile, so the choice travels with the person rather than
+    // with the browser. Fire and forget, but it must END in a then: a
+    // supabase-js builder that is neither awaited nor thened never sends.
+    const uid = sessionRef.current?.user?.id;
+    if (uid) supabase.from("profiles").update({ language: lang }).eq("id", uid).then(() => {});
   }, []);
   const t = useCallback((key, vars) => getTranslation(key, appLanguage, vars), [appLanguage]);
   // Translated menu items
@@ -46906,6 +46916,9 @@ export default function CircularMenu() {
 
   // Auth state
   const [session, setSession] = useState(null);
+  // Kept in step during render, which is what makes the ref above usable from
+  // a callback that has no dependency on it.
+  sessionRef.current = session;
   // Where this person is, kept current for the messenger's local-time readout.
   // Taken from the browser instead of asked for: it is already known exactly,
   // and a setting nobody remembers to change would be worse than none.
@@ -47766,6 +47779,27 @@ export default function CircularMenu() {
           initials: (meta.full_name || meta.name || "U").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase(),
         };
         await supabase.from("profiles").upsert(profileData, { onConflict: "id" });
+
+        // The chosen language belongs to the PERSON. It lived in localStorage
+        // alone, so it did not follow anybody to a second device and could not
+        // be read or set from anywhere but that one browser. The upsert above
+        // deliberately does not list `language`, so it never clobbers it.
+        //
+        // Skipped when the URL asked for one: ?lang= is a look at the other
+        // language for a single page load, and the row must not overrule it a
+        // second later.
+        try {
+          const asked = new URLSearchParams(window.location.search).get("lang");
+          if (asked !== "de" && asked !== "en") {
+            const { data: prof } = await supabase.from("profiles").select("language").eq("id", uid).maybeSingle();
+            if (prof?.language === "de" || prof?.language === "en") {
+              setAppLanguage(prof.language);
+              // Keep the local copy in step, so the login screen and the next
+              // load before this effect runs already speak the right language.
+              try { localStorage.setItem("agencyos-language", prof.language); } catch (_) {}
+            }
+          }
+        } catch (_) { /* offline or blocked: the local value stands */ }
 
         // 2. Check if user is in any org
         const { data: memberships } = await supabase
