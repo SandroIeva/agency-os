@@ -222,6 +222,87 @@ function makeTheme(darkMode) {
 
 const FONT = "'Geist', -apple-system, sans-serif";
 
+// The Settings panel's field and button shapes. They were declared inside the
+// app root, which is why the image-URL dialog could not use them and grew its
+// own square field and its own detached button instead. Pure derivations of
+// theme and darkMode, so they lift out whole; the comments below are the
+// reasons each number is what it is and travel with them.
+function wsStyles(theme, darkMode) {
+  const wsRowBtn = {
+    // Height as a HEIGHT, not as padding: padding works on both sides, so
+    // "one pixel shorter" through it is two. 39 is 40 less one.
+    // Two pixels of padding under the label and none above it, which with the
+    // centring lifts the text by exactly one. Geist puts its cap height below
+    // the middle of the line box, so a label centred by the box reads as
+    // sitting low in the pill — the same reason the empty states' own button
+    // carries 13 top and bottom rather than 11.
+    height: 39, padding: "0 12px 2px", minWidth: 132, boxSizing: "border-box",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    borderRadius: 999,
+    background: "transparent",
+    // The border as three longhands rather than the shorthand, so the property
+    // the hover animates is the property the base style sets. Measured with
+    // this Framer version: the shorthand animates correctly too, so this is
+    // the arrangement that cannot argue, not a fix for something broken.
+    // theme.border, not borderFaint: the faint one is for dividing rows, and a
+    // button drawn in it has too little to say against the panel behind it.
+    // One step up in the palette that already exists, in both themes.
+    borderWidth: 1, borderStyle: "solid", borderColor: theme.border,
+    // One weight for every button in this panel. They were three: 400 on the
+    // outlined ones, 500 on the two that sit inside a field and 600 on Save,
+    // which is what made buttons of identical size read as different sizes.
+    // Measured: 39px tall and 132 wide in all eight cases, so the type was the
+    // only thing left that could differ, and it did.
+    color: theme.textDim, fontSize: 12, fontWeight: 500, fontFamily: FONT, cursor: "pointer",
+    flexShrink: 0,
+  };
+  // Under the cursor the outline comes up to the weight of the label. A button
+  // whose edge never answers reads as a caption with a line around it.
+  const wsRowBtnHover = { borderColor: theme.textDim };
+  // The one button that COMMITS something. Anthracite on white, and inverted on
+  // anthracite: the design system does the same with the nav's selected pill,
+  // because a dark fill on a dark panel is a label, not a button — which is
+  // exactly what Save looked like in the dark theme.
+  const wsPrimaryBtn = {
+    ...wsRowBtn,
+    background: darkMode ? "#F4F4F7" : "#15151c",
+    borderColor: darkMode ? "#F4F4F7" : "#15151c",
+    color: darkMode ? "#15151c" : "#fff",
+  };
+  const wsPrimaryHover = { opacity: 0.88 };
+  // A field in this panel: a pill with a faint wash and no outline, holding
+  // whatever it is for and its buttons at the right. Defined once, because the
+  // invite row and the model keys are the same thing and looked like two.
+  const wsField = {
+    // 8 is the gap between everything a field holds: chips, the input, the
+    // round reset, the buttons. It was 6 with two exceptions written on top of
+    // it, a marginLeft on the saved-key line and a marginRight on the reset, so
+    // the spacing inside one field came out three different widths. It is also
+    // the gap the panel's own button rows use, so a field and a row space their
+    // contents alike.
+    display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8,
+    padding: "6px 6px 6px 18px", borderRadius: 999, minHeight: 52,
+    boxSizing: "border-box",
+    background: darkMode ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.022)",
+  };
+  // The button that lives INSIDE such a field. The same shape as the row
+  // buttons, filled rather than outlined because it is the one thing in the
+  // field that DOES something, and pushed right by an auto margin so it stays
+  // at the edge when the field's contents wrap onto another line.
+  const wsFieldBtn = {
+    ...wsRowBtn, marginLeft: "auto",
+    background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+    color: theme.textSub,
+  };
+  const wsFieldBtnHover = { ...wsRowBtnHover, scale: 1.02 };
+  // Everything inside a field is set in the field's own type, so an input, a
+  // saved-key line and a chip do not each pick their own size.
+  const wsFieldText = { fontSize: 13, fontFamily: FONT, color: theme.text };
+  return { wsRowBtn, wsRowBtnHover, wsPrimaryBtn, wsPrimaryHover, wsField, wsFieldBtn, wsFieldBtnHover, wsFieldText };
+}
+
+
+
 // A name you rename by double-clicking it. Pointing at it shows the field it is
 // about to become: the same wash and outline the input wears, in the same place.
 // That is the part the title attribute cannot do. The native tooltip waits about
@@ -33496,6 +33577,10 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     padding: "8px 14px", borderRadius: 999, fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
     border: `1px solid ${theme.borderFaint}`, color: theme.text, background: "transparent",
   };
+  // The Settings panel's field: a pill that HOLDS its button rather than
+  // standing next to one. Read from the one definition, not copied, so the two
+  // cannot drift the way this input already had.
+  const { wsField, wsFieldBtn, wsFieldBtnHover, wsFieldText } = wsStyles(theme, darkMode);
   // The primary button of a tab. The same one Creations draws, stated once so
   // the two headers cannot drift apart again: they had #23232b against
   // anthracite, 8px of padding against 9 and weight 500 against 600, which is
@@ -34424,11 +34509,24 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
         <AnimatePresence>
           {showUrlInput && (
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: "hidden", borderBottom: `1px solid ${theme.borderFaint}` }}>
-              <div style={{ padding: "12px 24px", display: "flex", gap: 10 }}>
-                <input autoFocus value={urlInput} onChange={e => setUrlInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addUrl(); if (e.key === "Escape") setShowUrlInput(false); }}
-                  placeholder={t("moodboard.urlPlaceholder") || "Bild- oder Website-URL einfügen…"}
-                  style={{ flex: 1, padding: "9px 13px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }} />
-                <motion.div whileTap={{ scale: 0.96 }} onClick={addUrl} style={{ ...iconBtn, background: accent, color: "#fff", border: "none" }}>{t("moodboard.add") || "Hinzufügen"}</motion.div>
+              {/* One pill holding the input and the button, the shape the
+                  Settings panel uses for every field that takes a value and
+                  does something with it. It was a square-cornered box beside a
+                  detached accent button, which is two controls where there is
+                  one thing to do. */}
+              <div style={{ padding: "12px 24px" }}>
+                <div style={wsField}>
+                  <input autoFocus value={urlInput} onChange={e => setUrlInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addUrl(); if (e.key === "Escape") setShowUrlInput(false); }}
+                    placeholder={t("moodboard.urlPlaceholder") || "Bild- oder Website-URL einfügen…"}
+                    style={{ ...wsFieldText, flex: 1, minWidth: 120, padding: "4px 2px",
+                      border: "none", outline: "none", background: "transparent" }} />
+                  <motion.div whileHover={urlInput.trim() ? wsFieldBtnHover : {}} whileTap={urlInput.trim() ? { scale: 0.95 } : {}}
+                    onClick={() => { if (urlInput.trim()) addUrl(); }}
+                    style={{ ...wsFieldBtn, cursor: urlInput.trim() ? "pointer" : "default",
+                      opacity: urlInput.trim() ? 1 : 0.5 }}>
+                    {t("moodboard.add") || "Hinzufügen"}
+                  </motion.div>
+                </div>
               </div>
             </motion.div>
           )}
@@ -47057,76 +47155,8 @@ export default function CircularMenu() {
   // something else on the screen. Measured in Geist at 12px, the widest label
   // of the four is "Logo entfernen" at 82.8px, so 132 clears it with air and
   // holds for the English labels too.
-  const wsRowBtn = {
-    // Height as a HEIGHT, not as padding: padding works on both sides, so
-    // "one pixel shorter" through it is two. 39 is 40 less one.
-    // Two pixels of padding under the label and none above it, which with the
-    // centring lifts the text by exactly one. Geist puts its cap height below
-    // the middle of the line box, so a label centred by the box reads as
-    // sitting low in the pill — the same reason the empty states' own button
-    // carries 13 top and bottom rather than 11.
-    height: 39, padding: "0 12px 2px", minWidth: 132, boxSizing: "border-box",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    borderRadius: 999,
-    background: "transparent",
-    // The border as three longhands rather than the shorthand, so the property
-    // the hover animates is the property the base style sets. Measured with
-    // this Framer version: the shorthand animates correctly too, so this is
-    // the arrangement that cannot argue, not a fix for something broken.
-    // theme.border, not borderFaint: the faint one is for dividing rows, and a
-    // button drawn in it has too little to say against the panel behind it.
-    // One step up in the palette that already exists, in both themes.
-    borderWidth: 1, borderStyle: "solid", borderColor: theme.border,
-    // One weight for every button in this panel. They were three: 400 on the
-    // outlined ones, 500 on the two that sit inside a field and 600 on Save,
-    // which is what made buttons of identical size read as different sizes.
-    // Measured: 39px tall and 132 wide in all eight cases, so the type was the
-    // only thing left that could differ, and it did.
-    color: theme.textDim, fontSize: 12, fontWeight: 500, fontFamily: FONT, cursor: "pointer",
-    flexShrink: 0,
-  };
-  // Under the cursor the outline comes up to the weight of the label. A button
-  // whose edge never answers reads as a caption with a line around it.
-  const wsRowBtnHover = { borderColor: theme.textDim };
-  // The one button that COMMITS something. Anthracite on white, and inverted on
-  // anthracite: the design system does the same with the nav's selected pill,
-  // because a dark fill on a dark panel is a label, not a button — which is
-  // exactly what Save looked like in the dark theme.
-  const wsPrimaryBtn = {
-    ...wsRowBtn,
-    background: darkMode ? "#F4F4F7" : "#15151c",
-    borderColor: darkMode ? "#F4F4F7" : "#15151c",
-    color: darkMode ? "#15151c" : "#fff",
-  };
-  const wsPrimaryHover = { opacity: 0.88 };
-  // A field in this panel: a pill with a faint wash and no outline, holding
-  // whatever it is for and its buttons at the right. Defined once, because the
-  // invite row and the model keys are the same thing and looked like two.
-  const wsField = {
-    // 8 is the gap between everything a field holds: chips, the input, the
-    // round reset, the buttons. It was 6 with two exceptions written on top of
-    // it, a marginLeft on the saved-key line and a marginRight on the reset, so
-    // the spacing inside one field came out three different widths. It is also
-    // the gap the panel's own button rows use, so a field and a row space their
-    // contents alike.
-    display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8,
-    padding: "6px 6px 6px 18px", borderRadius: 999, minHeight: 52,
-    boxSizing: "border-box",
-    background: darkMode ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.022)",
-  };
-  // The button that lives INSIDE such a field. The same shape as the row
-  // buttons, filled rather than outlined because it is the one thing in the
-  // field that DOES something, and pushed right by an auto margin so it stays
-  // at the edge when the field's contents wrap onto another line.
-  const wsFieldBtn = {
-    ...wsRowBtn, marginLeft: "auto",
-    background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
-    color: theme.textSub,
-  };
-  const wsFieldBtnHover = { ...wsRowBtnHover, scale: 1.02 };
-  // Everything inside a field is set in the field's own type, so an input, a
-  // saved-key line and a chip do not each pick their own size.
-  const wsFieldText = { fontSize: 13, fontFamily: FONT, color: theme.text };
+  const { wsRowBtn, wsRowBtnHover, wsPrimaryBtn, wsPrimaryHover,
+          wsField, wsFieldBtn, wsFieldBtnHover, wsFieldText } = wsStyles(theme, darkMode);
 
   // ── The workspace's name and its address ─────────────────────────────────
   // They were two separate edits, and that is what made them look like two
