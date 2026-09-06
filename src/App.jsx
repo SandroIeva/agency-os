@@ -34520,16 +34520,20 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                     placeholder={t("moodboard.urlPlaceholder") || "Bild- oder Website-URL einfügen…"}
                     style={{ ...wsFieldText, flex: 1, minWidth: 120, padding: "4px 2px",
                       border: "none", outline: "none", background: "transparent" }} />
-                  {/* A square, which wsRowBtn's 999 radius turns into a circle.
-                      The glyph is the RETURN key, not a plus: Enter is what
+                  {/* The field button at its own width, the same 132 the
+                      Settings panel gives every one of them, with the RETURN
+                      key drawn in the middle instead of the word: Enter is what
                       this field already responds to, so the button shows the
-                      key rather than naming an abstract action. The word moves
-                      to the title so it is still reachable, since a glyph on
-                      its own says what it does only to somebody who knows. */}
+                      key that does it rather than naming the action. Padding
+                      goes to 0 because wsRowBtn's is "0 12px 2px", two pixels
+                      under the label to sit Geist's cap height right, which on
+                      a glyph lifts it off centre by one. The word moves to the
+                      title, since a glyph alone says what it does only to
+                      somebody who already knows. */}
                   <motion.div whileHover={urlInput.trim() ? wsFieldBtnHover : {}} whileTap={urlInput.trim() ? { scale: 0.95 } : {}}
                     onClick={() => { if (urlInput.trim()) addUrl(); }}
                     title={t("moodboard.add") || "Hinzufügen"}
-                    style={{ ...wsFieldBtn, width: 39, minWidth: 39, padding: 0,
+                    style={{ ...wsFieldBtn, padding: 0,
                       cursor: urlInput.trim() ? "pointer" : "default",
                       opacity: urlInput.trim() ? 1 : 0.5 }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
