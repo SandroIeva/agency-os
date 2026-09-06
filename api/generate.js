@@ -60,14 +60,6 @@ const MODELS = {
     // eight times that, so the two fields are not cosmetic.
     body: (prompt) => ({ prompt, image_size: "1536x1024", quality: "low", num_images: 1, output_format: "png" }),
   },
-  "flux-2-dev": {
-    path: "/flux-2-dev/v1/generateT2I", microUsd: 12000, label: "Flux 2 Dev",
-    body: (prompt) => ({ prompt }),
-  },
-  "flux-dev": {
-    path: "/flux-dev/v1/dev/textToImage", microUsd: 25000, label: "Flux Dev",
-    body: (prompt) => ({ prompt }),
-  },
   "flux-pro": {
     path: "/flux-pro/v1/pro/textToImage", microUsd: 40000, label: "FLUX Pro",
     body: (prompt) => ({ prompt }),

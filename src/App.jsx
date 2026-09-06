@@ -2066,8 +2066,6 @@ const AGENT_FREE_MODEL_LABELS = {
   "nano-banana-2": "Nano Banana 2",
   "flux-1-schnell": "Flux Schnell",
   "flux-2-klein": "Flux 2 Klein",
-  "flux-2-dev": "Flux 2 Dev",
-  "flux-dev": "Flux Dev",
   "flux-pro": "Flux Pro",
 };
 
@@ -46392,15 +46390,25 @@ const metaballColor = (darkMode) => (darkMode ? "rgba(244,244,247,0.82)" : "rgba
 // The keys mirror MODELS in api/generate.js; the server stays the authority on
 // what exists, this table only teaches the ear. Longest alias first: "flux 2
 // klein" has to win over "flux 2", which has to win over bare "flux".
+//
+// Every digit also accepts its WORD. The recogniser is listening in German and
+// writes what it hears, so "Flux zwei Klein" arrives spelled out; against
+// patterns that only knew "2" it matched none of them and fell through to the
+// bare-"flux" rule, which is the flagship at forty credits. Somebody naming
+// the cheapest model was being handed the dearest.
 const VOICE_IMAGE_MODELS = [
-  { key: "nano-banana-2",  label: "Nano Banana 2", re: /\bnano[\s-]*banan[aei]{1,2}(?:\s*(?:2|ii|two|pro|plus))?\b/i },
-  { key: "flux-1-schnell", label: "Flux Schnell",  re: /\bflu[xk]s?\s*(?:1\s*)?schnell\b/i },
-  { key: "flux-2-klein",   label: "Flux 2 Klein",  re: /\bflu[xk]s?\s*(?:2\s*)?klein\b/i },
-  { key: "flux-2-dev",     label: "Flux 2 Dev",    re: /\bflu[xk]s?\s*2\s*dev\b/i },
-  { key: "flux-dev",       label: "Flux Dev",      re: /\bflu[xk]s?\s*dev\b/i },
+  { key: "nano-banana-2",  label: "Nano Banana 2", re: /\bnano[\s-]*banan[aei]{1,2}(?:\s*(?:2|zwei|ii|two|pro|plus))?\b/i },
+  { key: "flux-1-schnell", label: "Flux Schnell",  re: /\bflu[xk]s?\s*(?:(?:1|eins|one)\s*)?schnell\b/i },
+  { key: "flux-2-klein",   label: "Flux 2 Klein",  re: /\bflu[xk]s?\s*(?:(?:2|zwei|ii|two)\s*)?klein\b/i },
+  // "Flux Dev" and "Flux 2 Dev" are gone from the server, but the words are
+  // still what somebody who used them says. They resolve to Klein rather than
+  // falling through to the bare-"flux" rule below, which means the flagship:
+  // being charged forty credits for saying a name that no longer exists is a
+  // worse answer than being given the cheap one and told which it was.
+  { key: "flux-2-klein",   label: "Flux 2 Klein",  re: /\bflu[xk]s?\s*(?:(?:2|zwei|ii|two)\s*)?dev\b/i },
   { key: "flux-pro",       label: "FLUX Pro",      re: /\bflu[xk]s?\s*(?:pro|profi)\b/i },
-  { key: "flux-2-klein",   label: "Flux 2 Klein",  re: /\bflu[xk]s?\s*2\b/i },
-  { key: "gpt-image-2",    label: "GPT Image 2",   re: /\b(?:chat\s*)?gpt[\s-]*(?:image|bild)?\s*(?:2|ii|two)?\b/i },
+  { key: "flux-2-klein",   label: "Flux 2 Klein",  re: /\bflu[xk]s?\s*(?:2|zwei|ii|two)\b/i },
+  { key: "gpt-image-2",    label: "GPT Image 2",   re: /\b(?:chat\s*)?gpt[\s-]*(?:image|bild)?\s*(?:2|zwei|ii|two)?\b/i },
   // Just "Flux" means the flagship. It is the expensive one, so the orb always
   // says which model it settled on and a wrong guess is one sentence to fix.
   { key: "flux-pro",       label: "FLUX Pro",      re: /\bflu[xk]s?\b/i },
