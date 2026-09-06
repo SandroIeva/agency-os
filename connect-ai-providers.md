@@ -1,4 +1,4 @@
-# Connect AI Providers to i7OS
+# Connect AI Providers
 
 \
 An API key is not included with a standard ChatGPT, Claude, or Gemini subscription. API usage may be billed separately by the respective provider.<br>
@@ -72,9 +72,8 @@ Gemini API keys are created in **Google AI Studio**.
 6. Copy the new API key.
 7. Return to i7OS and follow the steps under **Add an API Key to i7OS**.
 
-\{% hint style="info" %\}\
-For new users, Google AI Studio may automatically create a default Google Cloud project and an API key after the terms of service have been accepted.\
-\{% endhint %\}
+\
+For new users, Google AI Studio may automatically create a default Google Cloud project and an API key after the terms of service have been accepted.<br>
 
 **Enable Billing for the Gemini API**
 
