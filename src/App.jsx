@@ -2157,6 +2157,7 @@ async function seedStarterTasks(orgId, userId, de) {
 const AGENT_FREE_MODEL_LABELS = {
   "gpt-image-2": "GPT Image 2",
   "nano-banana-2": "Nano Banana 2",
+  "nano-banana-pro": "Nano Banana Pro",
   "flux-1-schnell": "Flux Schnell",
   "flux-2-klein": "Flux 2 Klein",
   "flux-pro": "Flux Pro",
@@ -46543,7 +46544,13 @@ const metaballColor = (darkMode) => (darkMode ? "rgba(244,244,247,0.82)" : "rgba
 // bare-"flux" rule, which is the flagship at forty credits. Somebody naming
 // the cheapest model was being handed the dearest.
 const VOICE_IMAGE_MODELS = [
-  { key: "nano-banana-2",  label: "Nano Banana 2", re: /\bnano[\s-]*banan[aei]{1,2}(?:\s*(?:2|zwei|ii|two|pro|plus))?\b/i },
+  // Pro before 2, and 2 no longer answers to "pro". It used to: the alternation
+  // read (2|zwei|ii|two|pro|plus), so saying "Nano Banana Pro" — a model that
+  // did not exist yet — quietly bought Nano Banana 2. Now that it does exist,
+  // that would be the wrong model at half the price, which is the same class of
+  // mistake as the Flux Klein one below, only in the other direction.
+  { key: "nano-banana-pro", label: "Nano Banana Pro", re: /\bnano[\s-]*banan[aei]{1,2}[\s-]*(?:pro|profi)\b/i },
+  { key: "nano-banana-2",  label: "Nano Banana 2", re: /\bnano[\s-]*banan[aei]{1,2}(?:\s*(?:2|zwei|ii|two|plus))?\b/i },
   { key: "flux-1-schnell", label: "Flux Schnell",  re: /\bflu[xk]s?\s*(?:(?:1|eins|one)\s*)?schnell\b/i },
   { key: "flux-2-klein",   label: "Flux 2 Klein",  re: /\bflu[xk]s?\s*(?:(?:2|zwei|ii|two)\s*)?klein\b/i },
   // "Flux Dev" and "Flux 2 Dev" are gone from the server, but the words are
@@ -46562,7 +46569,10 @@ const VOICE_IMAGE_MODELS = [
 // "the best model", "low quality model". Only consulted when the sentence
 // actually says model or quality, so a picture OF a model stays a picture.
 const VOICE_IMAGE_QUALITY = [
-  { key: "nano-banana-2", label: "Nano Banana 2", re: /\b(?:best|beste[nrsm]?|highest|höchste[nrsm]?|top|maximal\w*|premium)\b/i },
+  // "das beste Modell" has to mean the best one there is, and since Nano Banana
+  // Pro joined the list that is no longer Nano Banana 2. It is also twice the
+  // price, which is why the orb always says out loud which model it settled on.
+  { key: "nano-banana-pro", label: "Nano Banana Pro", re: /\b(?:best|beste[nrsm]?|highest|höchste[nrsm]?|top|maximal\w*|premium)\b/i },
   { key: "flux-pro",      label: "FLUX Pro",      re: /\b(?:high|hoh\w+|gute?[nrsm]?|besser\w*)\b/i },
   { key: "flux-2-klein",  label: "Flux 2 Klein",  re: /\b(?:low|niedrig\w*|schlecht\w*|einfach\w*|günstig\w*|billig\w*|cheap|draft|schnellst\w*|fast)\b/i },
 ];

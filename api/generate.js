@@ -73,6 +73,20 @@ const MODELS = {
     path: "/nano-banana-2/v1/text-to-image", microUsd: 70350, label: "Nano Banana 2",
     body: (prompt) => ({ prompt, resolution: "1K", num_images: 1, output_format: "png" }),
   },
+  "nano-banana-pro": {
+    // Gemini 3 Pro Image, the dearest thing on the list. Pixazo prices it
+    // 1K $0.1407, 2K $0.1407, 4K $0.252 — one and two K cost THE SAME, so
+    // asking for 1K would mean paying for two and receiving one. Hence 2K.
+    // Four K is nearly double and is not what a file manager needs.
+    //
+    // output_format is deliberately absent: the documentation marks it
+    // "accepted but ignored", the model returns JPEG whatever is asked. Sending
+    // "png" would be a request that reads like a promise and is not one — and
+    // persistImage sniffs the real bytes anyway, so the file is filed by what
+    // it IS rather than by what was ordered.
+    path: "/nano-banana-pro/v1/text-to-image", microUsd: 140700, label: "Nano Banana Pro",
+    body: (prompt) => ({ prompt, resolution: "2K", num_images: 1 }),
+  },
 };
 // GPT Image 2, not the free model. Flux Schnell's getData is undocumented and,
 // measured against the live service, does not answer within twenty seconds nor
@@ -266,7 +280,12 @@ async function persistImage(db, { url, userId }) {
     throw new Error(`the stored image is not readable (HTTP ${check?.status ?? "no response"})`);
   }
 
-  return { publicUrl: link, path, bytes: buf.byteLength };
+  // The sniffed kind travels with the result. The storage object was already
+  // named from the bytes; the user_files row used to say ".png" and
+  // "image/png" no matter what arrived, so a JPEG was filed under a name it
+  // could not be opened by. Nano Banana returns JPEG whatever output_format
+  // asks for, which is how this surfaced.
+  return { publicUrl: link, path, bytes: buf.byteLength, ext: kind.ext, mime: kind.type };
 }
 
 // The other ending. A generation can fail minutes after the request, long after
@@ -326,10 +345,10 @@ async function completeJob(db, job, imageUrl) {
 
   // The asset row. Named from the prompt so a generated picture is findable by
   // what was asked for.
-  const name = ((job.prompt || "").slice(0, 60).replace(/[\n\r]+/g, " ").trim() || "KI-Bild") + ".png";
+  const name = ((job.prompt || "").slice(0, 60).replace(/[\n\r]+/g, " ").trim() || "KI-Bild") + "." + (stored.ext || "png");
   await db.from("user_files").insert({
     user_id: job.user_id, org_id: job.org_id, name,
-    mime_type: "image/png", size_bytes: stored.bytes, storage_path: stored.path,
+    mime_type: stored.mime || "image/png", size_bytes: stored.bytes, storage_path: stored.path,
     storage_provider: "supabase", public_url: stored.publicUrl,
     // The bucket travels with the row: deletion should never have to infer it.
     metadata: { generated: true, model: job.model, prompt: job.prompt, bucket: ASSET_BUCKET },
