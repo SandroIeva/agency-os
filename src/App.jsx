@@ -51904,7 +51904,7 @@ export default function CircularMenu() {
             <div style={{ position: "relative", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "center",
               // The tour is a picture beside a paragraph, so it needs the room
               // the one-question screens before it deliberately do not take.
-              maxWidth: onboardingStep === "tour" ? 1000 : 480, width: "100%", padding: "0 24px",
+              maxWidth: onboardingStep === "tour" ? 1000 : onboardingStep === "choose" ? 560 : 480, width: "100%", padding: "0 24px",
               margin: onboardingStep === "tour" ? "auto 0" : 0, flexShrink: 0 }}>
 
               {onboardingStep === "tour" && (
@@ -51917,56 +51917,66 @@ export default function CircularMenu() {
                 <motion.div
                   initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1, duration: 0.5 }}
-                  style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 8 }}
+                  style={{ fontSize: 15, fontFamily: FONT, color: theme.textDim, marginBottom: 10 }}
                 >
-                  {appLanguage === "de" ? `Hallo, ${userName.split(" ")[0]}` : `Hi, ${userName.split(" ")[0]}`} 👋
+                  {/* No waving hand. Every glyph in this app is drawn line work
+                      on the app's own colours; an emoji brings its own and is
+                      redrawn by each operating system. */}
+                  {appLanguage === "de" ? `Hallo, ${userName.split(" ")[0]}` : `Hi, ${userName.split(" ")[0]}`}
                 </motion.div>
                 <motion.div
                   initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2, duration: 0.5 }}
-                  style={{ fontSize: 26, fontWeight: 300, color: theme.text, fontFamily: FONT, letterSpacing: -0.5, marginBottom: 8, textAlign: "center" }}
+                  style={{ fontSize: 34, fontWeight: 300, color: theme.text, fontFamily: FONT, letterSpacing: -0.8, marginBottom: 10, textAlign: "center" }}
                 >
                   {appLanguage === "de" ? "Wie möchtest du starten?" : "How would you like to start?"}
                 </motion.div>
                 <motion.div
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                   transition={{ delay: 0.3, duration: 0.4 }}
-                  style={{ fontSize: 14, color: theme.textDim, fontFamily: FONT, marginBottom: 40, textAlign: "center" }}
+                  style={{ fontSize: 15, color: theme.textDim, fontFamily: FONT, marginBottom: 44, textAlign: "center" }}
                 >
                   {appLanguage === "de" ? "Erstelle einen neuen Workspace oder tritt einem bestehenden bei." : "Create a new workspace or join an existing one."}
                 </motion.div>
 
-                <div style={{ display: "flex", gap: 16, width: "100%" }}>
+                {/* Two cards that are the same card. The difference between
+                    them is carried by the icon tile alone: filled for the one
+                    that makes something, outlined for the one that joins
+                    something. The lilac is gone, here and everywhere; the app
+                    marks a chosen or primary thing in anthracite, and INVERTS
+                    it on dark, because #15151c on this canvas's own #111117 is
+                    a fill nobody can see. */}
+                <div style={{ display: "flex", gap: 18, width: "100%" }}>
                   {/* Create workspace */}
                   <motion.div
                     initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.35, duration: 0.4 }}
-                    whileHover={{ scale: 1.02, borderColor: "rgba(139, 122, 255, 0.3)" }}
+                    whileHover={{ scale: 1.02, borderColor: theme.border }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setOnboardingStep("create")}
                     style={{
-                      flex: 1, padding: "28px 24px", borderRadius: 20, cursor: "pointer",
+                      flex: 1, padding: "48px 28px", borderRadius: 22, cursor: "pointer",
                       // Frosted, so the dot grid reads as texture behind the card
                       // rather than as dots showing through it.
-                      background: "rgba(139, 122, 255, 0.06)", border: "1px solid rgba(139, 122, 255, 0.15)",
+                      background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`,
                       backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-                      display: "flex", flexDirection: "column", alignItems: "center", gap: 14,
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
                       transition: "all 0.25s ease",
                     }}
                   >
                     <div style={{
-                      width: 48, height: 48, borderRadius: 14,
-                      background: "rgba(139, 122, 255, 0.12)", border: "1px solid rgba(139, 122, 255, 0.2)",
+                      width: 56, height: 56, borderRadius: 16, marginBottom: 6,
+                      background: primaryBtn(darkMode).background, border: "1px solid transparent",
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 5v14M5 12h14" stroke="#8B7AFF" strokeWidth="2" strokeLinecap="round" />
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 5v14M5 12h14" stroke={primaryBtn(darkMode).color} strokeWidth="2" strokeLinecap="round" />
                       </svg>
                     </div>
-                    <div style={{ fontSize: 15, fontWeight: 500, color: theme.text, fontFamily: FONT }}>
+                    <div style={{ fontSize: 16.5, fontWeight: 500, color: theme.text, fontFamily: FONT }}>
                       {appLanguage === "de" ? "Workspace erstellen" : "Create Workspace"}
                     </div>
-                    <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, textAlign: "center", lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 13, color: theme.textDim, fontFamily: FONT, textAlign: "center", lineHeight: 1.5 }}>
                       {appLanguage === "de" ? "Erstelle dein eigenes Team und lade Mitglieder ein" : "Set up your own team and invite members"}
                     </div>
                   </motion.div>
@@ -51979,28 +51989,29 @@ export default function CircularMenu() {
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setOnboardingStep("join")}
                     style={{
-                      flex: 1, padding: "28px 24px", borderRadius: 20, cursor: "pointer",
+                      flex: 1, padding: "48px 28px", borderRadius: 22, cursor: "pointer",
                       background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`,
                       backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-                      display: "flex", flexDirection: "column", alignItems: "center", gap: 14,
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
                       transition: "all 0.25s ease",
                     }}
                   >
                     <div style={{
-                      width: 48, height: 48, borderRadius: 14,
-                      background: theme.hoverBg, border: `1px solid ${theme.border}`,
+                      width: 56, height: 56, borderRadius: 16, marginBottom: 6,
+                      background: "transparent", border: `1px solid ${theme.border}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                        <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke={theme.textSub} strokeWidth="1.8" strokeLinecap="round" />
-                        <circle cx="8.5" cy="7" r="4" stroke={theme.textSub} strokeWidth="1.8" />
-                        <path d="M20 8v6M17 11h6" stroke={theme.textSub} strokeWidth="1.8" strokeLinecap="round" />
+                      {/* The same plus. Two different glyphs made the cards look
+                          like two kinds of thing, when they are two doors into
+                          the same one. */}
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 5v14M5 12h14" stroke={theme.textSub} strokeWidth="2" strokeLinecap="round" />
                       </svg>
                     </div>
-                    <div style={{ fontSize: 15, fontWeight: 500, color: theme.text, fontFamily: FONT }}>
+                    <div style={{ fontSize: 16.5, fontWeight: 500, color: theme.text, fontFamily: FONT }}>
                       {appLanguage === "de" ? "Einladung annehmen" : "Join Workspace"}
                     </div>
-                    <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, textAlign: "center", lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 13, color: theme.textDim, fontFamily: FONT, textAlign: "center", lineHeight: 1.5 }}>
                       {appLanguage === "de" ? "Tritt einem bestehenden Team mit Einladungscode bei" : "Join an existing team with an invite code"}
                     </div>
                   </motion.div>
