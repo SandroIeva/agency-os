@@ -35286,7 +35286,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
               <>
                 <textarea value={genPrompt} autoFocus rows={4} disabled={genBusy}
                   onChange={e => setGenPrompt(e.target.value)}
-                  placeholder={appLanguage === "de" ? "z. B. Ein minimalistisches Studio-Foto einer Keramikvase auf Sandstein, weiches Morgenlicht" : "e.g. A minimal studio photo of a ceramic vase on sandstone, soft morning light"}
+                  placeholder={appLanguage === "de" ? "Ein minimalistisches Studio-Foto einer Keramikvase auf Sandstein, weiches Morgenlicht" : "A minimal studio photo of a ceramic vase on sandstone, soft morning light"}
                   style={{ width: "100%", boxSizing: "border-box", padding: "11px 13px", borderRadius: 12, resize: "vertical",
                     border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
                     color: theme.text, fontFamily: FONT, fontSize: 13, lineHeight: 1.55, outline: "none" }} />
