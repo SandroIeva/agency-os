@@ -10,5 +10,6 @@
   * [Brand Intelligence](brand-workspace/brand-intelligence.md)
   * [The Social media layer](brand-workspace/the-social-media-layer.md)
 * [Plan and manage brands](plan-and-manage-brands.md)
+* [Connect AI Providers to i7OS](connect-ai-providers-to-i7os.md)
 * [Create and collaborate](create-and-collaborate.md)
 * [Billing and subscriptions](billing-and-subscriptions.md)
