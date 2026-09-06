@@ -4,3 +4,11 @@ dist
 *.local
 .vercel
 .env*
+
+# Design sources and OS cruft do not belong in public/: everything in there
+# is copied verbatim into every deployment, and Vercel keeps every deployment.
+# 81 Illustrator files and a Sketch document were 18 MB of that, on every
+# build, and no browser ever asked for one.
+public/**/*.ai
+public/**/*.sketch
+.DS_Store
