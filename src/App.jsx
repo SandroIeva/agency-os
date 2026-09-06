@@ -51922,7 +51922,7 @@ export default function CircularMenu() {
                   {/* No waving hand. Every glyph in this app is drawn line work
                       on the app's own colours; an emoji brings its own and is
                       redrawn by each operating system. */}
-                  {appLanguage === "de" ? `Hallo, ${userName.split(" ")[0]}` : `Hi, ${userName.split(" ")[0]}`}
+                  {appLanguage === "de" ? `Hallo ${userName.split(" ")[0]}` : `Hello ${userName.split(" ")[0]}`}
                 </motion.div>
                 <motion.div
                   initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
@@ -51939,6 +51939,18 @@ export default function CircularMenu() {
                   {appLanguage === "de" ? "Erstelle einen neuen Workspace oder tritt einem bestehenden bei." : "Create a new workspace or join an existing one."}
                 </motion.div>
 
+                {/* On hover the whole card takes a tint: a step darker on light,
+                    a step lighter on dark, so it is the CARD that answers the
+                    pointer and not just its border.
+                    The base style sets backgroundColor rather than the
+                    background shorthand, so the property Framer animates is
+                    the property the style sets. Same reason the border below
+                    is written as a longhand.
+                    The transition sits INSIDE whileHover: the card's own
+                    transition prop carries the entry delay of 0.35, and Framer
+                    applies that prop to every state, so without this the tint
+                    would not begin until a third of a second after the pointer
+                    arrived. */}
                 {/* Two cards that are the same card. The difference between
                     them is carried by the icon tile alone: filled for the one
                     that makes something, outlined for the one that joins
@@ -51951,14 +51963,16 @@ export default function CircularMenu() {
                   <motion.div
                     initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.35, duration: 0.4 }}
-                    whileHover={{ scale: 1.02, borderColor: theme.border }}
+                    whileHover={{ scale: 1.02, borderColor: theme.border,
+                      backgroundColor: darkMode ? "rgba(255,255,255,0.095)" : "rgba(0,0,0,0.075)",
+                      transition: { duration: 0.18, ease: "easeOut" } }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setOnboardingStep("create")}
                     style={{
                       flex: 1, padding: "48px 28px", borderRadius: 22, cursor: "pointer",
                       // Frosted, so the dot grid reads as texture behind the card
                       // rather than as dots showing through it.
-                      background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`,
+                      backgroundColor: theme.hoverBg, border: `1px solid ${theme.borderFaint}`,
                       backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
                       display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
                       transition: "all 0.25s ease",
@@ -51985,12 +51999,14 @@ export default function CircularMenu() {
                   <motion.div
                     initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4, duration: 0.4 }}
-                    whileHover={{ scale: 1.02, borderColor: theme.border }}
+                    whileHover={{ scale: 1.02, borderColor: theme.border,
+                      backgroundColor: darkMode ? "rgba(255,255,255,0.095)" : "rgba(0,0,0,0.075)",
+                      transition: { duration: 0.18, ease: "easeOut" } }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setOnboardingStep("join")}
                     style={{
                       flex: 1, padding: "48px 28px", borderRadius: 22, cursor: "pointer",
-                      background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`,
+                      backgroundColor: theme.hoverBg, border: `1px solid ${theme.borderFaint}`,
                       backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
                       display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
                       transition: "all 0.25s ease",
@@ -52001,11 +52017,14 @@ export default function CircularMenu() {
                       background: "transparent", border: `1px solid ${theme.border}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
-                      {/* The same plus. Two different glyphs made the cards look
-                          like two kinds of thing, when they are two doors into
-                          the same one. */}
+                      {/* An arrow up, built on the plus's own geometry: both
+                          span 5 to 19 in the same 24 box at the same 2 stroke
+                          with round ends, so the two tiles read as one set.
+                          strokeLinejoin as well, which the plus does not need
+                          and an arrowhead does, or the tip comes out mitred. */}
                       <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 5v14M5 12h14" stroke={theme.textSub} strokeWidth="2" strokeLinecap="round" />
+                        <path d="M12 19V5M5 12l7-7 7 7" stroke={theme.textSub} strokeWidth="2"
+                          strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </div>
                     <div style={{ fontSize: 16.5, fontWeight: 500, color: theme.text, fontFamily: FONT }}>
