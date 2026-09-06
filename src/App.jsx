@@ -34520,8 +34520,11 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                     placeholder={t("moodboard.urlPlaceholder") || "Bild- oder Website-URL einfügen…"}
                     style={{ ...wsFieldText, flex: 1, minWidth: 120, padding: "4px 2px",
                       border: "none", outline: "none", background: "transparent" }} />
-                  {/* The field button at its own width, the same 132 the
-                      Settings panel gives every one of them, with the RETURN
+                  {/* The field button, 30 narrower than the shared 132: that
+                      width is set for a WORD, and this one holds a 15px glyph,
+                      so the same number leaves a lot of empty pill around it.
+                      Overridden here rather than in wsRowBtn, which every
+                      labelled button in Settings still needs at 132. With the RETURN
                       key drawn in the middle instead of the word: Enter is what
                       this field already responds to, so the button shows the
                       key that does it rather than naming the action. Padding
@@ -34533,7 +34536,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                   <motion.div whileHover={urlInput.trim() ? wsFieldBtnHover : {}} whileTap={urlInput.trim() ? { scale: 0.95 } : {}}
                     onClick={() => { if (urlInput.trim()) addUrl(); }}
                     title={t("moodboard.add") || "Hinzufügen"}
-                    style={{ ...wsFieldBtn, padding: 0,
+                    style={{ ...wsFieldBtn, padding: 0, minWidth: 102,
                       cursor: urlInput.trim() ? "pointer" : "default",
                       opacity: urlInput.trim() ? 1 : 0.5 }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
