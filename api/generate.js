@@ -42,7 +42,22 @@ const creditsFor = (microUsd) => Math.max(1, Math.ceil(microUsd / CREDIT_MICRO_U
 // `body` builds the request: the models do not share a request shape any more
 // than they share an endpoint. GPT Image 2 in particular is priced by size AND
 // quality, so those are pinned here — asking for the cheap variant is what makes
-// the price below true.
+// the price below true. Every model whose price depends on a dimension pins that
+// dimension for the same reason: a price that rests on somebody else's default
+// is a price that can change while this file stays untouched.
+//
+// WHERE THE NUMBERS COME FROM, and how to check them again. Each price is the
+// published rate for THIS endpoint at THIS setting. They move: Nano Banana 2
+// went from $0.070 to $0.084 per image between two readings, and for a while we
+// billed 71 credits for something that cost 84. Read the tables, do not assume.
+//
+//   flux-1-schnell, flux-2-klein, flux-pro   pixazo.ai/models/flux
+//   gpt-image-2                              pixazo.ai/models/gpt-image
+//   nano-banana-2, nano-banana-pro           pixazo.ai/models/nano-banana
+//
+// On each page the price table sits at the END of an endpoint's section, just
+// before the next heading — read the one AFTER the endpoint you care about, not
+// the one above it. All six last verified 2026-09-06.
 //
 // Listed cheapest first; the dialog renders them in this order.
 const MODELS = {
@@ -51,8 +66,13 @@ const MODELS = {
     body: (prompt) => ({ prompt }),
   },
   "flux-2-klein": {
-    path: "/flux-2-klein-4b/v1/generateImage", microUsd: 692, label: "Flux 2 Klein",
-    body: (prompt) => ({ prompt }),
+    // Priced per pixel count: $0.0003 at 512², $0.0007 at 1024², $0.0014 at
+    // 1448², $0.0028 at 2048². The size used to be left to the provider's
+    // default, which made the number below a guess about somebody else's
+    // config; 1024² is pinned so it is a fact. Still one credit either way,
+    // but a price nobody can state is a price that drifts unnoticed.
+    path: "/flux-2-klein-4b/v1/generateImage", microUsd: 700, label: "Flux 2 Klein",
+    body: (prompt) => ({ prompt, width: 1024, height: 1024 }),
   },
   "gpt-image-2": {
     path: "/gpt-image-2/v1/text-to-image", microUsd: 5000, label: "GPT Image 2",
@@ -65,12 +85,15 @@ const MODELS = {
     body: (prompt) => ({ prompt }),
   },
   "nano-banana-2": {
-    // Priced per resolution — $0.047 at 0.5K, $0.070 at 1K, more above. The
-    // documented default is 1K, but it is pinned anyway: a price that depends on
-    // someone else's default is a price that can change without us touching
-    // anything. num_images is pinned for the same reason — it bills per image,
-    // and defaults are not promises.
-    path: "/nano-banana-2/v1/text-to-image", microUsd: 70350, label: "Nano Banana 2",
+    // Priced per resolution — $0.063 at 0.5K, $0.084 at 1K, $0.126 at 2K,
+    // $0.168 at 4K. The documented default is 1K, but it is pinned anyway: a
+    // price that depends on someone else's default is a price that can change
+    // without us touching anything. num_images is pinned for the same reason —
+    // it bills per image, and defaults are not promises.
+    // Was 70350 here, from the earlier published rate of $0.070. Pixazo raised
+    // it and this file did not follow, so every picture cost us a fifth more
+    // than it billed. That is the whole reason the source pages are named above.
+    path: "/nano-banana-2/v1/text-to-image", microUsd: 84000, label: "Nano Banana 2",
     body: (prompt) => ({ prompt, resolution: "1K", num_images: 1, output_format: "png" }),
   },
   "nano-banana-pro": {
