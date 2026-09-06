@@ -17370,14 +17370,6 @@ const BRAND_SUBVIEW_LABELS = {
 
 // The Brand pillar tab bar. The three content pillars switch inline; Touchpoints
 // and Assets are dedicated views, so their tabs navigate there.
-const BRAND_PILLAR_TABS = [
-  { key: "strategy", label: "Strategie" },
-  { key: "identity", label: "Identität" },
-  { key: "design",   label: "Brand Design" },
-  { key: "touchpoints", label: "Audience", view: "touchpoints" },
-  { key: "assets",      label: "Assets",      view: "assets" },
-];
-
 // Second-level sub-tabs within each content pillar (per the agreed structure).
 const BRAND_PILLAR_SUBTABS = {
   strategy: [
@@ -17393,12 +17385,15 @@ const BRAND_PILLAR_SUBTABS = {
     { key: "avatar", label: "Brand Avatar" },
   ],
   design: [
-    { key: "logo",       label: "Logo" },
-    { key: "colors",     label: "Farben" },
-    { key: "typography", label: "Typografie" },
-    { key: "imagery",    label: "Bildsprache" },
+    { key: "logo",       label: { de: "Logo",        en: "Logo" } },
+    { key: "colors",     label: { de: "Farben",      en: "Colours" } },
+    { key: "typography", label: { de: "Typografie",  en: "Typography" } },
+    { key: "imagery",    label: { de: "Bildsprache", en: "Imagery" } },
   ],
 };
+// A sub-tab's label reads the same in both languages unless it says otherwise,
+// so only the ones that actually differ carry a pair.
+const brandSubLabel = (label, de) => (typeof label === "string" ? label : (de ? label.de : label.en));
 
 // Map legacy / removed tab ids onto the current pillars (for saved values).
 const BRAND_TAB_LEGACY_MAP = {
@@ -44053,12 +44048,16 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
   const [pillarOpen, setPillarOpen] = useState(false); // project-brand: top-right pillar switcher
   const [projDocFullscreen, setProjDocFullscreen] = useState(false); // embedded Dateien: doc editor fullscreen
   const embedHeaderSlot = useRef(null); // embedded pillars portal their header actions here
+  // appLanguage === "de" inline, NOT a `de` local: the only one in this
+  // component is declared inside createAvatarStory, several hundred lines
+  // below and in a different function, so reaching for it here compiles,
+  // builds green and throws at runtime. That has shipped twice.
   const PROJECT_PILLARS = [
-    { key: "strategy", label: "Strategie" },
-    { key: "identity", label: "Identität" },
-    { key: "design", label: "Designsystem" },
+    { key: "strategy",    label: appLanguage === "de" ? "Strategie"    : "Strategy" },
+    { key: "identity",    label: appLanguage === "de" ? "Identität"    : "Identity" },
+    { key: "design",      label: appLanguage === "de" ? "Designsystem" : "Design System" },
     { key: "touchpoints", label: "Audience" },
-    { key: "assets", label: "Dateien" },
+    { key: "assets",      label: appLanguage === "de" ? "Dateien"      : "Files" },
   ];
   // Pillars that render a bare embedded view (no brand sub-tabs / edit button).
   const isEmbeddedPillar = isProjectBrand && (brandTab === "touchpoints" || brandTab === "assets");
@@ -46050,7 +46049,8 @@ If you don't know a field, infer a plausible value. Write all text values in the
                 brand) render a bare embedded view, so no sub-tab bar. */}
             {!isEmbeddedPillar && (
             <div ref={subInd.containerRef} style={{ display: "flex", gap: 4, padding: "10px 26px 0", borderBottom: `1px solid ${theme.borderFaint}`, position: "relative" }}>
-              {pillarSubs.map(({ key, label }) => {
+              {pillarSubs.map(({ key, label: rawLabel }) => {
+                const label = brandSubLabel(rawLabel, appLanguage === "de");
                 const active = brandSub === key;
                 return (
                   <div key={key} ref={subInd.registerTab(key)} onClick={() => setBrandSub(key)}
