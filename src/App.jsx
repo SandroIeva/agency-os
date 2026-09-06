@@ -46756,7 +46756,19 @@ export default function CircularMenu() {
   // A stored choice wins; otherwise the browser decides. Only an explicit pick
   // is written back, so someone who never touched the setting keeps following
   // their browser instead of being frozen into whatever we detected once.
-  const [appLanguage, setAppLanguage] = useState(() => localStorage.getItem("agencyos-language") || detectLanguage());
+  // ?lang=en or ?lang=de shows the app in that language for THIS page load and
+  // writes nothing back, so it is a way to look at the other language without
+  // changing the setting or the browser's own. Only chooseLanguage persists,
+  // which is what makes this safe: reload without the parameter and the stored
+  // preference is untouched.
+  const [appLanguage, setAppLanguage] = useState(() => {
+    try {
+      const asked = new URLSearchParams(window.location.search).get("lang");
+      if (asked === "de" || asked === "en") return asked;
+    } catch (_) { /* no URL to read */ }
+    try { return localStorage.getItem("agencyos-language") || detectLanguage(); }
+    catch (_) { return detectLanguage(); }
+  });
   const chooseLanguage = useCallback((lang) => {
     setAppLanguage(lang);
     localStorage.setItem("agencyos-language", lang);
