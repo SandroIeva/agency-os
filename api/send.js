@@ -6,6 +6,21 @@
 //   mode "push-setup"      → "enable push" setup email (Resend)
 //   mode "push"            → web-push notification (VAPID)
 import webpush from "web-push";
+import { getAdminSupabase, requireUser } from "../server/billing.js";
+
+// Everything that reaches an email template goes through this first. The
+// templates interpolate names straight into HTML, and a name is whatever
+// somebody typed into a field.
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// The lifecycle sweep is the one caller that is not a person. It runs on
+// Vercel's cron with CRON_SECRET, so it can prove it is us; every other mode
+// belongs to a signed-in user.
+const isInternal = (req) => {
+  const secret = process.env.CRON_SECRET;
+  return Boolean(secret) && req.headers["x-i7-internal"] === secret;
+};
 
 // Canonical public app URL. Override via the PUBLIC_APP_URL env var if the
 // domain changes again; defaults to the current production domain.
@@ -35,13 +50,13 @@ const inviteHtml = ({ token, orgName, inviterName }) => `
               <h1 style="font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0;">You're invited to join a workspace</h1>
             </div>
             <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 24px;">
-              <strong>${inviterName || "A team member"}</strong> has invited you to join <strong>${orgName || "their workspace"}</strong> on i7OS.
+              <strong>${esc(inviterName || "A team member")}</strong> has invited you to join <strong>${esc(orgName || "their workspace")}</strong> on i7OS.
             </p>
             <div style="background: #f8f7ff; border: 1px solid #e8e5ff; border-radius: 12px; padding: 16px 20px; margin-bottom: 28px;">
               <div style="font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Your Invite Code</div>
-              <div style="font-size: 15px; font-weight: 600; color: #555; letter-spacing: 0.3px; word-break: break-all; font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">${token}</div>
+              <div style="font-size: 15px; font-weight: 600; color: #555; letter-spacing: 0.3px; word-break: break-all; font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">${esc(token)}</div>
             </div>
-            <a href="${APP_URL}/?invite=${token}" style="display: inline-block; padding: 12px 28px; background: #111111; color: white; text-decoration: none; border-radius: 10px; font-weight: 500; font-size: 14px; margin-bottom: 24px;">Join Workspace</a>
+            <a href="${APP_URL}/?invite=${encodeURIComponent(token)}" style="display: inline-block; padding: 12px 28px; background: #111111; color: white; text-decoration: none; border-radius: 10px; font-weight: 500; font-size: 14px; margin-bottom: 24px;">Join Workspace</a>
             <p style="font-size: 13px; color: #888; line-height: 1.6; margin-bottom: 24px;">
               Click the button to join directly,<br/>or copy the invite code and enter it manually in i7OS.
             </p>
@@ -59,9 +74,9 @@ const projectInviteHtml = ({ projectName, inviterName, token }) => `
               <h1 style="font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0;">Projekt-Einladung</h1>
             </div>
             <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 24px;">
-              <strong>${inviterName || "Ein Teammitglied"}</strong> hat dich eingeladen, am Projekt <strong>${projectName || ""}</strong> mitzuwirken.
+              <strong>${esc(inviterName || "Ein Teammitglied")}</strong> hat dich eingeladen, am Projekt <strong>${esc(projectName || "")}</strong> mitzuwirken.
             </p>
-            <a href="${APP_URL}/?project-invite=${token}" style="display: inline-block; padding: 12px 28px; background: #111111; color: white; text-decoration: none; border-radius: 10px; font-weight: 500; font-size: 14px; margin-bottom: 24px;">Projekt beitreten</a>
+            <a href="${APP_URL}/?project-invite=${encodeURIComponent(token)}" style="display: inline-block; padding: 12px 28px; background: #111111; color: white; text-decoration: none; border-radius: 10px; font-weight: 500; font-size: 14px; margin-bottom: 24px;">Projekt beitreten</a>
             <p style="font-size: 13px; color: #888; line-height: 1.6; margin-bottom: 24px;">
               Klick auf den Button, um dem Projekt beizutreten. Die Einladung ist 14 Tage gültig.
             </p>
@@ -79,7 +94,7 @@ const pushSetupHtml = ({ userName, setupUrl }) => `
               <h1 style="font-size: 20px; font-weight: 600; color: #1a1a2e; margin: 0;">Push-Benachrichtigungen aktivieren</h1>
             </div>
             <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 8px;">
-              Hey ${userName || ""},
+              Hey ${esc(userName || "")},
             </p>
             <p style="font-size: 15px; color: #444; line-height: 1.6; margin-bottom: 28px;">
               öffne diesen Link <strong>auf deinem Handy</strong>, um Push-Benachrichtigungen für Erinnerungen zu aktivieren.
@@ -105,31 +120,83 @@ const pushSetupHtml = ({ userName, setupUrl }) => `
           </div>
         `;
 
-export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+// The display name to sign an invitation with. Read from the sender's own
+// profile rather than from the request: a name in the body is a name the
+// sender chose for themselves in that one message.
+async function senderName(admin, userId) {
+  const { data } = await admin.from("profiles").select("display_name, email").eq("id", userId).maybeSingle();
+  return data?.display_name || data?.email || "";
+}
 
-  if (req.method === "OPTIONS") return res.status(200).end();
+export default async function handler(req, res) {
+  // No wildcard CORS. Every caller is the app on its own origin or the cron.
+  // `*` on an endpoint that sends mail is an open relay with a nice header.
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const mode = req.body?.mode || req.query?.mode;
 
+  // ── Who is asking ─────────────────────────────────────────────────────────
+  //
+  // Nothing here used to ask. Anyone on the internet could POST an address and
+  // a bit of text and i7OS would send mail to it, on our Resend account and
+  // under our domain's reputation, or push a notification to any endpoint they
+  // happened to know. The recipient came out of the request body, which is the
+  // definition of an open relay.
+  //
+  // Now: the sweep proves it is the sweep with the cron secret, everyone else
+  // proves who they are with the same bearer token the rest of api/ takes, and
+  // every mode below re-derives WHO may receive from the database instead of
+  // believing the body.
+  const internal = isInternal(req);
+  let user = null;
+  if (!internal) {
+    try {
+      user = await requireUser(req);
+    } catch {
+      return res.status(401).json({ error: "Authentication required", code: "unauthorized" });
+    }
+  }
+  if (mode === "lifecycle-warning" && !internal) {
+    return res.status(403).json({ error: "Not yours to send", code: "forbidden" });
+  }
+  const admin = getAdminSupabase();
+
   try {
     if (mode === "invite") {
-      const { email, token, orgName, inviterName } = req.body;
-      if (!email || !token) return res.status(400).json({ error: "Missing email or token" });
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ error: "Missing token" });
+
+      // The invitation decides everything: who it is for, which workspace, and
+      // whether it is still open. The body only says which invitation.
+      const { data: inv } = await admin
+        .from("invitations")
+        .select("email, org_id, status, expires_at")
+        .eq("token", token)
+        .maybeSingle();
+      if (!inv || inv.status !== "pending" || (inv.expires_at && new Date(inv.expires_at) < new Date())) {
+        return res.status(404).json({ error: "No open invitation for that token", code: "no_invite" });
+      }
+      // And only an admin of that workspace may cause it to be sent.
+      const { data: mem } = await admin
+        .from("org_members").select("role").eq("org_id", inv.org_id).eq("user_id", user.id).maybeSingle();
+      if (mem?.role !== "admin") return res.status(403).json({ error: "Not yours to send", code: "forbidden" });
+
+      const { data: org } = await admin.from("organizations").select("name").eq("id", inv.org_id).maybeSingle();
+      const orgName = org?.name || "their workspace";
+      const inviterName = await senderName(admin, user.id);
       const r = await sendResend({
         from: "Agency OS <invite@i7os.com>",
-        to: email,
-        subject: `${inviterName || "Someone"} invited you to join ${orgName || "their workspace"} on i7OS`,
+        to: inv.email,
+        subject: `${inviterName || "Someone"} invited you to join ${orgName} on i7OS`,
         html: inviteHtml({ token, orgName, inviterName }),
       });
       return r.ok ? res.status(200).json({ success: true, id: r.id }) : res.status(r.status).json({ error: r.error });
     }
 
     if (mode === "storage-warning") {
-      const { email, pct } = req.body;
+      // Goes to the person asking, never to an address in the body.
+      const { pct } = req.body;
+      const email = user.email;
       if (!email) return res.status(400).json({ error: "Missing email" });
       const usedPct = Math.min(100, Math.max(0, Math.round(Number(pct) || 90)));
       const r = await sendResend({
@@ -179,7 +246,7 @@ export default async function handler(req, res) {
             </div>
             <p style="font-size: 15px; color: #444; line-height: 1.6;">
               Dein i7OS Konto hat seit einer Weile keinen aktiven Plan. In <strong>${days} Tagen</strong>
-              entfernen wir deshalb die hochgeladenen Dateien${names.length ? ` aus ${names.length === 1 ? "deinem Workspace" : "deinen Workspaces"} <strong>${names.join(", ")}</strong>` : ""}.
+              entfernen wir deshalb die hochgeladenen Dateien${names.length ? ` aus ${names.length === 1 ? "deinem Workspace" : "deinen Workspaces"} <strong>${names.map(esc).join(", ")}</strong>` : ""}.
             </p>
             <p style="font-size: 15px; color: #444; line-height: 1.6;">
               Deine Projekte, Aufgaben und Markendaten bleiben zunächst erhalten und sind weiterhin sichtbar.
@@ -203,20 +270,53 @@ export default async function handler(req, res) {
     }
 
     if (mode === "project-invite") {
-      const { email, token, projectName, inviterName } = req.body;
-      if (!email || !token) return res.status(400).json({ error: "Missing email or token" });
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ error: "Missing token" });
+
+      const { data: inv } = await admin
+        .from("project_invitations")
+        .select("email, project_id, status, expires_at")
+        .eq("token", token)
+        .maybeSingle();
+      if (!inv || inv.status !== "pending" || (inv.expires_at && new Date(inv.expires_at) < new Date())) {
+        return res.status(404).json({ error: "No open invitation for that token", code: "no_invite" });
+      }
+      const { data: proj } = await admin
+        .from("projects").select("name, owner_id, org_id").eq("id", inv.project_id).maybeSingle();
+      if (!proj) return res.status(404).json({ error: "No such project", code: "no_project" });
+      // The project's owner, or an admin of the workspace it lives in.
+      let allowed = proj.owner_id === user.id;
+      if (!allowed) {
+        const { data: mem } = await admin
+          .from("org_members").select("role").eq("org_id", proj.org_id).eq("user_id", user.id).maybeSingle();
+        allowed = mem?.role === "admin";
+      }
+      if (!allowed) return res.status(403).json({ error: "Not yours to send", code: "forbidden" });
+
+      const inviterName = await senderName(admin, user.id);
+      const projectName = proj.name || "";
       const r = await sendResend({
         from: "i7OS <invite@i7os.com>",
-        to: email,
-        subject: `${inviterName || "Jemand"} hat dich zum Projekt "${projectName || ""}" eingeladen`,
+        to: inv.email,
+        subject: `${inviterName || "Jemand"} hat dich zum Projekt "${projectName}" eingeladen`,
         html: projectInviteHtml({ projectName, inviterName, token }),
       });
       return r.ok ? res.status(200).json({ success: true, id: r.id }) : res.status(r.status).json({ error: r.error });
     }
 
     if (mode === "push-setup") {
-      const { email, userName, token } = req.body;
-      if (!email || !token) return res.status(400).json({ error: "Missing email or token" });
+      // A setup link is a way into somebody's account on another device, so it
+      // may only ever be posted to that same somebody's own address.
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ error: "Missing token" });
+      const { data: row } = await admin
+        .from("push_setup_tokens").select("user_id, used, expires_at").eq("token", token).maybeSingle();
+      if (!row || row.user_id !== user.id || row.used || (row.expires_at && new Date(row.expires_at) < new Date())) {
+        return res.status(403).json({ error: "Not yours to send", code: "forbidden" });
+      }
+      const email = user.email;
+      if (!email) return res.status(400).json({ error: "Missing email" });
+      const userName = await senderName(admin, user.id);
       const setupUrl = `${APP_URL}/?push-setup=true&token=${encodeURIComponent(token)}`;
       const r = await sendResend({
         from: "i7OS <invite@i7os.com>",
@@ -230,6 +330,12 @@ export default async function handler(req, res) {
     if (mode === "push") {
       const { subscription, title, body, tag, url } = req.body;
       if (!subscription || !subscription.endpoint) return res.status(400).json({ error: "Missing subscription" });
+      // The endpoint has to be one of this user's own registered devices.
+      // Otherwise anybody who has ever seen a push endpoint can write anything
+      // they like onto somebody else's lock screen, signed i7OS.
+      const { data: own } = await admin
+        .from("push_subscriptions").select("id").eq("user_id", user.id).eq("endpoint", subscription.endpoint).maybeSingle();
+      if (!own) return res.status(403).json({ error: "Not one of your devices", code: "forbidden" });
       const vapidPublic = process.env.VAPID_PUBLIC_KEY;
       const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
       if (!vapidPublic || !vapidPrivate) return res.status(500).json({ error: "VAPID keys not configured" });

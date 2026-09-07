@@ -38,6 +38,22 @@ import skillReelScripter from "./skills/reel-scripter/SKILL.md?raw";
 import skillNewsletter from "./skills/newsletter-drafter/SKILL.md?raw";
 import skillSeriesPlanner from "./skills/series-planner/SKILL.md?raw";
 
+// The bearer token for our OWN api/ endpoints, read from the live session
+// rather than threaded through props: the endpoints that need it are called
+// from components several levels apart, and a prop that has to reach all of
+// them is a prop somebody will forget on the fourth one. getSession() reads
+// what the client already holds, so this costs no request.
+//
+// Every api/ route that spends money or sends something on somebody's behalf
+// checks this. Sending no header is the same as being a stranger.
+export async function authHeaders() {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch { return {}; }
+}
+
 // Error Boundary to prevent black screen — shows error info in production
 export class AppErrorBoundary extends Component {
   constructor(props) {
@@ -11870,8 +11886,8 @@ async function maybeWarnStorage({ orgId, userId, used, limit, email }) {
       });
     }
     if (email) {
-      fetch("/api/send", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "storage-warning", email, pct: pctInt }) }).catch(() => {});
+      fetch("/api/send", { method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({ mode: "storage-warning", pct: pctInt }) }).catch(() => {});
     }
   } catch (e) { console.warn("[storage] warn failed:", e?.message); }
 }
@@ -16694,7 +16710,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
       try {
         await fetch("/api/send", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
           body: JSON.stringify({
             mode: "project-invite",
             email,
@@ -49216,7 +49232,7 @@ export default function CircularMenu() {
               try {
                 const res = await fetch("/api/send", {
                   method: "POST",
-                  headers: { "Content-Type": "application/json" },
+                  headers: { "Content-Type": "application/json", ...(await authHeaders()) },
                   body: JSON.stringify({
                     mode: "push",
                     subscription: { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
@@ -49313,7 +49329,7 @@ export default function CircularMenu() {
       try {
         const testRes = await fetch("/api/send", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
           body: JSON.stringify({
             mode: "push",
             subscription: { endpoint: subJson.endpoint, keys: { p256dh: subJson.keys.p256dh, auth: subJson.keys.auth } },
@@ -49718,7 +49734,7 @@ export default function CircularMenu() {
     (async () => {
       try {
         const res = await fetch("/api/tts", {
-          method: "POST", headers: { "Content-Type": "application/json" },
+          method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
           body: JSON.stringify({ text, voiceId: selectedVoice }),
         });
         if (res.ok) {
@@ -51297,7 +51313,7 @@ export default function CircularMenu() {
       try {
         const ttsResponse = await fetch("/api/tts", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
           body: JSON.stringify({ text: aiText, voiceId: selectedVoice }),
         });
         if (aiStoppedRef.current) return;
@@ -55009,7 +55025,7 @@ export default function CircularMenu() {
                                 try {
                                   const resp = await fetch("/api/send", {
                                     method: "POST",
-                                    headers: { "Content-Type": "application/json" },
+                                    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
                                     body: JSON.stringify({
                                       mode: "invite",
                                       email,
@@ -55611,7 +55627,7 @@ export default function CircularMenu() {
                             try {
                               const res = await fetch("/api/tts", {
                                 method: "POST",
-                                headers: { "Content-Type": "application/json" },
+                                headers: { "Content-Type": "application/json", ...(await authHeaders()) },
                                 body: JSON.stringify({
                                   text: "Hi, I am your AI assistant in Agency OS. How can I help you today?",
                                   voiceId: voice.id,
@@ -56387,7 +56403,7 @@ export default function CircularMenu() {
                             for (const sub of subs || []) {
                               await fetch("/api/send", {
                                 method: "POST",
-                                headers: { "Content-Type": "application/json" },
+                                headers: { "Content-Type": "application/json", ...(await authHeaders()) },
                                 body: JSON.stringify({
                                   mode: "push",
                                   subscription: { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
@@ -56414,7 +56430,7 @@ export default function CircularMenu() {
                           if (tokenErr) throw tokenErr;
                           await fetch("/api/send", {
                             method: "POST",
-                            headers: { "Content-Type": "application/json" },
+                            headers: { "Content-Type": "application/json", ...(await authHeaders()) },
                             body: JSON.stringify({ mode: "push-setup", email: userEmail, userName, token: tokenRow.token }),
                           });
                           setPushSetupSent(true);

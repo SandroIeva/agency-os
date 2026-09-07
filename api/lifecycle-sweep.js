@@ -118,7 +118,10 @@ export default async function handler(req) {
           try {
             await fetch(`${process.env.PUBLIC_APP_URL || ""}/api/send`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              // api/send belongs to signed-in people now. This caller is not a
+              // person, so it proves it is the sweep with the same secret Vercel
+              // already hands the cron.
+              headers: { "Content-Type": "application/json", "x-i7-internal": process.env.CRON_SECRET || "" },
               body: JSON.stringify({
                 mode: "lifecycle-warning",
                 email: profile.email,
