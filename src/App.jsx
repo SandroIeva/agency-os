@@ -30349,7 +30349,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
 const POST_CHAR_LIMITS = { x: 280, threads: 500, pinterest: 500, instagram: 2200, linkedin: 3000 };
 const POST_OVERLAY_COLORS = ["#FFFFFF", "#15151c", "#F5C518", "#E86767", "#4D9FFF"];
 
-function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage = "de", incomingVisual = null }) {
+function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage = "de", incomingVisual = null, onViewContext = null }) {
   const de = appLanguage === "de";
   const L = (o) => (de ? o.de : o.en);
   // The picture comes first. Writing a caption for a post you have not seen yet
@@ -30516,6 +30516,30 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const toggleAccount = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const charLimit = selected.length ? Math.min(...selected.map(a => POST_CHAR_LIMITS[uiKeyFor(a.platform)] || 3000)) : 3000;
   const overLimit = text.length > charLimit;
+
+  // ── What the assistant is told when it is opened over this view ───────────
+  // It used to get one sentence, "they are composing a post for a social
+  // channel", which is not enough to write one: a LinkedIn caption and an
+  // Instagram caption are not the same text, a rewrite is not a first draft,
+  // and a 280 character limit changes the answer entirely. The composer is the
+  // only thing that knows any of that, so the composer is what says it.
+  useEffect(() => {
+    if (!onViewContext) return;
+    const step = steps[stepIdx] || steps[0];
+    onViewContext("createpost", {
+      "Step": `${step[de ? "de" : "en"]} (${stepIdx + 1} of ${steps.length})`,
+      "Channels chosen": selected.length
+        ? selected.map(a => `${a.platform}${a.username ? ` (@${a.username})` : ""}`).join(", ")
+        : "none yet, so no platform-specific advice can be given",
+      "Character limit": charLimit,
+      "Caption written so far": text.trim() || "nothing yet, the field is empty",
+      "Image": visual ? "one is attached" : "none attached",
+      "Scheduled for": schedule || "not scheduled",
+    });
+    // Leaving the composer takes its contents with it, rather than leaving them
+    // to describe whatever screen comes next.
+    return () => onViewContext("createpost", null);
+  }, [onViewContext, stepIdx, text, schedule, visual, selectedIds, accounts, charLimit, de]); // eslint-disable-line
 
   // A visual handed over from the canvas editor arrives the same way a picked
   // file does, so everything downstream — preview, presign, upload — is the one
@@ -50135,6 +50159,26 @@ export default function CircularMenu() {
   // ask it to write a post description and the composer was gone before you
   // finished the sentence. The layer moves now, not the view.
   const [voiceOverView, setVoiceOverView] = useState(null);
+  // What the OPEN view is holding, published by that view itself. currentView
+  // says which screen; this says what is on it, which is the difference
+  // between "they are composing a post" and "they are composing a LinkedIn
+  // post, 0 characters written, an image attached".
+  //
+  // A ref and not state: it changes on every keystroke in a caption field, and
+  // nothing rendered depends on it. Putting it in state would re-render the
+  // whole app per character to feed a string that is only read at the instant
+  // a prompt is built.
+  //
+  // Tagged with the view that published it, and checked against the live view
+  // before use, so a value left behind by the screen you just closed can never
+  // end up describing the one you are on.
+  const viewContextRef = useRef(null);   // { view, data } | null
+  const publishViewContext = useCallback((view, data) => {
+    viewContextRef.current = data ? { view, data } : null;
+  }, []);
+  const readViewContext = () =>
+    (viewContextRef.current && viewContextRef.current.view === currentView)
+      ? viewContextRef.current.data : null;
 
   // ── Files dropped on the Startview ──────────────────────────────────────
   // Drop a file on the dashboard and the assistant asks where it should go
@@ -51633,6 +51677,7 @@ export default function CircularMenu() {
         workspace: userOrg ? { name: userOrg.name, role: userOrgRole } : null,
         brand: brandProfile,
         projects: appProjects,
+        viewData: readViewContext(),
       });
       const activeKey = llmKeys[llmProvider];
       const googleToken = llmProvider === "gemini" && !activeKey ? getProviderToken() : null;
@@ -51736,6 +51781,7 @@ export default function CircularMenu() {
         workspace: userOrg ? { name: userOrg.name, role: userOrgRole } : null,
         brand: brandProfile,
         projects: appProjects,
+        viewData: readViewContext(),
       });
       let data;
 
@@ -53210,7 +53256,7 @@ export default function CircularMenu() {
         {/* CREATE SOCIAL MEDIA POST */}
         <AnimatePresence>
           {currentView === "createpost" && (
-            <CreatePostView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} appLanguage={appLanguage} incomingVisual={postVisual} onBack={() => setCurrentView("dashboard")} />
+            <CreatePostView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} appLanguage={appLanguage} incomingVisual={postVisual} onViewContext={publishViewContext} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 

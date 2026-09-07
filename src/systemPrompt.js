@@ -138,6 +138,33 @@ const LANGUAGE_RULE = {
   en: "\nThe interface is set to ENGLISH. Answer in English, and use the English name of every section, tab and button: never leave a German label in an English sentence. If the person clearly speaks or writes another language, follow them into it.",
 };
 
+// ── What the open view is holding ────────────
+// VIEW_CONTEXTS says WHICH view somebody is in. This says what is IN it, and
+// the view itself is what publishes it, as plain label/value pairs. Keeping
+// this file ignorant of what a post composer is means a second view can join
+// without touching it.
+//
+// Values are truncated hard. A caption can run to a few thousand characters,
+// and the point here is to tell the model what it is looking at, not to move
+// the document into the prompt.
+const VIEW_DATA_CAP = 600;
+const renderViewData = (data) => {
+  if (!data || typeof data !== "object") return "";
+  const lines = [];
+  for (const [label, raw] of Object.entries(data)) {
+    if (raw === null || raw === undefined || raw === "") continue;
+    let v = String(raw).replace(/\s+/g, " ").trim();
+    if (!v) continue;
+    if (v.length > VIEW_DATA_CAP) v = v.slice(0, VIEW_DATA_CAP) + " […]";
+    lines.push(`- ${label}: ${v}`);
+  }
+  if (!lines.length) return "";
+  return `\nWhat is on their screen right now:\n${lines.join("\n")}\n`
+    // Without this the model offers to "add that to the description", which it
+    // cannot do. Saying so once is cheaper than an apology every time.
+    + "\nYou can SEE these fields but you cannot fill them in. When you write something for a field, give the finished text plainly so it can be copied, and do not claim to have inserted it.";
+};
+
 // ── Assemble the full prompt ─────────────────
 /**
  * Build the complete system prompt for any LLM provider.
@@ -148,6 +175,7 @@ const LANGUAGE_RULE = {
  * @param {string} options.language     — app language ("de" / "en")
  * @param {string} options.surface      — "voice" (spoken) or "chat" (typed)
  * @param {string} options.provider     — llm provider id — informational only
+ * @param {object} options.viewData     — label/value pairs the open view published
  * @returns {string} the full system prompt
  */
 export function buildSystemPrompt({
@@ -159,6 +187,7 @@ export function buildSystemPrompt({
   workspace = null,    // { name, role } — the org the user is currently in
   brand = null,        // brand_profile row
   projects = [],       // [{ name }] — known project names
+  viewData = null,     // { label: value } published by the open view itself
 } = {}) {
   const parts = [identity(surface), APP_KNOWLEDGE, CAPABILITIES];
 
@@ -169,6 +198,9 @@ export function buildSystemPrompt({
   if (viewContext) {
     parts.push(`\nRight now:\n${viewContext}`);
   }
+  // Straight after the view line, because it is the same subject one step finer.
+  const viewDetail = renderViewData(viewData);
+  if (viewDetail) parts.push(viewDetail);
 
   // Add user context
   if (userName) {
@@ -234,4 +266,4 @@ export function buildSystemPrompt({
 }
 
 // Export individual pieces for testing / inspection
-export { identity, APP_KNOWLEDGE, CAPABILITIES, VIEW_CONTEXTS, LANGUAGE_RULE };
+export { identity, APP_KNOWLEDGE, CAPABILITIES, VIEW_CONTEXTS, LANGUAGE_RULE, renderViewData };
