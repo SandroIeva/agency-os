@@ -2,15 +2,33 @@
 // Normalizes responses to a common shape so the client doesn't have to branch.
 // On failure: returns a clear, user-readable `error` field with a hint about what's wrong.
 import { createClient } from "@supabase/supabase-js";
+import { requireOrgMember, requireUser } from "../server/billing.js";
 
 const MAX_TOKENS_DEFAULT = 2000;       // generous — full answers, not truncated
 const UPSTREAM_TIMEOUT_MS = 45_000;    // give the model time to think but bail before Vercel kills us
 
-function withTimeout(promise, ms, label) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)),
-  ]);
+// A real deadline, not a race.
+//
+// The old version raced the fetch against a timer. Three things were wrong with
+// that. The timer was never cleared, so every successful call left one behind.
+// The request was never aborted, so "timed out" only stopped US waiting while
+// the upstream call carried on. And the race ended when the response HEADERS
+// arrived, so a provider that answered instantly and then never finished the
+// body hung past the deadline with nothing to stop it.
+//
+// Pass a function and it gets an AbortSignal: put it on the fetch, and do the
+// body read inside, and both are on the same clock. A bare promise still works
+// the way it used to, minus the leaked timer.
+function withTimeout(makeRequest, ms, label) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  const started = typeof makeRequest === "function" ? makeRequest(ctrl.signal) : makeRequest;
+  return Promise.resolve(started)
+    .catch((e) => {
+      if (ctrl.signal.aborted) throw new Error(`${label} timed out after ${ms}ms`);
+      throw e;
+    })
+    .finally(() => clearTimeout(timer));
 }
 
 // ── AI token-usage metering (server-side, service key → clients can't spoof) ──
@@ -33,7 +51,7 @@ async function recordUsage({ orgId, userId, provider, model, feature, byok, usag
     // Normalise token fields across providers (Anthropic / OpenAI / Gemini).
     const input = usage.input_tokens ?? usage.prompt_tokens ?? usage.promptTokenCount ?? 0;
     const output = usage.output_tokens ?? usage.completion_tokens ?? usage.candidatesTokenCount ?? 0;
-    await db.from("token_usage").insert({
+    const { error } = await db.from("token_usage").insert({
       org_id: orgId,
       user_id: userId || null,
       provider,
@@ -43,6 +61,10 @@ async function recordUsage({ orgId, userId, provider, model, feature, byok, usag
       output_tokens: Math.max(0, Math.round(output)),
       byok: byok !== false,
     });
+    // supabase-js hands a database error back rather than throwing it, so the
+    // try/catch around this only ever caught network faults and a rejected
+    // insert looked like a success.
+    if (error) console.warn("[token_usage] insert rejected:", error.message);
   } catch (e) {
     console.warn("[token_usage] record failed:", e?.message);
   }
@@ -61,12 +83,15 @@ async function postJSONRetry(url, headers, body, label, retries = 2) {
   let last = { ok: false, status: 0, data: null, raw: "", timedOut: false };
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const r = await withTimeout(
-        fetch(url, { method: "POST", headers, body: JSON.stringify(body) }),
-        UPSTREAM_TIMEOUT_MS, label,
-      );
-      let d = null;
-      try { d = await r.json(); } catch { /* non-JSON body */ }
+      // Headers AND body under one deadline. Reading the body outside it is
+      // how a provider that stalls mid-answer used to hang here, and this is
+      // the retrying path, so a hang here costs the whole budget three times.
+      const { r, d } = await withTimeout(async (signal) => {
+        const resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal });
+        let parsed = null;
+        try { parsed = await resp.json(); } catch { /* non-JSON body */ }
+        return { r: resp, d: parsed };
+      }, UPSTREAM_TIMEOUT_MS, label);
       if (r.ok) return { ok: true, status: r.status, data: d, raw: "", timedOut: false };
       const raw = d?.error?.message || `HTTP ${r.status}`;
       last = { ok: false, status: r.status, data: d, raw, timedOut: false };
@@ -121,14 +146,33 @@ function hintFor(provider, statusCode, raw, lang = "de") {
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") return res.status(200).end();
+  // No wildcard CORS. Every caller is the app on its own origin.
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { message, messages, systemPrompt, provider = "claude", apiKey, oauthToken, model, maxTokens, wantsImage, image, imageOrientation, orgId, userId, feature, language } = req.body || {};
+  // Who is asking. The endpoint used to ask nobody, and then wrote token_usage
+  // rows with the org_id and user_id straight out of the REQUEST BODY using the
+  // service key. So anyone could attribute AI usage to any workspace they knew
+  // the id of, and the id is not a secret. The call itself spends the caller's
+  // own key, so this was never a way to spend our money, but the usage report
+  // is supposed to be a record and a record anybody can write is not one.
+  let user;
+  try {
+    user = await requireUser(req);
+  } catch {
+    return res.status(401).json({ error: "Authentication required", code: "unauthorized" });
+  }
+
+  const { message, messages, systemPrompt, provider = "claude", apiKey, oauthToken, model, maxTokens, wantsImage, image, imageOrientation, orgId, feature, language } = req.body || {};
+  // From the session, never from the body.
+  const userId = user.id;
+  // And the workspace has to be one this person belongs to, or nothing is
+  // recorded against it. A failure here does not fail the chat: the answer is
+  // what somebody asked for, the metering is our bookkeeping.
+  let meteredOrgId = null;
+  if (orgId) {
+    try { await requireOrgMember(user.id, orgId); meteredOrgId = orgId; }
+    catch { console.warn(`[token_usage] ${user.id} is not a member of ${orgId}, usage not recorded`); }
+  }
   const lang = language === "en" ? "en" : "de";
   // Everything is BYOK today (user's own key / Google OAuth). When a managed
   // company key is added later, that path will pass byok:false to bill credits.
@@ -167,7 +211,7 @@ export default async function handler(req, res) {
         const m = String(image).match(/^data:([^;]+);base64,(.*)$/);
         if (m) imgPart = { mime: m[1], b64: m[2] };
       } else {
-        const ir = await withTimeout(fetch(image), UPSTREAM_TIMEOUT_MS, "image-fetch");
+        const ir = await withTimeout((signal) => fetch(image, { signal }), UPSTREAM_TIMEOUT_MS, "image-fetch");
         if (ir.ok) {
           const buf = await ir.arrayBuffer();
           imgPart = { mime: ir.headers.get("content-type") || "image/png", b64: Buffer.from(buf).toString("base64") };
@@ -181,7 +225,8 @@ export default async function handler(req, res) {
     // ── Claude (Anthropic) ─────────────────────
     if (provider === "claude") {
       const claudeModel = model || "claude-sonnet-4-20250514";
-      const response = await withTimeout(fetch("https://api.anthropic.com/v1/messages", {
+      const response = await withTimeout((signal) => fetch("https://api.anthropic.com/v1/messages", {
+        signal,
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -219,7 +264,7 @@ export default async function handler(req, res) {
           provider: "claude",
         });
       }
-      await recordUsage({ orgId, userId, provider: "claude", model: claudeModel, feature, byok, usage: data.usage });
+      await recordUsage({ orgId: meteredOrgId, userId, provider: "claude", model: claudeModel, feature, byok, usage: data.usage });
       return res.status(200).json({
         content: [{ type: "text", text }],
         provider: "claude",
@@ -246,7 +291,8 @@ export default async function handler(req, res) {
             ? (model === "gpt-image-1" ? "1024x1536" : "1024x1792")
             : "1024x1024";
           const body = { model, prompt: lastUserMsg, n: 1, size };
-          const r = await withTimeout(fetch("https://api.openai.com/v1/images/generations", {
+          const r = await withTimeout((signal) => fetch("https://api.openai.com/v1/images/generations", {
+        signal,
             method: "POST",
             headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
             body: JSON.stringify(body),
@@ -259,7 +305,7 @@ export default async function handler(req, res) {
           if (item?.b64_json) return `data:image/png;base64,${item.b64_json}`;
           if (item?.url) {
             try {
-              const imgRes = await withTimeout(fetch(item.url), UPSTREAM_TIMEOUT_MS, "image-fetch");
+              const imgRes = await withTimeout((signal) => fetch(item.url, { signal }), UPSTREAM_TIMEOUT_MS, "image-fetch");
               if (!imgRes.ok) return null;
               const buf = await imgRes.arrayBuffer();
               const b64 = Buffer.from(buf).toString("base64");
@@ -312,7 +358,8 @@ export default async function handler(req, res) {
       }
 
       const openaiModel = model || "gpt-4o";
-      const response = await withTimeout(fetch("https://api.openai.com/v1/chat/completions", {
+      const response = await withTimeout((signal) => fetch("https://api.openai.com/v1/chat/completions", {
+        signal,
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -350,7 +397,7 @@ export default async function handler(req, res) {
           provider: "openai",
         });
       }
-      await recordUsage({ orgId, userId, provider: "openai", model: openaiModel, feature, byok, usage: data.usage });
+      await recordUsage({ orgId: meteredOrgId, userId, provider: "openai", model: openaiModel, feature, byok, usage: data.usage });
       return res.status(200).json({
         content: [{ type: "text", text }],
         provider: "openai",
@@ -550,7 +597,8 @@ export default async function handler(req, res) {
           requestBody.systemInstruction = { parts: [{ text: systemPrompt.trim() }] };
         }
 
-        response = await withTimeout(fetch(url, {
+        response = await withTimeout((signal) => fetch(url, {
+        signal,
           method: "POST",
           headers,
           body: JSON.stringify(requestBody),
@@ -629,7 +677,7 @@ export default async function handler(req, res) {
       const responseContent = [];
       if (text) responseContent.push({ type: "text", text });
       responseContent.push(...images);
-      await recordUsage({ orgId, userId, provider: "gemini", model: geminiModel, feature, byok, usage: data.usageMetadata });
+      await recordUsage({ orgId: meteredOrgId, userId, provider: "gemini", model: geminiModel, feature, byok, usage: data.usageMetadata });
       return res.status(200).json({
         content: responseContent,
         provider: "gemini",

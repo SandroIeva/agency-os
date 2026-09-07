@@ -14431,7 +14431,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     setAgentThinking(true);
     try {
       const resp = await fetch("/api/chat-multi", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({
           language: appLanguage,
           message: history[history.length - 1]?.text || "",
@@ -15883,7 +15883,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
 
       const response = await fetch("/api/chat-multi", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({
           language: appLanguage,
           message: dictatedPart,
@@ -35211,14 +35211,27 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
 
   const load = useCallback(async () => {
     if (!userOrg?.id) { setFiles([]); return; }
-    // Fetch the org's files and filter to media client-side — avoids a fragile
-    // PostgREST `.or(...ilike...)` string and is robust to query quirks.
+    // The media filter runs in the DATABASE, before the limit, not after it.
+    //
+    // It used to take the newest 300 rows of any kind and then keep the images.
+    // Three hundred documents newer than a picture meant Creations showed
+    // nothing at all while the picture sat right there in the workspace, and
+    // past 300 pictures the older ones were simply unreachable through this
+    // path. A deep link that waited for a file to appear in this list waited
+    // for ever.
+    //
+    // Two ilike terms rather than a clever one: the comment that used to be
+    // here called PostgREST's `.or()` fragile, and it can be, but the fragile
+    // part is a hand-built string with commas in it. Two plain patterns on one
+    // column are what it is for.
     let q = supabase.from("user_files")
       .select("id,name,public_url,mime_type,size_bytes,created_at,user_id,storage_path,storage_provider,folder_id,note,tags,colors,metadata")
-      .eq("org_id", userOrg.id);
+      .eq("org_id", userOrg.id)
+      .or("mime_type.ilike.image/%,mime_type.ilike.video/%");
     if (projectId) q = q.eq("project_id", projectId); // project brand: only this project's assets
     const { data, error } = await q.order("created_at", { ascending: false }).limit(300);
     if (error) { console.warn("[creations] load failed:", error.message); setFiles([]); return; }
+    // Kept as a belt: a row with no mime_type at all must not slip through.
     const media = (data || []).filter(f => { const m = f.mime_type || ""; return m.startsWith("image/") || m.startsWith("video/"); });
     const fresh = await refreshUserFileUrls(media);
     setFiles(fresh ? media.map(f => fresh.has(f.id) ? { ...f, public_url: fresh.get(f.id) } : f) : media);
@@ -35407,22 +35420,56 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
     if (!userOrg?.id || !session?.user?.id) return;
     try {
       let newPath = f.storage_path, publicUrl = f.public_url, provider = f.storage_provider || "supabase";
+      // The bucket is whatever the row says, exactly as performDelete reads it.
+      // This used to be hardcoded to user-files, so duplicating a file that
+      // lives in brand-assets copied from the wrong bucket, and the new row did
+      // not carry the bucket forward either.
+      const bucket = f.metadata?.bucket || "user-files";
       // Copy the underlying object for supabase-stored files so the duplicate is independent.
       if (provider === "supabase" && f.storage_path) {
         const ext = (f.name?.split(".").pop() || "bin").toLowerCase();
         newPath = `${session.user.id}/creations/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-        const { error: copyErr } = await supabase.storage.from("user-files").copy(f.storage_path, newPath);
-        if (copyErr) { newPath = f.storage_path; }
-        else { const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(newPath, 60 * 60 * 24 * 365); publicUrl = signed?.signedUrl || publicUrl; }
+        const { error: copyErr } = await supabase.storage.from(bucket).copy(f.storage_path, newPath);
+        // ⚠ A failed copy used to fall back to the ORIGINAL path and make the row
+        // anyway. The result was a "copy" pointing at the original object, so
+        // deleting the copy deleted the original's bytes and left the original
+        // row behind pointing at nothing. There is no version of that which is
+        // better than saying it did not work.
+        if (copyErr) {
+          alert((de ? "Kopie fehlgeschlagen: " : "Copy failed: ") + copyErr.message);
+          return;
+        }
+        const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(newPath, 60 * 60 * 24 * 365);
+        publicUrl = signed?.signedUrl || publicUrl;
       }
       const { data, error } = await supabase.from("user_files").insert({
         user_id: session.user.id, org_id: userOrg.id, project_id: projectId || null,
         name: (f.name || "datei").replace(/(\.[^.]+)?$/, " (Kopie)$1"),
         mime_type: f.mime_type, size_bytes: f.size_bytes,
         storage_path: newPath, storage_provider: provider, public_url: publicUrl,
+        metadata: { ...(f.metadata || {}), bucket, copiedFrom: f.id },
       }).select(FILE_COLS).single();
-      if (!error && data) setFiles(prev => [data, ...(prev || [])]);
-    } catch (_) {}
+      if (error) {
+        // The object exists and nothing points at it. Take it back out rather
+        // than leaving a file nobody can see and everybody pays for.
+        if (provider === "supabase" && newPath !== f.storage_path) {
+          await supabase.storage.from(bucket).remove([newPath]).catch(() => {});
+        }
+        alert((de ? "Kopie konnte nicht gespeichert werden: " : "The copy could not be saved: ") + error.message);
+        return;
+      }
+      if (data) {
+        // The duplicate is a second object of the same size and the ledger has
+        // to know, or the workspace is charged for one file and holding two.
+        if (provider === "supabase" && newPath !== f.storage_path) {
+          trackStorageUpload({ orgId: userOrg.id, userId: session.user.id, bucket, path: newPath, sizeBytes: f.size_bytes || 0 });
+        }
+        setFiles(prev => [data, ...(prev || [])]);
+      }
+    } catch (e) {
+      console.error("[duplicateFile]", e);
+      alert((de ? "Kopie fehlgeschlagen: " : "Copy failed: ") + (e?.message || ""));
+    }
   };
   const requestDelete = (f, e) => { e?.stopPropagation?.(); setConfirmDel(f); };
   const performDelete = async () => {
@@ -36344,7 +36391,7 @@ function MoodboardItemDetail({ item, items = [], containers = [], currentContain
         ? "Analysiere dieses Bild sehr gründlich und schreibe daraus EINEN ausführlichen, wiederverwendbaren Bildgenerierungs-Prompt auf Deutsch, mit dem eine KI ein neues Bild in exakt derselben Ästhetik erzeugen kann. Erfasse Motiv, Umgebung, Komposition, Licht, Farbpalette/Stimmung, Stil/Medium, Texturen und (bei Fotos) Kamera-Anmutung. Schreibe EINEN flüssigen, bildhaften Prompt (ca. 5–8 Sätze), keine Stichpunkte. Antworte NUR mit dem Prompt, ohne Einleitung, Überschrift oder Anführungszeichen."
         : "Analyse this image very thoroughly and turn it into ONE detailed, reusable image-generation prompt in English that lets an AI produce a new image in exactly the same aesthetic. Capture subject, environment, composition, lighting, colour palette/mood, style/medium, textures and (for photos) camera character. Write ONE flowing, vivid prompt (about 5–8 sentences), not bullet points. Reply with ONLY the prompt — no preamble, heading or quotation marks.";
       const resp = await fetch("/api/chat-multi", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({ language: appLanguage, message: msg, systemPrompt: sys, image: item.url, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 3000, orgId: currentAiContext.orgId, userId: currentAiContext.userId, feature: "image-to-prompt" }),
       });
       const data = await resp.json().catch(() => ({}));
@@ -39152,7 +39199,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
         ? "\n\n---\nWichtig: Befolge die obige Skill-Anweisung und ihre Output-Struktur genau. Gib AUSSCHLIESSLICH das fertige Dokument als Markdown zurück (Überschriften, Listen, Fett etc.) — keine Einleitung, keine Erklärungen, keine Code-Fences. Schreibe auf Deutsch."
         : "\n\n---\nImportant: Follow the skill instruction above and its output structure exactly. Return ONLY the finished document as Markdown (headings, lists, bold, etc.) — no preamble, no explanations, no code fences. Write in English.");
       const resp = await fetch("/api/chat-multi", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({ language: appLanguage, message: skillInput.trim(), systemPrompt: sys, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 4000, orgId: userOrg?.id, userId: session?.user?.id, feature: "skill" }),
       });
       const data = await resp.json().catch(() => ({}));
@@ -42747,7 +42794,7 @@ Schreibe das als EINEN flüssigen, sehr bildhaften und detaillierten Prompt (ca.
 
 Write it as ONE flowing, highly vivid and detailed prompt (about 5–8 sentences), not a bullet list. Reply with ONLY the prompt — no preamble, no headings, no quotation marks.`;
       const resp = await fetch("/api/chat-multi", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({
           language: appLanguage,
           message: msg,
@@ -43556,7 +43603,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     const promptStr = buildPrompt() + (variation ? `, ${variation}` : "");
     try {
       const resp = await fetch("/api/chat-multi", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({ language: appLanguage, message: promptStr, provider: llmProvider, apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, wantsImage: true, imageOrientation: "portrait", orgId: currentAiContext.orgId, userId: currentAiContext.userId, feature: "brand-avatar" }),
       });
       const data = await resp.json().catch(() => ({}));
@@ -44510,7 +44557,7 @@ Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals
     const oauthToken = (llmProvider === "gemini" && !apiKey && ensureValidToken) ? await ensureValidToken() : null;
     const resp = await fetch("/api/chat-multi", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: JSON.stringify({
         language: appLanguage,
         message: description,
@@ -44613,7 +44660,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
     try {
       const resp = await fetch("/api/chat-multi", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         // Several full competitor profiles in one response need a high token ceiling,
         // otherwise the JSON gets truncated and only the main profile survives (fallback).
         body: JSON.stringify({ language: appLanguage, message, systemPrompt: system, provider: llmProvider || "gemini", apiKey: apiKey || undefined, oauthToken: oauthToken || undefined, maxTokens: 8000, orgId: userOrg?.id, userId: session?.user?.id, feature: "brand-onboarding" }),
@@ -47402,6 +47449,40 @@ export default function CircularMenu() {
     } catch (_) { /* the brand is context, not a precondition */ }
   }, []);
   const [appProjects, setAppProjects] = useState([]);        // [{name}] — known project names for AI context + vocab correction
+
+  // ── The AI's picture of WHICH workspace it is standing in ──────────────────
+  //
+  // brandProfile and appProjects used to be loaded once inside the sign-in
+  // effect, whose dependency is the user id. Switching workspace does not
+  // change the user id, so the effect never ran again: the header said the new
+  // workspace while the AI was still being handed the previous one's brand and
+  // project names. For an agency with several clients that is one customer's
+  // brand answering questions about another's.
+  //
+  // Bound to userOrg.id instead, and cleared the moment it changes rather than
+  // left standing while the new one loads: a stale brand in that gap is worse
+  // than none. Latest wins, the same guard reloadEntitlements uses, because
+  // switching twice quickly fires two loads and the slower one must not land
+  // last.
+  const aiContextReqRef = useRef(0);
+  useEffect(() => {
+    const token = ++aiContextReqRef.current;
+    const orgId = userOrg?.id;
+    setBrandProfile(null);
+    setAppProjects([]);
+    if (!orgId || !session?.user?.id) return;
+    (async () => {
+      try {
+        const [bRes, pRes] = await Promise.all([
+          supabase.from("brand_profile").select("*").eq("org_id", orgId).is("project_id", null).maybeSingle(),
+          supabase.from("projects").select("name").eq("org_id", orgId).order("name"),
+        ]);
+        if (aiContextReqRef.current !== token) return;
+        setBrandProfile(bRes?.data || null);
+        setAppProjects(pRes?.data || []);
+      } catch (_) { /* the AI works without it, it just knows less */ }
+    })();
+  }, [userOrg?.id, session?.user?.id]);
   const [wsName, setWsName] = useState("");                  // workspace name input
   const [wsCreating, setWsCreating] = useState(false);       // creating workspace loading
   const [inviteCode, setInviteCode] = useState("");          // invite code input
@@ -48097,17 +48178,10 @@ export default function CircularMenu() {
             .eq("org_id", org.id);
           setOrgMembers(members || []);
 
-          // Load brand profile + projects for AI context (best-effort, fail silently)
-          (async () => {
-            try {
-              const [bRes, pRes] = await Promise.all([
-                supabase.from("brand_profile").select("*").eq("org_id", org.id).is("project_id", null).maybeSingle(),
-                supabase.from("projects").select("name").eq("org_id", org.id).order("name"),
-              ]);
-              setBrandProfile(bRes?.data || null);
-              setAppProjects(pRes?.data || []);
-            } catch (_) { /* ignore */ }
-          })();
+          // Brand profile and projects are NOT loaded here any more. They hang
+          // off userOrg.id in an effect of their own, so that switching
+          // workspace reloads them; doing it here as well would mean two
+          // writers and a race between them.
 
           // Load pending invites for team management
           const { data: sentInvites } = await supabase
@@ -49186,9 +49260,19 @@ export default function CircularMenu() {
       }
     }
     else if (status !== "cancelled") {
-      setPinErr(appLanguage === "de"
-        ? "Die Verbindung zu Pinterest ist nicht zustande gekommen. Versuch es noch einmal."
-        : "The Pinterest connection did not go through. Try again.");
+      // Told apart, because "try again" is the wrong advice for two of them.
+      setPinErr(
+        status === "forbidden"
+          ? (appLanguage === "de"
+              ? "Du gehörst nicht mehr zu diesem Workspace, deshalb wurde die Verbindung nicht hergestellt."
+              : "You are no longer a member of that workspace, so the connection was not made.")
+        : status === "save_failed"
+          ? (appLanguage === "de"
+              ? "Pinterest hat geantwortet, aber die Verbindung konnte nicht gespeichert werden. Bitte noch einmal verbinden."
+              : "Pinterest answered, but the connection could not be saved. Please connect again.")
+          : (appLanguage === "de"
+              ? "Die Verbindung zu Pinterest ist nicht zustande gekommen. Versuch es noch einmal."
+              : "The Pinterest connection did not go through. Try again."));
     }
   }, []); // eslint-disable-line
 
@@ -49244,9 +49328,19 @@ export default function CircularMenu() {
       setSettingsTab("account");
       setCurrentView("settings");
     } else if (status !== "cancelled") {
-      setFigErr(appLanguage === "de"
-        ? "Die Verbindung zu Figma ist nicht zustande gekommen. Versuch es noch einmal."
-        : "The Figma connection did not go through. Try again.");
+      // Told apart, because "try again" is the wrong advice for two of them.
+      setFigErr(
+        status === "forbidden"
+          ? (appLanguage === "de"
+              ? "Du gehörst nicht mehr zu diesem Workspace, deshalb wurde die Verbindung nicht hergestellt."
+              : "You are no longer a member of that workspace, so the connection was not made.")
+        : status === "save_failed"
+          ? (appLanguage === "de"
+              ? "Figma hat geantwortet, aber die Verbindung konnte nicht gespeichert werden. Bitte noch einmal verbinden."
+              : "Figma answered, but the connection could not be saved. Please connect again.")
+          : (appLanguage === "de"
+              ? "Die Verbindung zu Figma ist nicht zustande gekommen. Versuch es noch einmal."
+              : "The Figma connection did not go through. Try again."));
     }
   }, []); // eslint-disable-line
 
@@ -51351,7 +51445,7 @@ export default function CircularMenu() {
       const wantsImage = detectImageIntent(text) && (llmProvider === "gemini" || llmProvider === "openai");
       const response = await fetch("/api/chat-multi", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({
           language: appLanguage,
           messages: nextMessages.map(m => ({ role: m.role, content: m.content })),
@@ -51451,7 +51545,7 @@ export default function CircularMenu() {
         // User has their own key or Google OAuth token
         const response = await fetch("/api/chat-multi", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
           body: JSON.stringify({
             language: appLanguage,
             messages: history,
@@ -51475,7 +51569,7 @@ export default function CircularMenu() {
             if (freshToken) {
               const retryRes = await fetch("/api/chat-multi", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", ...(await authHeaders()) },
                 body: JSON.stringify({
                   language: appLanguage,
                   messages: history,
@@ -56099,7 +56193,7 @@ export default function CircularMenu() {
                                           try {
                                             const res = await fetch("/api/chat-multi", {
                                               method: "POST",
-                                              headers: { "Content-Type": "application/json" },
+                                              headers: { "Content-Type": "application/json", ...(await authHeaders()) },
                                               body: JSON.stringify({
                                                 language: appLanguage,
                                                 message: "Say OK",

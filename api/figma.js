@@ -159,6 +159,18 @@ export default async function handler(req) {
       .eq("token", state).is("used_at", null).select("token").maybeSingle();
     if (!claimed) return back("expired");
 
+    // The token said which workspace, and the token is now spent. Ask the
+    // membership table again anyway: minting and returning are two moments and
+    // somebody can be removed from a workspace in between. It is also the
+    // second half of the fix in create_messenger_link_token, which used to
+    // issue a token for any workspace id the caller named.
+    if (tok.org_id) {
+      const { data: stillAMember } = await db
+        .from("org_members").select("user_id")
+        .eq("org_id", tok.org_id).eq("user_id", tok.user_id).maybeSingle();
+      if (!stillAMember) return back("forbidden");
+    }
+
     // Figma gives 30 seconds from the grant to spend the code, so nothing slow
     // belongs between the redirect and here.
     const res = await fetch(`${API}/oauth/token`, {
@@ -174,7 +186,7 @@ export default async function handler(req) {
     const me = await fetch(`${API}/me`, { headers: { Authorization: `Bearer ${j.access_token}` } })
       .then(r => (r.ok ? r.json() : null)).catch(() => null);
 
-    await db.from("figma_connections").upsert({
+    const { error: saveErr } = await db.from("figma_connections").upsert({
       org_id: tok.org_id,
       // The token response calls it user_id_string, not user_id.
       figma_user_id: j.user_id_string || me?.id || null,
@@ -190,6 +202,13 @@ export default async function handler(req) {
       last_error: null,
       updated_at: new Date().toISOString(),
     }, { onConflict: "org_id" });
+    // Checked. It was awaited and then ignored, so a database error sent
+    // somebody back to a screen saying "connected" with nothing saved, and the
+    // one-time token was already spent by then.
+    if (saveErr) {
+      console.error("[figma] connection not saved:", saveErr.message);
+      return back("save_failed");
+    }
 
     return back("connected");
   }

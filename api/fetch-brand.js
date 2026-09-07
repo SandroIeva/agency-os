@@ -4,6 +4,13 @@
 //   GET  ?url=…&mode=preview   → lightweight Open Graph preview (title, description, image)
 //   GET  ?mode=weather         → IP-geolocated current temperature (server-side, bypasses
 //                                browser CORS issues with public geo providers)
+//
+// Every mode here fetches a URL somebody typed, so every mode goes through the
+// shared guard in server/safeUrl.js: one idea of what a private address is,
+// every redirect hop re-checked, and a cap that is applied WHILE reading rather
+// than after the whole thing is already in memory. The preview mode had no host
+// check at all.
+import { assertPublicUrl, BlockedUrlError, readCapped, safeFetch } from "../server/safeUrl.js";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -55,7 +62,14 @@ export default async function handler(req, res) {
       const wd = await wr.json();
       const t = wd?.current_weather?.temperature;
       if (typeof t !== "number") return res.status(502).json({ error: "Weather payload invalid" });
-      res.setHeader("Cache-Control", "public, s-maxage=600, stale-while-revalidate=1800");
+      // PRIVATE, not public. The answer depends on the caller's IP address and
+      // the URL does not, so a shared cache in front of this would happily hand
+      // one visitor the city and temperature of whoever asked ten minutes
+      // earlier. A Vary header on the forwarded IP would be the other way to
+      // say it, and would also mean trusting every CDN in the path to honour a
+      // header it has no reason to. Ten minutes in the visitor's own browser
+      // costs the same and cannot be wrong about whose weather it is.
+      res.setHeader("Cache-Control", "private, max-age=600");
       return res.status(200).json({ temp: Math.round(t), city, lat, lon });
     } catch (e) {
       return res.status(500).json({ error: "Weather lookup error: " + (e?.message || "unknown") });
@@ -205,15 +219,32 @@ export default async function handler(req, res) {
     const { url } = req.body || {};
     if (!url || typeof url !== "string") return res.status(400).json({ error: "Missing url" });
     try {
-      const pdfParse = (await import("pdf-parse")).default;
-      const fileResp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; i7-OS-BrandFetcher/1.0)" } });
+      // pdf-parse v2 exports a CLASS. The default export is not callable, so
+      // `(await import("pdf-parse")).default(buf)` threw "pdfParse is not a
+      // function" on every single import, after the download and before a byte
+      // of the PDF was read. Nobody saw a parse error because parsing never
+      // started.
+      const { PDFParse } = await import("pdf-parse");
+      const MAX_PDF = 25 * 1024 * 1024;
+      const { res: fileResp } = await safeFetch(url, {
+        maxBytes: MAX_PDF, timeoutMs: 20000,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; i7-OS-BrandFetcher/1.0)" },
+      });
       if (!fileResp.ok) return res.status(502).json({ error: `Could not download PDF (${fileResp.status})` });
-      const buf = Buffer.from(await fileResp.arrayBuffer());
-      if (buf.length > 25 * 1024 * 1024) return res.status(413).json({ error: "PDF too large (max 25 MB)" });
+      // Counted while reading. The old check ran after the whole file was
+      // already in memory, which is not a limit, it is a report.
+      const buf = Buffer.from(await readCapped(fileResp, MAX_PDF));
 
-      const parsed = await pdfParse(buf, { max: 60 }); // cap to first 60 pages for perf
-      const text = (parsed.text || "").trim();
-      const numPages = parsed.numpages || null;
+      const parser = new PDFParse({ data: buf });
+      let text = "", numPages = null;
+      try {
+        const out = await parser.getText({ first: 60 }); // first 60 pages is plenty for a brand book
+        text = (out?.text || "").trim();
+        numPages = out?.total ?? null;
+      } finally {
+        // The parser holds a worker. Not releasing it leaks one per import.
+        try { await parser.destroy(); } catch (_) {}
+      }
 
       // ── Color extraction from text content ──
       const hexHits = text.match(/#[0-9a-fA-F]{6}\b/g) || [];
@@ -309,10 +340,13 @@ export default async function handler(req, res) {
     if (!url || typeof url !== "string") return res.status(400).json({ error: "Missing url" });
     try {
       const JSZip = (await import("jszip")).default;
-      const fileResp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; i7-OS-BrandFetcher/1.0)" } });
+      const MAX_ZIP = 50 * 1024 * 1024;
+      const { res: fileResp } = await safeFetch(url, {
+        maxBytes: MAX_ZIP, timeoutMs: 20000,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; i7-OS-BrandFetcher/1.0)" },
+      });
       if (!fileResp.ok) return res.status(502).json({ error: `Could not download ZIP (${fileResp.status})` });
-      const arrayBuf = await fileResp.arrayBuffer();
-      if (arrayBuf.byteLength > 50 * 1024 * 1024) return res.status(413).json({ error: "ZIP too large (max 50 MB)" });
+      const arrayBuf = (await readCapped(fileResp, MAX_ZIP)).buffer;
 
       const zip = await JSZip.loadAsync(arrayBuf);
       const logos = [], fonts = [], pdfs = [], images = [], others = [];
@@ -367,20 +401,26 @@ export default async function handler(req, res) {
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
 
   let parsed;
-  try { parsed = new URL(url); } catch { return res.status(400).json({ error: "Invalid url" }); }
+  // This one had no host check at all, so a loopback address went straight
+  // through to the network.
+  try { parsed = assertPublicUrl(url); }
+  catch (e) { return res.status(400).json({ error: e instanceof BlockedUrlError ? e.message : "Invalid url" }); }
 
   try {
-    const response = await fetch(parsed.toString(), {
+    const { res: response, url: landedOn } = await safeFetch(parsed.toString(), {
+      timeoutMs: 15000,
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; i7-OS-BrandFetcher/1.0; +https://i7os.com)",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       },
-      redirect: "follow",
     });
     if (!response.ok) return res.status(502).json({ error: `Site returned ${response.status}` });
     const html = await response.text();
 
-    const finalUrl = response.url || parsed.toString();
+    // Where the redirects actually ended. response.url is not filled in when a
+    // redirect is followed by hand, and every relative link on the page is
+    // resolved against this.
+    const finalUrl = landedOn?.toString() || response.url || parsed.toString();
     const origin = new URL(finalUrl).origin;
 
     // ── Helpers ──────────────────────────────────────────────────────────

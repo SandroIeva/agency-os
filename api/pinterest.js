@@ -177,6 +177,18 @@ export default async function handler(req) {
       .eq("token", state).is("used_at", null).select("token").maybeSingle();
     if (!claimed) return back("expired");
 
+    // The token said which workspace, and the token is now spent. Ask the
+    // membership table again anyway: minting and returning are two moments and
+    // somebody can be removed from a workspace in between. It is also the
+    // second half of the fix in create_messenger_link_token, which used to
+    // issue a token for any workspace id the caller named.
+    if (tok.org_id) {
+      const { data: stillAMember } = await db
+        .from("org_members").select("user_id")
+        .eq("org_id", tok.org_id).eq("user_id", tok.user_id).maybeSingle();
+      if (!stillAMember) return back("forbidden");
+    }
+
     const res = await fetch(`${API}/oauth/token`, {
       method: "POST",
       headers: { Authorization: basic(clientId, clientSecret), "Content-Type": "application/x-www-form-urlencoded" },
@@ -190,7 +202,7 @@ export default async function handler(req) {
     const me = await pin(j.access_token, "/user_account").then(r => r.ok ? r.json() : null).catch(() => null);
 
     const now = Date.now();
-    await db.from("pinterest_connections").upsert({
+    const { error: saveErr } = await db.from("pinterest_connections").upsert({
       org_id: tok.org_id,
       pinterest_user_id: me?.id || null,
       username: me?.username || null,
@@ -203,6 +215,12 @@ export default async function handler(req) {
       last_error: null,
       updated_at: new Date().toISOString(),
     }, { onConflict: "org_id" });
+    // Checked, for the same reason as Figma: awaited and ignored meant the UI
+    // said connected while nothing had been stored, and the token was spent.
+    if (saveErr) {
+      console.error("[pinterest] connection not saved:", saveErr.message);
+      return back("save_failed");
+    }
 
     return back("connected");
   }
