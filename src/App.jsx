@@ -11717,6 +11717,31 @@ async function refreshUserFileUrls(rows) {
   return fresh.size ? fresh : null;
 }
 
+// A chat attachment lives in a private bucket now, so its link is signed and
+// signatures expire. Opening an old conversation mints fresh ones for the
+// messages that carry a path, which is why the path is stored at all: a url on
+// its own cannot be renewed, it can only stop working.
+//
+// Messages from before this change have no path and keep their old public link,
+// so nothing that already exists breaks.
+async function withFreshAttachments(rows) {
+  const needing = (rows || []).filter(m => m.attachment_path);
+  if (!needing.length) return rows;
+  const signed = new Map();
+  await Promise.all(needing.map(async (m) => {
+    const { data, error } = await supabase.storage.from("user-files").createSignedUrl(m.attachment_path, SIGNED_URL_TTL);
+    // Said out loud rather than swallowed: a refusal here means somebody is
+    // looking at a conversation whose attachment they may not read, and a
+    // silently missing picture is the least useful way to learn that.
+    if (error || !data?.signedUrl) {
+      console.warn("[chat] could not sign attachment", m.attachment_path, "–", error?.message || "no url returned");
+      return;
+    }
+    signed.set(m.id, data.signedUrl);
+  }));
+  return rows.map(m => (signed.has(m.id) ? { ...m, attachment_url: signed.get(m.id) } : m));
+}
+
 async function uploadTracked({ bucket, path, file, orgId, userId, contentType, upsert = false, sizeBytes }) {
   const res = await supabase.storage.from(bucket).upload(path, file, {
     contentType, upsert,
@@ -14315,7 +14340,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
         .select("*")
         .eq("conversation_id", activeConvId)
         .order("created_at", { ascending: true });
-      setMessages(data || []);
+      setMessages(await withFreshAttachments(data || []));
       setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
     };
     load();
@@ -14358,17 +14383,30 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     setUploadingAttachment(true);
     try {
       const file = pendingAttachment.file;
-      const ext = file.name.split(".").pop();
       const safeName = file.name.replace(/[^\w.-]/g, "_");
-      const path = `${myId}/${Date.now()}_${safeName}`;
+      if (!userOrg?.id) { alert("Kein Workspace aktiv."); setUploadingAttachment(false); return null; }
+      // user-files, not chat-attachments. That bucket is PUBLIC, so an
+      // attachment was openable by anybody who had the link and no account at
+      // all. It cannot simply be made private: the ai-images in it are share
+      // links, and those are meant to open for whoever they were sent to. So the
+      // two part company and a private attachment goes to the private bucket.
+      //
+      // chat/<org_id>/… and not <user_id>/…, because the other people in the
+      // conversation have to be able to read it. user-files' own rules key on
+      // the uploader's id, which would have made an attachment readable by the
+      // sender and by nobody else.
+      const path = `chat/${userOrg.id}/${myId}/${Date.now()}_${safeName}`;
       const room = await checkStorageRoom(userOrg?.id, file.size, { userId: session?.user?.id, email: session?.user?.email });
       if (!room.ok) { alert(`Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.`); setUploadingAttachment(false); return null; }
-      const { data: up, error } = await supabase.storage.from("chat-attachments").upload(path, file, { cacheControl: UPLOAD_CACHE_IMMUTABLE, contentType: file.type });
+      const { data: up, error } = await supabase.storage.from("user-files").upload(path, file, { cacheControl: UPLOAD_CACHE_IMMUTABLE, contentType: file.type });
       if (error) { console.error("Upload error:", error); alert("Upload fehlgeschlagen: " + error.message); setUploadingAttachment(false); return null; }
-      trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "chat-attachments", path, sizeBytes: file.size });
-      const { data: pub } = supabase.storage.from("chat-attachments").getPublicUrl(up.path);
+      trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "user-files", path, sizeBytes: file.size });
+      // A signed link, and the PATH is kept beside it: signatures expire, and a
+      // stored url alone would mean the picture quietly disappearing out of an
+      // old conversation a year later.
+      const { data: signed } = await supabase.storage.from("user-files").createSignedUrl(up.path, SIGNED_URL_TTL);
       setUploadingAttachment(false);
-      return { url: pub.publicUrl, name: file.name, type: file.type, size: file.size };
+      return { url: signed?.signedUrl || null, path: up.path, name: file.name, type: file.type, size: file.size };
     } catch (e) {
       console.error("Upload exception:", e);
       setUploadingAttachment(false);
@@ -14499,6 +14537,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       sender_id: myId,
       text: text || null,
       attachment_url: attachment?.url || null,
+      attachment_path: attachment?.path || null,
       attachment_name: attachment?.name || null,
       attachment_type: attachment?.type || null,
       attachment_size: attachment?.size || null,
@@ -14532,8 +14571,15 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
           body: notifBody,
           // No subject: the body IS the message somebody typed, and that is not
           // ours to translate. The attachment rides along so a messenger can
-          // show the picture rather than describe it; chat-attachments is a
-          // public bucket, so the url needs no signing and no expiry.
+          // show the picture rather than describe it.
+          //
+          // That url is a SIGNED one now, since attachments moved to the private
+          // bucket, and it is good for a year. The notification is delivered in
+          // seconds so it always works on arrival; what it does mean is that the
+          // picture inside an old Telegram or Slack message stops loading after
+          // a year, while the same attachment in i7OS keeps working because the
+          // app re-signs it from the stored path. Worth knowing rather than
+          // discovering.
           metadata: {
             conversation_id: activeConvId, actor: myName,
             ...(attachment ? {
