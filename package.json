@@ -7,7 +7,10 @@
     "dev": "vite",
     "dev:vercel": "npx vercel dev",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:unbound": "node scripts/check-unbound.cjs src/App.jsx src/DesktopView.jsx src/PublicBrandLanding.jsx src/main.jsx src/BillingSettings.jsx src/AdminView.jsx",
+    "check:writes": "node scripts/check-unsent-writes.cjs src/App.jsx src/DesktopView.jsx src/PublicBrandLanding.jsx src/main.jsx api/*.js server/*.js",
+    "check": "npm run check:unbound && npm run check:writes"
   },
   "dependencies": {
     "@blocknote/core": "^0.51.4",
