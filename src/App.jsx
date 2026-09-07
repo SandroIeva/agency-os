@@ -29830,11 +29830,25 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
   const [busyKey, setBusyKey] = useState(null);     // platform being connected / account being removed
   const orgId = userOrg?.id;
 
+  // Latest wins, and the workspace has to still be the one that was asked
+  // about. A slow answer for workspace A used to land after a quick one for B
+  // and put A's connected accounts on screen under B. The analytics request
+  // below already had a guard; this one did not.
+  const statusReqRef = useRef(0);
   const loadStatus = useCallback(async () => {
-    if (!orgId) return;
+    const token = ++statusReqRef.current;
+    const asked = orgId;
+    setAccounts([]);
+    if (!asked) return;
     setError(null);
-    try { const r = await zernioRequest(session, { mode: "status", orgId }); setAccounts(r.accounts || []); }
-    catch (e) { setAccounts([]); setError(e); }
+    try {
+      const r = await zernioRequest(session, { mode: "status", orgId: asked });
+      if (statusReqRef.current !== token) return;
+      setAccounts(r.accounts || []);
+    } catch (e) {
+      if (statusReqRef.current !== token) return;
+      setAccounts([]); setError(e);
+    }
   }, [orgId, session?.access_token]); // eslint-disable-line
   useEffect(() => { loadStatus(); }, [loadStatus]);
 
@@ -29897,15 +29911,46 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
   const interactions = sumMetric("likes") + sumMetric("comments") + sumMetric("shares") + sumMetric("saves");
   const postCount = dailyRows.reduce((s, r) => s + (r.postCount || 0), 0);
   const engagementRate = impressions ? (interactions / impressions) * 100 : 0;
-  // Weekly buckets for the chart (last 8 ISO weeks from the daily series).
+  // Weekly buckets for the chart: the last 8 weeks, and now actually weeks.
+  //
+  // The comment said ISO weeks and the arithmetic was ceil(dayOfYear / 7), which
+  // starts its weeks on the 1st of January rather than on a Monday. Sunday the
+  // 4th and Monday the 5th of January 2026 landed in the same bucket although
+  // they are different weeks. And a week with no measurements was simply left
+  // out, so the eight bars were the last eight weeks THAT HAD DATA, drawn side
+  // by side as if they were consecutive: a quiet fortnight closed up and the
+  // line looked steady when it had in fact stopped.
+  //
+  // Monday is the start. Eight consecutive weeks are always drawn, and a week
+  // with no data is a zero in its own place rather than a gap that is hidden.
   const weekly = (() => {
+    const mondayOf = (d) => {
+      const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+      // getUTCDay: Sunday is 0, so Sunday belongs to the Monday six days back.
+      const back = (x.getUTCDay() + 6) % 7;
+      x.setUTCDate(x.getUTCDate() - back);
+      return x;
+    };
+    const key = (d) => d.toISOString().slice(0, 10);
     const buckets = new Map();
     dailyRows.forEach(r => {
       const d = new Date(r.date + "T00:00:00Z");
-      const wk = `${d.getUTCFullYear()}-${String(Math.ceil(((d - new Date(Date.UTC(d.getUTCFullYear(), 0, 1))) / 86400000 + 1) / 7)).padStart(2, "0")}`;
-      buckets.set(wk, (buckets.get(wk) || 0) + (r.metrics?.impressions || 0));
+      if (Number.isNaN(d.getTime())) return;
+      const k = key(mondayOf(d));
+      buckets.set(k, (buckets.get(k) || 0) + (r.metrics?.impressions || 0));
     });
-    return [...buckets.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).slice(-8).map(([, v]) => v);
+    // Anchored on the newest week that has data, so the chart ends where the
+    // numbers do rather than on an empty "this week" whenever the provider is
+    // a day behind.
+    const newest = [...buckets.keys()].sort().pop();
+    const end = newest ? new Date(newest + "T00:00:00Z") : mondayOf(new Date());
+    const out = [];
+    for (let i = 7; i >= 0; i--) {
+      const wk = new Date(end);
+      wk.setUTCDate(wk.getUTCDate() - i * 7);
+      out.push(buckets.get(key(wk)) || 0);
+    }
+    return out;
   })();
   const maxWeek = Math.max(1, ...weekly);
   const topPosts = topOk ? (data.top.posts || []).slice(0, 5) : [];
@@ -48581,6 +48626,16 @@ export default function CircularMenu() {
     setLlmProvider("gemini");
     googleTokenRef.current = null;
     googleTokenTsRef.current = 0;
+    // The AI dialog is account-bound too, and it lives in memory as well as in
+    // storage. Leaving it meant the next person to sign in found the previous
+    // one's conversation on screen.
+    clearTimeout(dialogSaveTimerRef.current);
+    setDialogMessages([]);
+    setDialogConversations([]);
+    setDialogConversationId(null);
+    setDialogInput("");
+    dialogLoadedRef.current = false;
+    dialogOwnerRef.current = null;
   }, []);
 
   const handleLogout = async () => {
@@ -50676,6 +50731,9 @@ export default function CircularMenu() {
   // slate. A switcher in the header lets them jump between past chats or start a new one.
   const DIALOG_STORAGE_KEY = (uid) => `i7os.dialog.conversations.${uid || "anon"}`;
   const [dialogConversationId, setDialogConversationId] = useState(null);
+  // The account the dialog state in memory belongs to. Compared rather than
+  // counted, because StrictMode runs effects twice.
+  const dialogOwnerRef = useRef(null);
   const [dialogConversations, setDialogConversations] = useState([]); // [{id,title,updatedAt,createdAt}]
   const [conversationSwitcherOpen, setConversationSwitcherOpen] = useState(false);
   const dialogSaveTimerRef = useRef(null);
@@ -50691,6 +50749,21 @@ export default function CircularMenu() {
   // Also handles the "user re-authenticated as someone else" case by re-running on uid change.
   useEffect(() => {
     const uid = session?.user?.id;
+    // Whose dialog is currently in state. The App root survives a logout, so
+    // without this the previous person's messages were still sitting in
+    // dialogMessages when the next one signed in — and then the guard below
+    // ("do not clobber what is already there") kept them, and the save effect
+    // wrote them out under the NEW user's storage key. A per-user filename is
+    // not separation if the state crosses between them.
+    if (dialogOwnerRef.current !== uid) {
+      clearTimeout(dialogSaveTimerRef.current);
+      setDialogMessages([]);
+      setDialogConversations([]);
+      setDialogConversationId(null);
+      setDialogInput("");
+      dialogLoadedRef.current = false;
+      dialogOwnerRef.current = uid || null;
+    }
     if (!uid) return;
     try {
       const raw = localStorage.getItem(DIALOG_STORAGE_KEY(uid));
@@ -50739,6 +50812,10 @@ export default function CircularMenu() {
     const uid = session?.user?.id;
     if (!uid || !dialogConversationId) return;
     if (!dialogLoadedRef.current) return; // don't clobber storage during initial hydration
+    // And only for the account this state actually belongs to. Between a sign-in
+    // and the effect above running there is a render where uid is already the
+    // new person and the messages are still the old one's.
+    if (dialogOwnerRef.current !== uid) return;
     clearTimeout(dialogSaveTimerRef.current);
     dialogSaveTimerRef.current = setTimeout(() => {
       try {
@@ -51250,18 +51327,28 @@ export default function CircularMenu() {
   const aiFolderIdRef = useRef(null);
   const AI_FOLDER_NAME = "AI Generated";
   const ensureAiFolder = async () => {
-    if (aiFolderIdRef.current) return aiFolderIdRef.current;
     if (!userOrg?.id || !session?.user?.id) return null;
+    // The cache is keyed by WORKSPACE, not held as one id for the whole app.
+    // It used to be a bare ref: switch workspace and the folder id of the
+    // previous one was still returned, so the picture got the new workspace's
+    // org_id and the old workspace's folder_id. The foreign key only checks
+    // that the folder exists, not that it belongs here, so the row was accepted
+    // and the picture then failed to appear in the file view it was filed
+    // under. The lookup ignored org_id for the same reason.
+    if (aiFolderIdRef.current?.orgId === userOrg.id && aiFolderIdRef.current?.userId === session.user.id) {
+      return aiFolderIdRef.current.id;
+    }
     try {
       const { data: existing } = await supabase
         .from("user_folders")
         .select("id")
         .eq("user_id", session.user.id)
+        .eq("org_id", userOrg.id)
         .eq("name", AI_FOLDER_NAME)
         .is("parent_id", null)
         .maybeSingle();
       if (existing?.id) {
-        aiFolderIdRef.current = existing.id;
+        aiFolderIdRef.current = { id: existing.id, orgId: userOrg.id, userId: session.user.id };
         return existing.id;
       }
       const { data: created, error } = await supabase
@@ -51275,7 +51362,7 @@ export default function CircularMenu() {
         .select("id")
         .single();
       if (error) throw error;
-      aiFolderIdRef.current = created.id;
+      aiFolderIdRef.current = { id: created.id, orgId: userOrg.id, userId: session.user.id };
       return created.id;
     } catch (e) {
       console.warn("[AI folder] could not ensure folder:", e.message);
@@ -52603,9 +52690,14 @@ export default function CircularMenu() {
                             if (joining) return;
                             setJoining(true); setOnboardingError(null);
                             try {
-                              const { error: memErr } = await supabase.from("org_members").insert({ org_id: inv.org_id, user_id: session.user.id, role: inv.role || "member" });
+                              // One call, not three writes. Joining, taking the role off the
+                              // invitation and marking it used all happened separately in
+                              // the browser, which meant the invitee needed write access to
+                              // the invitation, which meant they could rewrite the workspace
+                              // and the role in it first.
+                              const { data: res, error: memErr } = await supabase.rpc("accept_org_invitation", { p_token: inv.token });
                               if (memErr) throw memErr;
-                              await supabase.from("invitations").update({ status: "accepted" }).eq("id", inv.id);
+                              if (!res?.ok) throw new Error(res?.reason || "join_failed");
                               const { data: org } = await supabase.from("organizations").select("*").eq("id", inv.org_id).single();
                               setUserOrg(org); finishOnboarding();
                             } catch (e) { setOnboardingError(joinBlockedMessage(e, appLanguage === "de") || (appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join.")); setJoining(false); }
@@ -52649,9 +52741,10 @@ export default function CircularMenu() {
                         try {
                           const { data: inv, error } = await supabase.from("invitations").select("*, organizations(id, name, slug)").eq("token", inviteCode.trim()).eq("status", "pending").single();
                           if (error || !inv) { setOnboardingError(appLanguage === "de" ? "Ungültiger oder abgelaufener Code." : "Invalid or expired invite code."); setJoining(false); return; }
-                          const { error: memErr } = await supabase.from("org_members").insert({ org_id: inv.org_id, user_id: session.user.id, role: inv.role || "member" });
+                          // One call: see the comment on the pending-invitation tile above.
+                          const { data: res, error: memErr } = await supabase.rpc("accept_org_invitation", { p_token: inv.token });
                           if (memErr) throw memErr;
-                          await supabase.from("invitations").update({ status: "accepted" }).eq("id", inv.id);
+                          if (!res?.ok) throw new Error(res?.reason || "join_failed");
                           const { data: org } = await supabase.from("organizations").select("*").eq("id", inv.org_id).single();
                           setUserOrg(org); finishOnboarding(); setInviteCode("");
                         } catch (err) { setOnboardingError(joinBlockedMessage(err, appLanguage === "de") || (appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join.")); setJoining(false); }
@@ -52672,9 +52765,10 @@ export default function CircularMenu() {
                         try {
                           const { data: inv, error } = await supabase.from("invitations").select("*, organizations(id, name, slug)").eq("token", inviteCode.trim()).eq("status", "pending").single();
                           if (error || !inv) { setOnboardingError(appLanguage === "de" ? "Ungültiger oder abgelaufener Code." : "Invalid or expired invite code."); setJoining(false); return; }
-                          const { error: memErr } = await supabase.from("org_members").insert({ org_id: inv.org_id, user_id: session.user.id, role: inv.role || "member" });
+                          // One call: see the comment on the pending-invitation tile above.
+                          const { data: res, error: memErr } = await supabase.rpc("accept_org_invitation", { p_token: inv.token });
                           if (memErr) throw memErr;
-                          await supabase.from("invitations").update({ status: "accepted" }).eq("id", inv.id);
+                          if (!res?.ok) throw new Error(res?.reason || "join_failed");
                           const { data: org } = await supabase.from("organizations").select("*").eq("id", inv.org_id).single();
                           setUserOrg(org); finishOnboarding(); setInviteCode("");
                         } catch (err) { setOnboardingError(joinBlockedMessage(err, appLanguage === "de") || (appLanguage === "de" ? "Fehler beim Beitreten." : "Failed to join.")); setJoining(false); }

@@ -3,6 +3,7 @@
 // On failure: returns a clear, user-readable `error` field with a hint about what's wrong.
 import { createClient } from "@supabase/supabase-js";
 import { requireOrgMember, requireUser } from "../server/billing.js";
+import { readCapped, safeFetch } from "../server/safeUrl.js";
 
 const MAX_TOKENS_DEFAULT = 2000;       // generous — full answers, not truncated
 const UPSTREAM_TIMEOUT_MS = 45_000;    // give the model time to think but bail before Vercel kills us
@@ -211,9 +212,16 @@ export default async function handler(req, res) {
         const m = String(image).match(/^data:([^;]+);base64,(.*)$/);
         if (m) imgPart = { mime: m[1], b64: m[2] };
       } else {
-        const ir = await withTimeout((signal) => fetch(image, { signal }), UPSTREAM_TIMEOUT_MS, "image-fetch");
+        // Through the shared guard, like every other server-side fetch. This one
+        // was still calling fetch() on whatever url arrived in the body with no
+        // check at all, so a signed-in session with any BYOK key was enough to
+        // make the server request a loopback address. The four endpoints fixed
+        // last round were not the only place a url reaches the network, and this
+        // is what "inventory every fetcher" meant.
+        const MAX_IMAGE = 12 * 1024 * 1024;
+        const { res: ir } = await safeFetch(String(image), { maxBytes: MAX_IMAGE, timeoutMs: UPSTREAM_TIMEOUT_MS });
         if (ir.ok) {
-          const buf = await ir.arrayBuffer();
+          const buf = await readCapped(ir, MAX_IMAGE);
           imgPart = { mime: ir.headers.get("content-type") || "image/png", b64: Buffer.from(buf).toString("base64") };
         }
       }

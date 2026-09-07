@@ -341,6 +341,15 @@ export default async function handler(req, res) {
       // walk here rather than in the browser keeps it one request instead of
       // seven, and the fan-out is capped — the newest handful of posts is where
       // the newest comments are.
+      // The plan is checked HERE, not at the top of the mode.
+      //
+      // Reading the comments that are already there costs nothing and stays
+      // open, so an account whose plan lapsed can still look at what it paid
+      // for. What follows is the part that calls SocialCrawl, which bills per
+      // call, and lookup and reactors have always checked the plan before doing
+      // the same thing. This one did not.
+      await requirePaidSocial(orgId);
+
       const posts = Array.isArray(list?.data) ? list.data.slice(0, 6) : [];
       // Said out loud rather than left to look like missing data: without the
       // key a LinkedIn thread falls back to Zernio, which returns comments

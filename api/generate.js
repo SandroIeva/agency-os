@@ -589,7 +589,8 @@ export default async function handler(req) {
         const msg = res.status === 429
           ? "The image service is busy right now — please try again in a moment."
           : (payload?.error || payload?.message || `Image service error ${res.status}`);
-        await db.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() }).eq("id", jobRow.id);
+        await db.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() })
+          .eq("id", jobRow.id).in("status", ["queued", "running"]);
         return json({ error: msg, code: res.status === 429 ? "generation_busy" : "generation_failed", jobId: jobRow.id }, 502);
       }
     } catch (e) {
@@ -628,15 +629,33 @@ export default async function handler(req) {
     const requestId = findRequestId(payload);
     if (!requestId) {
       const msg = "The image service returned nothing we could use.";
-      await db.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() }).eq("id", jobRow.id);
+      // Same reason as the transition below: never over a terminal state.
+      await db.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() })
+        .eq("id", jobRow.id).in("status", ["queued", "running"]);
       return json({ error: msg, code: "generation_failed", jobId: jobRow.id }, 502);
     }
-    await db.from("generation_jobs").update({
+    // ⚠ Only from a state that is not finished.
+    //
+    // The provider is handed the webhook URL during the submit call, so a fast
+    // model can call it back BEFORE this line runs. completeJob then stores the
+    // picture and writes "completed", and this update used to overwrite that
+    // with "running" unconditionally. claimed_at is set by then, so no later
+    // attempt could finish the job either: a picture that existed, paid for,
+    // showing as forever in progress. Reproduced by the review, and the fix is
+    // the `.in(...)` filter, which makes the transition atomic.
+    const { data: moved } = await db.from("generation_jobs").update({
       status: "running",
       provider_request_id: String(requestId),
       polling_url: findPollingUrl(payload) || `${GATEWAY}/v2/requests/status/${requestId}`,
       updated_at: new Date().toISOString(),
-    }).eq("id", jobRow.id);
+    }).eq("id", jobRow.id).in("status", ["queued", "running"]).select("id").maybeSingle();
+
+    if (!moved) {
+      // Somebody got there first, and the only way that happens is the webhook.
+      const { data: fresh } = await db.from("generation_jobs")
+        .select("status,result_url,error").eq("id", jobRow.id).maybeSingle();
+      return json({ jobId: jobRow.id, status: fresh?.status || "running", url: fresh?.result_url || null, error: fresh?.error || undefined, upstreamMs });
+    }
     return json({ jobId: jobRow.id, status: "running", upstreamMs });
   }
 
@@ -663,6 +682,19 @@ export default async function handler(req) {
       // job until it gave up, and the reason never left this function.
       if (!res.ok) {
         const msg = payload?.message || payload?.error || `Status check failed (HTTP ${res.status})`;
+        // A status endpoint that is busy, rate limited or briefly down says
+        // nothing about the GENERATION. Failing the job on a 503 threw away a
+        // picture that was still being made, and the webhook that arrived a
+        // minute later was then refused as "already failed": paid for, produced,
+        // and unreachable. Only an answer that is about the request itself is
+        // terminal.
+        const transient = res.status === 408 || res.status === 425 || res.status === 429 || res.status >= 500;
+        if (transient) {
+          await db.from("generation_jobs").update({
+            provider_status: `HTTP ${res.status} (voruebergehend)`, updated_at: new Date().toISOString(),
+          }).eq("id", job.id).in("status", ["queued", "running"]);
+          return json({ jobId: job.id, status: job.status, note: msg });
+        }
         await failJob(db, job, msg, { provider_status: `HTTP ${res.status}` });
         return json({ jobId: job.id, status: "failed", error: msg });
       }
