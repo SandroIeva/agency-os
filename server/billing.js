@@ -266,6 +266,54 @@ export async function readJsonBody(req) {
   return {};
 }
 
+// Which subscription owns the account row.
+//
+// Stripe does not promise the order its events arrive in, and the payload of a
+// customer.subscription.* event is a SNAPSHOT taken when the event was made,
+// not the subscription as it stands now. Two different things went wrong with
+// that, and they need two different answers.
+//
+// The snapshot could simply be stale, so an event made before a change arrived
+// after it and wrote the older state back. That half is closed in the webhook,
+// which now retrieves the subscription fresh instead of believing the payload.
+//
+// The other half is this function. The event can be about a DIFFERENT and older
+// subscription: somebody cancels and subscribes again, the cancellation event is
+// delayed, and it lands after the new subscription and marks the account
+// cancelled. The customer is paying and the product says they are not.
+//
+// The rule: an event only writes the account row if it is about the subscription
+// the row already names, or about one that is genuinely newer. `created` is a
+// Stripe timestamp in whole seconds, so two subscriptions made inside the same
+// second cannot be told apart by it; a live stored subscription wins that tie,
+// because overwriting something that is being paid for is the worse mistake.
+export const SUBSCRIPTION_LIVE_STATUSES = new Set([
+  "active", "trialing", "incomplete", "past_due", "unpaid", "paused",
+]);
+
+export function subscriptionWins(stored, incoming) {
+  if (!incoming?.id) return { apply: false, reason: "no_subscription_id" };
+  if (!stored?.id) return { apply: true, reason: "nothing_stored" };
+  if (stored.id === incoming.id) return { apply: true, reason: "same_subscription" };
+
+  // The stored one is over. Anything current takes the row.
+  if (!SUBSCRIPTION_LIVE_STATUSES.has(stored.status)) {
+    return { apply: true, reason: "stored_is_finished" };
+  }
+
+  const a = Number(incoming.created || 0);
+  const b = Number(stored.created || 0);
+  if (a > b) {
+    // A second subscription while the first is still live is a double charge,
+    // not a plan change: the Customer Portal switches the SAME subscription. The
+    // newer one takes the row so the customer sees what they are being billed
+    // for now, and the older one is named in the log because it is still
+    // running and nothing in the product can find it any more.
+    return { apply: true, reason: "newer_subscription", displaced: stored.id };
+  }
+  return { apply: false, reason: "older_than_stored" };
+}
+
 export async function syncStripeSubscription(subscription) {
   const admin = getAdminSupabase();
   const item = subscription.items?.data?.[0];
@@ -354,6 +402,38 @@ export async function syncStripeSubscription(subscription) {
   // billing_accounts is the table the app reads. workspace_subscriptions is
   // written too for as long as the transition lasts, so rolling the code back
   // doesn't strand a paying customer with no subscription record.
+  // Does this event get to write the row at all?
+  const storedAccount = ownerUserId ? await getBillingAccount(ownerUserId) : null;
+  const verdict = subscriptionWins(
+    storedAccount?.stripe_subscription_id
+      ? {
+          id: storedAccount.stripe_subscription_id,
+          status: storedAccount.status,
+          created: storedAccount.stripe_subscription_created_at
+            ? Math.floor(new Date(storedAccount.stripe_subscription_created_at).getTime() / 1000)
+            : 0,
+        }
+      : null,
+    { id: subscription.id, status: subscription.status, created: subscription.created },
+  );
+  if (!verdict.apply) {
+    console.log(`[billing] ignoring ${subscription.id} (${subscription.status}): ${verdict.reason}, row holds ${storedAccount?.stripe_subscription_id}`);
+    return null;
+  }
+  if (verdict.displaced) {
+    // Two live subscriptions on one account is a double charge. Nothing here
+    // cancels it by itself, because cancelling somebody's payment on the
+    // strength of a webhook is not a decision code should take, but it is named
+    // loudly so it can be found in Stripe.
+    console.error(`[billing] DOUBLE SUBSCRIPTION on account ${ownerUserId}: ${subscription.id} displaces ${verdict.displaced}, which is still live and now unreachable from the app`);
+  }
+  // Only on billing_accounts. workspace_subscriptions has no such column, and
+  // spreading it there would fail the upsert on a table that is only kept
+  // alive so a rollback does not strand a paying customer.
+  const subCreatedAt = subscription.created
+    ? new Date(subscription.created * 1000).toISOString()
+    : null;
+
   let account = null;
   if (ownerUserId) {
     // The owner can be gone. Deleting an account cancels its subscription at
@@ -372,7 +452,7 @@ export async function syncStripeSubscription(subscription) {
     }
     const { data, error } = await admin
       .from("billing_accounts")
-      .upsert({ owner_user_id: ownerUserId, ...shared }, { onConflict: "owner_user_id" })
+      .upsert({ owner_user_id: ownerUserId, ...shared, stripe_subscription_created_at: subCreatedAt }, { onConflict: "owner_user_id" })
       .select()
       .single();
     if (error) throw error;

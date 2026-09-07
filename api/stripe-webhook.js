@@ -67,7 +67,26 @@ export default async function handler(req, res) {
       event.type === "customer.subscription.updated" ||
       event.type === "customer.subscription.deleted"
     ) {
-      await syncStripeSubscription(event.data.object);
+      // Retrieved, not believed. The payload of these events is a SNAPSHOT of
+      // the subscription at the moment the event was made, and Stripe does not
+      // promise the order they arrive in, so an event made before a change can
+      // land after it and write the older state back. The checkout and invoice
+      // handlers above already retrieve; these three were the ones reading a
+      // photograph. One extra API call per event buys away the whole stale half
+      // of the problem.
+      //
+      // A subscription Stripe cannot hand back any more is answered from the
+      // snapshot rather than dropped: knowing it is gone is still worth
+      // recording, and syncStripeSubscription decides for itself whether that
+      // event may write the row.
+      const snapshot = event.data.object;
+      let current = snapshot;
+      try {
+        current = await getStripe().subscriptions.retrieve(snapshot.id);
+      } catch (e) {
+        console.warn(`[billing] could not re-read ${snapshot.id}, using the event's own copy:`, e?.message);
+      }
+      await syncStripeSubscription(current);
     }
 
     if (
