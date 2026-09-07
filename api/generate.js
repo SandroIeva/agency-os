@@ -369,26 +369,51 @@ async function completeJob(db, job, imageUrl) {
   // The asset row. Named from the prompt so a generated picture is findable by
   // what was asked for.
   const name = ((job.prompt || "").slice(0, 60).replace(/[\n\r]+/g, " ").trim() || "KI-Bild") + "." + (stored.ext || "png");
-  await db.from("user_files").insert({
+
+  // ⚠ Every one of these three errors is CHECKED. supabase-js does not throw on
+  // a database error, it hands it back in `error`, and all three of these used
+  // to be awaited and then ignored. A failed user_files insert therefore left
+  // the picture in storage with no row pointing at it, while the job was still
+  // marked completed and the credits still charged: paid for, reported as
+  // finished, and findable nowhere.
+  //
+  // The asset row is the one that decides. Without it there is no picture as
+  // far as the product is concerned, so its failure fails the job and the
+  // stored object is removed rather than left to be paid for by the storage
+  // quota forever.
+  const { error: fileErr } = await db.from("user_files").insert({
     user_id: job.user_id, org_id: job.org_id, name,
     mime_type: stored.mime || "image/png", size_bytes: stored.bytes, storage_path: stored.path,
     storage_provider: "supabase", public_url: stored.publicUrl,
     // The bucket travels with the row: deletion should never have to infer it.
     metadata: { generated: true, model: job.model, prompt: job.prompt, bucket: ASSET_BUCKET },
   });
+  if (fileErr) {
+    await db.storage.from(ASSET_BUCKET).remove([stored.path]).catch(() => {});
+    throw new Error(`could not file the generated image: ${fileErr.message}`);
+  }
 
   // The storage ledger. Skipping this is how the ledger drifts from reality —
-  // an upload does it, so a generation must too.
-  await db.from("workspace_files").upsert(
+  // an upload does it, so a generation must too. A miss here does NOT throw:
+  // the picture exists and is usable, and a quota that is briefly short is a
+  // smaller problem than destroying finished work. It is logged so the drift
+  // has a cause somebody can find.
+  const { error: ledgerErr } = await db.from("workspace_files").upsert(
     { org_id: job.org_id, bucket: ASSET_BUCKET, path: stored.path, size_bytes: stored.bytes, created_by: job.user_id },
     { onConflict: "bucket,path" },
   );
+  if (ledgerErr) console.error("[generate] storage ledger not updated:", ledgerErr.message);
 
-  await db.from("generation_jobs").update({
+  // The job's own row. If this does not land the job stays "running" with a
+  // finished picture already filed, and the next poll would try to complete it
+  // again — which is exactly what claimed_at prevents, so it would simply stop.
+  // Better to fail loudly and leave a job that can be looked at.
+  const { error: jobErr } = await db.from("generation_jobs").update({
     status: "completed", result_url: stored.publicUrl,
     cost_micro_usd: model.microUsd, cost_credits: credits,
     completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
   }).eq("id", job.id);
+  if (jobErr) throw new Error(`could not close the generation job: ${jobErr.message}`);
 
   // The whole point of doing this here: the person may be somewhere else
   // entirely by now, minutes later.

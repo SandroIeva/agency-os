@@ -196,6 +196,22 @@ async function zfetchSoft(path, opts) {
 
 // The workspace's Zernio profile id — created lazily on first use and persisted
 // in workspace_social (server-only table, service key).
+// Every account id that arrives in a REQUEST BODY has to be one of this
+// workspace's. An orgId proves nothing about an account: it is in every share
+// link, and admin rights over one workspace say nothing about somebody else's
+// connected profile. The posting path already knew this and checked it inline;
+// disconnect and the comment thread did not, so an admin of any workspace could
+// hand Zernio a stranger's account id and have it deleted or read.
+async function requireOwnAccounts(orgId, accountIds) {
+  const profileId = await ensureProfile(orgId);
+  const mine = await zfetch(`/accounts?profileId=${encodeURIComponent(profileId)}`);
+  const myIds = new Set((mine.accounts || []).map(a => a._id));
+  for (const id of accountIds) {
+    if (!myIds.has(id)) throw new HttpError(403, "Account does not belong to this workspace", "forbidden_account");
+  }
+  return profileId;
+}
+
 async function ensureProfile(orgId) {
   const admin = getAdminSupabase();
   const { data: row, error } = await admin
@@ -272,6 +288,7 @@ export default async function handler(req, res) {
       await requireOrgMember(user.id, orgId, { adminOnly: true });
       const accountId = String(body.accountId || "");
       if (!/^[a-f0-9]{24}$/i.test(accountId)) throw new HttpError(400, "Invalid accountId", "invalid_account");
+      await requireOwnAccounts(orgId, [accountId]);
       await zfetch(`/accounts/${accountId}`, { method: "DELETE" });
       return res.status(200).json({ ok: true });
     }
@@ -306,6 +323,7 @@ export default async function handler(req, res) {
       if (body.postId) {
         const accountId = String(body.accountId || "");
         if (!/^[a-f0-9]{24}$/i.test(accountId)) throw new HttpError(400, "Invalid accountId", "invalid_account");
+        await requireOwnAccounts(orgId, [accountId]);
         const thread = await zfetchSoft(
           `/inbox/comments/${encodeURIComponent(String(body.postId))}?accountId=${encodeURIComponent(accountId)}`);
         return res.status(200).json({ thread });
@@ -581,12 +599,7 @@ export default async function handler(req, res) {
         throw new HttpError(400, "Content or media is required", "invalid_content");
       }
       // Guard: every account must belong to THIS workspace's Zernio profile.
-      const profileId = await ensureProfile(orgId);
-      const mine = await zfetch(`/accounts?profileId=${encodeURIComponent(profileId)}`);
-      const myIds = new Set((mine.accounts || []).map(a => a._id));
-      for (const p of platforms) {
-        if (!myIds.has(p.accountId)) throw new HttpError(403, "Account does not belong to this workspace", "forbidden_account");
-      }
+      await requireOwnAccounts(orgId, platforms.map(p => p.accountId));
       const payload = {
         content: content || undefined,
         platforms: platforms.map(p => ({ platform: p.platform, accountId: p.accountId })),
