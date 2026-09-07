@@ -336,6 +336,12 @@ const THEME_KEY = "agencyos-theme";
 
 const GEO_CACHE_KEY = "i7os.weather.geo.v2";   // { lat, lon, ts }
 
+// The assistant's panel sits this far from the right edge AND this far from the
+// bottom. One constant rather than two numbers, because the two being equal is
+// the whole point: the owner asked for the same gap on both sides, and two
+// literals drift the moment one of them is nudged.
+const ASSISTANT_GAP = 16;
+
 function makeTheme(darkMode) {
   return darkMode ? {
     bg: "#111117",
@@ -51994,13 +52000,28 @@ export default function CircularMenu() {
   // was never meant for. Comparing against the live view corrects itself.
   const overView = !!voiceOverView && currentView === voiceOverView;
   const assistantLayer = overView
-    ? { position: "fixed", right: 18, bottom: 96, width: 340, maxWidth: "calc(100vw - 36px)",
-        zIndex: 9990, borderRadius: 24, padding: "20px 18px",
-        background: darkMode ? "rgba(18,18,26,0.94)" : "rgba(252,252,254,0.96)",
-        border: `1px solid ${theme.borderFaint}`,
-        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-        boxShadow: darkMode ? "0 18px 50px rgba(0,0,0,0.45)" : "0 18px 50px rgba(0,0,0,0.16)" }
+    ? { position: "fixed", right: ASSISTANT_GAP, bottom: ASSISTANT_GAP,
+        width: 320, maxWidth: `calc(100vw - ${ASSISTANT_GAP * 2}px)`,
+        zIndex: 9990, paddingTop: 30 }
     : { position: "absolute", inset: 0, zIndex: 15 };
+
+  // Closing it has to be a thing you can see. Escape works, but a keystroke is
+  // not an affordance, and over a view there is no Home button to fall back on
+  // the way the dashboard has. Drawn, not an emoji, like every other glyph.
+  const assistantClose = overView ? (
+    <div
+      onClick={(e) => { e.stopPropagation(); stopAssistant(); }}
+      title={appLanguage === "de" ? "Schliessen" : "Close"}
+      style={{ position: "absolute", top: 0, right: 0, width: 30, height: 30,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        borderRadius: "50%", cursor: "pointer",
+        background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)" }}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim}
+        strokeWidth="1.8" strokeLinecap="round">
+        <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+      </svg>
+    </div>
+  ) : null;
 
   // Leave the AI voice/speaking view cleanly and return to the dashboard. Used by
   // the bottom grid button (the only other option in that view).
@@ -53414,6 +53435,7 @@ export default function CircularMenu() {
                 cursor: "pointer",
               }}
             >
+              {assistantClose}
               {/* A file is waiting, so the orb has something to ask rather than
                   an empty prompt. The question is the heading; LISTENING is
                   what it says when nothing is pending. */}
@@ -53802,6 +53824,7 @@ export default function CircularMenu() {
                 alignItems: "center", justifyContent: "center",
               }}
             >
+              {assistantClose}
               {/* Status label */}
               <motion.div
                 animate={{ opacity: aiStatus === "thinking" ? [0.4, 0.8, 0.4] : 0.6 }}
