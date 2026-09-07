@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 // never leave the machine for.
 import qrcode from "qrcode-generator";
 import { motion, AnimatePresence } from "framer-motion";
+import DOMPurify from "dompurify";
 import { supabase } from "./supabase";
 import { notifLines } from "./notificationText";
 import { buildSystemPrompt } from "./systemPrompt";
@@ -52,6 +53,75 @@ export async function authHeaders() {
     const token = data?.session?.access_token;
     return token ? { Authorization: `Bearer ${token}` } : {};
   } catch { return {}; }
+}
+
+// Rich text saved by one person is rendered in another person's browser, and
+// nothing in this app ever cleaned it. The editor writes contentEditable markup
+// straight into brand_profile.section_content with innerHTML, and the reader
+// puts it back with dangerouslySetInnerHTML: a colleague could store a script
+// tag or an onerror attribute and have it run in an admin's session.
+//
+// DOMPurify rather than a hand-written allowlist. Sanitisers are the classic
+// thing that looks right and is not, and this one is already in the tree.
+//
+// Applied on the way IN and on the way OUT. On the way in so nothing new is
+// stored dirty; on the way out because everything stored before today went in
+// unchecked and there is no migration that can be sure it caught all of it.
+const cleanHtml = (html) => {
+  const s = String(html || "");
+  if (!s) return s;
+  try {
+    return DOMPurify.sanitize(s, {
+      USE_PROFILES: { html: true },   // no SVG, no MathML — this is a text field
+      // The html profile still allows form controls, and it was measured doing
+      // so: a <form action="https://evil"> with an <input name="pw"> came
+      // through untouched, which is a phishing page wearing our chrome. A brand
+      // description has no business collecting anything.
+      FORBID_TAGS: ["form", "input", "button", "textarea", "select", "option", "label", "fieldset", "legend"],
+      // Anything that is not a page, an address or an anchor is not a link.
+      ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/)/i,
+    });
+  } catch (_) {
+    // Rather no formatting than unchecked markup.
+    return s.replace(/<[^>]*>/g, "");
+  }
+};
+
+// Everything in localStorage that belongs to a PERSON rather than to this
+// browser. None of it carries a user id, and logging out used to remove exactly
+// one of them (agencyos-google-token), so on a shared machine the next person to
+// sign in inherited the previous one's Google refresh token and their paid AI
+// keys — and the Google refresh token is the one that gets used FIRST, before
+// anybody notices whose Drive is being read.
+//
+// Theme, language and window sizes are deliberately not in this list: those
+// belong to the browser and nobody minds inheriting them.
+const ACCOUNT_LOCAL_KEYS = [
+  "agencyos-llm-keys",              // the API keys somebody pays for
+  "agencyos-llm-provider",
+  "agencyos-google-token",          // Google access token
+  "agencyos-google-token-ts",
+  "agencyos-google-refresh-token",  // the long-lived one
+  "agencyos-name",
+  "agencyos-voice-id",
+  "agencyos-voice-image-model",
+  "agencyos-autosave-ai-images",
+  "agencyos-doc-default-visibility",
+  "agencyos-push-setup-token",
+  "agencyos-push-setup-pending",
+  "agencyos-project-invite-token",
+  "agencyos-return-state",
+  "agencyos-open-wb",
+  "agencyos-open-task",
+  "agencyos-open-doc",
+];
+// Who was signed in last. Compared on every session change so that switching
+// accounts clears the previous one even when nobody pressed "log out" — a
+// second tab, a restored session, an expired one replaced by somebody else's.
+const LAST_USER_KEY = "agencyos-last-user";
+
+function clearAccountLocalState() {
+  for (const k of ACCOUNT_LOCAL_KEYS) { try { localStorage.removeItem(k); } catch (_) {} }
 }
 
 // Error Boundary to prevent black screen — shows error info in production
@@ -36645,7 +36715,7 @@ function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel, simple
     // so emptiness has to be judged by the text, not the markup.
     setEmpty(!el.textContent.trim() && !el.querySelector("img"));
   };
-  useEffect(() => { if (ref.current) { ref.current.innerHTML = initialHTML || "<p></p>"; checkEmpty(); } }, []);
+  useEffect(() => { if (ref.current) { ref.current.innerHTML = cleanHtml(initialHTML) || "<p></p>"; checkEmpty(); } }, []);
   const exec = (cmd, val) => { document.execCommand(cmd, false, val); ref.current?.focus(); };
 
   // Link entry as an inline row instead of window.prompt(). Clicking into the
@@ -41849,7 +41919,7 @@ function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMod
           simple
           placeholder="Wofür steht eure Farbwelt? Beschreibe, welche Farbe wofür eingesetzt wird — z. B. Primärfarbe für Flächen und Buttons, Akzentfarbe sparsam für Hervorhebungen — und was die Farben über die Marke aussagen sollen." />
       ) : savedHtml ? (
-        <div className="brand-rich" dangerouslySetInnerHTML={{ __html: savedHtml }} />
+        <div className="brand-rich" dangerouslySetInnerHTML={{ __html: cleanHtml(savedHtml) }} />
       ) : (
         <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 560 }}>
           Beschreibe eure Farbwelt — wofür die Farben stehen und wie sie eingesetzt werden. Über „Bearbeiten" oben rechts kannst du den Text ergänzen.
@@ -44284,7 +44354,8 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
   useEffect(() => { const s = BRAND_PILLAR_SUBTABS[brandTab] || []; setBrandSub(s[0]?.key); setEditingText(false); setVisionEditing(false); }, [brandTab]);
   useEffect(() => { setEditingText(false); setVisionEditing(false); }, [brandSub]);
 
-  const saveSection = async (key, html) => {
+  const saveSection = async (key, rawHtml) => {
+    const html = cleanHtml(rawHtml);
     setProfile(p => ({ ...p, section_content: { ...(p?.section_content || {}), [key]: html } }));
     setEditingText(false);
     try { if (profile?.id) await supabase.from("brand_profile").update({ section_content: { ...(profile.section_content || {}), [key]: html } }).eq("id", profile.id); } catch (e) {}
@@ -46448,7 +46519,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                         <RichTextEditor key={k} initialHTML={seed || "<p></p>"} theme={theme} darkMode={darkMode}
                           onSave={(html) => saveSection(k, html)} onCancel={() => setEditingText(false)} />
                       ) : savedHtml ? (
-                        <div className="brand-rich" dangerouslySetInnerHTML={{ __html: savedHtml }} />
+                        <div className="brand-rich" dangerouslySetInnerHTML={{ __html: cleanHtml(savedHtml) }} />
                       ) : body}
                       {/* Brand Story gets a history timeline under the text */}
                       {k === "identity/story" && (
@@ -48273,11 +48344,38 @@ export default function CircularMenu() {
     return null;
   }, [storeGoogleToken, persistGoogleRefreshToken, isTokenFresh, autoReLogin]);
 
+  // Forget the person, keep the browser. localStorage is only half of it: the
+  // App component stays mounted across a logout, so llmKeys and the Google
+  // token refs would still be holding the previous person's credentials in
+  // memory while the next one signs in. Both halves, or neither.
+  const forgetAccount = useCallback(() => {
+    clearAccountLocalState();
+    setLlmKeys({});
+    setLlmProvider("gemini");
+    googleTokenRef.current = null;
+    googleTokenTsRef.current = 0;
+  }, []);
+
   const handleLogout = async () => {
-    localStorage.removeItem("agencyos-google-token");
+    forgetAccount();
     await supabase.auth.signOut();
     setSession(null);
+    try { localStorage.removeItem(LAST_USER_KEY); } catch (_) {}
   };
+
+  // The other way accounts change: no logout at all. A second tab signs
+  // somebody else in, a restored session belongs to a different person, an
+  // expired one is replaced. Comparing the id rather than counting renders,
+  // because StrictMode runs this twice and "skip the first run" has already
+  // written the wrong thing once in this file.
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid) return;
+    let last = null;
+    try { last = localStorage.getItem(LAST_USER_KEY); } catch (_) {}
+    if (last && last !== uid) forgetAccount();
+    try { localStorage.setItem(LAST_USER_KEY, uid); } catch (_) {}
+  }, [session?.user?.id, forgetAccount]);
 
   // ── Background token refresh: check every 5 min, refresh if > 45 min old ──
   // Store latest refs to avoid dependency changes crashing React
