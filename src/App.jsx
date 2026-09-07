@@ -50122,6 +50122,13 @@ export default function CircularMenu() {
     return t("greet.night");
   };
   const [voiceMode, setVoiceMode] = useState(false);
+  // Which view the assistant was opened ON TOP OF, or null on the dashboard.
+  // It used to close the view before opening, because its own UI sits on a
+  // dashboard layer (z-index 15) and would have been invisible underneath a
+  // view. Closing the view threw away the very thing the question was about:
+  // ask it to write a post description and the composer was gone before you
+  // finished the sentence. The layer moves now, not the view.
+  const [voiceOverView, setVoiceOverView] = useState(null);
 
   // ── Files dropped on the Startview ──────────────────────────────────────
   // Drop a file on the dashboard and the assistant asks where it should go
@@ -51084,8 +51091,12 @@ export default function CircularMenu() {
   const startVoice = () => {
     setMenuOpen(false);
     setSubOpen(false);
-    // Close any open view so the voice UI doesn't overlay it
-    if (currentView !== "dashboard") setCurrentView("dashboard");
+    // The view STAYS. Remembered here so the assistant's own UI knows to draw
+    // itself as a panel beside the work rather than as a full-screen takeover,
+    // and so buildSystemPrompt is told what the person is actually looking at:
+    // VIEW_CONTEXTS has had a line for `createpost` all along, and resetting to
+    // the dashboard here is what made sure the model never saw it.
+    setVoiceOverView(currentView !== "dashboard" ? currentView : null);
     if (panelOpen) setPanelOpen(false);
     if (tasksOpen) setTasksOpen(false);
     setVoiceMode(true);
@@ -51943,10 +51954,10 @@ export default function CircularMenu() {
     startVoice();
   };
 
-  // Leave the AI voice/speaking view cleanly and return to the dashboard. Used by
-  // the bottom grid button (the only other option in that view).
-  const goDashboard = () => {
-    if (menuOpen) handleClose();
+  // Everything that ends the assistant, without deciding where you end up.
+  // goDashboard sends you home afterwards; closing it over a view has to leave
+  // you exactly where you were standing, which is the whole point of A.
+  const stopAssistant = () => {
     if (aiSpeaking || voiceMode) {
       try { if (recognitionRef.current) { recognitionRef.current.onresult = null; recognitionRef.current.stop(); recognitionRef.current = null; } } catch(e) {}
       if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
@@ -51959,6 +51970,39 @@ export default function CircularMenu() {
       try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch(e) {}
       setVoiceMode(false); setAiSpeaking(false); setAiStatus(""); setAiResponse(""); setTranscript("");
     }
+    setVoiceOverView(null);
+  };
+
+  // Escape closes the assistant over a view. On the dashboard the gesture is
+  // already the Home button and the scroll, and both go through goDashboard.
+  useEffect(() => {
+    if (!voiceOverView) return;
+    const onKey = (e) => { if (e.key === "Escape") stopAssistant(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }); // eslint-disable-line -- reads live state on purpose, re-bound each render
+
+  // Where the assistant draws itself. On the dashboard it owns the screen,
+  // because there is nothing behind it worth seeing. Over a view it must not:
+  // the field being talked about is on that screen, and a centred takeover
+  // covers exactly the thing under discussion. So it becomes a panel in the
+  // corner the orb already lives in, above the bottom bar (60) and below the
+  // typed dialog (9998).
+  const overView = !!voiceOverView;
+  const assistantLayer = overView
+    ? { position: "fixed", right: 18, bottom: 96, width: 340, maxWidth: "calc(100vw - 36px)",
+        zIndex: 9990, borderRadius: 24, padding: "20px 18px",
+        background: darkMode ? "rgba(18,18,26,0.94)" : "rgba(252,252,254,0.96)",
+        border: `1px solid ${theme.borderFaint}`,
+        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        boxShadow: darkMode ? "0 18px 50px rgba(0,0,0,0.45)" : "0 18px 50px rgba(0,0,0,0.16)" }
+    : { position: "absolute", inset: 0, zIndex: 15 };
+
+  // Leave the AI voice/speaking view cleanly and return to the dashboard. Used by
+  // the bottom grid button (the only other option in that view).
+  const goDashboard = () => {
+    if (menuOpen) handleClose();
+    stopAssistant();
     if (tasksOpen) setTasksOpen(false); // center home button also returns from the tasks view
     if (panelOpen) setPanelOpen(false);
     setCurrentView("dashboard");
@@ -53360,10 +53404,10 @@ export default function CircularMenu() {
               // transcript as an answer it could not place.
               onClick={() => { if (!drop?.speaking) stopVoice(); }}
               style={{
-                position: "absolute", inset: 0,
+                ...assistantLayer,
                 display: "flex", flexDirection: "column",
                 alignItems: "center", justifyContent: "center",
-                cursor: "pointer", zIndex: 15,
+                cursor: "pointer",
               }}
             >
               {/* A file is waiting, so the orb has something to ask rather than
@@ -53468,9 +53512,9 @@ export default function CircularMenu() {
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     style={{
-                      fontSize: 15, fontFamily: FONT, color: darkMode ? "#ffffffAA" : "#1a1a2eCC",
-                      fontWeight: 400, textAlign: "center", maxWidth: 400,
-                      marginTop: 28, lineHeight: 1.5, padding: "0 20px",
+                      fontSize: overView ? 13.5 : 15, fontFamily: FONT, color: darkMode ? "#ffffffAA" : "#1a1a2eCC",
+                      fontWeight: 400, textAlign: "center", maxWidth: overView ? "100%" : 400,
+                      marginTop: overView ? 16 : 28, lineHeight: 1.5, padding: overView ? 0 : "0 20px",
                     }}
                   >{transcript}</motion.div>
                 )}
@@ -53749,10 +53793,9 @@ export default function CircularMenu() {
               exit={voiceNavActiveRef.current ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
               transition={voiceNavActiveRef.current ? { duration: 0 } : { type: "spring", stiffness: 100, damping: 18, mass: 0.8 }}
               style={{
-                position: "absolute", inset: 0,
+                ...assistantLayer,
                 display: "flex", flexDirection: "column",
                 alignItems: "center", justifyContent: "center",
-                zIndex: 15,
               }}
             >
               {/* Status label */}
@@ -53784,7 +53827,7 @@ export default function CircularMenu() {
               >
                 {/* The same orb, larger, and it runs faster while the AI talks.
                     The old sphere is still the fallback where WebGPU is not. */}
-                <LiquidOrb size={200} darkMode={darkMode}
+                <LiquidOrb size={overView ? 104 : 200} darkMode={darkMode}
                   speed={aiStatus === "speaking" ? 3.4 : 1.5}
                   hoverSpeed={aiStatus === "speaking" ? 3.8 : 2.6}
                   fallback={<AISpeakingSphere darkMode={darkMode} speaking={aiStatus === "speaking"} audioLevel={audioLevelRef} />} />
@@ -53804,9 +53847,13 @@ export default function CircularMenu() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3, duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
                     style={{
-                      fontSize: 14, fontFamily: FONT,
-                      fontWeight: 400, textAlign: "center", maxWidth: 560,
-                      marginTop: 28, lineHeight: 1.7, padding: "0 20px",
+                      fontSize: overView ? 13 : 14, fontFamily: FONT,
+                      fontWeight: 400, textAlign: "center", maxWidth: overView ? "100%" : 560,
+                      marginTop: overView ? 14 : 28, lineHeight: 1.7, padding: overView ? 0 : "0 20px",
+                      // An answer can run long, and in the panel there is no
+                      // screen to run onto. It scrolls inside instead of
+                      // pushing the panel off the bottom of the window.
+                      ...(overView ? { maxHeight: "34vh", overflowY: "auto" } : null),
                     }}
                   >
                     {aiResponse.split(/\s+/).filter(Boolean).map((word, i) => {
