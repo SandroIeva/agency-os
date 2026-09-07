@@ -28158,7 +28158,7 @@ function parseCSV(text) {
 // Channel colour/label lookup — reuse the same platform set + glyphs as Touchpoints.
 const CHANNEL_META = Object.fromEntries(TOUCHPOINT_PLATFORMS.map(p => [p.key, { label: p.label, color: p.color }]));
 
-function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef, userOrg }) {
+function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef, userOrg, projectName = "" }) {
   const de = appLanguage === "de";
   const [view, setView] = useState("cards"); // "cards" | "list"
   const [search, setSearch] = useState("");
@@ -28680,6 +28680,20 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef,
         </div>
       </div>
 
+      {/* Inside a project brand this list is still the workspace's. Social
+          accounts are connected once per workspace, so there is no per-brand
+          audience to show, and showing this one under a customer's name would
+          claim these people reacted to that customer. */}
+      {projectName ? (
+        <div style={{ margin: "10px 26px 0", padding: "9px 13px", borderRadius: 11,
+          border: `1px solid ${theme.borderFaint}`,
+          background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+          fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
+          {de ? `Diese Kontakte gehören zum Workspace, nicht zu ${projectName}. Social-Konten werden einmal pro Workspace verbunden.`
+              : `These contacts belong to the workspace, not to ${projectName}. Social accounts are connected once per workspace.`}
+        </div>
+      ) : null}
+
       <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 26px 26px" }}>
         {people.length === 0 ? (
           <div style={{ padding: "60px 20px", textAlign: "center", fontSize: 13,
@@ -28911,7 +28925,7 @@ const plainField = (v, de = true) => {
 // The scan itself is free to run for anybody, because it costs us nothing; only
 // keeping the result counts against the monthly allowance, and the database
 // trigger is what actually holds that line.
-function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }) {
+function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg, projectId = null }) {
   const de = appLanguage === "de";
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -28920,27 +28934,36 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
   const [note, setNote] = useState("");
   const [history, setHistory] = useState([]);
 
-  // What the workspace says about itself, to hold the website against. Empty
+  // What the brand says about itself, to hold the website against. Empty
   // fields are the point rather than a problem: a gap here is the reason the
   // comparison cannot be made, and saying which one is more use than silence.
+  //
+  // Which brand: the one you are standing in. This read was pinned to
+  // `project_id is null`, so scanning a customer's website from inside their
+  // project brand compared it against the AGENCY's positioning and said
+  // nothing about having done so.
   const [brand, setBrand] = useState(null);
   useEffect(() => {
     if (!userOrg?.id) return;
-    supabase.from("brand_profile")
+    let q = supabase.from("brand_profile")
       .select("name,claim,description,vision,voice_tone,brand_values")
-      .eq("org_id", userOrg.id).is("project_id", null).maybeSingle()
-      .then(({ data }) => setBrand(data || {}));
-  }, [userOrg?.id]);
+      .eq("org_id", userOrg.id);
+    q = projectId ? q.eq("project_id", projectId) : q.is("project_id", null);
+    q.maybeSingle().then(({ data }) => setBrand(data || {}));
+  }, [userOrg?.id, projectId]);
 
   const loadHistory = useCallback(async () => {
     if (!userOrg?.id) return;
-    const { data } = await supabase.from("website_scans")
+    let q = supabase.from("website_scans")
       // The whole row, not just the score: a saved scan has to open again, or
       // the only way back to its findings is to run it a second time.
-      .select("id,url,score,created_at,categories,findings,detail").eq("org_id", userOrg.id)
-      .order("created_at", { ascending: false }).limit(12);
+      .select("id,url,score,created_at,categories,findings,detail").eq("org_id", userOrg.id);
+    // Each brand keeps its own history. One list mixing the agency's site with
+    // every customer's is a list nobody can read.
+    q = projectId ? q.eq("project_id", projectId) : q.is("project_id", null);
+    const { data } = await q.order("created_at", { ascending: false }).limit(12);
     setHistory(data || []);
-  }, [userOrg?.id]);
+  }, [userOrg?.id, projectId]);
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
   const scan = async () => {
@@ -28958,7 +28981,8 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
       // Saving is the part with an allowance. A refused save is not a failed
       // scan, so it is said quietly beside the result instead of replacing it.
       const { error: saveErr } = await supabase.from("website_scans").insert({
-        org_id: userOrg?.id, url: data.url, score: data.score,
+        org_id: userOrg?.id, project_id: projectId || null,
+        url: data.url, score: data.score,
         categories: data.categories, findings: data.findings,
         // Without this a stored scan reopened without its machine view.
         detail: { detected: data.detected, machine: data.machine },
@@ -28966,8 +28990,8 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
       });
       if (saveErr) {
         setNote(/i7os_scan_quota/.test(saveErr.message)
-          ? (de ? "Dieses Ergebnis wurde nicht gespeichert — das Monatskontingent ist aufgebraucht."
-                : "This result was not saved — the monthly allowance is used up.")
+          ? (de ? "Dieses Ergebnis wurde nicht gespeichert. Das Monatskontingent ist aufgebraucht."
+                : "This result was not saved. The monthly allowance is used up.")
           : (de ? "Dieses Ergebnis wurde nicht gespeichert. Ein Plan wird zum Speichern benötigt."
                 : "This result was not saved. Saving requires a plan."));
       } else loadHistory();
@@ -29003,6 +29027,14 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg }
           {busy ? (de ? "Prüft …" : "Scanning …") : (de ? "Analysieren" : "Analyse")}
         </motion.button>
       </div>
+
+      {/* Which brand the site is held against. Silence here is what let a
+          customer's website be measured against the agency unnoticed. */}
+      {brand?.name ? (
+        <div style={{ marginTop: -10, fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
+          {de ? `Verglichen wird mit der Marke ${brand.name}.` : `Compared against the brand ${brand.name}.`}
+        </div>
+      ) : null}
 
       {error && (
         <div style={{ padding: "10px 14px", borderRadius: 12, background: "rgba(232,103,103,.08)",
@@ -29820,7 +29852,7 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
   );
 }
 
-function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg }) {
+function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, projectId = null, projectName = "" }) {
   // Read from the module-level mirror rather than threaded through two more
   // components — the same mirror the upload guards use. Advisory only: the real
   // gate is api/zernio.js, because connecting bills us upstream and a client
@@ -30006,13 +30038,25 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
       {viewSwitch}
       <WebsitePresencePanel theme={theme} darkMode={darkMode} appLanguage={appLanguage}
-        session={session} userOrg={userOrg} />
+        session={session} userOrg={userOrg} projectId={projectId} />
     </div>
   );
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
       {viewSwitch}
+      {/* Zernio connects one set of accounts per WORKSPACE, so there are no
+          per-brand social numbers to show. Drawing the workspace's under a
+          customer's brand without saying so reads as that customer's reach. */}
+      {projectName ? (
+        <div style={{ marginBottom: 16, padding: "9px 13px", borderRadius: 11,
+          border: `1px solid ${theme.borderFaint}`,
+          background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+          fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
+          {de ? `Diese Zahlen gehören zum Workspace, nicht zu ${projectName}. Social-Konten werden einmal pro Workspace verbunden.`
+              : `These numbers belong to the workspace, not to ${projectName}. Social accounts are connected once per workspace.`}
+        </div>
+      ) : null}
       {socialBlocked && !errorText && (
         <div style={{ marginBottom: 16, padding: "12px 16px", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap",
           background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
@@ -30268,7 +30312,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg })
               {/* The page itself, then everyone else's — same column, same
                   question one step wider. */}
               <LinkedInPagePanel theme={theme} darkMode={darkMode} de={de}
-                session={session} orgId={orgId} projectId={null} accounts={accounts}
+                session={session} orgId={orgId} projectId={projectId} accounts={accounts}
                 card={card} secLabel={secLabel} />
               <SocialBenchmarkPanel theme={theme} darkMode={darkMode} de={de}
                 session={session} orgId={orgId} card={card} secLabel={secLabel}
@@ -32378,9 +32422,9 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
         </div>
 
         {audTab === "people" ? (
-          <PeopleTab theme={theme} darkMode={darkMode} accent={accent} appLanguage={appLanguage} headerSlotRef={peopleHeaderSlot} userOrg={userOrg} />
+          <PeopleTab theme={theme} darkMode={darkMode} accent={accent} appLanguage={appLanguage} headerSlotRef={peopleHeaderSlot} userOrg={userOrg} projectName={projectName} />
         ) : audTab === "analytics" ? (
-          <AnalyticsTab theme={theme} darkMode={darkMode} appLanguage={appLanguage} session={session} userOrg={userOrg} />
+          <AnalyticsTab theme={theme} darkMode={darkMode} appLanguage={appLanguage} session={session} userOrg={userOrg} projectId={projectId} projectName={projectName} />
         ) : previewKey ? (
           // In the content area, not over the panel: the workspace header and
           // the Audience tabs stay exactly where they were, and only the part
