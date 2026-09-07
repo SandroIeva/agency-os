@@ -51988,7 +51988,11 @@ export default function CircularMenu() {
   // covers exactly the thing under discussion. So it becomes a panel in the
   // corner the orb already lives in, above the bottom bar (60) and below the
   // typed dialog (9998).
-  const overView = !!voiceOverView;
+  // Derived, not just remembered: leaving the view with the panel still open
+  // (the view's own Back button, a spoken "open calendar") would otherwise
+  // leave a corner panel sitting on the dashboard, which is the one screen it
+  // was never meant for. Comparing against the live view corrects itself.
+  const overView = !!voiceOverView && currentView === voiceOverView;
   const assistantLayer = overView
     ? { position: "fixed", right: 18, bottom: 96, width: 340, maxWidth: "calc(100vw - 36px)",
         zIndex: 9990, borderRadius: 24, padding: "20px 18px",
