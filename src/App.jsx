@@ -21851,7 +21851,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       "shadow-spread": de ? "Schatten-Spread" : "shadow spread",
       "background-blur": de ? "Hintergrund-Blur" : "background blur",
       "inner-shadow": de ? "innerer Schatten" : "inner shadow",
-      "mixed-text-style": de ? "gemischter Textstil" : "mixed text style" };
+      "mixed-text-style": de ? "gemischter Textstil" : "mixed text style",
+      // Not a simplification but a loss, and it belongs in the same count: a
+      // picture that did not upload is the one thing somebody will look for.
+      "image-failed": de ? "Bild nicht geladen" : "image not loaded" };
     const w = (data.warnings || []).filter(x => x.count > 0);
     // The count is always said. "Nothing arrived" and "it arrived and you
     // cannot see it" looked identical from the outside, and that cost a round
@@ -21932,7 +21935,29 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         } catch (_) { /* one picture short is not the whole import */ }
       }
 
-      const ready = { items: withUrls, size: j.size, warnings: j.warnings, root: j.root, seat: j.seat };
+      // Join the uploads back onto the items. The server hands back image items
+      // carrying `url: null` and a parallel `images` list keyed by the same id,
+      // and nothing here ever joined the two: the join was named `withUrls` and
+      // never written, so every SUCCESSFUL import threw a ReferenceError one
+      // line before it could place anything, and the catch below reported it as
+      // "Import abgebrochen". A failed import looked identical to a failed
+      // upload, which is why it read as a Figma problem.
+      //
+      // A picture whose upload failed is dropped rather than placed as an empty
+      // box. An invisible hole reads as a bug; a missing picture that the note
+      // counts out loud reads as what it is.
+      let lostImages = 0;
+      const withUrls = (j.items || []).flatMap(it => {
+        if (it.type !== "image") return [it];
+        const url = urls[it.id];
+        if (!url) { lostImages++; return []; }
+        return [{ ...it, url }];
+      });
+      const warnings = lostImages
+        ? [...(j.warnings || []), { kind: "image-failed", count: lostImages }]
+        : j.warnings;
+
+      const ready = { items: withUrls, size: j.size, warnings, root: j.root, seat: j.seat };
       figmaCache.current.set(link, { at: Date.now(), data: ready });
       placeFigmaItems(ready, false);
     } catch (e) {
@@ -44254,23 +44279,49 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
     try { if (profile?.id) await supabase.from("brand_profile").update({ voice_tone: vt }).eq("id", profile.id); } catch (e) {}
   };
   // Brand Story timeline — live in-memory update + debounced DB write.
+  //
+  // ⚠ Every one of these three ends in `.then()` for a reason. A supabase-js
+  // builder is LAZY: `supabase.from(x).update(y).eq(z)` on its own line builds a
+  // thenable and drops it, and no request is ever sent. All three of these were
+  // written that way, so the timeline, the taglines and purpose/vision/mission
+  // looked saved, survived until the tab was reloaded, and were then gone. The
+  // id is read out of the ref rather than off `profile`, because the debounce
+  // outlives a profile switch and would otherwise write one brand's text onto
+  // whichever brand happens to be open 700 ms later.
+  // Shaped exactly like savePersonas/saveCompetitors further down, which were
+  // written correctly: await the write, read the id off profileRef, and create
+  // the row when the brand has none yet instead of dropping the edit.
+  const brandPatch = async (patch, label) => {
+    const cur = profileRef.current;
+    let error = null;
+    if (cur?.id) {
+      ({ error } = await supabase.from("brand_profile").update(patch).eq("id", cur.id));
+    } else if (userOrg?.id) {
+      const { data, error: insErr } = await supabase.from("brand_profile")
+        .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id, name: (projectId ? projectName : userOrg?.name) || "", ...patch })
+        .select("id").single();
+      error = insErr;
+      if (data) setProfile(p => ({ ...(p || {}), id: data.id }));
+    }
+    if (error) console.error(`[brand] ${label} not saved:`, error.message);
+  };
   const storyTlTimer = useRef(null);
   const saveTimeline = (tl) => {
     setProfile(p => ({ ...p, story_timeline: tl }));
     clearTimeout(storyTlTimer.current);
-    storyTlTimer.current = setTimeout(() => { if (profile?.id) supabase.from("brand_profile").update({ story_timeline: tl }).eq("id", profile.id); }, 700);
+    storyTlTimer.current = setTimeout(() => brandPatch({ story_timeline: tl }, "timeline"), 700);
   };
   const taglinesTimer = useRef(null);
   const saveTaglines = (tg) => {
     setProfile(p => ({ ...p, taglines: tg }));
     clearTimeout(taglinesTimer.current);
-    taglinesTimer.current = setTimeout(() => { if (profile?.id) supabase.from("brand_profile").update({ taglines: tg }).eq("id", profile.id); }, 700);
+    taglinesTimer.current = setTimeout(() => brandPatch({ taglines: tg }, "taglines"), 700);
   };
   const pvmTimer = useRef(null);
   const savePvm = (pvm) => {
     setProfile(p => ({ ...p, pvm }));
     clearTimeout(pvmTimer.current);
-    pvmTimer.current = setTimeout(() => { if (profile?.id) supabase.from("brand_profile").update({ pvm }).eq("id", profile.id); }, 700);
+    pvmTimer.current = setTimeout(() => brandPatch({ pvm }, "purpose/vision/mission"), 700);
   };
   // Personas / Competitors — defined below after profile state is declared.
   const personasTimer = useRef(null);
