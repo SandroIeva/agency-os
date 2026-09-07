@@ -152,8 +152,16 @@ export default function PublicBrandLanding({ token }) {
           const { data } = await supabase.from("brand_profile").select("*").is("project_id", null).limit(1).maybeSingle();
           if (alive) { setBrand(pickBrand(data)); setSections(null); }
         } else {
-          const { data } = await supabase.from("brand_shares").select("data, sections").eq("token", token).maybeSingle();
-          if (alive) { setBrand(data?.data ? pickBrand(data.data) : null); setSections(data?.sections || null); }
+          // Through a function, not the table. The table used to carry a public
+          // SELECT policy of `USING (true)` so that this `.eq("token", …)` could
+          // work at all — which meant anyone holding the anon key could list
+          // every published snapshot in the product together with its token. A
+          // share link is supposed to be unguessable, not merely unadvertised.
+          // The function answers one row for an exact token and nothing for a
+          // wrong one, so there is nothing left to enumerate.
+          const { data } = await supabase.rpc("brand_share_by_token", { p_token: token });
+          const row = Array.isArray(data) ? data[0] : data;
+          if (alive) { setBrand(row?.data ? pickBrand(row.data) : null); setSections(row?.sections || null); }
         }
       } catch { if (alive) setBrand(null); }
     })();
