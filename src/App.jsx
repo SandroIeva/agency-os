@@ -52047,9 +52047,20 @@ export default function CircularMenu() {
   const overView = !!voiceOverView && currentView === voiceOverView;
   const assistantLayer = overView
     ? { position: "fixed", right: ASSISTANT_GAP, bottom: ASSISTANT_GAP,
-        width: 320, maxWidth: `calc(100vw - ${ASSISTANT_GAP * 2}px)`,
-        zIndex: 9990, paddingTop: 30 }
+        width: 340, maxWidth: `calc(100vw - ${ASSISTANT_GAP * 2}px)`,
+        zIndex: 9990, borderRadius: 24, padding: "30px 18px 20px",
+        background: darkMode ? "rgba(18,18,26,0.94)" : "rgba(252,252,254,0.96)",
+        border: `1px solid ${theme.borderFaint}`,
+        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        boxShadow: darkMode ? "0 18px 50px rgba(0,0,0,0.45)" : "0 18px 50px rgba(0,0,0,0.16)" }
     : { position: "absolute", inset: 0, zIndex: 15 };
+
+  // The orb, and its halo, at whatever size it is drawn. LiquidOrb scales its
+  // own glow with its radius; the swell around it out here did NOT, so at 104px
+  // a halo tuned for 200px sat too wide and read as a ring around the ball
+  // instead of light coming off it. One factor, applied to every radius.
+  const orbSize = overView ? 104 : 200;
+  const g = (px) => Math.round((px * orbSize) / 200);
 
   // Closing it has to be a thing you can see. Escape works, but a keystroke is
   // not an affordance, and over a view there is no Home button to fall back on
@@ -52058,7 +52069,7 @@ export default function CircularMenu() {
     <div
       onClick={(e) => { e.stopPropagation(); stopAssistant(); }}
       title={appLanguage === "de" ? "Schliessen" : "Close"}
-      style={{ position: "absolute", top: 0, right: 0, width: 30, height: 30,
+      style={{ position: "absolute", top: 8, right: 8, width: 30, height: 30,
         display: "flex", alignItems: "center", justifyContent: "center",
         borderRadius: "50%", cursor: "pointer",
         background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)" }}>
@@ -53886,10 +53897,10 @@ export default function CircularMenu() {
                 onClick={voiceGenLabel ? undefined : askAgain}
                 animate={{
                   boxShadow: aiStatus === "speaking" ? [
-                    "0 0 40px rgba(150,220,235,0.16), 0 0 80px rgba(190,170,250,0.06)",
-                    "0 0 75px rgba(150,220,235,0.30), 0 0 150px rgba(190,170,250,0.14)",
-                    "0 0 40px rgba(150,220,235,0.16), 0 0 80px rgba(190,170,250,0.06)",
-                  ] : "0 0 30px rgba(180,210,240,0.10)",
+                    `0 0 ${g(40)}px rgba(150,220,235,0.16), 0 0 ${g(80)}px rgba(190,170,250,0.06)`,
+                    `0 0 ${g(75)}px rgba(150,220,235,0.30), 0 0 ${g(150)}px rgba(190,170,250,0.14)`,
+                    `0 0 ${g(40)}px rgba(150,220,235,0.16), 0 0 ${g(80)}px rgba(190,170,250,0.06)`,
+                  ] : `0 0 ${g(30)}px rgba(180,210,240,0.10)`,
                   scale: aiStatus === "speaking" ? [1, 1.04, 1] : 1,
                 }}
                 transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
@@ -53900,7 +53911,7 @@ export default function CircularMenu() {
               >
                 {/* The same orb, larger, and it runs faster while the AI talks.
                     The old sphere is still the fallback where WebGPU is not. */}
-                <LiquidOrb size={overView ? 104 : 200} darkMode={darkMode}
+                <LiquidOrb size={orbSize} darkMode={darkMode}
                   speed={aiStatus === "speaking" ? 3.4 : 1.5}
                   hoverSpeed={aiStatus === "speaking" ? 3.8 : 2.6}
                   fallback={<AISpeakingSphere darkMode={darkMode} speaking={aiStatus === "speaking"} audioLevel={audioLevelRef} />} />
