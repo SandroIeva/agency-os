@@ -87,6 +87,74 @@ const cleanHtml = (html) => {
   }
 };
 
+// ── What a published brand page is allowed to receive ───────────────────────
+//
+// publishBrand used to store the WHOLE brand_profile row and let `sections`
+// decide only what the page DRAWS. Two different things were wrong with that.
+//
+// A section somebody switched off still travelled in full, so the switch hid it
+// from the page and from nobody else: unticking Personas left the persona in
+// the payload with its goals, pains and motivations, one network tab away.
+//
+// And 21 of the row's 38 columns are not read by the public page at ALL, and
+// were going out regardless of any switch. On the one brand published today
+// that is the competitor analysis (9.7 KB, the single largest thing in the
+// payload), the AI research, the brand avatar configuration, the touchpoint
+// channels, the section rich text, the Figma and PDF links and four internal
+// ids. Nobody ever chose to share any of it.
+//
+// So this is a WHITELIST. The lists below are the columns pickBrand() in
+// PublicBrandLanding.jsx actually reads, grouped by the section that needs
+// them; anything not named here does not leave the workspace. A column added
+// to brand_profile later is excluded by default, which is the safe way round.
+const PUB_ALWAYS = ["name", "claim", "description"];
+const PUB_FIELDS_BY_SECTION = {
+  strategy:   ["pvm", "story_timeline", "brand_values", "analysis"],
+  taglines:   ["taglines"],
+  voice:      ["voice_tone"],
+  logo:       ["logos", "logo_url"],
+  colors:     ["color_palette", "colors", "gradients"],
+  typography: ["typography"],
+  imagery:    ["imagery"],
+  personas:   ["personas"],
+};
+
+function publicBrandSnapshot(profile, sections) {
+  if (!profile) return null;
+  const on = (k) => !sections || sections[k] !== false;
+  const out = {};
+  const put = (k) => { if (profile[k] !== undefined && profile[k] !== null) out[k] = profile[k]; };
+
+  // The claim and the description are not a section: the header bar carries the
+  // claim on every page, and both are the caption on the logo page and the
+  // specimen text on the typography page. Cutting them with the strategy
+  // section would empty pages that are still switched on.
+  PUB_ALWAYS.forEach(put);
+  for (const [section, cols] of Object.entries(PUB_FIELDS_BY_SECTION)) {
+    if (on(section)) cols.forEach(put);
+  }
+
+  // Of the analysis the page reads exactly one field. The rest is research
+  // nobody outside the workspace asked for.
+  if (out.analysis) {
+    const km = Array.isArray(profile.analysis?.key_messages) ? profile.analysis.key_messages.filter(Boolean) : [];
+    if (km.length) out.analysis = { key_messages: km };
+    else delete out.analysis;
+  }
+
+  // The page's tint comes from the primary colour and is visible on every page
+  // whether or not the colour section is shown. Hiding the colours must not
+  // turn a branded page black, so the primary alone stays behind. It is not a
+  // leak: you can see it.
+  if (!on("colors")) {
+    const pal = profile.color_palette;
+    const primary = (pal && typeof pal === "object" && !Array.isArray(pal) && pal.primary)
+      || (Array.isArray(profile.colors) ? profile.colors[0] : null);
+    if (primary) out.color_palette = { primary };
+  }
+  return out;
+}
+
 // Everything in localStorage that belongs to a PERSON rather than to this
 // browser. None of it carries a user id, and logging out used to remove exactly
 // one of them (agencyos-google-token), so on a shared machine the next person to
@@ -44355,7 +44423,11 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
         || (((isProjectBrand ? projectName : profile.name) || profile.name || "brand").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "brand")
           + "-" + Math.random().toString(36).slice(2, 6);
       const { error } = await supabase.from("brand_shares").upsert(
-        { token, org_id: userOrg.id, project_id: projectId || null, data: profile, sections: pubSections, created_by: session?.user?.id, updated_at: new Date().toISOString() },
+        // publicBrandSnapshot, not the whole profile. A switch that is off has
+        // to mean "do not send", not "do not draw", or it promises something it
+        // does not do. Re-cut on every publish, so unticking a section and
+        // pressing Aktualisieren actually removes it from the link.
+        { token, org_id: userOrg.id, project_id: projectId || null, data: publicBrandSnapshot(profile, pubSections), sections: pubSections, created_by: session?.user?.id, updated_at: new Date().toISOString() },
         { onConflict: "token" });
       if (!error) setPubToken(token);
     } catch (e) { console.error("publish brand failed", e); }
