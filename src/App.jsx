@@ -11904,6 +11904,20 @@ function planLimitError(error, de) {
   if (raw.includes("i7os_project_limit")) return limitMessage("projects", de);
   if (raw.includes("i7os_workspace_limit")) return limitMessage("workspaces", de);
   if (raw.includes("i7os_seat_limit")) return limitMessage("seats", de);
+  // Not a plan limit but the same shape of answer: a trigger said no and the
+  // raw token would be a symptom, not a sentence. Reachable from the UI in one
+  // case, the brand setup wizard, which writes brand and design system in one
+  // go and therefore needs both rights.
+  if (raw.includes("i7os_design_forbidden")) {
+    return de
+      ? "Für das Design System fehlen dir die Rechte in diesem Workspace. Ein Admin kann sie in den Einstellungen vergeben."
+      : "You do not have design system rights in this workspace. An admin can grant them in Settings.";
+  }
+  if (raw.includes("i7os_brand_forbidden")) {
+    return de
+      ? "Für die Marke fehlen dir die Rechte in diesem Workspace. Ein Admin kann sie in den Einstellungen vergeben."
+      : "You do not have brand editing rights in this workspace. An admin can grant them in Settings.";
+  }
   return null;
 }
 // Same seat limit, seen from the other side. Someone accepting an invitation
