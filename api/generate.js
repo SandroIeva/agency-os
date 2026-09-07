@@ -158,16 +158,19 @@ async function remainingCredits(db, orgId) {
   const { data: account } = await db.from("billing_accounts").select("*").eq("owner_user_id", owner).maybeSingle();
   const limit = resolveEntitlements(account).limits.imageCredits ?? 0;
 
-  const since = new Date();
-  since.setUTCDate(1);
-  since.setUTCHours(0, 0, 0, 0);
-  const { data: rows } = await db
-    .from("generation_jobs")
-    .select("cost_credits")
-    .eq("org_id", orgId)
-    .eq("status", "completed")
-    .gte("completed_at", since.toISOString());
-  const used = (rows || []).reduce((n, r) => n + Number(r.cost_credits || 0), 0);
+  // Asked of the database, not counted here, because reserve_image_credits has
+  // to answer the same question a millisecond later and the number the dialog
+  // shows must be the number the gate uses. Two sums drift.
+  //
+  // What it counts: this account's jobs, not just this workspace's. The plan
+  // belongs to whoever created the workspace and pools storage and seats
+  // across everything they own; the image allowance was the one that did not,
+  // so three workspaces quietly meant three times the credits. And a job
+  // counts from the moment it STARTS rather than when it finishes, which is
+  // what stops five quick clicks spending the same remainder five times.
+  const { data: usedRaw, error: usedErr } = await db.rpc("image_credits_used", { p_org: orgId });
+  if (usedErr) throw new Error(`could not read the credit balance: ${usedErr.message}`);
+  const used = Number(usedRaw || 0);
   return { limit, used, left: Math.max(0, limit - used) };
 }
 
@@ -499,7 +502,12 @@ export default async function handler(req) {
 
   // ── credits — what is left this month, for the dialog to show ────────────
   if (mode === "credits") {
-    const c = await remainingCredits(db, orgId);
+    // The balance now comes from the database, so it can fail. Saying so beats
+    // answering "you have no plan", which is what returning zeros would look
+    // like from the dialog.
+    let c;
+    try { c = await remainingCredits(db, orgId); }
+    catch (e) { return json({ error: e.message, code: "credits_unavailable" }, 503); }
     return json({
       ...c,
       models: Object.entries(MODELS).map(([key, m]) => ({ key, label: m.label, credits: creditsFor(m.microUsd) })),
@@ -513,27 +521,55 @@ export default async function handler(req) {
     const prompt = String(body.prompt || "").trim();
     if (!prompt) return json({ error: "A prompt is required", code: "missing_prompt" }, 400);
 
-    const credits = await remainingCredits(db, orgId);
+    let credits;
+    try { credits = await remainingCredits(db, orgId); }
+    catch (e) { return json({ error: e.message, code: "credits_unavailable" }, 503); }
     // A free model still needs a plan — the provider throttles it, and it is
     // ours to hand out, not a trial's to consume.
     if (credits.limit === 0) {
       return json({ error: "AI generation needs a paid plan.", code: "generation_needs_plan" }, 402);
     }
-    if (creditsFor(model.microUsd) > credits.left) {
+    const need = creditsFor(model.microUsd);
+    // An early, friendly no. The real gate is the reservation below; this one
+    // exists so the common case answers without taking a lock.
+    if (need > credits.left) {
       return json({
         error: "This month's AI credits are used up.",
         code: "generation_no_credits",
-        limit: credits.limit, used: credits.used, needed: creditsFor(model.microUsd),
+        limit: credits.limit, used: credits.used, needed: need,
       }, 402);
     }
 
-    const { data: job, error: jobErr } = await db.from("generation_jobs").insert({
-      org_id: orgId, user_id: user.id, kind: "image", model: modelKey, prompt, status: "queued",
-      // Remembered now because the notification is written minutes later, by
-      // which time there is nobody left to ask what language they were using.
-      lang: body.lang === "de" ? "de" : "en",
-    }).select().single();
-    if (jobErr) return json({ error: jobErr.message }, 500);
+    // THE gate. Checking the remainder and then creating the job were two
+    // steps, and between them another request could read the same remainder:
+    // five clicks a moment apart each saw the full balance and each started,
+    // and Pixazo billed us for all five. This reserves and creates in one
+    // statement, under a lock held per account, so the second request sees the
+    // first one's credits already taken.
+    //
+    // A job that fails stops counting, so nothing has to be handed back by
+    // name. A job that dies mid-flight holds its credits for half an hour and
+    // then stops counting too, which is why there is no sweeper here.
+    const { data: job, error: jobErr } = await db.rpc("reserve_image_credits", {
+      p_org: orgId, p_user: user.id, p_model: modelKey, p_prompt: prompt,
+      p_lang: body.lang === "de" ? "de" : "en", p_credits: need, p_limit: credits.limit,
+    });
+    // PostgREST hands a composite return back as an object, but tolerate the
+    // single-row-array shape too rather than depend on that.
+    const jobRow = Array.isArray(job) ? job[0] : job;
+    if (jobErr || !jobRow?.id) {
+      if (/i7os_image_credits/.test(`${jobErr?.message || ""} ${jobErr?.details || ""}`)) {
+        // Somebody else's request took the last of it in the moment between the
+        // read above and the lock. The honest answer is the same one.
+        const after = await remainingCredits(db, orgId).catch(() => credits);
+        return json({
+          error: "This month's AI credits are used up.",
+          code: "generation_no_credits",
+          limit: after.limit, used: after.used, needed: need,
+        }, 402);
+      }
+      return json({ error: jobErr?.message || "could not start the generation" }, 500);
+    }
 
     let payload;
     const startedAt = Date.now();
@@ -543,7 +579,7 @@ export default async function handler(req) {
         // Terminal mode: one callback when it is done or has failed. Polling
         // still works and stays as the fallback — a webhook that never arrives
         // must not strand the job.
-        "X-Webhook-URL": `${origin}/api/generate?hook=${job.id}.${await hookToken(job.id)}`,
+        "X-Webhook-URL": `${origin}/api/generate?hook=${jobRow.id}.${await hookToken(jobRow.id)}`,
         "X-Webhook-Mode": "terminal",
       });
       payload = await res.json().catch(() => ({}));
@@ -553,8 +589,8 @@ export default async function handler(req) {
         const msg = res.status === 429
           ? "The image service is busy right now — please try again in a moment."
           : (payload?.error || payload?.message || `Image service error ${res.status}`);
-        await db.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() }).eq("id", job.id);
-        return json({ error: msg, code: res.status === 429 ? "generation_busy" : "generation_failed", jobId: job.id }, 502);
+        await db.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() }).eq("id", jobRow.id);
+        return json({ error: msg, code: res.status === 429 ? "generation_busy" : "generation_failed", jobId: jobRow.id }, 502);
       }
     } catch (e) {
       const timedOut = e?.name === "TimeoutError" || /abort|timeout/i.test(e?.message || "");
@@ -563,11 +599,11 @@ export default async function handler(req) {
         : (e?.message || "Image service unreachable");
       await db.from("generation_jobs").update({
         status: "failed", error: msg, updated_at: new Date().toISOString(),
-      }).eq("id", job.id);
+      }).eq("id", jobRow.id);
       return json({
         error: msg,
         code: timedOut ? "generation_timeout" : "generation_failed",
-        jobId: job.id,
+        jobId: jobRow.id,
       }, 504);
     }
 
@@ -575,15 +611,15 @@ export default async function handler(req) {
     const immediate = findImage(payload);
     if (immediate) {
       try {
-        const done = await completeJob(db, job, immediate);
+        const done = await completeJob(db, jobRow, immediate);
         if (!done) {
-          const { data: fresh } = await db.from("generation_jobs").select("result_url,status").eq("id", job.id).maybeSingle();
-          return json({ jobId: job.id, status: fresh?.status || "running", url: fresh?.result_url || null });
+          const { data: fresh } = await db.from("generation_jobs").select("result_url,status").eq("id", jobRow.id).maybeSingle();
+          return json({ jobId: jobRow.id, status: fresh?.status || "running", url: fresh?.result_url || null });
         }
-        return json({ jobId: job.id, status: "completed", url: done.url });
+        return json({ jobId: jobRow.id, status: "completed", url: done.url });
       } catch (e) {
-        await db.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);
-        return json({ error: e.message, code: "generation_failed", jobId: job.id }, 502);
+        await db.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", jobRow.id);
+        return json({ error: e.message, code: "generation_failed", jobId: jobRow.id }, 502);
       }
     }
 
@@ -592,16 +628,16 @@ export default async function handler(req) {
     const requestId = findRequestId(payload);
     if (!requestId) {
       const msg = "The image service returned nothing we could use.";
-      await db.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() }).eq("id", job.id);
-      return json({ error: msg, code: "generation_failed", jobId: job.id }, 502);
+      await db.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() }).eq("id", jobRow.id);
+      return json({ error: msg, code: "generation_failed", jobId: jobRow.id }, 502);
     }
     await db.from("generation_jobs").update({
       status: "running",
       provider_request_id: String(requestId),
       polling_url: findPollingUrl(payload) || `${GATEWAY}/v2/requests/status/${requestId}`,
       updated_at: new Date().toISOString(),
-    }).eq("id", job.id);
-    return json({ jobId: job.id, status: "running", upstreamMs });
+    }).eq("id", jobRow.id);
+    return json({ jobId: jobRow.id, status: "running", upstreamMs });
   }
 
   // ── status ────────────────────────────────────────────────────────────────
