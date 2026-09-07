@@ -28319,7 +28319,14 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef,
       }
       if (!added.length) { alert(de ? "Keine gültigen Personen in der CSV gefunden (Spalte 'name' erforderlich)." : "No valid people found in the CSV (a 'name' column is required)."); return; }
       setAllPeople(prev => [...added, ...prev]);
-      alert(de ? `${added.length} Person(en) importiert.` : `Imported ${added.length} person(s).`);
+      // Said plainly, because it is true: nothing in this tab is written
+      // anywhere. There is no table behind People yet, only the read of
+      // audience_engagement that fills it automatically, so an import lives in
+      // this component and is gone when the tab unmounts. "Imported 12 people"
+      // was a promise the product does not keep.
+      alert(de
+        ? `${added.length} Person(en) geladen.\n\nAchtung: manuell angelegte und importierte Personen werden noch nicht gespeichert. Sie verschwinden, sobald du den Bereich verlässt.`
+        : `${added.length} person(s) loaded.\n\nNote: people added or imported by hand are not saved yet. They disappear as soon as you leave this area.`);
     };
     reader.readAsText(file);
   };
@@ -28680,8 +28687,8 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef,
             {/* An empty tab and a filter that matches nothing are different
                 situations, and only one of them is the user's doing. */}
             {allPeople.length === 0
-              ? (de ? "Noch niemand hier. Über „Hinzufügen“ anlegen oder importieren — wer auf Social Media kommentiert oder mehrfach reagiert, erscheint von selbst."
-                    : "Nobody here yet. Add or import someone — anyone who comments on social, or reacts repeatedly, shows up on their own.")
+              ? (de ? "Noch niemand hier. Wer auf Social Media kommentiert oder mehrfach reagiert, erscheint von selbst. Manuell anlegen und importieren geht schon, wird aber noch nicht gespeichert."
+                    : "Nobody here yet. Anyone who comments on social, or reacts repeatedly, shows up on their own. Adding and importing by hand already works, but is not saved yet.")
               : (de ? "Keine Personen gefunden." : "No people found.")}
           </div>
         ) : view === "list" ? (
