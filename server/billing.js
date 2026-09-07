@@ -356,6 +356,20 @@ export async function syncStripeSubscription(subscription) {
   // doesn't strand a paying customer with no subscription record.
   let account = null;
   if (ownerUserId) {
+    // The owner can be gone. Deleting an account cancels its subscription at
+    // period end and then removes the user; billing_accounts cascades with it,
+    // so Stripe keeps sending events for weeks afterwards — the renewal that
+    // does not happen, and finally customer.subscription.deleted. Those still
+    // resolve an ownerUserId out of the subscription's metadata, and upserting
+    // it would break the foreign key to auth.users: the webhook would answer
+    // 500 and Stripe would retry the same event until it gave up.
+    //
+    // Nothing to record and nothing wrong. Say so and return 200.
+    const { data: stillThere } = await admin.auth.admin.getUserById(ownerUserId).catch(() => ({ data: null }));
+    if (!stillThere?.user) {
+      console.log(`[billing] subscription ${subscription.id} belongs to a deleted account, nothing to record`);
+      return null;
+    }
     const { data, error } = await admin
       .from("billing_accounts")
       .upsert({ owner_user_id: ownerUserId, ...shared }, { onConflict: "owner_user_id" })

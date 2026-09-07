@@ -47559,6 +47559,27 @@ export default function CircularMenu() {
     setDeletingAcc(true);
     try {
       const uid = session?.user?.id;
+      // 0) Stripe FIRST, and if it fails nothing else happens.
+      //
+      //    billing_accounts cascades away with the auth user, so the moment the
+      //    account is gone there is nothing left that knows which subscription
+      //    belonged to it: it would keep renewing with nobody able to point at
+      //    it and stop it. Deleting first and cancelling afterwards is not an
+      //    order that exists.
+      //
+      //    Cancelled at the end of the paid period, not immediately, so nobody
+      //    loses time they already paid for.
+      const cancelRes = await fetch("/api/create-customer-portal-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({ mode: "cancel-at-period-end" }),
+      });
+      if (!cancelRes.ok) {
+        const j = await cancelRes.json().catch(() => null);
+        throw new Error(appLanguage === "de"
+          ? `Das Abo konnte nicht gekündigt werden, deshalb wurde nichts gelöscht. ${j?.error || ""}`.trim()
+          : `The subscription could not be cancelled, so nothing was deleted. ${j?.error || ""}`.trim());
+      }
       // 1) Personal storage under the user's own <uid>/ prefixes. Must run before
       //    the RPC — after it the session is gone and storage RLS denies.
       await deleteUserStorage(uid);
@@ -56819,6 +56840,18 @@ export default function CircularMenu() {
                               </span>
                             ))}
                           </div>
+                        </div>
+                      )}
+
+                      {/* What happens to the money. Deleting used to say nothing
+                          about it and cancel nothing, so a subscription simply
+                          went on renewing after the account was gone. Worded to
+                          be true whether or not there is one to cancel. */}
+                      {entitlements?.plan && entitlements.plan !== "free" && (
+                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 16, lineHeight: 1.5 }}>
+                          {appLanguage === "de"
+                            ? <>Ein laufendes Abo wird zum Ende der bezahlten Periode gekündigt und nicht verlängert. Die bereits bezahlte Zeit wird nicht erstattet.</>
+                            : <>A running subscription is cancelled at the end of the paid period and will not renew. Time already paid for is not refunded.</>}
                         </div>
                       )}
 
