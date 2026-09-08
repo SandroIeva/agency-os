@@ -44591,7 +44591,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
   );
 }
 
-function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, darkMode, t, appLanguage = "de", brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, projectId = null, projectName = "", orgMembers = [], createNotification, onUploadStorage, onUploadDrive, getProviderToken, autoReLogin, onOpenWhiteboard = null }) {
+function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, darkMode, t, appLanguage = "de", brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, projectId = null, projectName = "", orgMembers = [], createNotification, onUploadStorage, onUploadDrive, getProviderToken, autoReLogin, onOpenWhiteboard = null, onViewContext = null }) {
   // Scope: null projectId = the org-level brand (unchanged). A projectId scopes
   // every load/insert/realtime to that project's own brand_profile row, and the
   // pillar switch becomes a local top-right dropdown instead of the app menu.
@@ -44606,6 +44606,7 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
   // Edit permission for the current pillar: Design System needs the Designer
   // role, everything else needs the Brand role (admins have both).
   const canEditCurrent = brandTab === "design" ? canEditDesign : canEditBrand;
+
   // Second-level sub-tab within the active pillar; resets to the first when the pillar changes.
   const pillarSubs = BRAND_PILLAR_SUBTABS[brandTab] || [];
   const [brandSub, setBrandSub] = useState(pillarSubs[0]?.key);
@@ -44960,6 +44961,61 @@ If you don't know a field, infer a plausible value. Write all text values in the
       }
     }, 500);
   };
+  // ── What the assistant may write here ────────────────────────────────────
+  // The claim is one line that the whole brand hangs off, so overwriting it
+  // without a way back is not acceptable. The previous one is kept until the
+  // person types in the field themselves, exactly like the post composer.
+  const [claimUndo, setClaimUndo] = useState(null);
+  const claimRef = useRef("");
+  const writeClaim = useCallback(async (next) => {
+    const value = String(next || "").replace(/\s+/g, " ").trim().slice(0, 300);
+    if (!value) return;
+    setForm(prev => ({ ...prev, claim: value }));
+    setProfile(pr => ({ ...(pr || {}), claim: value }));
+    const cur = profileRef.current;
+    // The database has the final say: brand_profile carries
+    // enforce_brand_edit_rights, so somebody without the right is refused here
+    // no matter what the assistant was asked to do.
+    if (cur?.id) {
+      await supabase.from("brand_profile").update({ claim: value, updated_at: new Date().toISOString() }).eq("id", cur.id);
+    } else if (userOrg?.id) {
+      const { data } = await supabase.from("brand_profile")
+        .insert({ org_id: userOrg.id, project_id: projectId || null, created_by: session?.user?.id,
+                  name: (projectId ? projectName : userOrg?.name) || "", claim: value })
+        .select("id").single();
+      if (data) setProfile(pr => ({ ...(pr || {}), id: data.id }));
+    }
+  }, [userOrg?.id, projectId, projectName, session?.user?.id]);
+
+  const setClaimFromAssistant = useCallback((next) => {
+    setClaimUndo(claimRef.current || "");
+    writeClaim(next);
+  }, [writeClaim]);
+  // What the assistant sees and may do while this brand is open. The action is
+  // offered only when this person may edit the brand: the database refuses them
+  // anyway, but offering something that will be refused makes the assistant
+  // promise a change it cannot make.
+  useEffect(() => {
+    if (!onViewContext) return;
+    // profile, not the form buffer: the form is declared further down this
+    // component, and naming it in the dependency list below would read it
+    // before its own const runs. The saved value is also the more honest one
+    // to hand back on undo.
+    const claim = profile?.claim || "";
+    claimRef.current = claim;
+    onViewContext("brand", {
+      "Brand open": projectName || userOrg?.name || "the workspace brand",
+      "Claim right now": claim || "empty",
+      "May they edit this brand": canEditBrand ? "yes" : "no, it is read-only for them",
+    }, canEditBrand ? {
+      setClaim: {
+        label: "replace the brand's claim, the one line the brand is summed up in. One short line, no quotes around it",
+        run: setClaimFromAssistant,
+      },
+    } : null);
+    return () => onViewContext("brand", null);
+  }, [onViewContext, profile?.claim, canEditBrand, projectName, userOrg?.name, setClaimFromAssistant]);
+
   const visionTimer = useRef(null);
   const saveVision = (v) => {
     setProfile(p => ({ ...(p || {}), vision: v }));
@@ -46212,8 +46268,23 @@ If you don't know a field, infer a plausible value. Write all text values in the
           </div>
 
           <div>
-            <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>{t("brand.voice.claimLabel")}</label>
-            <input value={form.claim} onChange={(e) => setForm(prev => ({ ...prev, claim: e.target.value }))}
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8, gap: 12 }}>
+              <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>{t("brand.voice.claimLabel")}</label>
+              {claimUndo !== null && (
+                <motion.div whileTap={{ scale: 0.96 }}
+                  onClick={() => { writeClaim(claimUndo || " "); setForm(prev => ({ ...prev, claim: claimUndo })); setClaimUndo(null); }}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer",
+                    fontSize: 11.5, fontFamily: FONT, fontWeight: 500, color: theme.textFaint }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ position: "relative", top: -1 }}>
+                    <path d="M9 14L4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" />
+                  </svg>
+                  {appLanguage === "de" ? "Rückgängig" : "Undo"}
+                </motion.div>
+              )}
+            </div>
+            <input value={form.claim}
+              onChange={(e) => { setForm(prev => ({ ...prev, claim: e.target.value })); if (claimUndo !== null) setClaimUndo(null); }}
               placeholder={t("brand.voice.claimPlaceholder")}
               style={{
                 width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
@@ -53408,7 +53479,7 @@ export default function CircularMenu() {
         {/* BRAND VIEW */}
         <AnimatePresence>
           {currentView === "brand" && (
-            <BrandView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} brandTab={brandTab} setBrandTab={setBrandTab} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onNavigate={(v) => setCurrentView(v)} onOpenDoc={(id) => { setDocDeepLink({ documentId: id, blockId: null, ts: Date.now() }); setCurrentView("assets"); }} onOpenWhiteboard={openWhiteboardFromAssets} onBack={() => setCurrentView("dashboard")} />
+            <BrandView onViewContext={publishViewContext} session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} brandTab={brandTab} setBrandTab={setBrandTab} llmProvider={llmProvider} llmKeys={llmKeys} ensureValidToken={ensureValidToken} canEditBrand={canEditBrand} canEditDesign={canEditDesign} onNavigate={(v) => setCurrentView(v)} onOpenDoc={(id) => { setDocDeepLink({ documentId: id, blockId: null, ts: Date.now() }); setCurrentView("assets"); }} onOpenWhiteboard={openWhiteboardFromAssets} onBack={() => setCurrentView("dashboard")} />
           )}
         </AnimatePresence>
 
