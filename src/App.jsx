@@ -51478,8 +51478,18 @@ export default function CircularMenu() {
       recognitionRef.current = recognition;
 
       let commandExecuted = false;
-      // Silence timer — auto-fires stopVoice after the user stops talking for ~1.6s
-      const SILENCE_MS = 1600;
+      // How long a pause has to be before the assistant decides you are done.
+      //
+      // It was 1.6s, which is shorter than the pause somebody takes in the
+      // middle of a sentence while working out how to finish it, so it cut
+      // people off mid-thought. Every recognition result restarts it, interim
+      // ones included, so this is genuinely silence and not just the gap
+      // between two words.
+      //
+      // The cost of raising it is the wait after you HAVE finished, so it is
+      // a trade rather than a free win: 2.4s buys a comfortable thinking pause
+      // and still answers quickly enough not to feel asleep.
+      const SILENCE_MS = 2400;
       const clearSilenceTimer = () => {
         if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
       };
