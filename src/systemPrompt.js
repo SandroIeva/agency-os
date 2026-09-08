@@ -386,6 +386,64 @@ const brandFieldLines = (brand) => {
   return lines;
 };
 
+// ── Documents ────────────────────────────────
+// A document's body is BlockNote JSON, not text: an array of blocks, each with
+// a content array of runs and possibly children. Nothing here understands
+// block types on purpose, it walks anything shaped like content and collects
+// the runs, so a block type added later still reads rather than vanishing.
+export function blockNoteText(raw) {
+  let doc = raw;
+  if (typeof raw === "string") {
+    const t = raw.trim();
+    if (!t) return "";
+    if (t[0] !== "[" && t[0] !== "{") return t.replace(/\s+/g, " ").trim();  // plain text, older docs
+    try { doc = JSON.parse(t); } catch { return t.replace(/\s+/g, " ").trim(); }
+  }
+  const out = [];
+  const walk = (node, depth) => {
+    if (!node || depth > 12) return;
+    if (Array.isArray(node)) { for (const x of node) walk(x, depth + 1); return; }
+    if (typeof node !== "object") return;
+    if (typeof node.text === "string") out.push(node.text);
+    if (node.content) walk(node.content, depth + 1);
+    if (node.children) walk(node.children, depth + 1);
+    if (node.rows) walk(node.rows, depth + 1);      // tables
+    if (node.cells) walk(node.cells, depth + 1);
+  };
+  walk(doc, 0);
+  return out.join(" ").replace(/\s+/g, " ").trim();
+}
+
+// Words worth searching a document for. Short words and the handful of German
+// and English fillers that appear in every sentence would match every document
+// and therefore rank nothing.
+const SEARCH_STOPWORDS = new Set([
+  "aber","auch","dass","dein","deine","denn","der","die","das","dem","den","des","doch","eine","einen","einer","eines",
+  "hast","habe","haben","ich","ihr","ist","kann","kannst","mein","meine","mich","mir","nicht","noch","oder","sich","sind",
+  "soll","sollst","und","uns","unser","unsere","vom","von","was","wenn","wer","wie","wir","wird","wirst","zum","zur","über",
+  "about","and","are","can","could","does","for","from","have","has","how","its","not","our","please","что","should","that",
+  "the","them","there","they","this","was","were","what","when","where","which","who","will","with","would","you","your",
+  "dokument","dokumente","dokumenten","document","documents","datei","dateien","file","files",
+  "finde","find","suche","suchen","search","zeig","zeige","show","sag","sage","tell","gibt","geben",
+  "steht","stehen","stand","unseren","unserem","unserer","unseres","einem","jede","jeden","jeder",
+  "alle","allen","etwas","welche","welchen","warum","wieso","weshalb","bitte","mache","machen","gerne",
+]);
+// A German word list by enumeration will always miss an inflection. The cost of
+// a miss is a slightly worse search, never a wrong answer: the words only pick
+// which documents to look in, and the database still decides which of those the
+// person may see.
+export function docSearchTerms(question, max = 4) {
+  const words = String(question || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !SEARCH_STOPWORDS.has(w));
+  const seen = new Set();
+  const out = [];
+  for (const w of words) { if (!seen.has(w)) { seen.add(w); out.push(w); } if (out.length >= max) break; }
+  return out;
+}
+
 // ── Assemble the full prompt ─────────────────
 /**
  * Build the complete system prompt for any LLM provider.
@@ -399,6 +457,7 @@ const brandFieldLines = (brand) => {
  * @param {object} options.viewData     — label/value pairs the open view published
  * @param {object} options.viewActions  — name/description of what the view can do
  * @param {Array}  options.projectBrands — brand rows of the workspace's project brands
+ * @param {object} options.documents    — titles the asker may see, plus excerpts matching the question
  * @returns {string} the full system prompt
  */
 export function buildSystemPrompt({
@@ -413,6 +472,10 @@ export function buildSystemPrompt({
   viewData = null,     // { label: value } published by the open view itself
   viewActions = null,  // { name: description } the open view offers to perform
   projectBrands = [],  // [{ ...brand_profile row, projectName }] for is_brand projects
+  documents = null,    // { titles: [{title, kind}], matches: [{title, excerpt}] }
+                       // ALWAYS fetched in the browser under the user's own session, so
+                       // the document RLS policy decides what is in here. Never widen
+                       // this with a service-key read: the boundary is the database.
 } = {}) {
   const parts = [identity(surface), APP_KNOWLEDGE, CAPABILITIES];
 
@@ -483,6 +546,44 @@ export function buildSystemPrompt({
         + "When somebody asks about one by name, answer from ITS fields below and not from the workspace brand above:\n\n"
         + blocks.join("\n\n"));
     }
+  }
+
+  // Documents. Two things are true at once here and both matter: the assistant
+  // is useful only if it can point at what the team wrote down, and it must
+  // never become a way around a document's own permissions.
+  //
+  // The list below was fetched IN THE BROWSER under the asking person's own
+  // session, so the "Doc access read" policy decided it: workspace-visible, or
+  // theirs, or shared with them, or in a project they are a member of. This
+  // code does not filter and must never be given a service-key read to widen
+  // it. The instruction not to imply unlisted documents is the second half:
+  // confirming that a document exists is itself a disclosure, even without its
+  // content.
+  const docTitles = Array.isArray(documents?.titles) ? documents.titles : [];
+  const docMatches = Array.isArray(documents?.matches) ? documents.matches : [];
+  if (docTitles.length || docMatches.length) {
+    const bits = [];
+    if (docTitles.length) {
+      const listed = docTitles.slice(0, 60)
+        .map((d) => `- ${d.title || "Untitled"}${d.kind && d.kind !== "doc" ? ` (${d.kind})` : ""}${d.folder ? ` — in ${d.folder}` : ""}`)
+        .join("\n");
+      bits.push(`Documents in this workspace that this person is allowed to open:\n${listed}`);
+    }
+    if (docMatches.length) {
+      const passages = docMatches.slice(0, 5)
+        .map((m) => `From "${m.title || "Untitled"}":\n${cap(m.excerpt, 900)}`)
+        .join("\n\n");
+      bits.push(`Passages from those documents that match what they just asked:\n\n${passages}`);
+    }
+    bits.push(
+      "Rules about documents, and they are not negotiable:\n"
+      + "- The list above is the WHOLE set this person may open. It was filtered by the database against their own account, not by you.\n"
+      + "- Never mention, guess at, hint at or imply a document that is not listed. A document missing from that list is one they are not allowed to see, and confirming that it exists is a disclosure even if you say nothing about its contents.\n"
+      + "- Never answer from a document you were not given here, and do not infer what an unlisted document might contain.\n"
+      + "- When you use one, name it, so they can open it and check you.\n"
+      + "- If the answer is not in what you were given, say that instead of filling the gap."
+    );
+    parts.push("\n" + bits.join("\n\n"));
   }
 
   // Projects context — useful so the assistant can talk about them by name

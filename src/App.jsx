@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import DOMPurify from "dompurify";
 import { supabase } from "./supabase";
 import { notifLines } from "./notificationText";
-import { buildSystemPrompt, parseViewActions } from "./systemPrompt";
+import { buildSystemPrompt, parseViewActions, blockNoteText, docSearchTerms } from "./systemPrompt";
 import { isDaylight } from "./daylight";
 import { getTranslation } from "./translations";
 // Shared with api/figma: the browser fits what the endpoint converted, and both
@@ -47675,6 +47675,18 @@ export default function CircularMenu() {
   const [projectBrands, setProjectBrands] = useState([]);
   const projectBrandsRef = useRef([]);
   projectBrandsRef.current = projectBrands;
+
+  // ── Documents the assistant may talk about ────────────────────────────────
+  // Every read here goes through the BROWSER client under this person's own
+  // session, so the "Doc access read" policy decides what comes back:
+  // workspace-visible, or theirs, or shared with them, or in a project they
+  // belong to. That is deliberate and must stay that way. Moving this to a
+  // serverless function with the service key would replace a database boundary
+  // with a promise in my own code, and a private document would be one bug
+  // away from being read aloud to a colleague.
+  const [docTitles, setDocTitles] = useState([]);
+  const docTitlesRef = useRef([]);
+  docTitlesRef.current = docTitles;
   const loadBrandProfile = useCallback(async (orgId) => {
     if (!orgId) { setBrandProfile(null); setProjectBrands([]); return; }
     try {
@@ -47711,18 +47723,25 @@ export default function CircularMenu() {
     setBrandProfile(null);
     setProjectBrands([]);
     setAppProjects([]);
+    setDocTitles([]);
     if (!orgId || !session?.user?.id) return;
     (async () => {
       try {
-        const [bRes, pRes] = await Promise.all([
+        const [bRes, pRes, dRes] = await Promise.all([
           supabase.from("brand_profile").select("*, projects(name)").eq("org_id", orgId),
           supabase.from("projects").select("name").eq("org_id", orgId).order("name"),
+          // No filter of ours: RLS returns exactly the documents this person
+          // may open, and that is the whole list the assistant is ever told
+          // about.
+          supabase.from("brand_documents").select("id,title,kind")
+            .eq("org_id", orgId).order("updated_at", { ascending: false }).limit(60),
         ]);
         if (aiContextReqRef.current !== token) return;
         const split = splitBrandRows(bRes?.data);
         setBrandProfile(split.workspace);
         setProjectBrands(split.projects);
         setAppProjects(pRes?.data || []);
+        setDocTitles(dRes?.data || []);
       } catch (_) { /* the AI works without it, it just knows less */ }
     })();
   }, [userOrg?.id, session?.user?.id]);
@@ -50266,6 +50285,43 @@ export default function CircularMenu() {
   // A reply comes back, an action block may be in it. Run what the OPEN view
   // actually offers, drop the rest, and hand back the text with the block cut
   // out so nothing is ever shown or read aloud.
+  // What the person may open, plus the passages in it that match what they just
+  // asked. One query, under their own session, so a document they cannot open
+  // cannot come back here no matter what they type.
+  const findDocuments = async (question) => {
+    const orgId = userOrg?.id;
+    const titles = docTitlesRef.current || [];
+    if (!orgId) return null;
+    const terms = docSearchTerms(question);
+    if (!terms.length) return titles.length ? { titles, matches: [] } : null;
+    try {
+      // Only letters and digits reach the filter: a comma or a parenthesis in a
+      // term would be read as PostgREST syntax rather than as something to
+      // search for.
+      const ors = terms.flatMap((t) => {
+        const safe = t.replace(/[^\p{L}\p{N}]/gu, "");
+        return safe ? [`title.ilike.%${safe}%`, `content.ilike.%${safe}%`] : [];
+      });
+      if (!ors.length) return { titles, matches: [] };
+      const { data } = await supabase.from("brand_documents")
+        .select("id,title,content,kind")
+        .eq("org_id", orgId).or(ors.join(","))
+        .order("updated_at", { ascending: false }).limit(5);
+      const matches = (data || []).map((d) => {
+        const text = blockNoteText(d.content);
+        if (!text) return null;
+        // The passage that matched, not the opening paragraph of every
+        // document: the first page of a brief says nothing about the question.
+        const low = text.toLowerCase();
+        let at = -1;
+        for (const t of terms) { const i = low.indexOf(t); if (i >= 0 && (at < 0 || i < at)) at = i; }
+        const from = at < 0 ? 0 : Math.max(0, at - 200);
+        return { title: d.title, excerpt: (from > 0 ? "… " : "") + text.slice(from, from + 900) };
+      }).filter(Boolean);
+      return { titles, matches };
+    } catch (_) { return titles.length ? { titles, matches: [] } : null; }
+  };
+
   const applyViewActions = (text) => {
     const { clean, calls } = parseViewActions(text);
     if (!calls.length) return text;
@@ -51779,6 +51835,9 @@ export default function CircularMenu() {
     setDialogSending(true);
 
     try {
+      // Asked before the prompt is built, so the answer can quote what the team
+      // wrote down. Filtered by the database against this person's account.
+      const documents = await findDocuments(text);
       const systemPrompt = buildSystemPrompt({
         currentView,
         userName,
@@ -51789,6 +51848,7 @@ export default function CircularMenu() {
         brand: brandProfileRef.current,
         projectBrands: projectBrandsRef.current,
         projects: appProjects,
+        documents,
         viewData: readViewContext(),
         viewActions: readViewActionDocs(),
       });
@@ -51883,6 +51943,7 @@ export default function CircularMenu() {
 
     try {
       // Build context-aware system prompt — now includes workspace + brand + projects
+      const documents = await findDocuments(userMessage);
       const systemPrompt = buildSystemPrompt({
         currentView,
         userName,
@@ -51895,6 +51956,7 @@ export default function CircularMenu() {
         brand: brandProfileRef.current,
         projectBrands: projectBrandsRef.current,
         projects: appProjects,
+        documents,
         viewData: readViewContext(),
         viewActions: readViewActionDocs(),
       });

@@ -172,6 +172,21 @@ in hand before anything is displayed.
 Both reply paths must run it: `submitVoiceMessage` (voice, and it feeds TTS) and
 `sendDialogMessage` (typed). A path that forgets reads the markup aloud.
 
+**Documents reach the assistant only through the browser.** The titles list and
+the per-question passage search both run on the anon client under the asking
+person's own session, so `brand_documents`' "Doc access read" policy decides
+what comes back: workspace-visible, or theirs, or shared with them, or in a
+project they belong to. **Never move either read into an `api/` function with
+the service key** — that swaps a database boundary for a promise in app code,
+and a private document is then one bug away from being read aloud to a
+colleague. The prompt carries the matching half of the rule: the list is the
+whole set, and a document missing from it must not be mentioned, guessed at or
+implied, because confirming that it exists is a disclosure on its own. Proven
+against production inside a rollback: a `restricted` document containing a
+unique word was found by its author (1) and invisible to a colleague in the
+same workspace by id, by title and by that word (0, 0, 0), while that colleague
+still saw the workspace's other 10.
+
 An action CHANGES somebody's screen, so: it runs only if the open view offers
 that exact name, at most 3 per reply, payload capped, and anything destructive
 keeps a way back (`setCaption` in `CreatePostView` stores the previous text and
