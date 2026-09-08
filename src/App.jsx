@@ -1846,12 +1846,19 @@ function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de
 // Speaking rates offered for the assistant's voice. Fish Audio accepts 0.5 to
 // 2.0; anything past these reads as a machine rather than as somebody talking,
 // so the list stops well inside the range it is allowed.
+//
+// The scale is centred on 1.15, not on Fish's own 1.0. The owner listened to
+// both and called 1.15 normal, so that is what the word means here: a rate is
+// named for how it sounds against the one people actually want, not for how
+// far it sits from the API's default. Fish's 1.0 keeps a place as "Langsam"
+// rather than being dropped, so nobody who deliberately chose it gets moved.
+const DEFAULT_VOICE_SPEED = 1.15;
 const VOICE_SPEEDS = [
-  { value: 0.9,  de: "Langsam",         en: "Slow" },
-  { value: 1,    de: "Normal",          en: "Normal" },
-  { value: 1.15, de: "Etwas schneller", en: "A little faster" },
-  { value: 1.3,  de: "Schnell",         en: "Fast" },
-  { value: 1.5,  de: "Sehr schnell",    en: "Very fast" },
+  { value: 0.9,  de: "Sehr langsam", en: "Very slow" },
+  { value: 1,    de: "Langsam",      en: "Slow" },
+  { value: 1.15, de: "Normal",       en: "Normal" },
+  { value: 1.3,  de: "Schnell",      en: "Fast" },
+  { value: 1.5,  de: "Sehr schnell", en: "Very fast" },
 ];
 
 function Dropdown({ value, onChange, options = [], placeholder = "Auswählen", theme, darkMode,
@@ -47481,9 +47488,13 @@ export default function CircularMenu() {
   // of listening to it, and remembered per browser like the voice is.
   const [voiceSpeed, setVoiceSpeed] = useState(() => {
     try {
-      const stored = Number(localStorage.getItem("agencyos-voice-speed"));
-      return VOICE_SPEEDS.some(o => o.value === stored) ? stored : 1;
-    } catch (_) { return 1; }
+      // A stored rate is somebody's deliberate choice and survives the change
+      // of what "Normal" means. Only people who never picked one land on the
+      // new default, which is everybody who used the app before today.
+      const raw = localStorage.getItem("agencyos-voice-speed");
+      const stored = Number(raw);
+      return (raw !== null && VOICE_SPEEDS.some(o => o.value === stored)) ? stored : DEFAULT_VOICE_SPEED;
+    } catch (_) { return DEFAULT_VOICE_SPEED; }
   });
   useEffect(() => {
     try { localStorage.setItem("agencyos-voice-speed", String(voiceSpeed)); } catch (_) {}

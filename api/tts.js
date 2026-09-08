@@ -56,7 +56,11 @@ export default async function handler(req, res) {
         // outright outside that, so a number arriving from a browser is
         // clamped here rather than trusted: this endpoint spends money, and a
         // rejected call is a call we still made.
-        prosody: { speed: Math.min(2, Math.max(0.5, Number(speed) || 1)) },
+        //
+        // The fallback is 1.15 rather than Fish's own 1.0, so a caller that
+        // sends no rate gets what the app calls normal instead of something
+        // slower than every user of it has chosen.
+        prosody: { speed: Math.min(2, Math.max(0.5, Number(speed) || 1.15)) },
       }),
     });
 
