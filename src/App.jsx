@@ -2301,7 +2301,7 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onDismiss, onSaveKey }) {
 
           {/* Two destinations, one line each: where a key is issued, and how to
               do it. While no tutorial page exists the second is the first. */}
-          <div style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 16, marginTop: 26, flexWrap: "wrap" }}>
             <a href={AI_INTRO_TUTORIAL_URL || chosen.url} target="_blank" rel="noopener noreferrer"
               style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, letterSpacing: "0.02em",
                 color: darkMode ? "#c9c9d0" : "#454545", textDecoration: "underline" }}>
