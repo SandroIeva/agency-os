@@ -2177,6 +2177,15 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
   );
 }
 
+// ⚠ WHILE THIS IS TRUE THE INTRO OPENS FOR EVERYONE, ON EVERY VISIT TO THE
+// DASHBOARD, even when a key is already stored and even after it was dismissed.
+// It exists so the owner can keep looking at it while we build it, instead of
+// wiping an account to get back to the first-run state. It is deliberately a
+// single obvious constant and not a hidden localStorage flag, because the thing
+// that has to happen is somebody turning it OFF, and a hidden switch is a
+// switch nobody remembers. Set to false when the design is settled.
+const AI_INTRO_ALWAYS = true;
+
 function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, onSaveKey }) {
   const de = appLanguage === "de";
   // Where each key comes from. Named rather than described: somebody who has
@@ -2187,10 +2196,12 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, o
     { id: "openai", name: "ChatGPT", sub: "OpenAI",    placeholder: "sk-...",           url: "https://platform.openai.com/api-keys" },
   ];
   const [pick, setPick] = useState("gemini");
-  // Never seeded from a stored key: this dialog only opens when there is none,
-  // and a password field that echoes one back gets pasted into, which silently
-  // concatenates.
+  // Never seeded from a stored key, even though AI_INTRO_ALWAYS means this can
+  // now open for somebody who has one. A field that echoes a key back gets
+  // pasted into, which silently concatenates two keys into one broken one.
   const [draft, setDraft] = useState("");
+  const [slide, setSlide] = useState(0);
+  const [held, setHeld] = useState(false);   // somebody steered, stop moving
   const chosen = PROVIDERS.find(x => x.id === pick) || PROVIDERS[0];
   // One definition for both the chosen chip and the Save button, so they cannot
   // disagree about what "selected" looks like.
@@ -2207,6 +2218,15 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, o
     ["Strategy and competitors", "Build personas, analyse competitors, read a brand off a website"],
     ["Copy and image prompts", "Write documents from skills, tidy dictation, derive prompts from images"],
   ];
+  // Advances on its own until somebody takes the dots, then stops: a carousel
+  // that keeps moving under a finger is a carousel nobody can read.
+  useEffect(() => {
+    if (held) return;
+    const id = setTimeout(() => setSlide(v => (v + 1) % benefits.length), 4200);
+    return () => clearTimeout(id);
+  }, [slide, held, benefits.length]);
+  const shown = benefits[slide] || benefits[0];
+
   return createPortal(
     <div onClick={onDismiss}
       style={{ position: "fixed", inset: 0, zIndex: 100003, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
@@ -2227,20 +2247,35 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, o
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {benefits.map(([title, sub]) => (
-            <div key={title} style={{ display: "flex", gap: 11, alignItems: "flex-start" }}>
-              <span style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0, marginTop: 1,
-                background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
-                display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.text} strokeWidth="3"
-                  strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-              </span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{title}</div>
-                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 1, lineHeight: 1.5 }}>{sub}</div>
+        {/* One at a time. Three ticks in a column read as a checklist of
+            things you do not have yet; one card at a time reads as a look at
+            what the thing does, which is what somebody arriving needs. The box
+            keeps its height so the dialog does not jump between slides. */}
+        <div style={{ borderRadius: 14, padding: "16px 18px", minHeight: 86,
+          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)",
+          display: "flex", alignItems: "center" }}>
+          <AnimatePresence mode="wait">
+            <motion.div key={slide}
+              initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }}
+              transition={{ duration: 0.24, ease: [0.22, 0.68, 0.35, 1.0] }}
+              style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint,
+                letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>
+                {(de ? "Damit arbeitest du" : "This is what it does")}
               </div>
-            </div>
+              <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{shown[0]}</div>
+              <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 3, lineHeight: 1.5 }}>{shown[1]}</div>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "center", gap: 7, marginTop: -8 }}>
+          {benefits.map((_, i) => (
+            <div key={i} onClick={() => { setHeld(true); setSlide(i); }}
+              title={String(i + 1)}
+              style={{ width: i === slide ? 18 : 6, height: 6, borderRadius: 999, cursor: "pointer",
+                background: i === slide ? theme.text : (darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.16)"),
+                transition: "width .22s ease, background .22s ease" }} />
           ))}
         </div>
 
@@ -50223,8 +50258,12 @@ export default function CircularMenu() {
     // z-index 100003 straight over the tour, whose last slide asks the very
     // same question at z-index 99.
     if (onboardingStep) return;
-    if (localStorage.getItem("agencyos-ai-key-intro") === "seen") return;
-    if (Object.values(llmKeys || {}).some(Boolean)) return;
+    // AI_INTRO_ALWAYS skips both of the reasons not to show it. See the comment
+    // on the constant: it is on while the dialog is being designed.
+    if (!AI_INTRO_ALWAYS) {
+      if (localStorage.getItem("agencyos-ai-key-intro") === "seen") return;
+      if (Object.values(llmKeys || {}).some(Boolean)) return;
+    }
     setAiIntroOpen(true);
   }, [session, onDashboard, onboardingStep, llmKeys]);
   const closeAiIntro = () => { localStorage.setItem("agencyos-ai-key-intro", "seen"); setAiIntroOpen(false); };
