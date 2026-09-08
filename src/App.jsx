@@ -2192,18 +2192,6 @@ const AI_INTRO_ALWAYS = true;
 // GitBook url here and the link moves.
 const AI_INTRO_TUTORIAL_URL = "";
 
-// The pictures on the left of the intro, one per slide. The files are the
-// feature images already in public/, used here as placeholders: swapping in
-// purpose-made screenshots is a change of three strings and nothing else.
-// A slide with no image still works, the caption sits on the empty panel.
-const AI_INTRO_SLIDES = [
-  { image: "/Create.jpg",  de: ["Der Assistent", "Die Sphäre auf dem Dashboard und der Messenger, gesprochen und getippt"],
-                           en: ["The assistant", "The sphere on the dashboard and the messenger, spoken and typed"] },
-  { image: "/Brand.jpg",   de: ["Strategie und Wettbewerb", "Personas erstellen, Wettbewerber analysieren, Brand aus einer Website lesen"],
-                           en: ["Strategy and competitors", "Build personas, analyse competitors, read a brand off a website"] },
-  { image: "/Analyse.jpg", de: ["Texte und Bild-Prompts", "Dokumente aus Skills schreiben, Diktate korrigieren, Prompts aus Bildern ableiten"],
-                           en: ["Copy and image prompts", "Write documents from skills, tidy dictation, derive prompts from images"] },
-];
 
 function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, onSaveKey }) {
   const de = appLanguage === "de";
@@ -2219,27 +2207,11 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, o
   // now open for somebody who has one. A field that echoes a key back gets
   // pasted into, which silently concatenates two keys into one broken one.
   const [draft, setDraft] = useState("");
-  const [slide, setSlide] = useState(0);
-  const [held, setHeld] = useState(false);   // somebody steered, stop moving
   const chosen = PROVIDERS.find(x => x.id === pick) || PROVIDERS[0];
   // One definition for both the chosen chip and the Save button, so they cannot
   // disagree about what "selected" looks like.
   const sel = primaryBtn(darkMode);
   const save = () => { const k = draft.trim(); if (k) onSaveKey?.(chosen.id, k); };
-  // What actually stops working without a key. Named as the places they are,
-  // not as capabilities in the abstract.
-  const slides = AI_INTRO_SLIDES.map(sl => {
-    const [title, sub] = sl[de ? "de" : "en"];
-    return { image: sl.image, title, sub };
-  });
-  // Advances on its own until somebody takes the dots, then stops: a carousel
-  // that keeps moving under a finger is a carousel nobody can read.
-  useEffect(() => {
-    if (held) return;
-    const id = setTimeout(() => setSlide(v => (v + 1) % slides.length), 6000);
-    return () => clearTimeout(id);
-  }, [slide, held, slides.length]);
-  const shown = slides[slide] || slides[0];
 
   // The picture column is dropped below this width rather than squeezed. A
   // resize listener and not a one-off read: somebody who narrows the window
@@ -2254,145 +2226,119 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, o
 
   return createPortal(
     <div onClick={onDismiss}
-      style={{ position: "fixed", inset: 0, zIndex: 100003, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+      style={{ position: "fixed", inset: 0, zIndex: 100003, background: "rgba(0,0,0,0.34)",
+        backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
         display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+
+      {/* Measured off the Figma frame "AI-Key-Screen" (1008x585): card radius
+          53.9, inner panel 484x550 at radius 44, an 18px inset all round, the
+          right column starting 59px past the panel and ending 26 from the edge,
+          its first line 115 below the inner top. The numbers are the design's,
+          not approximations of it. */}
       <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
         onClick={e => e.stopPropagation()}
-        style={{ width: narrow ? "min(520px, 100%)" : "min(900px, 100%)", display: "flex",
-          // A floor rather than a fixed height: a wrapped line or a longer
-          // provider name may still push it taller, and capping at the viewport
-          // keeps it whole on a short laptop screen.
-          minHeight: narrow ? 0 : 520, maxHeight: "calc(100vh - 48px)",
-          background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 20,
-          boxShadow: "0 30px 80px rgba(0,0,0,0.35)", overflow: "hidden" }}>
+        style={{ width: narrow ? "min(520px, 100%)" : "min(1008px, 100%)",
+          minHeight: narrow ? 0 : 585, maxHeight: "calc(100vh - 48px)",
+          display: "flex", padding: 18, borderRadius: 54, boxSizing: "border-box",
+          background: darkMode ? "#1c1c24" : "#e1e1e1",
+          boxShadow: darkMode ? "0 40px 90px rgba(0,0,0,0.55)" : "0 40px 90px rgba(0,0,0,0.18)",
+          overflow: "hidden" }}>
 
-        {/* LEFT: the pictures. The features are shown rather than listed, and
-            the caption sits ON the image so the right column stays about one
-            thing: getting a key in. Dropped entirely on a narrow window, where
-            a picture would push the form off the screen. */}
+        {/* LEFT: the sphere itself, not a picture of one. The design put a
+            blurred copy behind the ball for the halo; here the halo is its own
+            layer so the orb stays sharp while it turns. */}
         {!narrow && (
-          <div style={{ width: 360, flexShrink: 0, padding: 14, display: "flex" }}>
-            <div style={{ position: "relative", flex: 1, borderRadius: 16, overflow: "hidden",
-              background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
-              <AnimatePresence>
-                <motion.div key={slide}
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  transition={{ duration: 0.9, ease: "easeInOut" }}
-                  style={{ position: "absolute", inset: 0 }}>
-                  {shown.image && (
-                    <img src={shown.image} alt="" draggable={false}
-                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                  )}
-                </motion.div>
-              </AnimatePresence>
-
-              {/* A scrim, so white type is readable over whatever the picture
-                  happens to be. Without it the caption depends on the image. */}
-              <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "48px 18px 16px",
-                background: "linear-gradient(to top, rgba(0,0,0,0.82), rgba(0,0,0,0.45) 45%, rgba(0,0,0,0))" }}>
-                <AnimatePresence mode="wait">
-                  <motion.div key={slide}
-                    initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}>
-                    <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#fff" }}>{shown.title}</div>
-                    <div style={{ fontSize: 12, fontFamily: FONT, color: "rgba(255,255,255,0.72)", marginTop: 3, lineHeight: 1.5 }}>{shown.sub}</div>
-                  </motion.div>
-                </AnimatePresence>
-                <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
-                  {slides.map((_, i) => (
-                    <div key={i} onClick={() => { setHeld(true); setSlide(i); }}
-                      style={{ width: i === slide ? 20 : 6, height: 5, borderRadius: 999, cursor: "pointer",
-                        background: i === slide ? "#fff" : "rgba(255,255,255,0.38)",
-                        transition: "width .22s ease, background .22s ease" }} />
-                  ))}
-                </div>
-              </div>
+          <div style={{ width: 484, flexShrink: 0, borderRadius: 44, position: "relative", overflow: "hidden",
+            background: darkMode ? "#0f0f16" : "#ffffff",
+            display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ position: "absolute", width: 322, height: 322, borderRadius: "50%",
+              background: "radial-gradient(circle, rgba(104,92,255,0.85) 0%, rgba(104,92,255,0.42) 45%, rgba(104,92,255,0) 70%)",
+              filter: "blur(58px)", pointerEvents: "none" }} />
+            <div style={{ position: "relative" }}>
+              <LiquidOrb size={221} darkMode={darkMode} speed={1.3} hoverSpeed={2.4}
+                fallback={<AISphere darkMode={darkMode} />} />
             </div>
           </div>
         )}
 
-        {/* RIGHT: one job, get a key in. */}
-        <div style={{ flex: 1, minWidth: 0, padding: 26, display: "flex", flexDirection: "column", gap: 16 }}>
-          <div>
-            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-              {de ? "KI im Workspace aktivieren" : "Turn on AI in your workspace"}
-            </div>
-            <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 6, lineHeight: 1.55 }}>
-              {de
-                ? "Die KI-Funktionen laufen über deinen eigenen Schlüssel bei Google, Anthropic oder OpenAI. Hinterlegt in einer Minute."
-                : "The AI features run on your own key from Google, Anthropic or OpenAI. Set up in a minute."}
-            </div>
+        {/* RIGHT */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
+          padding: narrow ? "10px 6px 6px" : "115px 26px 26px 59px" }}>
+          <div style={{ fontSize: narrow ? 26 : 36, fontFamily: FONT, fontWeight: 500, lineHeight: 1.12,
+            color: darkMode ? "#f2f2f4" : "#494545" }}>
+            {de ? "KI im Workspace aktivieren" : "Turn on AI in your workspace"}
+          </div>
+          {/* 262 wide in the design, narrower than the column on purpose: the
+              line length is the point, not filling the space. */}
+          <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, lineHeight: 1.45, marginTop: 12,
+            maxWidth: 300, color: darkMode ? "#9b9ba3" : "#918b8b" }}>
+            {de
+              ? "Bring deinen eigenen KI-Schlüssel mit und behalte die Kontrolle. Einmal hinterlegen, dann läuft es."
+              : "Bring your own AI key to get started and stay in control. Add your key once, and you are ready to go."}
           </div>
 
-          {/* Plain names in one strip. The cards with a second line under each
-              were three headings competing with the real one above them. */}
-          <div style={{ display: "inline-flex", padding: 3, borderRadius: 999, alignSelf: "flex-start",
-            background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-            {PROVIDERS.map(pr => {
-              const on = pr.id === pick;
-              return (
-                <motion.div key={pr.id} whileTap={{ scale: 0.97 }}
-                  onClick={() => { setPick(pr.id); setDraft(""); }}
-                  style={{ padding: "7px 15px", borderRadius: 999, cursor: "pointer",
-                    fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500,
-                    background: on ? sel.background : "transparent",
-                    color: on ? sel.color : theme.textDim,
-                    transition: "background .18s ease, color .18s ease" }}>
-                  {pr.name}
-                </motion.div>
-              );
-            })}
-          </div>
-
-          <div>
+          {/* One field, with the provider chosen inside it. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 26,
+            padding: 4, borderRadius: 50, boxSizing: "border-box",
+            background: darkMode
+              ? "rgba(255,255,255,0.07)"
+              : "linear-gradient(90deg, #d5d5d5 0%, #d9d9d9 100%)" }}>
+            <Dropdown
+              value={pick}
+              onChange={v => { setPick(v); setDraft(""); }}
+              options={PROVIDERS.map(pr => ({ value: pr.id, label: pr.name }))}
+              theme={theme} darkMode={darkMode} minWidth={150}
+              triggerStyle={{ background: darkMode ? "rgba(255,255,255,0.10)" : "#ffffff",
+                borderRadius: 999, padding: "8px 10px 8px 14px" }} />
             <input type="password" value={draft} autoComplete="off"
               onChange={e => setDraft(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") save(); }}
-              placeholder={chosen.placeholder}
-              style={{ width: "100%", boxSizing: "border-box", padding: "12px 15px", borderRadius: 12,
-                background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
-                border: `1px solid ${theme.borderFaint}`, color: theme.text,
-                fontSize: 13, fontFamily: FONT, outline: "none" }} />
-            <div style={{ display: "flex", gap: 14, marginTop: 9, flexWrap: "wrap" }}>
-              {/* Two different destinations on purpose: one is where the key is
-                  issued, the other is how to do it. While no tutorial page
-                  exists the second falls back to the first, so the link is
-                  never a promise nobody can keep. */}
-              <a href={chosen.url} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, textDecoration: "none" }}>
-                {de ? `Schlüssel bei ${chosen.sub} holen` : `Get a key from ${chosen.sub}`}
-              </a>
-              <a href={AI_INTRO_TUTORIAL_URL || chosen.url} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, textDecoration: "none" }}>
-                {de ? "So bekommst du einen Schlüssel" : "How to get an API key"}
-              </a>
-            </div>
+              placeholder={de ? "API-Schlüssel hier" : "API Key here"}
+              style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
+                padding: "0 14px 0 2px", color: darkMode ? "#f2f2f4" : "#2c2c2c",
+                fontSize: 14, fontFamily: FONT }} />
           </div>
 
-          <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, lineHeight: 1.55 }}>
+          {/* Two destinations, one line each: where a key is issued, and how to
+              do it. While no tutorial page exists the second is the first. */}
+          <div style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" }}>
+            <a href={AI_INTRO_TUTORIAL_URL || chosen.url} target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, letterSpacing: "0.02em",
+                color: darkMode ? "#c9c9d0" : "#454545", textDecoration: "underline" }}>
+              {de ? "So bekommst du einen Schlüssel" : "How to get an API key"}
+            </a>
+            <a href={chosen.url} target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500,
+                color: darkMode ? "#8b8b95" : "#918b8b", textDecoration: "none" }}>
+              {chosen.sub}
+            </a>
+          </div>
+
+          <div style={{ fontSize: 11.5, fontFamily: FONT, marginTop: 14, lineHeight: 1.55,
+            color: darkMode ? "#7a7a84" : "#a09a9a" }}>
             {de
-              ? "Der Schlüssel bleibt in diesem Browser und wird nur für deine eigenen Anfragen benutzt. Abgerechnet wird direkt bei deinem Anbieter."
-              : "The key stays in this browser and is only used for your own requests. Your provider bills you directly."}
+              ? "Der Schlüssel bleibt in diesem Browser. Abgerechnet wird direkt bei deinem Anbieter."
+              : "The key stays in this browser. Your provider bills you directly."}
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginTop: "auto", paddingTop: 4 }}>
-            {/* Still reachable, for somebody who would rather see the whole panel
-                or has a key for a provider not offered here. */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8,
+            marginTop: "auto", paddingTop: 24 }}>
             <motion.button whileTap={{ scale: 0.97 }} onClick={onGoToSettings}
               style={{ marginRight: "auto", padding: "9px 0", border: "none", background: "transparent",
-                color: theme.textDim, fontFamily: FONT, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+                color: darkMode ? "#8b8b95" : "#918b8b", fontFamily: FONT, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
               {de ? "In den Einstellungen" : "Open settings"}
             </motion.button>
             <motion.button whileTap={{ scale: 0.97 }} onClick={onDismiss}
-              style={{ padding: "9px 16px", borderRadius: 11, border: `1px solid ${theme.borderFaint}`, background: "transparent",
-                color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+              style={{ padding: "16px 28px", borderRadius: 40, border: "none", background: "transparent",
+                color: darkMode ? "#f2f2f4" : "#000000", fontFamily: FONT, fontSize: 15, fontWeight: 500,
+                lineHeight: 1, cursor: "pointer" }}>
               {de ? "Später" : "Later"}
             </motion.button>
             <motion.button whileTap={{ scale: 0.97 }} onClick={save} disabled={!draft.trim()}
-              style={{ padding: "9px 18px", borderRadius: 11, border: "none",
-                background: draft.trim() ? sel.background : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)"),
-                color: draft.trim() ? sel.color : theme.textDim,
-                fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
+              style={{ padding: "16px 28px", borderRadius: 40, border: "none", lineHeight: 1,
+                background: draft.trim() ? (darkMode ? "#f2f2f4" : "#2c2c2c") : (darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.14)"),
+                color: draft.trim() ? (darkMode ? "#15151c" : "#fbfbfb") : (darkMode ? "#7a7a84" : "#8d8d8d"),
+                fontFamily: FONT, fontSize: 15, fontWeight: 500,
                 cursor: draft.trim() ? "pointer" : "default" }}>
               {de ? "Speichern" : "Save"}
             </motion.button>
