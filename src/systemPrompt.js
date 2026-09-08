@@ -259,6 +259,133 @@ const plainText = (html) => String(html ?? "")
   .replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
   .replace(/\s+/g, " ").trim();
 
+// One brand rendered as facts. Shared by the workspace brand and by every
+// project brand, because a customer's brand is a brand in its own right and
+// two renderers would have drifted the first time a field was added to one.
+const brandFieldLines = (brand) => {
+  const lines = [];
+  if (brand.name) lines.push(`- Brand name: ${brand.name}`);
+  if (brand.claim) lines.push(`- Claim / tagline: ${brand.claim}`);
+  if (brand.description) lines.push(`- Description: ${cap(brand.description)}`);
+  if (brand.website_url) lines.push(`- Website: ${brand.website_url}`);
+
+  // Purpose, vision and mission. The editor seeds the fields with German
+  // instructions telling you what to write; if those were saved unchanged
+  // they are a prompt for the user, not a statement about the brand, and
+  // reciting them as the brand's purpose would be worse than silence.
+  const pvm = brand.pvm || {};
+  if (real(pvm.purpose)) lines.push(`- Purpose: ${cap(pvm.purpose)}`);
+  if (real(pvm.vision)) lines.push(`- Mission statement (vision): ${cap(pvm.vision)}`);
+  if (real(pvm.mission)) lines.push(`- Mission: ${cap(pvm.mission)}`);
+
+  // The vision over time, which is a different field from pvm.vision.
+  const vis = brand.vision || {};
+  if (real(vis.aspiration)) lines.push(`- Aspiration: ${cap(vis.aspiration)}`);
+  if (real(vis.now)) lines.push(`- Where the brand is today: ${cap(vis.now)}`);
+  if (real(vis.year3)) lines.push(`- Where it wants to be in 3 years: ${cap(vis.year3)}`);
+  if (real(vis.year5)) lines.push(`- Where it wants to be in 5 years: ${cap(vis.year5)}`);
+
+  if (Array.isArray(brand.brand_values) && brand.brand_values.length) {
+    const vals = brand.brand_values.slice(0, 8)
+      .map(v => (typeof v === "string" ? v : v?.name && (v.reason ? `${v.name} (${v.reason})` : v.name)))
+      .filter(Boolean);
+    if (vals.length) lines.push(`- Brand values: ${vals.join(" · ")}`);
+  }
+
+  const soul = brand.soul || {};
+  const archetype = [soul.archetypePrimary, soul.archetypeSecondary].filter(Boolean).join(" / ");
+  const soulBits = [
+    archetype && `archetype ${archetype}`,
+    soul.driver && `driven by ${soul.driver}`,
+    soul.against && `against ${soul.against}`,
+    soul.emotion && `should leave people feeling ${soul.emotion}`,
+    soul.temperament && `temperament ${soul.temperament}`,
+    soul.voice && `voice ${soul.voice}`,
+  ].filter(Boolean);
+  if (soulBits.length) lines.push(`- Brand soul: ${soulBits.join(", ")}`);
+
+  const vt = brand.voice_tone || {};
+  if (real(vt.intro)) lines.push(`- Voice and tone: ${cap(vt.intro)}`);
+  if (Array.isArray(vt.attributes) && vt.attributes.length) {
+    const attrs = vt.attributes.slice(0, 8)
+      .map(a => (typeof a === "string" ? a : a?.name || a?.label)).filter(Boolean);
+    if (attrs.length) lines.push(`- Voice attributes: ${attrs.join(" · ")}`);
+  }
+  if (Array.isArray(vt.moments) && vt.moments.length) {
+    const moments = vt.moments.slice(0, 5)
+      .map(m => (typeof m === "string" ? m : [m?.name || m?.label, m?.text || m?.description].filter(Boolean).join(": ")))
+      .filter(Boolean);
+    if (moments.length) lines.push(`- How it speaks in specific moments: ${moments.map(x => cap(x, 160)).join(" | ")}`);
+  }
+
+  if (Array.isArray(brand.taglines) && brand.taglines.length) {
+    const tags = brand.taglines.slice(0, 8)
+      .map(x => (typeof x === "string" ? x : x?.text || x?.value || x?.name)).filter(Boolean);
+    if (tags.length) lines.push(`- Taglines in use or under consideration: ${tags.join(" · ")}`);
+  }
+
+  const palette = brand.color_palette || {};
+  if (palette.primary || palette.secondary || (palette.accents && palette.accents.length)) {
+    const colorBits = [];
+    if (palette.primary) colorBits.push(`Primary ${palette.primary}`);
+    if (palette.secondary) colorBits.push(`Secondary ${palette.secondary}`);
+    if (palette.accents && palette.accents.length) colorBits.push(`Accents ${palette.accents.join(", ")}`);
+    if (colorBits.length) lines.push(`- Brand colors: ${colorBits.join(" · ")}`);
+  }
+
+  const fonts = brand.intelligence?.fonts;
+  if (fonts && (fonts.heading || fonts.body)) {
+    const f = [];
+    if (fonts.heading) f.push(`Headings: ${fonts.heading}`);
+    if (fonts.body) f.push(`Body: ${fonts.body}`);
+    lines.push(`- Typography: ${f.join(" · ")}`);
+  }
+
+  if (Array.isArray(brand.personas) && brand.personas.length > 0) {
+    const personaList = brand.personas.slice(0, 4)
+      .map(p => {
+        const who = [p.name, p.role].filter(Boolean).join(", ");
+        if (!who) return null;
+        const bits = [
+          p.age && `${p.age}`,
+          p.location,
+          p.product_expectation || p.description || p.summary,
+          Array.isArray(p.goals) && p.goals.length && `wants: ${p.goals.slice(0, 2).join("; ")}`,
+          Array.isArray(p.pains) && p.pains.length && `frustrated by: ${p.pains.slice(0, 2).join("; ")}`,
+        ].filter(Boolean).map(x => cap(x, 160));
+        return bits.length ? `${who} (${bits.join(" — ").replace(/ — /g, ", ")})` : who;
+      }).filter(Boolean);
+    if (personaList.length) lines.push(`- Personas:\n${personaList.map(x => `  · ${x}`).join("\n")}`);
+  }
+
+  if (Array.isArray(brand.competitors) && brand.competitors.length) {
+    const comps = brand.competitors.slice(0, 5)
+      .map(c => (c?.name ? (c.summary ? `${c.name}: ${cap(c.summary, 160)}` : c.name) : null))
+      .filter(Boolean);
+    if (comps.length) lines.push(`- Competitors on file: ${comps.join(" | ")}`);
+  }
+
+  if (brand.intelligence?.context) {
+    lines.push(`- Additional brand info: ${cap(brand.intelligence.context, 800)}`);
+  }
+
+  // The free-written strategy sections. Stored as HTML per section key, so
+  // the tags come out: the model is being told what the brand says, not how
+  // the editor marked it up.
+  const sections = brand.section_content && typeof brand.section_content === "object"
+    ? brand.section_content : {};
+  const written = Object.entries(sections)
+    .map(([key, html]) => [key, plainText(html)])
+    .filter(([, text]) => text.length > 1)
+    .slice(0, 8);
+  if (written.length) {
+    lines.push("- Written into the brand's own sections:");
+    for (const [key, text] of written) lines.push(`  · ${key}: ${cap(text, 400)}`);
+  }
+
+  return lines;
+};
+
 // ── Assemble the full prompt ─────────────────
 /**
  * Build the complete system prompt for any LLM provider.
@@ -271,6 +398,7 @@ const plainText = (html) => String(html ?? "")
  * @param {string} options.provider     — llm provider id — informational only
  * @param {object} options.viewData     — label/value pairs the open view published
  * @param {object} options.viewActions  — name/description of what the view can do
+ * @param {Array}  options.projectBrands — brand rows of the workspace's project brands
  * @returns {string} the full system prompt
  */
 export function buildSystemPrompt({
@@ -284,6 +412,7 @@ export function buildSystemPrompt({
   projects = [],       // [{ name }] — known project names
   viewData = null,     // { label: value } published by the open view itself
   viewActions = null,  // { name: description } the open view offers to perform
+  projectBrands = [],  // [{ ...brand_profile row, projectName }] for is_brand projects
 } = {}) {
   const parts = [identity(surface), APP_KNOWLEDGE, CAPABILITIES];
 
@@ -327,131 +456,33 @@ export function buildSystemPrompt({
   //   competitors   [{ name, founded, summary }]
   //   section_content { "<section key>": "<html>" }
   if (brand && (brand.name || brand.claim || brand.description)) {
-    const lines = [];
-    lines.push("The brand they have defined in this workspace. This is the brand you serve: use it, prefer it over generic advice, and when asked about it answer from it rather than from the section names.");
-    if (brand.name) lines.push(`- Brand name: ${brand.name}`);
-    if (brand.claim) lines.push(`- Claim / tagline: ${brand.claim}`);
-    if (brand.description) lines.push(`- Description: ${cap(brand.description)}`);
-    if (brand.website_url) lines.push(`- Website: ${brand.website_url}`);
-
-    // Purpose, vision and mission. The editor seeds the fields with German
-    // instructions telling you what to write; if those were saved unchanged
-    // they are a prompt for the user, not a statement about the brand, and
-    // reciting them as the brand's purpose would be worse than silence.
-    const pvm = brand.pvm || {};
-    if (real(pvm.purpose)) lines.push(`- Purpose: ${cap(pvm.purpose)}`);
-    if (real(pvm.vision)) lines.push(`- Mission statement (vision): ${cap(pvm.vision)}`);
-    if (real(pvm.mission)) lines.push(`- Mission: ${cap(pvm.mission)}`);
-
-    // The vision over time, which is a different field from pvm.vision.
-    const vis = brand.vision || {};
-    if (real(vis.aspiration)) lines.push(`- Aspiration: ${cap(vis.aspiration)}`);
-    if (real(vis.now)) lines.push(`- Where the brand is today: ${cap(vis.now)}`);
-    if (real(vis.year3)) lines.push(`- Where it wants to be in 3 years: ${cap(vis.year3)}`);
-    if (real(vis.year5)) lines.push(`- Where it wants to be in 5 years: ${cap(vis.year5)}`);
-
-    if (Array.isArray(brand.brand_values) && brand.brand_values.length) {
-      const vals = brand.brand_values.slice(0, 8)
-        .map(v => (typeof v === "string" ? v : v?.name && (v.reason ? `${v.name} (${v.reason})` : v.name)))
-        .filter(Boolean);
-      if (vals.length) lines.push(`- Brand values: ${vals.join(" · ")}`);
+    const lines = brandFieldLines(brand);
+    if (lines.length) {
+      parts.push("\nThe brand of this workspace itself. Use it, prefer it over generic advice, and when asked about it answer from it rather than from the section names:\n" + lines.join("\n"));
     }
-
-    const soul = brand.soul || {};
-    const archetype = [soul.archetypePrimary, soul.archetypeSecondary].filter(Boolean).join(" / ");
-    const soulBits = [
-      archetype && `archetype ${archetype}`,
-      soul.driver && `driven by ${soul.driver}`,
-      soul.against && `against ${soul.against}`,
-      soul.emotion && `should leave people feeling ${soul.emotion}`,
-      soul.temperament && `temperament ${soul.temperament}`,
-      soul.voice && `voice ${soul.voice}`,
-    ].filter(Boolean);
-    if (soulBits.length) lines.push(`- Brand soul: ${soulBits.join(", ")}`);
-
-    const vt = brand.voice_tone || {};
-    if (real(vt.intro)) lines.push(`- Voice and tone: ${cap(vt.intro)}`);
-    if (Array.isArray(vt.attributes) && vt.attributes.length) {
-      const attrs = vt.attributes.slice(0, 8)
-        .map(a => (typeof a === "string" ? a : a?.name || a?.label)).filter(Boolean);
-      if (attrs.length) lines.push(`- Voice attributes: ${attrs.join(" · ")}`);
-    }
-    if (Array.isArray(vt.moments) && vt.moments.length) {
-      const moments = vt.moments.slice(0, 5)
-        .map(m => (typeof m === "string" ? m : [m?.name || m?.label, m?.text || m?.description].filter(Boolean).join(": ")))
-        .filter(Boolean);
-      if (moments.length) lines.push(`- How it speaks in specific moments: ${moments.map(x => cap(x, 160)).join(" | ")}`);
-    }
-
-    if (Array.isArray(brand.taglines) && brand.taglines.length) {
-      const tags = brand.taglines.slice(0, 8)
-        .map(x => (typeof x === "string" ? x : x?.text || x?.value || x?.name)).filter(Boolean);
-      if (tags.length) lines.push(`- Taglines in use or under consideration: ${tags.join(" · ")}`);
-    }
-
-    const palette = brand.color_palette || {};
-    if (palette.primary || palette.secondary || (palette.accents && palette.accents.length)) {
-      const colorBits = [];
-      if (palette.primary) colorBits.push(`Primary ${palette.primary}`);
-      if (palette.secondary) colorBits.push(`Secondary ${palette.secondary}`);
-      if (palette.accents && palette.accents.length) colorBits.push(`Accents ${palette.accents.join(", ")}`);
-      if (colorBits.length) lines.push(`- Brand colors: ${colorBits.join(" · ")}`);
-    }
-
-    const fonts = brand.intelligence?.fonts;
-    if (fonts && (fonts.heading || fonts.body)) {
-      const f = [];
-      if (fonts.heading) f.push(`Headings: ${fonts.heading}`);
-      if (fonts.body) f.push(`Body: ${fonts.body}`);
-      lines.push(`- Typography: ${f.join(" · ")}`);
-    }
-
-    if (Array.isArray(brand.personas) && brand.personas.length > 0) {
-      const personaList = brand.personas.slice(0, 4)
-        .map(p => {
-          const who = [p.name, p.role].filter(Boolean).join(", ");
-          if (!who) return null;
-          const bits = [
-            p.age && `${p.age}`,
-            p.location,
-            p.product_expectation || p.description || p.summary,
-            Array.isArray(p.goals) && p.goals.length && `wants: ${p.goals.slice(0, 2).join("; ")}`,
-            Array.isArray(p.pains) && p.pains.length && `frustrated by: ${p.pains.slice(0, 2).join("; ")}`,
-          ].filter(Boolean).map(x => cap(x, 160));
-          return bits.length ? `${who} (${bits.join(" — ").replace(/ — /g, ", ")})` : who;
-        }).filter(Boolean);
-      if (personaList.length) lines.push(`- Personas:\n${personaList.map(x => `  · ${x}`).join("\n")}`);
-    }
-
-    if (Array.isArray(brand.competitors) && brand.competitors.length) {
-      const comps = brand.competitors.slice(0, 5)
-        .map(c => (c?.name ? (c.summary ? `${c.name}: ${cap(c.summary, 160)}` : c.name) : null))
-        .filter(Boolean);
-      if (comps.length) lines.push(`- Competitors on file: ${comps.join(" | ")}`);
-    }
-
-    if (brand.intelligence?.context) {
-      lines.push(`- Additional brand info: ${cap(brand.intelligence.context, 800)}`);
-    }
-
-    // The free-written strategy sections. Stored as HTML per section key, so
-    // the tags come out: the model is being told what the brand says, not how
-    // the editor marked it up.
-    const sections = brand.section_content && typeof brand.section_content === "object"
-      ? brand.section_content : {};
-    const written = Object.entries(sections)
-      .map(([key, html]) => [key, plainText(html)])
-      .filter(([, text]) => text.length > 1)
-      .slice(0, 8);
-    if (written.length) {
-      lines.push("- Written into the brand's own sections:");
-      for (const [key, text] of written) lines.push(`  · ${key}: ${cap(text, 400)}`);
-    }
-
-    if (lines.length > 1) parts.push("\n" + lines.join("\n"));
   } else {
     // No brand yet is itself worth knowing: it changes what is worth suggesting.
     parts.push("\nNo brand has been defined in this workspace yet. If it becomes relevant, mention that the Brand section can build one from a website, a brand book PDF, a Figma file or from scratch. Do not push it into every answer.");
+  }
+
+  // Brands that belong to individual projects. A creative agency runs its
+  // customers' brands here, and "what is Somega's positioning" is a question
+  // about Somega, not about the agency. The workspace brand above is not an
+  // answer to it.
+  if (Array.isArray(projectBrands) && projectBrands.length) {
+    const blocks = [];
+    for (const pb of projectBrands.slice(0, 6)) {
+      if (!pb || !(pb.name || pb.claim || pb.description)) continue;
+      const lines = brandFieldLines(pb);
+      if (!lines.length) continue;
+      blocks.push(`Project brand "${pb.projectName || pb.name}":\n${lines.join("\n")}`);
+    }
+    if (blocks.length) {
+      parts.push(
+        "\nBrands defined for individual projects in this workspace. Each is a brand of its own, usually a customer's. "
+        + "When somebody asks about one by name, answer from ITS fields below and not from the workspace brand above:\n\n"
+        + blocks.join("\n\n"));
+    }
   }
 
   // Projects context — useful so the assistant can talk about them by name

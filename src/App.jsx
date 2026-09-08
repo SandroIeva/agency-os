@@ -342,6 +342,19 @@ const GEO_CACHE_KEY = "i7os.weather.geo.v2";   // { lat, lon, ts }
 // literals drift the moment one of them is nudged.
 const ASSISTANT_GAP = 16;
 
+// A workspace has its own brand and, for every project with is_brand on, a
+// brand per project. One query returns all of them; this splits them, and it is
+// the only place that knows the rule. Two loaders each pinned themselves to
+// `project_id is null` on their own, which is how the assistant ended up
+// describing the agency while somebody stood in a customer's brand.
+const splitBrandRows = (rows) => ({
+  workspace: (rows || []).find(r => !r.project_id) || null,
+  // The project's name, not the brand's: people ask for "Somega", which is what
+  // the project is called in their head and in the sidebar.
+  projects: (rows || []).filter(r => r.project_id)
+    .map(r => ({ ...r, projectName: r.projects?.name || r.name })),
+});
+
 function makeTheme(darkMode) {
   return darkMode ? {
     bg: "#111117",
@@ -47658,12 +47671,21 @@ export default function CircularMenu() {
   // pressed. The ref is always the latest render's value.
   const brandProfileRef = useRef(null);
   brandProfileRef.current = brandProfile;
+  // The brands of this workspace's project brands, one per is_brand project.
+  const [projectBrands, setProjectBrands] = useState([]);
+  const projectBrandsRef = useRef([]);
+  projectBrandsRef.current = projectBrands;
   const loadBrandProfile = useCallback(async (orgId) => {
-    if (!orgId) { setBrandProfile(null); return; }
+    if (!orgId) { setBrandProfile(null); setProjectBrands([]); return; }
     try {
-      const { data } = await supabase.from("brand_profile").select("*")
-        .eq("org_id", orgId).is("project_id", null).maybeSingle();
-      setBrandProfile(data || null);
+      // Every brand of the workspace in one read. The SELECT policy is
+      // is_org_member(org_id), so this returns exactly what the person could
+      // already open by clicking, and nothing beyond it.
+      const { data } = await supabase.from("brand_profile")
+        .select("*, projects(name)").eq("org_id", orgId);
+      const split = splitBrandRows(data);
+      setBrandProfile(split.workspace);
+      setProjectBrands(split.projects);
     } catch (_) { /* the brand is context, not a precondition */ }
   }, []);
   const [appProjects, setAppProjects] = useState([]);        // [{name}] — known project names for AI context + vocab correction
@@ -47687,16 +47709,19 @@ export default function CircularMenu() {
     const token = ++aiContextReqRef.current;
     const orgId = userOrg?.id;
     setBrandProfile(null);
+    setProjectBrands([]);
     setAppProjects([]);
     if (!orgId || !session?.user?.id) return;
     (async () => {
       try {
         const [bRes, pRes] = await Promise.all([
-          supabase.from("brand_profile").select("*").eq("org_id", orgId).is("project_id", null).maybeSingle(),
+          supabase.from("brand_profile").select("*, projects(name)").eq("org_id", orgId),
           supabase.from("projects").select("name").eq("org_id", orgId).order("name"),
         ]);
         if (aiContextReqRef.current !== token) return;
-        setBrandProfile(bRes?.data || null);
+        const split = splitBrandRows(bRes?.data);
+        setBrandProfile(split.workspace);
+        setProjectBrands(split.projects);
         setAppProjects(pRes?.data || []);
       } catch (_) { /* the AI works without it, it just knows less */ }
     })();
@@ -51762,6 +51787,7 @@ export default function CircularMenu() {
         provider: llmProvider,
         workspace: userOrg ? { name: userOrg.name, role: userOrgRole } : null,
         brand: brandProfileRef.current,
+        projectBrands: projectBrandsRef.current,
         projects: appProjects,
         viewData: readViewContext(),
         viewActions: readViewActionDocs(),
@@ -51867,6 +51893,7 @@ export default function CircularMenu() {
         provider: llmProvider,
         workspace: userOrg ? { name: userOrg.name, role: userOrgRole } : null,
         brand: brandProfileRef.current,
+        projectBrands: projectBrandsRef.current,
         projects: appProjects,
         viewData: readViewContext(),
         viewActions: readViewActionDocs(),
