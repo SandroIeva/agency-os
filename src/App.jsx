@@ -1843,6 +1843,17 @@ function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de
 // numeric entry under a list of named presets. It is a prop on the shared
 // component rather than a one-off menu somewhere, so every dropdown in the app
 // keeps looking and behaving alike.
+// Speaking rates offered for the assistant's voice. Fish Audio accepts 0.5 to
+// 2.0; anything past these reads as a machine rather than as somebody talking,
+// so the list stops well inside the range it is allowed.
+const VOICE_SPEEDS = [
+  { value: 0.9,  de: "Langsam",         en: "Slow" },
+  { value: 1,    de: "Normal",          en: "Normal" },
+  { value: 1.15, de: "Etwas schneller", en: "A little faster" },
+  { value: 1.3,  de: "Schnell",         en: "Fast" },
+  { value: 1.5,  de: "Sehr schnell",    en: "Very fast" },
+];
+
 function Dropdown({ value, onChange, options = [], placeholder = "Auswählen", theme, darkMode,
   leadingIcon = null, minWidth = 200, align = "left", maxTriggerWidth, disabled = false, triggerStyle = {}, footer = null, maxHeight = 280 }) {
   const [open, setOpen] = useState(false);
@@ -47431,6 +47442,20 @@ export default function CircularMenu() {
 
   useEffect(() => { localStorage.setItem("agencyos-voice-id", selectedVoice); }, [selectedVoice]);
 
+  // How fast that voice talks. Fish Audio takes prosody.speed, 0.5 to 2.0,
+  // and the default of 1.0 reads slowly to somebody who already knows what the
+  // assistant is going to say. Kept beside the voice because it is a property
+  // of listening to it, and remembered per browser like the voice is.
+  const [voiceSpeed, setVoiceSpeed] = useState(() => {
+    try {
+      const stored = Number(localStorage.getItem("agencyos-voice-speed"));
+      return VOICE_SPEEDS.some(o => o.value === stored) ? stored : 1;
+    } catch (_) { return 1; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("agencyos-voice-speed", String(voiceSpeed)); } catch (_) {}
+  }, [voiceSpeed]);
+
   // Persist LLM settings
   useEffect(() => { localStorage.setItem("agencyos-llm-provider", llmProvider); }, [llmProvider]);
   useEffect(() => { localStorage.setItem("agencyos-llm-keys", JSON.stringify(llmKeys)); }, [llmKeys]);
@@ -50476,7 +50501,7 @@ export default function CircularMenu() {
       try {
         const res = await fetch("/api/tts", {
           method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-          body: JSON.stringify({ text, voiceId: selectedVoice }),
+          body: JSON.stringify({ text, voiceId: selectedVoice, speed: voiceSpeed }),
         });
         if (res.ok) {
           const url = URL.createObjectURL(await res.blob());
@@ -52110,7 +52135,7 @@ export default function CircularMenu() {
         const ttsResponse = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-          body: JSON.stringify({ text: aiText, voiceId: selectedVoice }),
+          body: JSON.stringify({ text: aiText, voiceId: selectedVoice, speed: voiceSpeed }),
         });
         if (aiStoppedRef.current) return;
         if (ttsResponse.ok) {
@@ -56502,6 +56527,7 @@ export default function CircularMenu() {
                                 body: JSON.stringify({
                                   text: "Hi, I am your AI assistant in Agency OS. How can I help you today?",
                                   voiceId: voice.id,
+                                  speed: voiceSpeed,
                                 }),
                               });
                               if (res.ok) {
@@ -56559,6 +56585,31 @@ export default function CircularMenu() {
                       </div>
                     );
                   })}
+                </div>
+
+                {/* Speaking rate. Same section as the voice, because it is a
+                    property of listening to it rather than a setting of its
+                    own. `appLanguage === "de"` inline: this is the App root's
+                    render and a sibling function's `de` does not reach here. */}
+                <div style={{ marginTop: 12, borderRadius: 20, background: theme.cardBg,
+                  border: `1px solid ${theme.border}`, padding: "14px 18px",
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
+                      {appLanguage === "de" ? "Sprechtempo" : "Speaking rate"}
+                    </div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
+                      {appLanguage === "de"
+                        ? "Gilt für die Sphere und für die Hörprobe hier."
+                        : "Applies to the sphere and to the preview here."}
+                    </div>
+                  </div>
+                  <Dropdown
+                    value={voiceSpeed}
+                    onChange={(v) => setVoiceSpeed(Number(v))}
+                    options={VOICE_SPEEDS.map(o => ({ value: o.value, label: appLanguage === "de" ? o.de : o.en }))}
+                    theme={theme} darkMode={darkMode} align="right" minWidth={190}
+                  />
                 </div>
               </motion.div>
               )}

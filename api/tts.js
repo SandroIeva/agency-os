@@ -29,7 +29,7 @@ export default async function handler(req, res) {
     return res.status(status).json({ error: e.message || "Authentication required", code: "unauthorized" });
   }
 
-  const { text, voiceId } = req.body || {};
+  const { text, voiceId, speed } = req.body || {};
   if (!text) return res.status(400).json({ error: "No text provided" });
   if (typeof text !== "string" || text.length > MAX_CHARS) {
     return res.status(413).json({ error: `Text is limited to ${MAX_CHARS} characters`, code: "too_long" });
@@ -52,6 +52,11 @@ export default async function handler(req, res) {
         mp3_bitrate: 128,
         normalize: true,
         latency: "normal",
+        // Speaking rate. Fish accepts 0.5 to 2.0 and rejects the request
+        // outright outside that, so a number arriving from a browser is
+        // clamped here rather than trusted: this endpoint spends money, and a
+        // rejected call is a call we still made.
+        prosody: { speed: Math.min(2, Math.max(0.5, Number(speed) || 1)) },
       }),
     });
 
