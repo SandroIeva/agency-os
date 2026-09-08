@@ -2193,7 +2193,7 @@ const AI_INTRO_ALWAYS = true;
 const AI_INTRO_TUTORIAL_URL = "";
 
 
-function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, onSaveKey }) {
+function AiKeyIntro({ theme, darkMode, appLanguage, onDismiss, onSaveKey }) {
   const de = appLanguage === "de";
   // Where each key comes from. Named rather than described: somebody who has
   // never made one needs the address, not the advice.
@@ -2307,27 +2307,12 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, o
                 color: darkMode ? "#c9c9d0" : "#454545", textDecoration: "underline" }}>
               {de ? "So bekommst du einen Schlüssel" : "How to get an API key"}
             </a>
-            <a href={chosen.url} target="_blank" rel="noopener noreferrer"
-              style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500,
-                color: darkMode ? "#8b8b95" : "#918b8b", textDecoration: "none" }}>
-              {chosen.sub}
-            </a>
           </div>
 
-          <div style={{ fontSize: 11.5, fontFamily: FONT, marginTop: 14, lineHeight: 1.55,
-            color: darkMode ? "#7a7a84" : "#a09a9a" }}>
-            {de
-              ? "Der Schlüssel bleibt in diesem Browser. Abgerechnet wird direkt bei deinem Anbieter."
-              : "The key stays in this browser. Your provider bills you directly."}
-          </div>
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8,
             marginTop: "auto", paddingTop: 24 }}>
-            <motion.button whileTap={{ scale: 0.97 }} onClick={onGoToSettings}
-              style={{ marginRight: "auto", padding: "9px 0", border: "none", background: "transparent",
-                color: darkMode ? "#8b8b95" : "#918b8b", fontFamily: FONT, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
-              {de ? "In den Einstellungen" : "Open settings"}
-            </motion.button>
+
             <motion.button whileTap={{ scale: 0.97 }} onClick={onDismiss}
               style={{ padding: "16px 28px", borderRadius: 40, border: "none", background: "transparent",
                 color: darkMode ? "#f2f2f4" : "#000000", fontFamily: FONT, fontSize: 15, fontWeight: 500,
@@ -57887,7 +57872,7 @@ export default function CircularMenu() {
             setLlmProvider(provider);
             closeAiIntro();
           }}
-          onGoToSettings={() => { closeAiIntro(); setSettingsTab("ai"); setCurrentView("settings"); }} />
+          />
       )}
 
       {/* Bottom bar — in document fullscreen only the AI orb floats above the overlay */}
