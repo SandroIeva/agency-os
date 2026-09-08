@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import DOMPurify from "dompurify";
 import { supabase } from "./supabase";
 import { notifLines } from "./notificationText";
-import { buildSystemPrompt } from "./systemPrompt";
+import { buildSystemPrompt, parseViewActions } from "./systemPrompt";
 import { isDaylight } from "./daylight";
 import { getTranslation } from "./translations";
 // Shared with api/figma: the browser fits what the endpoint converted, and both
@@ -30517,6 +30517,24 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const charLimit = selected.length ? Math.min(...selected.map(a => POST_CHAR_LIMITS[uiKeyFor(a.platform)] || 3000)) : 3000;
   const overLimit = text.length > charLimit;
 
+  // ── What the assistant may DO here ────────────────────────────────────────
+  // Writing into the caption replaces whatever is in it. Somebody who has
+  // typed three lines and then asks for a rewrite should not lose the three
+  // lines to find out they preferred them, so one step back is kept.
+  //
+  // A ref for the current text rather than a dependency: this callback is
+  // handed to the App root once and must not be rebuilt on every keystroke,
+  // and a captured `text` would be the text as it was when the assistant
+  // opened.
+  const textRef = useRef(text);
+  textRef.current = text;
+  const [captionUndo, setCaptionUndo] = useState(null);   // previous text, or null
+  const setCaptionFromAssistant = useCallback((next) => {
+    setCaptionUndo(textRef.current);
+    setText(String(next || "").slice(0, 5000));
+    setStepIdx(1);   // the Description step, so the change happens in plain sight
+  }, []);
+
   // ── What the assistant is told when it is opened over this view ───────────
   // It used to get one sentence, "they are composing a post for a social
   // channel", which is not enough to write one: a LinkedIn caption and an
@@ -30535,11 +30553,16 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       "Caption written so far": text.trim() || "nothing yet, the field is empty",
       "Image": visual ? "one is attached" : "none attached",
       "Scheduled for": schedule || "not scheduled",
+    }, {
+      setCaption: {
+        label: "replace the post description with text you write. The person sees it appear in the field, so give the finished caption and nothing else",
+        run: setCaptionFromAssistant,
+      },
     });
-    // Leaving the composer takes its contents with it, rather than leaving them
-    // to describe whatever screen comes next.
+    // Leaving the composer takes its contents AND its actions with it, rather
+    // than leaving them to describe, or act on, whatever screen comes next.
     return () => onViewContext("createpost", null);
-  }, [onViewContext, stepIdx, text, schedule, visual, selectedIds, accounts, charLimit, de]); // eslint-disable-line
+  }, [onViewContext, setCaptionFromAssistant, stepIdx, text, schedule, visual, selectedIds, accounts, charLimit, de]); // eslint-disable-line
 
   // A visual handed over from the canvas editor arrives the same way a picked
   // file does, so everything downstream — preview, presign, upload — is the one
@@ -30970,14 +30993,16 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       fixed 320 inside a box that fills the panel, which left
                       the box scrolling around a half-empty field. */}
                   <div style={{ position: "relative", flex: 1, minHeight: 220, display: "flex" }}>
-                    <textarea value={text} onChange={e => setText(e.target.value)} autoFocus
+                    <textarea value={text}
+                      onChange={e => { setText(e.target.value); if (captionUndo !== null) setCaptionUndo(null); }} autoFocus
                       placeholder={de ? "Was möchtest du teilen?" : "What do you want to share?"}
                       style={{ width: "100%", flex: 1, boxSizing: "border-box", padding: "18px 20px 40px", borderRadius: 18,
                         border: `1px solid ${overLimit ? "#E86767" : theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.6)",
                         color: theme.text, fontSize: 15, fontFamily: FONT, lineHeight: 1.65, outline: "none", resize: "none", caretColor: theme.text }} />
+                    <div style={{ position: "absolute", left: 20, bottom: 17, display: "flex", alignItems: "center", gap: 16 }}>
                     <motion.div whileTap={{ scale: 0.96 }} onClick={toggleDictation}
                       title={dictating ? (de ? "Diktat stoppen" : "Stop dictation") : (de ? "Diktieren" : "Dictate")}
-                      style={{ position: "absolute", left: 20, bottom: 17, display: "inline-flex", alignItems: "center", gap: 6,
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6,
                         cursor: "pointer", fontSize: 11.5, fontFamily: FONT, fontWeight: 500, color: dictating ? "#EF4444" : theme.textFaint }}>
                       {/* The glyph's own baseline sits low against 11.5px text,
                           so it is lifted rather than the row being re-aligned. */}
@@ -30988,6 +31013,21 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       </svg>
                       {dictating ? "Stopp" : (de ? "Diktieren" : "Dictate")}
                     </motion.div>
+                    {/* Only while the assistant's write is the last thing that
+                        happened to this field. */}
+                    {captionUndo !== null && (
+                      <motion.div whileTap={{ scale: 0.96 }}
+                        onClick={() => { setText(captionUndo); setCaptionUndo(null); }}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer",
+                          fontSize: 11.5, fontFamily: FONT, fontWeight: 500, color: theme.textFaint }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ position: "relative", top: -1 }}>
+                          <path d="M9 14L4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" />
+                        </svg>
+                        {de ? "Rückgängig" : "Undo"}
+                      </motion.div>
+                    )}
+                    </div>
                     {/* Same distance from its own edge as the mic is from the
                         left one, and the same size, so the two read as one line
                         along the bottom of the field.
@@ -50172,13 +50212,48 @@ export default function CircularMenu() {
   // Tagged with the view that published it, and checked against the live view
   // before use, so a value left behind by the screen you just closed can never
   // end up describing the one you are on.
-  const viewContextRef = useRef(null);   // { view, data } | null
-  const publishViewContext = useCallback((view, data) => {
-    viewContextRef.current = data ? { view, data } : null;
+  const viewContextRef = useRef(null);   // { view, data, actions } | null
+  const publishViewContext = useCallback((view, data, actions = null) => {
+    viewContextRef.current = (data || actions) ? { view, data, actions } : null;
   }, []);
-  const readViewContext = () =>
+  // Both readers check the live view first. A screen you just closed must not
+  // get to describe the one you are on, and it must certainly not get to act
+  // on it.
+  const liveViewContext = () =>
     (viewContextRef.current && viewContextRef.current.view === currentView)
-      ? viewContextRef.current.data : null;
+      ? viewContextRef.current : null;
+  const readViewContext = () => liveViewContext()?.data || null;
+  // Only the names, and what they do. The functions never leave this file.
+  const readViewActionDocs = () => {
+    const a = liveViewContext()?.actions;
+    if (!a) return null;
+    const out = {};
+    for (const k of Object.keys(a)) if (a[k]?.label) out[k] = a[k].label;
+    return Object.keys(out).length ? out : null;
+  };
+
+  // A reply comes back, an action block may be in it. Run what the OPEN view
+  // actually offers, drop the rest, and hand back the text with the block cut
+  // out so nothing is ever shown or read aloud.
+  const applyViewActions = (text) => {
+    const { clean, calls } = parseViewActions(text);
+    if (!calls.length) return text;
+    const actions = liveViewContext()?.actions || {};
+    let ran = 0;
+    for (const call of calls) {
+      const action = actions[call.name];
+      if (!action || typeof action.run !== "function") {
+        console.warn("[view action] ignored, not offered here:", call.name);
+        continue;
+      }
+      try { action.run(call.value); ran++; }
+      catch (e) { console.warn("[view action] failed:", call.name, e); }
+    }
+    // A model that put its whole answer inside the block would otherwise leave
+    // nothing to say, and the voice path would speak silence.
+    if (!clean && ran) return appLanguage === "de" ? "Steht im Feld." : "It is in the field.";
+    return clean;
+  };
 
   // ── Files dropped on the Startview ──────────────────────────────────────
   // Drop a file on the dashboard and the assistant asks where it should go
@@ -51678,6 +51753,7 @@ export default function CircularMenu() {
         brand: brandProfile,
         projects: appProjects,
         viewData: readViewContext(),
+        viewActions: readViewActionDocs(),
       });
       const activeKey = llmKeys[llmProvider];
       const googleToken = llmProvider === "gemini" && !activeKey ? getProviderToken() : null;
@@ -51705,7 +51781,7 @@ export default function CircularMenu() {
       });
       const data = await response.json();
       // Response shape: content: [{type:"text", text}, {type:"image", url}]
-      const textPart = (data.content || []).find(c => c.type === "text")?.text || "";
+      const textPart = applyViewActions((data.content || []).find(c => c.type === "text")?.text || "");
       const imageParts = (data.content || []).filter(c => c.type === "image");
       if (textPart || imageParts.length > 0) {
         const msgTimestamp = Date.now();
@@ -51782,6 +51858,7 @@ export default function CircularMenu() {
         brand: brandProfile,
         projects: appProjects,
         viewData: readViewContext(),
+        viewActions: readViewActionDocs(),
       });
       let data;
 
@@ -51837,7 +51914,9 @@ export default function CircularMenu() {
       // Surface API-level errors (invalid key, blocked by safety, rate limit, etc.) instead of a generic fallback
       let aiText;
       if (data.content?.[0]?.text) {
-        aiText = data.content[0].text;
+        // Before anything else: an action block is carried out here and removed,
+        // so it never reaches the history, the screen or the text-to-speech.
+        aiText = applyViewActions(data.content[0].text);
         // Committed here and nowhere else. An error message is not something
         // the assistant said, and a question with no answer is a user turn with
         // no assistant turn after it, which breaks the alternation the next

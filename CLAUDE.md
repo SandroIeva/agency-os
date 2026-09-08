@@ -141,6 +141,42 @@ Navigation is state-based (`currentView` string in `App`), not a router. The mai
 
 Brand structure: ONE shared `BrandView` scoped by `projectId` — `projects.is_brand` toggles a per-project brand workspace. Public brand sharing = `brand_shares` snapshot table + `?b=<token>` route; the snapshot is frozen until the user clicks "Aktualisieren".
 
+## The assistant, and how a view talks to it
+
+The sphere is not a dashboard feature. It opens over whatever view you are in,
+and `voiceOverView` decides its shape: a full-screen takeover on the dashboard,
+a panel in the bottom-right corner over a view. Never let it close the view to
+make room again, which is what it used to do.
+
+A view tells the assistant about itself through **one registry in the App root**
+(`publishViewContext(view, data, actions)`), and both readers check the value's
+`view` against the live `currentView` first, so a screen you just closed can
+never describe, or act on, the one you are on.
+
+- **`data`** is label/value pairs. `systemPrompt.js` renders them without
+  knowing what any view is, which is the point: the next view to join needs no
+  change there. Values are capped at 600 characters.
+- **`actions`** is `{ name: { label, run } }`. Only the labels reach the model;
+  the functions never leave App.jsx.
+
+**The action protocol lives entirely in `src/systemPrompt.js`** — the markers,
+the instructions the model is given, and `parseViewActions` that reads them
+back. Two ends of one protocol written in two files drift the first time either
+is edited. A model asks for an action with `[[i7os:<name>]]…[[/i7os]]` at the
+end of its reply; the block is executed and cut out before the text is stored,
+shown or spoken. It is a sentinel block rather than provider tool-calling
+because `api/chat-multi` speaks to Claude, OpenAI and Gemini through one shape
+and their tool APIs are three; neither reply path streams, so the whole text is
+in hand before anything is displayed.
+
+Both reply paths must run it: `submitVoiceMessage` (voice, and it feeds TTS) and
+`sendDialogMessage` (typed). A path that forgets reads the markup aloud.
+
+An action CHANGES somebody's screen, so: it runs only if the open view offers
+that exact name, at most 3 per reply, payload capped, and anything destructive
+keeps a way back (`setCaption` in `CreatePostView` stores the previous text and
+shows an Undo until the person types themselves).
+
 ## Write-path index — where things are actually created
 
 Look here FIRST before adding a gate, a limit, a validation or a "create X"

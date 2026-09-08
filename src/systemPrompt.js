@@ -159,10 +159,74 @@ const renderViewData = (data) => {
     lines.push(`- ${label}: ${v}`);
   }
   if (!lines.length) return "";
-  return `\nWhat is on their screen right now:\n${lines.join("\n")}\n`
-    // Without this the model offers to "add that to the description", which it
-    // cannot do. Saying so once is cheaper than an apology every time.
-    + "\nYou can SEE these fields but you cannot fill them in. When you write something for a field, give the finished text plainly so it can be copied, and do not claim to have inserted it.";
+  return `\nWhat is on their screen right now:\n${lines.join("\n")}\n`;
+};
+
+// Said when the open view offers nothing to do. Without it the model offers to
+// "add that to the description", which it then cannot do.
+const NO_ACTIONS_RULE = "\nYou can SEE these fields but you cannot fill them in. When you write something for a field, give the finished text plainly so it can be copied, and do not claim to have inserted it.";
+
+// ── Actions: the model asking the app to do something ────────────────────────
+// The one channel by which a reply becomes a change on screen. The markers, the
+// instructions the model is given, and the parser that reads them back all live
+// here together on purpose: the protocol has two ends, and two ends written in
+// two files drift the first time one of them is edited.
+//
+// A sentinel block rather than provider tool-calling, because api/chat-multi
+// speaks to Claude, OpenAI and Gemini through one shape, and their tool APIs
+// are three different shapes. Neither reply path streams, so the whole text is
+// in hand before anything is shown or spoken and the block can be cut out
+// cleanly.
+const ACTION_OPEN = "[[i7os:";
+const ACTION_CLOSE = "[[/i7os]]";
+export const viewActionPattern = () =>
+  /\[\[i7os:([A-Za-z][A-Za-z0-9_]{0,40})\]\]([\s\S]*?)\[\[\/i7os\]\]/g;
+
+// At most this many characters of payload, and at most this many blocks. A
+// reply that asks for fifty changes is a runaway, not an instruction.
+export const ACTION_PAYLOAD_CAP = 10000;
+export const ACTION_CALL_CAP = 3;
+
+/**
+ * Pull action blocks out of a model reply.
+ * @returns {{clean: string, calls: {name: string, value: string}[]}}
+ */
+export function parseViewActions(text) {
+  if (!text || typeof text !== "string") return { clean: text || "", calls: [] };
+  const calls = [];
+  const clean = text
+    .replace(viewActionPattern(), (_m, name, body) => {
+      if (calls.length < ACTION_CALL_CAP) {
+        calls.push({ name, value: body.trim().slice(0, ACTION_PAYLOAD_CAP) });
+      }
+      return "";
+    })
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { clean, calls };
+}
+
+// What the model is told it may do. Only ever the actions the OPEN view
+// published, so a name it reads here is a name that exists a moment later.
+const renderViewActions = (actions) => {
+  const names = Object.keys(actions || {});
+  if (!names.length) return "";
+  const list = names.map((k) => `- ${k}: ${actions[k]}`).join("\n");
+  return `
+You can also DO things on this screen, not only talk about them. Available here:
+${list}
+
+To do one, put a block at the very END of your reply, on its own lines:
+${ACTION_OPEN}<name>]]
+the finished content, and nothing else
+${ACTION_CLOSE}
+
+Rules, and they matter because this CHANGES the person's screen:
+- Only when they asked for that thing to happen. "What would you write?" is a question, not an instruction to overwrite their field.
+- Only the names listed above. Anything else is dropped.
+- The block is cut out before your reply is shown or spoken, so also say one short sentence outside it. Do not describe the block or repeat its content.
+- Inside the block: the finished content only. No quotes around it, no markdown, no preamble.
+- Never more than one block per action.`;
 };
 
 // ── Assemble the full prompt ─────────────────
@@ -176,6 +240,7 @@ const renderViewData = (data) => {
  * @param {string} options.surface      — "voice" (spoken) or "chat" (typed)
  * @param {string} options.provider     — llm provider id — informational only
  * @param {object} options.viewData     — label/value pairs the open view published
+ * @param {object} options.viewActions  — name/description of what the view can do
  * @returns {string} the full system prompt
  */
 export function buildSystemPrompt({
@@ -188,6 +253,7 @@ export function buildSystemPrompt({
   brand = null,        // brand_profile row
   projects = [],       // [{ name }] — known project names
   viewData = null,     // { label: value } published by the open view itself
+  viewActions = null,  // { name: description } the open view offers to perform
 } = {}) {
   const parts = [identity(surface), APP_KNOWLEDGE, CAPABILITIES];
 
@@ -201,6 +267,11 @@ export function buildSystemPrompt({
   // Straight after the view line, because it is the same subject one step finer.
   const viewDetail = renderViewData(viewData);
   if (viewDetail) parts.push(viewDetail);
+  // Either it can act here, or it must say plainly that it cannot. Never both,
+  // and never neither, or it invents an answer about its own reach.
+  const actionRules = renderViewActions(viewActions);
+  if (actionRules) parts.push(actionRules);
+  else if (viewDetail) parts.push(NO_ACTIONS_RULE);
 
   // Add user context
   if (userName) {
