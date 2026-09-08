@@ -47652,6 +47652,12 @@ export default function CircularMenu() {
   // a new one only appeared after a full reload. Everything else on the brand
   // side loads its own copy, which is why only Creations looked wrong.
   const [brandProfile, setBrandProfile] = useState(null);
+  // The prompt builders read the brand through this, not through the state.
+  // They run inside callbacks the speech recogniser captured seconds earlier,
+  // and a captured `brandProfile` is the brand as it was when the orb was
+  // pressed. The ref is always the latest render's value.
+  const brandProfileRef = useRef(null);
+  brandProfileRef.current = brandProfile;
   const loadBrandProfile = useCallback(async (orgId) => {
     if (!orgId) { setBrandProfile(null); return; }
     try {
@@ -51222,6 +51228,11 @@ export default function CircularMenu() {
     // VIEW_CONTEXTS has had a line for `createpost` all along, and resetting to
     // the dashboard here is what made sure the model never saw it.
     setVoiceOverView(currentView !== "dashboard" ? currentView : null);
+    // The brand is a cache, loaded once per workspace. Edit the vision and ask
+    // about it in the same sitting and the answer came from before the edit.
+    // Not awaited: the recogniser is listening for seconds either way, which is
+    // far longer than one row takes.
+    if (userOrg?.id) loadBrandProfile(userOrg.id);
     if (panelOpen) setPanelOpen(false);
     if (tasksOpen) setTasksOpen(false);
     setVoiceMode(true);
@@ -51750,7 +51761,7 @@ export default function CircularMenu() {
         surface: "chat",
         provider: llmProvider,
         workspace: userOrg ? { name: userOrg.name, role: userOrgRole } : null,
-        brand: brandProfile,
+        brand: brandProfileRef.current,
         projects: appProjects,
         viewData: readViewContext(),
         viewActions: readViewActionDocs(),
@@ -51855,7 +51866,7 @@ export default function CircularMenu() {
         surface: "voice",
         provider: llmProvider,
         workspace: userOrg ? { name: userOrg.name, role: userOrgRole } : null,
-        brand: brandProfile,
+        brand: brandProfileRef.current,
         projects: appProjects,
         viewData: readViewContext(),
         viewActions: readViewActionDocs(),
