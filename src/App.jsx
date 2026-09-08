@@ -50234,21 +50234,42 @@ export default function CircularMenu() {
     }
   }, [pushSetupOverlay]);
 
+  // It no longer greets anybody. Somebody who has just signed in is looking at
+  // their dashboard for the first time, not asking for an API key, and a dialog
+  // in front of that is a toll gate. It comes at the moment AI is actually
+  // reached for (see requireAiProvider), and otherwise on the way BACK to the
+  // dashboard, once, after they have been somewhere and seen what the place is.
+  const leftDashboardRef = useRef(false);
   useEffect(() => {
-    if (!session || !onDashboard) return;
-    // Not while onboarding is still on screen. currentView is already
-    // "dashboard" behind that overlay, so without this the popup opened at
-    // z-index 100003 straight over the tour, whose last slide asks the very
-    // same question at z-index 99.
-    if (onboardingStep) return;
-    // AI_INTRO_ALWAYS skips both of the reasons not to show it. See the comment
-    // on the constant: it is on while the dialog is being designed.
+    if (!onDashboard) { if (session) leftDashboardRef.current = true; return; }
+    if (!session || onboardingStep) return;
+    if (!leftDashboardRef.current) return;          // first arrival, say nothing
     if (!AI_INTRO_ALWAYS) {
       if (localStorage.getItem("agencyos-ai-key-intro") === "seen") return;
-      if (Object.values(llmKeys || {}).some(Boolean)) return;
+      if (hasAiProvider()) return;
     }
     setAiIntroOpen(true);
-  }, [session, onDashboard, onboardingStep, llmKeys]);
+  }, [session, onDashboard, onboardingStep, llmKeys, llmProvider]); // eslint-disable-line
+  // Gemini also works through the Google OAuth token, so a missing pasted key
+  // is not the same as no provider. Asked here exactly as the two send paths
+  // ask it, or the dialog would appear in front of somebody it works for.
+  const hasAiProvider = () => {
+    const key = llmKeys?.[llmProvider];
+    return !!key || (llmProvider === "gemini" && !!getProviderToken?.());
+  };
+  // Called at the moment somebody reaches for AI. Returns false and opens the
+  // dialog when there is nothing to reach with, so the answer arrives where the
+  // question was asked instead of on the next visit to the dashboard.
+  //
+  // AI_INTRO_ALWAYS deliberately does NOT reach in here. It exists to keep the
+  // dialog visible while it is being designed, and if it also blocked this the
+  // sphere would stop working for everyone who already has a key, which is a
+  // debugging switch breaking the product it is there to look at.
+  const requireAiProvider = () => {
+    if (hasAiProvider()) return true;
+    setAiIntroOpen(true);
+    return false;
+  };
   const closeAiIntro = () => { localStorage.setItem("agencyos-ai-key-intro", "seen"); setAiIntroOpen(false); };
 
   // Re-read on every return to the dashboard, which is where the cards are: a
@@ -51452,6 +51473,7 @@ export default function CircularMenu() {
   // function. The orb falls out of the corner first and the voice UI comes up
   // as it lands; 380ms is the drop.
   const launchVoice = () => {
+    if (!requireAiProvider()) return;
     setOrbLeaving(true);
     setTimeout(startVoice, 380);
   };
@@ -52028,7 +52050,9 @@ export default function CircularMenu() {
       const googleToken = llmProvider === "gemini" && !activeKey ? getProviderToken() : null;
 
       if (!activeKey && !googleToken) {
-        setDialogMessages(prev => [...prev, { role: "assistant", content: t("ai.noProvider") || "Kein KI-Provider konfiguriert. Bitte in den Settings einen API-Key eintragen.", timestamp: Date.now(), error: true }]);
+        // A sentence saying to go to Settings, when the thing that fixes it can
+        // be opened right here.
+        setAiIntroOpen(true);
         return;
       }
 
