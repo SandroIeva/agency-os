@@ -1858,14 +1858,43 @@ function Dropdown({ value, onChange, options = [], placeholder = "Auswählen", t
   leadingIcon = null, minWidth = 200, align = "left", maxTriggerWidth, disabled = false, triggerStyle = {}, footer = null, maxHeight = 280 }) {
   const [open, setOpen] = useState(false);
   const sel = options.find(o => String(o.value) === String(value));
+
+  // Which way the list opens. It always went down, so a Dropdown near the
+  // bottom of a page ran off the screen and its options could not be reached
+  // at all. Measured at the moment of opening rather than guessed: the same
+  // control sits at the top of some views and at the foot of others.
+  const wrapRef = useRef(null);
+  const [menuBox, setMenuBox] = useState({ up: false, max: maxHeight });
+  const toggle = () => {
+    if (disabled) return;
+    if (!open) {
+      const r = wrapRef.current?.getBoundingClientRect();
+      if (r) {
+        const GAP = 16;                                  // breathing room at the screen edge
+        const below = Math.max(0, window.innerHeight - r.bottom - GAP);
+        const above = Math.max(0, r.top - GAP);
+        // How tall the list will actually be, not the cap: a five-item list
+        // fits in a gap a fifteen-item list does not, and flipping one that
+        // was never in trouble moves a menu for no reason.
+        const wanted = Math.min(maxHeight, options.length * 40 + 12);
+        const up = below < wanted && above > below;
+        // Two independent guarantees. Flipping puts it where there is more
+        // room; capping to that room means it cannot run off the screen even
+        // when neither side is big enough, and it scrolls inside instead.
+        setMenuBox({ up, max: Math.max(140, Math.min(maxHeight, up ? above : below)) });
+      }
+    }
+    setOpen(o => !o);
+  };
+  const dropUp = menuBox.up;
   const check = (
     <span style={{ width: 18, height: 18, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
     </span>
   );
   return (
-    <div style={{ position: "relative", flexShrink: 0 }}>
-      <motion.div whileTap={disabled ? {} : { scale: 0.97 }} onClick={() => !disabled && setOpen(o => !o)}
+    <div ref={wrapRef} style={{ position: "relative", flexShrink: 0 }}>
+      <motion.div whileTap={disabled ? {} : { scale: 0.97 }} onClick={toggle}
         style={{
           display: "inline-flex", alignItems: "center", gap: 8,
           padding: "8px 11px 8px 13px", borderRadius: 999, cursor: disabled ? "default" : "pointer",
@@ -1886,10 +1915,14 @@ function Dropdown({ value, onChange, options = [], placeholder = "Auswählen", t
         {open && (
           <>
             <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5000 }} />
-            <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+            <motion.div initial={{ opacity: 0, y: dropUp ? 6 : -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: dropUp ? 6 : -6, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
               style={{
-                position: "absolute", top: "calc(100% + 8px)", [align]: 0, zIndex: 5001,
-                minWidth, maxHeight, overflowY: "auto", padding: 6, borderRadius: 14,
+                position: "absolute",
+                // Up or down, never both: writing only the one that applies
+                // leaves the other unset rather than fighting it.
+                ...(dropUp ? { bottom: "calc(100% + 8px)" } : { top: "calc(100% + 8px)" }),
+                [align]: 0, zIndex: 5001,
+                minWidth, maxHeight: menuBox.max, overflowY: "auto", padding: 6, borderRadius: 14,
                 background: darkMode ? "rgba(28,28,38,0.92)" : "rgba(255,255,255,0.94)",
                 backdropFilter: "blur(20px) saturate(1.3)", WebkitBackdropFilter: "blur(20px) saturate(1.3)",
                 border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.6)"}`,
