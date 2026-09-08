@@ -2186,6 +2186,25 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
 // switch nobody remembers. Set to false when the design is settled.
 const AI_INTRO_ALWAYS = true;
 
+// Where "How to get an API key" points. Empty until the docs page exists, and
+// while it is empty the link falls back to the chosen provider's own key page,
+// which is a real destination rather than a promise nobody can keep. Put the
+// GitBook url here and the link moves.
+const AI_INTRO_TUTORIAL_URL = "";
+
+// The pictures on the left of the intro, one per slide. The files are the
+// feature images already in public/, used here as placeholders: swapping in
+// purpose-made screenshots is a change of three strings and nothing else.
+// A slide with no image still works, the caption sits on the empty panel.
+const AI_INTRO_SLIDES = [
+  { image: "/Create.jpg",  de: ["Der Assistent", "Die Sphäre auf dem Dashboard und der Messenger, gesprochen und getippt"],
+                           en: ["The assistant", "The sphere on the dashboard and the messenger, spoken and typed"] },
+  { image: "/Brand.jpg",   de: ["Strategie und Wettbewerb", "Personas erstellen, Wettbewerber analysieren, Brand aus einer Website lesen"],
+                           en: ["Strategy and competitors", "Build personas, analyse competitors, read a brand off a website"] },
+  { image: "/Analyse.jpg", de: ["Texte und Bild-Prompts", "Dokumente aus Skills schreiben, Diktate korrigieren, Prompts aus Bildern ableiten"],
+                           en: ["Copy and image prompts", "Write documents from skills, tidy dictation, derive prompts from images"] },
+];
+
 function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, onSaveKey }) {
   const de = appLanguage === "de";
   // Where each key comes from. Named rather than described: somebody who has
@@ -2209,23 +2228,29 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, o
   const save = () => { const k = draft.trim(); if (k) onSaveKey?.(chosen.id, k); };
   // What actually stops working without a key. Named as the places they are,
   // not as capabilities in the abstract.
-  const benefits = de ? [
-    ["Der Assistent", "Die Sphäre auf dem Dashboard und der Messenger, gesprochen und getippt"],
-    ["Strategie und Wettbewerb", "Personas erstellen, Wettbewerber analysieren, Brand aus einer Website lesen"],
-    ["Texte und Bild-Prompts", "Dokumente aus Skills schreiben, Diktate korrigieren, Prompts aus Bildern ableiten"],
-  ] : [
-    ["The assistant", "The sphere on the dashboard and the messenger, spoken and typed"],
-    ["Strategy and competitors", "Build personas, analyse competitors, read a brand off a website"],
-    ["Copy and image prompts", "Write documents from skills, tidy dictation, derive prompts from images"],
-  ];
+  const slides = AI_INTRO_SLIDES.map(sl => {
+    const [title, sub] = sl[de ? "de" : "en"];
+    return { image: sl.image, title, sub };
+  });
   // Advances on its own until somebody takes the dots, then stops: a carousel
   // that keeps moving under a finger is a carousel nobody can read.
   useEffect(() => {
     if (held) return;
-    const id = setTimeout(() => setSlide(v => (v + 1) % benefits.length), 4200);
+    const id = setTimeout(() => setSlide(v => (v + 1) % slides.length), 4200);
     return () => clearTimeout(id);
-  }, [slide, held, benefits.length]);
-  const shown = benefits[slide] || benefits[0];
+  }, [slide, held, slides.length]);
+  const shown = slides[slide] || slides[0];
+
+  // The picture column is dropped below this width rather than squeezed. A
+  // resize listener and not a one-off read: somebody who narrows the window
+  // with the dialog open would otherwise keep a 360px image on a 400px screen.
+  const [narrow, setNarrow] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth < 780);
+  useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth < 780);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   return createPortal(
     <div onClick={onDismiss}
@@ -2233,123 +2258,146 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, o
         display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
         onClick={e => e.stopPropagation()}
-        style={{ width: "min(520px, 100%)", display: "flex", flexDirection: "column", gap: 18,
-          background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 18,
-          boxShadow: "0 30px 80px rgba(0,0,0,0.35)", padding: 26 }}>
-        <div>
-          <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-            {de ? "KI im Workspace aktivieren" : "Turn on AI in your workspace"}
-          </div>
-          <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 5, lineHeight: 1.55 }}>
-            {de
-              ? "Die KI-Funktionen laufen über deinen eigenen Schlüssel bei Anthropic, OpenAI oder Google. Hinterlegt in einer Minute."
-              : "The AI features run on your own key from Anthropic, OpenAI or Google. Set up in a minute."}
-          </div>
-        </div>
+        style={{ width: narrow ? "min(520px, 100%)" : "min(900px, 100%)", display: "flex",
+          background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 20,
+          boxShadow: "0 30px 80px rgba(0,0,0,0.35)", overflow: "hidden" }}>
 
-        {/* One at a time. Three ticks in a column read as a checklist of
-            things you do not have yet; one card at a time reads as a look at
-            what the thing does, which is what somebody arriving needs. The box
-            keeps its height so the dialog does not jump between slides. */}
-        <div style={{ borderRadius: 14, padding: "16px 18px", minHeight: 86,
-          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)",
-          display: "flex", alignItems: "center" }}>
-          <AnimatePresence mode="wait">
-            <motion.div key={slide}
-              initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }}
-              transition={{ duration: 0.24, ease: [0.22, 0.68, 0.35, 1.0] }}
-              style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint,
-                letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>
-                {(de ? "Damit arbeitest du" : "This is what it does")}
+        {/* LEFT: the pictures. The features are shown rather than listed, and
+            the caption sits ON the image so the right column stays about one
+            thing: getting a key in. Dropped entirely on a narrow window, where
+            a picture would push the form off the screen. */}
+        {!narrow && (
+          <div style={{ width: 360, flexShrink: 0, padding: 14, display: "flex" }}>
+            <div style={{ position: "relative", flex: 1, borderRadius: 16, overflow: "hidden",
+              background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
+              <AnimatePresence mode="wait">
+                <motion.div key={slide}
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  style={{ position: "absolute", inset: 0 }}>
+                  {shown.image && (
+                    <img src={shown.image} alt="" draggable={false}
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  )}
+                </motion.div>
+              </AnimatePresence>
+
+              {/* A scrim, so white type is readable over whatever the picture
+                  happens to be. Without it the caption depends on the image. */}
+              <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "48px 18px 16px",
+                background: "linear-gradient(to top, rgba(0,0,0,0.82), rgba(0,0,0,0.45) 45%, rgba(0,0,0,0))" }}>
+                <AnimatePresence mode="wait">
+                  <motion.div key={slide}
+                    initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.24, ease: [0.22, 0.68, 0.35, 1.0] }}>
+                    <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#fff" }}>{shown.title}</div>
+                    <div style={{ fontSize: 12, fontFamily: FONT, color: "rgba(255,255,255,0.72)", marginTop: 3, lineHeight: 1.5 }}>{shown.sub}</div>
+                  </motion.div>
+                </AnimatePresence>
+                <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
+                  {slides.map((_, i) => (
+                    <div key={i} onClick={() => { setHeld(true); setSlide(i); }}
+                      style={{ width: i === slide ? 20 : 6, height: 5, borderRadius: 999, cursor: "pointer",
+                        background: i === slide ? "#fff" : "rgba(255,255,255,0.38)",
+                        transition: "width .22s ease, background .22s ease" }} />
+                  ))}
+                </div>
               </div>
-              <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{shown[0]}</div>
-              <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 3, lineHeight: 1.5 }}>{shown[1]}</div>
-            </motion.div>
-          </AnimatePresence>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "center", gap: 7, marginTop: -8 }}>
-          {benefits.map((_, i) => (
-            <div key={i} onClick={() => { setHeld(true); setSlide(i); }}
-              title={String(i + 1)}
-              style={{ width: i === slide ? 18 : 6, height: 6, borderRadius: 999, cursor: "pointer",
-                background: i === slide ? theme.text : (darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.16)"),
-                transition: "width .22s ease, background .22s ease" }} />
-          ))}
-        </div>
-
-        <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, lineHeight: 1.55 }}>
-          {de
-            ? "Der Schlüssel bleibt in diesem Browser und wird nur für deine eigenen Anfragen benutzt. Abgerechnet wird direkt bei deinem Anbieter."
-            : "The key stays in this browser and is only used for your own requests. Your provider bills you directly."}
-        </div>
-
-        {/* Pick one, paste the key, done. */}
-        <div style={{ display: "flex", gap: 7 }}>
-          {PROVIDERS.map(pr => {
-            const on = pr.id === pick;
-            return (
-              <motion.div key={pr.id} whileTap={{ scale: 0.97 }}
-                onClick={() => { setPick(pr.id); setDraft(""); }}
-                style={{ flex: 1, padding: "9px 8px", borderRadius: 11, cursor: "pointer", textAlign: "center",
-                  transition: "all 0.18s ease",
-                  // The selected state is anthracite on light and INVERTED on
-                  // dark, which is what the main nav's pill does. Drawn as
-                  // #15151c in both, it sat on the dialog's own #16161e and was
-                  // invisible: measured at one value apart.
-                  background: on ? sel.background : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)"),
-                  border: `1px solid ${on ? sel.background : theme.borderFaint}` }}>
-                <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
-                  color: on ? sel.color : theme.text }}>{pr.name}</div>
-                <div style={{ fontSize: 10.5, fontFamily: FONT, marginTop: 1,
-                  color: on ? sel.color + "8c" : theme.textDim }}>{pr.sub}</div>
-              </motion.div>
-            );
-          })}
-        </div>
-
-        <div>
-          <input type="password" value={draft} autoComplete="off"
-            onChange={e => setDraft(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") save(); }}
-            placeholder={chosen.placeholder}
-            style={{ width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 11,
-              background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
-              border: `1px solid ${theme.borderFaint}`, color: theme.text,
-              fontSize: 13, fontFamily: FONT, outline: "none" }} />
-          <div style={{ marginTop: 7, textAlign: "right" }}>
-            <a href={chosen.url} target="_blank" rel="noopener noreferrer"
-              style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, textDecoration: "none" }}>
-              {de ? `Schlüssel bei ${chosen.sub} holen` : `Get a key from ${chosen.sub}`}
-            </a>
+            </div>
           </div>
-        </div>
+        )}
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
-          {/* Still reachable, for somebody who would rather see the whole panel
-              or has a key for a provider not offered here. */}
-          <motion.button whileTap={{ scale: 0.97 }} onClick={onGoToSettings}
-            style={{ marginRight: "auto", padding: "9px 0", border: "none", background: "transparent",
-              color: theme.textDim, fontFamily: FONT, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
-            {de ? "In den Einstellungen" : "Open settings"}
-          </motion.button>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={onDismiss}
-            style={{ padding: "9px 16px", borderRadius: 11, border: `1px solid ${theme.borderFaint}`, background: "transparent",
-              color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-            {de ? "Später" : "Later"}
-          </motion.button>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={save} disabled={!draft.trim()}
-            style={{ padding: "9px 18px", borderRadius: 11, border: "none",
-              background: draft.trim() ? sel.background : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)"),
-              color: draft.trim() ? sel.color : theme.textDim,
-              fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
-              cursor: draft.trim() ? "pointer" : "default" }}>
-            {de ? "Speichern" : "Save"}
-          </motion.button>
+        {/* RIGHT: one job, get a key in. */}
+        <div style={{ flex: 1, minWidth: 0, padding: 26, display: "flex", flexDirection: "column", gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+              {de ? "KI im Workspace aktivieren" : "Turn on AI in your workspace"}
+            </div>
+            <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 6, lineHeight: 1.55 }}>
+              {de
+                ? "Die KI-Funktionen laufen über deinen eigenen Schlüssel bei Google, Anthropic oder OpenAI. Hinterlegt in einer Minute."
+                : "The AI features run on your own key from Google, Anthropic or OpenAI. Set up in a minute."}
+            </div>
+          </div>
+
+          {/* Plain names in one strip. The cards with a second line under each
+              were three headings competing with the real one above them. */}
+          <div style={{ display: "inline-flex", padding: 3, borderRadius: 999, alignSelf: "flex-start",
+            background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
+            {PROVIDERS.map(pr => {
+              const on = pr.id === pick;
+              return (
+                <motion.div key={pr.id} whileTap={{ scale: 0.97 }}
+                  onClick={() => { setPick(pr.id); setDraft(""); }}
+                  style={{ padding: "7px 15px", borderRadius: 999, cursor: "pointer",
+                    fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500,
+                    background: on ? sel.background : "transparent",
+                    color: on ? sel.color : theme.textDim,
+                    transition: "background .18s ease, color .18s ease" }}>
+                  {pr.name}
+                </motion.div>
+              );
+            })}
+          </div>
+
+          <div>
+            <input type="password" value={draft} autoComplete="off"
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") save(); }}
+              placeholder={chosen.placeholder}
+              style={{ width: "100%", boxSizing: "border-box", padding: "12px 15px", borderRadius: 12,
+                background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
+                border: `1px solid ${theme.borderFaint}`, color: theme.text,
+                fontSize: 13, fontFamily: FONT, outline: "none" }} />
+            <div style={{ display: "flex", gap: 14, marginTop: 9, flexWrap: "wrap" }}>
+              {/* Two different destinations on purpose: one is where the key is
+                  issued, the other is how to do it. While no tutorial page
+                  exists the second falls back to the first, so the link is
+                  never a promise nobody can keep. */}
+              <a href={chosen.url} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, textDecoration: "none" }}>
+                {de ? `Schlüssel bei ${chosen.sub} holen` : `Get a key from ${chosen.sub}`}
+              </a>
+              <a href={AI_INTRO_TUTORIAL_URL || chosen.url} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, textDecoration: "none" }}>
+                {de ? "So bekommst du einen Schlüssel" : "How to get an API key"}
+              </a>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, lineHeight: 1.55 }}>
+            {de
+              ? "Der Schlüssel bleibt in diesem Browser und wird nur für deine eigenen Anfragen benutzt. Abgerechnet wird direkt bei deinem Anbieter."
+              : "The key stays in this browser and is only used for your own requests. Your provider bills you directly."}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginTop: "auto", paddingTop: 4 }}>
+            {/* Still reachable, for somebody who would rather see the whole panel
+                or has a key for a provider not offered here. */}
+            <motion.button whileTap={{ scale: 0.97 }} onClick={onGoToSettings}
+              style={{ marginRight: "auto", padding: "9px 0", border: "none", background: "transparent",
+                color: theme.textDim, fontFamily: FONT, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+              {de ? "In den Einstellungen" : "Open settings"}
+            </motion.button>
+            <motion.button whileTap={{ scale: 0.97 }} onClick={onDismiss}
+              style={{ padding: "9px 16px", borderRadius: 11, border: `1px solid ${theme.borderFaint}`, background: "transparent",
+                color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+              {de ? "Später" : "Later"}
+            </motion.button>
+            <motion.button whileTap={{ scale: 0.97 }} onClick={save} disabled={!draft.trim()}
+              style={{ padding: "9px 18px", borderRadius: 11, border: "none",
+                background: draft.trim() ? sel.background : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)"),
+                color: draft.trim() ? sel.color : theme.textDim,
+                fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
+                cursor: draft.trim() ? "pointer" : "default" }}>
+              {de ? "Speichern" : "Save"}
+            </motion.button>
+          </div>
         </div>
       </motion.div>
-    </div>, document.body);
+    </div>,
+    document.body
+  );
 }
 
 // The four things worth doing first in a new workspace. One definition, used
