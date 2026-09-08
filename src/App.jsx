@@ -2236,7 +2236,7 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, o
   // that keeps moving under a finger is a carousel nobody can read.
   useEffect(() => {
     if (held) return;
-    const id = setTimeout(() => setSlide(v => (v + 1) % slides.length), 4200);
+    const id = setTimeout(() => setSlide(v => (v + 1) % slides.length), 6000);
     return () => clearTimeout(id);
   }, [slide, held, slides.length]);
   const shown = slides[slide] || slides[0];
@@ -2259,6 +2259,10 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, o
       <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
         onClick={e => e.stopPropagation()}
         style={{ width: narrow ? "min(520px, 100%)" : "min(900px, 100%)", display: "flex",
+          // A floor rather than a fixed height: a wrapped line or a longer
+          // provider name may still push it taller, and capping at the viewport
+          // keeps it whole on a short laptop screen.
+          minHeight: narrow ? 0 : 520, maxHeight: "calc(100vh - 48px)",
           background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 20,
           boxShadow: "0 30px 80px rgba(0,0,0,0.35)", overflow: "hidden" }}>
 
@@ -2270,10 +2274,10 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, o
           <div style={{ width: 360, flexShrink: 0, padding: 14, display: "flex" }}>
             <div style={{ position: "relative", flex: 1, borderRadius: 16, overflow: "hidden",
               background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
-              <AnimatePresence mode="wait">
+              <AnimatePresence>
                 <motion.div key={slide}
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3 }}
+                  transition={{ duration: 0.9, ease: "easeInOut" }}
                   style={{ position: "absolute", inset: 0 }}>
                   {shown.image && (
                     <img src={shown.image} alt="" draggable={false}
@@ -2289,7 +2293,7 @@ function AiKeyIntro({ theme, darkMode, appLanguage, onGoToSettings, onDismiss, o
                 <AnimatePresence mode="wait">
                   <motion.div key={slide}
                     initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.24, ease: [0.22, 0.68, 0.35, 1.0] }}>
+                    transition={{ duration: 0.45, ease: [0.22, 0.68, 0.35, 1.0] }}>
                     <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#fff" }}>{shown.title}</div>
                     <div style={{ fontSize: 12, fontFamily: FONT, color: "rgba(255,255,255,0.72)", marginTop: 3, lineHeight: 1.5 }}>{shown.sub}</div>
                   </motion.div>
