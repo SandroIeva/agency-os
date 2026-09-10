@@ -8,7 +8,7 @@
 // ── What survives, and what cannot ────────────────────────────────────────
 // An artboard document is a FLAT list of absolutely positioned primitives:
 // text, rect/ellipse, image, line. It has no concept of groups, auto-layout,
-// constraints, components, masks or effects. So a frame arrives flattened, and
+// constraints, components or masks. Supported effects are kept on primitives. So a frame arrives flattened, and
 // that is a property of the destination rather than a shortcut taken here.
 //
 // Text stays text and stays editable. A rectangle keeps its fill and its
@@ -90,9 +90,9 @@ const radiiOf = (node) => {
   return r.map(v => Math.max(0, Number(v) || 0));
 };
 
-// Figma's effects, as the two the artboard has. Both are drawn as one CSS
-// filter there, on screen and in the export alike, so they apply to any item
-// type: a shadow under a text is the same mechanism as a shadow under a box.
+// Layer blur and shadows use the artboard filter. Background blur has its
+// own bgBlur field, rendered with backdrop-filter and a clipped canvas snapshot
+// on export. It must not become layer blur: that would blur the foreground.
 //
 // `alpha` is a percentage here and a 0..1 channel in Figma, and `color` is a
 // hex string rather than a paint.
@@ -120,10 +120,16 @@ const effectsOf = (node, note) => {
   }
   const layer = fx.find(e => e.type === "LAYER_BLUR");
   if (layer?.radius) out.blur = Math.round(layer.radius);
-  // The filter blurs the element itself, never what is behind it, so a
-  // background blur has nowhere to land. Named rather than dropped: it is the
-  // difference between frosted glass and a plain panel.
-  if (fx.some(e => e.type === "BACKGROUND_BLUR")) note("background-blur");
+  const backgrounds = fx.filter(e => e.type === "BACKGROUND_BLUR" && Number.isFinite(e.radius) && e.radius > 0);
+  if (backgrounds.length) {
+    // Text needs a glyph-shaped backdrop mask, which the editor does not have.
+    if (node.type === "TEXT") note("background-blur");
+    else {
+      out.bgBlur = backgrounds[0].radius;
+      if (backgrounds.length > 1) note("background-blur-stack");
+      if (backgrounds[0].blurType === "PROGRESSIVE") note("background-blur-progressive");
+    }
+  }
   if (fx.some(e => e.type === "INNER_SHADOW")) note("inner-shadow");
   return out;
 };
@@ -145,6 +151,7 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
   // second request, and downloading them is the caller's job. Collected here so
   // the caller can resolve them in one go rather than one node at a time.
   const images = [];
+  let convertedAutoLayouts = 0;
   const warn = new Map();
   const note = (k) => warn.set(k, (warn.get(k) || 0) + 1);
 
@@ -155,6 +162,35 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
       x: Math.round(b.x - origin.x), y: Math.round(b.y - origin.y),
       w: Math.round(b.width), h: Math.round(b.height),
     };
+  };
+
+  // Figma already resolves padding, spacing, wrapping and hug/fill sizes into
+  // absoluteBoundingBox. Keep those positions; do not run a second layout engine.
+  const appendContainer = (node, b, opacity, surface) => {
+    const children = node.itemReverseZIndex && node.layoutMode && node.layoutMode !== "NONE"
+      ? [...(node.children || [])].reverse() : node.children || [];
+    let outline = null;
+    if (surface?.strokeWidth && children.length) {
+      // The frame's border is above its content. Keep it editable as a separate
+      // transparent shape, so edge-to-edge children cannot cover the outline.
+      outline = {
+        id: newId(), type: "rect", x: b.x, y: b.y, w: b.w, h: b.h,
+        fill: "transparent", stroke: surface.stroke,
+        strokeWidth: surface.strokeWidth, strokeAlpha: surface.strokeAlpha,
+        ...(surface.radius != null ? { radius: surface.radius } : {}),
+        ...(surface.radii ? { radii: surface.radii } : {}),
+        ...(surface.opacity != null ? { opacity: surface.opacity } : {}),
+      };
+      delete surface.stroke;
+      delete surface.strokeWidth;
+      delete surface.strokeAlpha;
+    }
+    if (surface && (surface.type === "image" || surface.fill !== "transparent"
+        || surface.bgBlur || surface.blur || surface.shadow || !outline)) items.push(surface);
+    children.forEach(child => walk(child, opacity));
+    if (outline) items.push(outline);
+    if (node.layoutMode && node.layoutMode !== "NONE") convertedAutoLayouts++;
+    if (node.type === "INSTANCE") note("component");
   };
 
   const walk = (node, inheritedOpacity) => {
@@ -173,18 +209,21 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     const img = imageFill(node);
     if (img) {
       const id = newId();
-      items.push({
+      const st = strokeOf(node);
+      const surface = {
         id, type: "image", x: b.x, y: b.y, w: b.w, h: b.h,
         // Figma's own scale modes, mapped to the two the artboard has.
         fit: img.scaleMode === "FIT" ? "contain" : "cover",
         // Filled in by the caller once the ref has been resolved to a URL.
         url: null,
+        ...(st ? { stroke: st.color, strokeWidth: st.width, strokeAlpha: st.alpha } : {}),
         ...effectsOf(node, note),
+        ...(radiiOf(node) ? { radii: radiiOf(node) } : radiusOf(node) ? { radius: radiusOf(node) } : {}),
         ...(opacity < 1 ? { opacity: round2(opacity) } : {}),
-      });
+      };
       images.push({ id, imageRef: img.imageRef });
-      // A frame can carry an image AND children; the children still belong.
-      if (node.children) node.children.forEach(c => walk(c, opacity));
+      if (CONTAINERS.has(node.type)) appendContainer(node, b, opacity, surface);
+      else items.push(surface);
       return;
     }
 
@@ -211,7 +250,7 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
       items.push({
         id: newId(), type: "line",
         x1: b.x, y1: b.y, x2: b.x + b.w, y2: b.y + b.h,
-        ...(st ? { stroke: st.color, strokeWidth: st.width } : {}),
+        ...(st ? { stroke: st.color, strokeWidth: st.width, strokeAlpha: st.alpha } : {}),
       });
       return;
     }
@@ -222,10 +261,10 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     if (CONTAINERS.has(node.type)) {
       // Only when it actually paints something: an invisible layout frame that
       // became a rectangle would put a box behind every group.
-      if (paint) items.push(shapeItem("rect", newId(), b, paint, node, opacity));
-      if (node.layoutMode && node.layoutMode !== "NONE") note("auto-layout");
-      if (node.type === "INSTANCE") note("component");
-      if (node.children) node.children.forEach(c => walk(c, opacity));
+      const hasBackdrop = (node.effects || []).some(e => e.type === "BACKGROUND_BLUR" && e.visible !== false && Number.isFinite(e.radius) && e.radius > 0);
+      const surface = paint || hasBackdrop || strokeOf(node)
+        ? shapeItem("rect", newId(), b, paint, node, opacity) : null;
+      appendContainer(node, b, opacity, surface);
       return;
     }
 
@@ -240,11 +279,13 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
       id, type, x: b.x, y: b.y, w: b.w, h: b.h,
       // A gradient object where there is one: the artboard paints fills through
       // paintCss, which takes either.
-      fill: paint?.gradient || paint?.color || "#ffffff",
+      fill: paint?.gradient || paint?.color || "transparent",
       ...effectsOf(node, note),
       ...(radiiOf(node) ? { radii: radiiOf(node) } : radiusOf(node) ? { radius: radiusOf(node) } : {}),
-      ...(st ? { stroke: st.color, strokeWidth: st.width } : {}),
-      ...(effAlpha(opacity, paint) < 1 ? { opacity: round2(effAlpha(opacity, paint)) } : {}),
+      ...(st ? { stroke: st.color, strokeWidth: st.width, strokeAlpha: st.alpha } : {}),
+      // A translucent fill must not fade the blur and shadow with it.
+      ...(paint && paint.alpha < 1 ? { fillAlpha: round2(paint.alpha * 100) } : {}),
+      ...(opacity < 1 ? { opacity: round2(opacity) } : {}),
     };
   };
 
@@ -285,6 +326,7 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
   return {
     items,
     images,
+    convertedAutoLayouts,
     warnings: [...warn.entries()].map(([kind, count]) => ({ kind, count })),
     size: { w: Math.round(origin.width), h: Math.round(origin.height) },
     name: root.name || null,
@@ -332,6 +374,7 @@ export function fitItems(items, from, to) {
       // has moved. Its colour and opacity are not geometry and stay put.
       ...(it.shadow ? { shadow: { ...it.shadow, x: r(it.shadow.x), y: r(it.shadow.y), blur: r(it.shadow.blur) } } : {}),
       ...(it.blur != null ? { blur: r(it.blur) } : {}),
+      ...(it.bgBlur != null ? { bgBlur: round2(it.bgBlur * k) } : {}),
       ...(it.strokeWidth != null ? { strokeWidth: Math.max(0.5, it.strokeWidth * k) } : {}),
     })),
   };
@@ -349,7 +392,8 @@ const lineHeightMultiple = (st, size) => {
 const strokeOf = (node) => {
   const s = (node.strokes || []).find(s => s.visible !== false && s.type === "SOLID");
   if (!s || !node.strokeWeight) return null;
-  return { color: hex(s.color), width: node.strokeWeight };
+  return { color: hex(s.color), width: node.strokeWeight,
+    alpha: round2(Math.max(0, Math.min(1, (s.opacity ?? 1) * (s.color?.a ?? 1))) * 100) };
 };
 
 // figma.com/design/<key>/<slug>?node-id=1-23  →  { key, nodeId: "1:23" }

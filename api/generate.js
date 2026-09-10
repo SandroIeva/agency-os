@@ -59,6 +59,27 @@ const creditsFor = (microUsd) => Math.max(1, Math.ceil(microUsd / CREDIT_MICRO_U
 // before the next heading — read the one AFTER the endpoint you care about, not
 // the one above it. All six last verified 2026-09-06.
 //
+// Models that run on the PERSON'S OWN key, straight at the provider, because
+// Pixazo does not carry them. GPT Images 2.5 was released on 2026-09-08 with
+// two API models, flare (fast, the default) and sunburst (slower, more
+// precise); Pixazo's gpt-image page still lists only gpt-image-2, verified
+// against its raw HTML on 2026-09-09.
+//
+// Kept in a SEPARATE table from MODELS on purpose. Everything downstream keys
+// off MODELS to decide what we pay for and what to reserve credits against,
+// and a bring-your-own-key model belongs in none of that: it costs us nothing,
+// so under the project's own rule it is not gated, and it must never reach the
+// reservation. One table, one meaning.
+const BYOK_MODELS = {
+  "gpt-image-2.5": {
+    label: "GPT Image 2.5", provider: "openai", model: "gpt-image-2.5-flare",
+    // Flare rather than sunburst: OpenAI names it the default for most uses and
+    // sunburst trades time for precision, which is the wrong trade in a dialog
+    // somebody is waiting in front of. Both cost the same.
+    body: (prompt) => ({ model: "gpt-image-2.5-flare", prompt, size: "1536x1024", quality: "low", n: 1 }),
+  },
+};
+
 // Listed cheapest first; the dialog renders them in this order.
 const MODELS = {
   "flux-1-schnell": {
@@ -510,12 +531,95 @@ export default async function handler(req) {
     catch (e) { return json({ error: e.message, code: "credits_unavailable" }, 503); }
     return json({
       ...c,
-      models: Object.entries(MODELS).map(([key, m]) => ({ key, label: m.label, credits: creditsFor(m.microUsd) })),
+      models: [
+        ...Object.entries(MODELS).map(([key, m]) => ({ key, label: m.label, credits: creditsFor(m.microUsd) })),
+        // Marked, not hidden: the dialog decides whether to offer one, because
+        // only the browser knows whether that provider's key is stored.
+        ...Object.entries(BYOK_MODELS).map(([key, m]) => ({ key, label: m.label, credits: 0, byok: m.provider })),
+      ],
     });
   }
 
   // ── submit ────────────────────────────────────────────────────────────────
   if (mode === "submit") {
+    // ── Own key, own bill ───────────────────────────────────────────────────
+    // Placed BEFORE every credit check on purpose: the paid path below never
+    // sees one of these models, so nothing here can reserve, spend or exhaust
+    // an allowance. It also means a broken change in here cannot reach the
+    // Pixazo path at all.
+    const byok = BYOK_MODELS[body.model];
+    if (byok) {
+      const prompt = String(body.prompt || "").trim();
+      if (!prompt) return json({ error: "A prompt is required", code: "missing_prompt" }, 400);
+      const apiKey = String(body.apiKey || "").trim();
+      if (!apiKey) {
+        return json({
+          error: "This model runs on your own OpenAI key. Add one in Settings, AI and models.",
+          code: "byok_key_missing",
+        }, 400);
+      }
+
+      // No reservation, so the row is written here. cost stays zero because it
+      // is: this generation is billed to them by their provider, and recording
+      // a cost we did not pay would put a number nobody owes into the ledger.
+      const { data: jobRow, error: jobErr } = await db.from("generation_jobs").insert({
+        org_id: orgId, user_id: user.id, model: body.model, prompt,
+        lang: body.lang === "de" ? "de" : "en",
+        status: "running", cost_micro_usd: 0, cost_credits: 0,
+      }).select().single();
+      if (jobErr || !jobRow?.id) {
+        return json({ error: jobErr?.message || "could not start the generation" }, 500);
+      }
+
+      try {
+        const res = await fetch("https://api.openai.com/v1/images/generations", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify(byok.body(prompt)),
+          signal: AbortSignal.timeout(PIXAZO_SUBMIT_MS),
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          // Their key, their error, so it is worth relaying rather than
+          // flattening: an expired key and a content refusal need different
+          // things done about them.
+          const msg = payload?.error?.message || `OpenAI error ${res.status}`;
+          await db.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() })
+            .eq("id", jobRow.id).in("status", ["queued", "running"]);
+          return json({ error: msg, code: res.status === 401 ? "byok_key_rejected" : "generation_failed", jobId: jobRow.id },
+            res.status === 401 ? 401 : 502);
+        }
+
+        // gpt-image models answer with base64, never a link. persistImage
+        // fetches whatever it is given, and a data URL is something fetch can
+        // read, so the storing, the signing and the ledger stay one path.
+        const b64 = payload?.data?.[0]?.b64_json;
+        const link = payload?.data?.[0]?.url;
+        const source = b64 ? `data:image/png;base64,${b64}` : link;
+        if (!source) {
+          const msg = "OpenAI returned nothing we could use.";
+          await db.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() })
+            .eq("id", jobRow.id).in("status", ["queued", "running"]);
+          return json({ error: msg, code: "generation_failed", jobId: jobRow.id }, 502);
+        }
+        const done = await completeJob(db, jobRow, source);
+        if (!done) {
+          const { data: fresh } = await db.from("generation_jobs").select("result_url,status").eq("id", jobRow.id).maybeSingle();
+          return json({ jobId: jobRow.id, status: fresh?.status || "running", url: fresh?.result_url || null });
+        }
+        return json({ jobId: jobRow.id, status: "completed", url: done.url });
+      } catch (e) {
+        const timedOut = e?.name === "TimeoutError" || /abort|timeout/i.test(e?.message || "");
+        const msg = timedOut
+          ? "OpenAI did not answer in time. It may still be working, try again in a moment."
+          : (e?.message || "OpenAI unreachable");
+        await db.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() })
+          .eq("id", jobRow.id);
+        return json({ error: msg, code: timedOut ? "generation_timeout" : "generation_failed", jobId: jobRow.id },
+          timedOut ? 504 : 502);
+      }
+    }
+
     const modelKey = MODELS[body.model] ? body.model : DEFAULT_MODEL;
     const model = MODELS[modelKey];
     const prompt = String(body.prompt || "").trim();

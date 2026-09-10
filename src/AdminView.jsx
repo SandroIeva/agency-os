@@ -7,6 +7,7 @@
 // so hiding or showing it in the client is never the security boundary.
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "./supabase";
+import WebsiteAnalytics from "./WebsiteAnalytics";
 
 const FONT = "'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const BG = "#0f0f14";
@@ -195,6 +196,8 @@ export default function AdminView() {
         <Tile label="Zahlende Kunden" value={s.zahlende_kunden} hint={`${s.im_trial} im Trial`} />
         <Tile label="Speicher" value={fmtMB(s.speicher_mb_gesamt)} />
       </div>
+
+      <WebsiteAnalytics data={state.data.website} />
 
       <div style={{ fontSize: 12, color: FAINT, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 10 }}>Workspaces</div>
       <div style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 14, marginBottom: 30, overflow: "hidden" }}>

@@ -19,7 +19,7 @@ import { createClient } from "@supabase/supabase-js";
 export const config = { runtime: "edge" };
 
 const json = (obj, status = 200) =>
-  new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
+  new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 
 export default async function handler(req) {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -49,10 +49,11 @@ export default async function handler(req) {
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-  const [summary, workspaces, users] = await Promise.all([
+  const [summary, workspaces, users, website] = await Promise.all([
     admin.from("admin_summary").select("*").maybeSingle(),
     admin.from("admin_workspaces").select("*").order("angelegt", { ascending: false }),
     admin.from("admin_users").select("*").order("registriert", { ascending: false }),
+    admin.rpc("admin_website_stats"),
   ]);
 
   const firstError = summary.error || workspaces.error || users.error;
@@ -62,6 +63,7 @@ export default async function handler(req) {
     summary: summary.data || {},
     workspaces: workspaces.data || [],
     users: users.data || [],
+    website: website.error ? { error: "unavailable" } : website.data,
     generatedAt: new Date().toISOString(),
   });
 }

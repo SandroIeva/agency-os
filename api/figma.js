@@ -330,6 +330,7 @@ export default async function handler(req) {
       // in storage through uploadTracked like every other file and the ledger
       // stays right.
       images: out.images,
+      convertedAutoLayouts: out.convertedAutoLayouts,
       warnings: out.warnings,
       root: out.root,
     });
