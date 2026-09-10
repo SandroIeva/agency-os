@@ -2179,14 +2179,18 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
   );
 }
 
-// ⚠ WHILE THIS IS TRUE THE INTRO OPENS FOR EVERYONE, ON EVERY VISIT TO THE
-// DASHBOARD, even when a key is already stored and even after it was dismissed.
-// It exists so the owner can keep looking at it while we build it, instead of
-// wiping an account to get back to the first-run state. It is deliberately a
-// single obvious constant and not a hidden localStorage flag, because the thing
-// that has to happen is somebody turning it OFF, and a hidden switch is a
-// switch nobody remembers. Set to false when the design is settled.
-const AI_INTRO_ALWAYS = true;
+// Set true to make the intro open on every visit to the dashboard, key or no
+// key, dismissed or not. It is for looking at the dialog while working on it,
+// without wiping an account to get back to the first-run state. Off now: the
+// design is settled, and it would be a toll gate in front of everybody.
+const AI_INTRO_ALWAYS = false;
+
+// The App root owns the key dialog, but the features that need a key live in
+// components far below it: the chat agent, the skills, the personas, the
+// competitor lookup, the image prompts. One mirror rather than a prop threaded
+// through seven components, which is the same shape `currentEntitlements` uses
+// for the upload guards outside the React tree.
+let openAiKeyIntro = null;
 
 // Where "How to get an API key" points. Empty until the docs page exists, and
 // while it is empty the link falls back to the chosen provider's own key page,
@@ -14557,6 +14561,11 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     if ((llmProvider || "gemini") === "gemini" && !apiKey && ensureValidToken) {
       try { oauthToken = await ensureValidToken(); } catch (_) {}
     }
+    // No dialog here: ChatView already renders <AiNotConnected> when no key is
+    // stored, and the failure path names Settings. The guard itself stays,
+    // because sending anyway posted the server's 400 into the thread as if the
+    // agent had said it.
+    if (!apiKey && !oauthToken) return;
     setAgentThinking(true);
     try {
       const resp = await fetch("/api/chat-multi", {
@@ -43138,7 +43147,8 @@ function BrandImagery({ value, editing, onChange, uploadFile, llmProvider, llmKe
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
     let oauthToken = null;
     if (llmProvider === "gemini" && !apiKey && ensureValidToken) { try { oauthToken = await ensureValidToken(); } catch (_) {} }
-    if (!apiKey && !oauthToken) return;
+    // Returned silently, so the button simply did nothing.
+    if (!apiKey && !oauthToken) { openAiKeyIntro?.(); return; }
     setGenIds(g => [...g, item.id]);
     try {
       const sys = appLanguage === "de"
@@ -43976,7 +43986,7 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
     let oauthToken = null;
     if (llmProvider === "gemini" && !apiKey && ensureValidToken) { try { oauthToken = await ensureValidToken(); } catch (_) {} }
-    if (!apiKey && !oauthToken) { setErr(de ? "Kein API-Key hinterlegt (Settings → KI & Modelle)." : "No API key configured (Settings → AI)."); return; }
+    if (!apiKey && !oauthToken) { openAiKeyIntro?.(); return; }
     setBusy(true);
     const promptStr = buildPrompt() + (variation ? `, ${variation}` : "");
     try {
@@ -44934,6 +44944,7 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
 Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals; exactly 3 pains; a realistic first-person quote; "role" is a short job/role title; "gender" is one of "Weiblich", "Männlich" or "Divers" (in German) inferred from the name/description; "consumer_behavior" is 1-3 words (e.g. "Fast Pace-Buyer"). Infer realistic content from the description. Write all values in the SAME language as the description.`;
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
     const oauthToken = (llmProvider === "gemini" && !apiKey && ensureValidToken) ? await ensureValidToken() : null;
+    if (!apiKey && !oauthToken) { openAiKeyIntro?.(); return; }
     const resp = await fetch("/api/chat-multi", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(await authHeaders()) },
@@ -45014,6 +45025,7 @@ Rules:
 If you don't know a field, infer a plausible value. Write all text values in the SAME language as the input.`;
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
     const oauthToken = (llmProvider === "gemini" && !apiKey && ensureValidToken) ? await ensureValidToken() : null;
+    if (!apiKey && !oauthToken) { openAiKeyIntro?.(); return; }
 
     const domainFromInput = (() => {
       try { return new URL(/^https?:\/\//i.test(input) ? input : `https://${input}`).hostname.replace(/^www\./, ""); }
@@ -50354,6 +50366,12 @@ export default function CircularMenu() {
     setAiIntroOpen(true);
     return false;
   };
+  // Published for the components below, and taken down again on unmount so a
+  // stale opener cannot outlive the tree that owns the dialog.
+  useEffect(() => {
+    openAiKeyIntro = () => setAiIntroOpen(true);
+    return () => { openAiKeyIntro = null; };
+  }, []);
   const closeAiIntro = () => { localStorage.setItem("agencyos-ai-key-intro", "seen"); setAiIntroOpen(false); };
 
   // Re-read on every return to the dashboard, which is where the cards are: a
