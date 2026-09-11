@@ -22035,6 +22035,31 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // What the pointer actually does right now.
   const activeTool = spacePan ? "hand" : tool;
 
+  // Moving an element is not one thing. A drawn path carries an offset, an
+  // arrow has two ends, everything else has a corner. Duplicating needed this
+  // first and the arrow keys need exactly the same, so it is ONE function: two
+  // that merely agree stop agreeing the day somebody adds a fifth shape.
+  // Everything an operation on the selection should touch: the ticked set if
+  // there is one, otherwise the single selection, and in both cases the WHOLE
+  // of any group a member belongs to. Deleting needed this first and nudging
+  // needs the identical answer, or an arrow key would tear a group in half
+  // while Delete took all of it.
+  const selectionIds = (id = sel) => {
+    const ids = new Set(pick.length ? pick : (id ? [id] : []));
+    for (const sid of [...ids]) {
+      const o = items.find(q => q.id === sid);
+      if (o?.groupId) items.filter(q => q.groupId === o.groupId).forEach(q => ids.add(q.id));
+    }
+    return ids;
+  };
+
+  const movedBy = (it, dx, dy) =>
+    (it.type === "draw" || it.type === "path")
+      ? { ox: (it.ox || 0) + dx, oy: (it.oy || 0) + dy }
+      : (it.type === "arrow" || it.type === "line")
+        ? { x1: it.x1 + dx, y1: it.y1 + dy, x2: it.x2 + dx, y2: it.y2 + dy }
+        : { x: it.x + dx, y: it.y + dy };
+
   useEffect(() => {
     const onKey = (e) => {
       // Same guard the whiteboard already uses: while the focus is in a field,
@@ -22051,6 +22076,25 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       // Was guarded on `sel` alone, so a marquee or a group — which leave
       // several picked and no single selection — could not be deleted at all.
       if ((e.key === "Backspace" || e.key === "Delete") && (sel || pick.length)) deleteSel();
+      // Nudge the selection. Above the modifier gate below, because these are
+      // the only shortcuts here that take no modifier at all, which is why they
+      // never fired: everything past that line needs Cmd or Ctrl.
+      //
+      // selectedIds() reads refs, so it is the selection as it is now and not
+      // as it was when this listener was attached. Shift makes the step ten,
+      // the way every design tool does it. markChange coalesces within 600ms,
+      // so holding a key is one undo step rather than forty.
+      if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        const ids = selectionIds();
+        if (!ids.size) return;
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1;
+        const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+        const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+        markChange();
+        setItems(list => list.map(i => (ids.has(i.id) ? { ...i, ...movedBy(i, dx, dy) } : i)));
+        return;
+      }
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const k = e.key.toLowerCase();
@@ -22111,13 +22155,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const rest = list.filter(i => i.id !== id);
     return dir === "front" ? [...rest, it] : [it, ...rest];
   });
-  const cloneOf = (it, dx = 0, dy = 0) => ({
-    ...it, id: crypto.randomUUID(),
-    ...((it.type === "draw" || it.type === "path") ? { ox: (it.ox || 0) + dx, oy: (it.oy || 0) + dy }
-      : it.type === "arrow" || it.type === "line"
-        ? { x1: it.x1 + dx, y1: it.y1 + dy, x2: it.x2 + dx, y2: it.y2 + dy }
-        : { x: it.x + dx, y: it.y + dy }),
-  });
+  const cloneOf = (it, dx = 0, dy = 0) => ({ ...it, id: crypto.randomUUID(), ...movedBy(it, dx, dy) });
   const copySel = (id = sel) => {
     const it = items.find(i => i.id === id);
     if (it) clipRef.current = [it];
@@ -22402,13 +22440,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // Deletes what is SELECTED, which after a marquee is several things and no
   // single `sel` at all — the old version read one id and quietly did nothing.
   const deleteSel = (id = sel) => {
-    const ids = new Set(pick.length ? pick : (id ? [id] : []));
     // A mask and its content go together; leaving half of a group behind leaves
-    // an invisible mask nobody can select.
-    for (const sid of [...ids]) {
-      const o = items.find(q => q.id === sid);
-      if (o?.groupId) items.filter(q => q.groupId === o.groupId).forEach(q => ids.add(q.id));
-    }
+    // an invisible mask nobody can select. selectionIds is where that rule
+    // lives now, shared with the arrow keys.
+    const ids = selectionIds(id);
     if (!ids.size) return;
     markChange();
     setItems(list => list.filter(i => !ids.has(i.id)));
