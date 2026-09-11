@@ -175,6 +175,7 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
       // transparent shape, so edge-to-edge children cannot cover the outline.
       outline = {
         id: newId(), type: "rect", x: b.x, y: b.y, w: b.w, h: b.h,
+        ...(curGid ? { groupId: curGid } : {}),
         fill: "transparent", stroke: surface.stroke,
         strokeWidth: surface.strokeWidth, strokeAlpha: surface.strokeAlpha,
         ...(surface.radius != null ? { radius: surface.radius } : {}),
@@ -193,7 +194,41 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     if (node.type === "INSTANCE") note("component");
   };
 
+  // What Figma calls a group, the artboard calls a group. Everything a
+  // container produces gets one id, so a thing that was one object over there
+  // is one object here.
+  //
+  // Only these four: a SECTION or a CANVAS is the page, and grouping a whole
+  // page is not what anybody meant by grouping. The imported node itself is
+  // excluded too, or every import would arrive as a single group containing
+  // all of it.
+  //
+  // ONE level, because that is all `groupId` can carry. The OUTERMOST container
+  // wins, so what you would drag in Figma is what you drag here; an inner group
+  // keeps the id it already has rather than minting its own.
+  const GROUPABLE = new Set(["GROUP", "COMPONENT", "INSTANCE", "FRAME"]);
+  let curGid = null;
+
   const walk = (node, inheritedOpacity) => {
+    const outer = curGid;
+    const mints = !curGid && node && node !== root && GROUPABLE.has(node.type);
+    const gid = mints ? newId() : null;
+    if (mints) curGid = gid;
+    const before = items.length;
+    try {
+      walkNode(node, inheritedOpacity);
+    } finally {
+      curGid = outer;
+    }
+    if (!mints) return;
+    // A group of one is not a group. A frame holding a single rectangle would
+    // otherwise arrive as a group nobody can see the point of, and a container
+    // that produced nothing at all would leave an id on no items.
+    const mine = items.slice(before).filter(i => i.groupId === gid);
+    if (mine.length < 2) for (const i of mine) delete i.groupId;
+  };
+
+  const walkNode = (node, inheritedOpacity) => {
     if (!node || node.visible === false) return;
     const opacity = inheritedOpacity * (node.opacity ?? 1);
     // Fully transparent is not worth carrying, and neither is what is inside it.
@@ -212,6 +247,7 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
       const st = strokeOf(node);
       const surface = {
         id, type: "image", x: b.x, y: b.y, w: b.w, h: b.h,
+        ...(curGid ? { groupId: curGid } : {}),
         // Figma's own scale modes, mapped to the two the artboard has.
         fit: img.scaleMode === "FIT" ? "contain" : "cover",
         // Filled in by the caller once the ref has been resolved to a URL.
@@ -249,6 +285,7 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
       const st = strokeOf(node);
       items.push({
         id: newId(), type: "line",
+        ...(curGid ? { groupId: curGid } : {}),
         x1: b.x, y1: b.y, x2: b.x + b.w, y2: b.y + b.h,
         ...(st ? { stroke: st.color, strokeWidth: st.width, strokeAlpha: st.alpha } : {}),
       });
@@ -277,6 +314,7 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     const st = strokeOf(node);
     return {
       id, type, x: b.x, y: b.y, w: b.w, h: b.h,
+      ...(curGid ? { groupId: curGid } : {}),
       // A gradient object where there is one: the artboard paints fills through
       // paintCss, which takes either.
       fill: paint?.gradient || paint?.color || "transparent",
@@ -299,6 +337,7 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     if ((node.characterStyleOverrides || []).some(Boolean)) note("mixed-text-style");
     return {
       id: newId(), type: "text",
+      ...(curGid ? { groupId: curGid } : {}),
       x: b.x, y: b.y,
       // The measured box, so a line breaks where Figma broke it rather than
       // wherever the artboard's own wrapper decides.

@@ -22220,7 +22220,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // see — and loses everything past the edge. Which looks exactly like an
     // import that brought nothing but a background.
     const fitted = figmaFit(data.items || [], data.size, { w: W, h: H });
-    const made = fitted.items.map(it => ({ ...it, id: crypto.randomUUID() }));
+    // Fresh ids for the items AND for their groups. The import is cached per
+    // link, so placing the same one twice hands out the same server-side group
+    // ids a second time, and the two copies would fuse into one group that
+    // spans both. One map per placement keeps each copy's groups its own,
+    // while everything that was grouped over in Figma stays grouped here.
+    const gidMap = new Map();
+    const made = fitted.items.map(it => {
+      const next = { ...it, id: crypto.randomUUID() };
+      if (it.groupId) {
+        if (!gidMap.has(it.groupId)) gidMap.set(it.groupId, crypto.randomUUID());
+        next.groupId = gidMap.get(it.groupId);
+      }
+      return next;
+    });
     if (!made.length) {
       setErr(de ? "In diesem Frame war nichts, was hier ankommen kann." : "There was nothing in that frame this board can hold.");
       return;
