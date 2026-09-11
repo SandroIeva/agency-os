@@ -52904,20 +52904,22 @@ export default function CircularMenu() {
             }}
           >
             <DotGrid darkMode={darkMode} />
-            <AnimatedBlob />
+            {/* No AnimatedBlob. The same reason it is absent from the onboarding
+                screens: on a screen that asks one question it is the brightest
+                thing on it, and it sits in the corner where nothing is. */}
             <div style={{ position: "relative", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
               {/* Logo */}
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2, duration: 0.6, ease: [0.22, 0.68, 0.35, 1.0] }}
-                style={{ marginBottom: 48 }}
+                style={{ marginBottom: 48, color: theme.text }}
               >
                 <svg width="92" height="58" viewBox="0 0 76 48" fill="none">
-                  <path opacity="0.8" d="M4.64867 13.5494C3.95863 13.5494 3.37755 13.3133 2.90542 12.8594C2.43329 12.4054 2.19722 11.8243 2.19722 11.1343C2.19722 10.4987 2.43329 9.93579 2.90542 9.46366C3.37755 8.99152 3.95863 8.75546 4.64867 8.75546C5.3387 8.75546 5.91979 8.99152 6.39192 9.46366C6.86405 9.93579 7.10011 10.4987 7.10011 11.1343C7.10011 11.8243 6.86405 12.4054 6.39192 12.8594C5.91979 13.3133 5.3387 13.5494 4.64867 13.5494ZM2.66935 35.3037V16.6001H6.53719V35.3037H2.66935ZM11.0486 9.26391H29.3345V12.133L19.0748 35.3037H14.8075L24.7767 12.9138H11.0486V9.26391Z" fill="white" fillOpacity="0.8"/>
+                  <path opacity="0.8" d="M4.64867 13.5494C3.95863 13.5494 3.37755 13.3133 2.90542 12.8594C2.43329 12.4054 2.19722 11.8243 2.19722 11.1343C2.19722 10.4987 2.43329 9.93579 2.90542 9.46366C3.37755 8.99152 3.95863 8.75546 4.64867 8.75546C5.3387 8.75546 5.91979 8.99152 6.39192 9.46366C6.86405 9.93579 7.10011 10.4987 7.10011 11.1343C7.10011 11.8243 6.86405 12.4054 6.39192 12.8594C5.91979 13.3133 5.3387 13.5494 4.64867 13.5494ZM2.66935 35.3037V16.6001H6.53719V35.3037H2.66935ZM11.0486 9.26391H29.3345V12.133L19.0748 35.3037H14.8075L24.7767 12.9138H11.0486V9.26391Z" fill="currentColor" fillOpacity="0.8"/>
                   <g opacity="0.8">
-                    <rect x="39.3999" y="0.5" width="36" height="22" rx="11" stroke="white"/>
-                    <path d="M51.14 17.0376V17.0454C49.4759 17.0454 48.0853 16.4907 46.9681 15.3735C45.8509 14.2563 45.2962 12.8735 45.2962 11.2173C45.2962 9.56104 45.8509 8.17822 46.9603 7.07666C48.0696 5.9751 49.4603 5.42041 51.1321 5.42041C52.7962 5.42041 54.1868 5.9751 55.2962 7.07666C56.4056 8.17822 56.9603 9.55322 56.9603 11.2095C56.9603 12.8657 56.4056 14.2485 55.2962 15.3657C54.1868 16.4829 52.804 17.0376 51.14 17.0376ZM51.14 15.4438V15.4595C52.3431 15.4595 53.3275 15.0532 54.0853 14.2329C54.8431 13.4126 55.2259 12.4048 55.2259 11.2095C55.2259 10.0376 54.8431 9.04541 54.0775 8.24072C53.3118 7.43604 52.3353 7.02979 51.14 7.02979C49.9368 7.02979 48.9525 7.42822 48.1868 8.23291C47.4212 9.0376 47.0384 10.022 47.0384 11.1938C47.0384 12.3892 47.4212 13.397 48.1868 14.2173C48.9525 15.0376 49.9368 15.4438 51.14 15.4438ZM63.4675 17.0376L63.4206 17.0454C62.1706 17.0454 61.1003 16.7173 60.2018 16.0688C59.3034 15.4204 58.694 14.6157 58.3737 13.6626L60.0143 13.1704C60.2721 13.8501 60.7096 14.4126 61.3268 14.8501C61.944 15.2876 62.6706 15.5063 63.5143 15.5063C64.2565 15.5063 64.8659 15.3267 65.3425 14.9751C65.819 14.6235 66.0612 14.2173 66.0612 13.7563C66.0612 13.3813 65.9284 13.0688 65.655 12.811C65.3815 12.5532 64.9284 12.3267 64.2878 12.1235L61.4753 11.2251C59.7956 10.7017 58.9596 9.7876 58.9596 8.48291C58.9596 7.63916 59.3268 6.9126 60.0612 6.31104C60.7956 5.70947 61.7175 5.40479 62.8268 5.40479C63.9675 5.40479 64.9518 5.67041 65.78 6.20166C66.6081 6.73291 67.194 7.39697 67.5378 8.19385L65.9206 8.67822C65.655 8.15479 65.2565 7.73291 64.7175 7.4126C64.1784 7.09229 63.5534 6.93604 62.8425 6.93604C62.2253 6.93604 61.7175 7.08447 61.319 7.38135C60.9206 7.67822 60.7175 8.02979 60.7175 8.43604C60.7175 8.75635 60.8346 9.02197 61.0612 9.23291C61.2878 9.44385 61.655 9.62354 62.155 9.77197L64.905 10.647C65.8737 10.9517 66.6081 11.3267 67.1003 11.772C67.5925 12.2173 67.8425 12.8345 67.8425 13.6313C67.8425 14.5923 67.4362 15.397 66.6237 16.0532C65.8112 16.7095 64.7565 17.0376 63.4675 17.0376Z" fill="white"/>
+                    <rect x="39.3999" y="0.5" width="36" height="22" rx="11" stroke="currentColor"/>
+                    <path d="M51.14 17.0376V17.0454C49.4759 17.0454 48.0853 16.4907 46.9681 15.3735C45.8509 14.2563 45.2962 12.8735 45.2962 11.2173C45.2962 9.56104 45.8509 8.17822 46.9603 7.07666C48.0696 5.9751 49.4603 5.42041 51.1321 5.42041C52.7962 5.42041 54.1868 5.9751 55.2962 7.07666C56.4056 8.17822 56.9603 9.55322 56.9603 11.2095C56.9603 12.8657 56.4056 14.2485 55.2962 15.3657C54.1868 16.4829 52.804 17.0376 51.14 17.0376ZM51.14 15.4438V15.4595C52.3431 15.4595 53.3275 15.0532 54.0853 14.2329C54.8431 13.4126 55.2259 12.4048 55.2259 11.2095C55.2259 10.0376 54.8431 9.04541 54.0775 8.24072C53.3118 7.43604 52.3353 7.02979 51.14 7.02979C49.9368 7.02979 48.9525 7.42822 48.1868 8.23291C47.4212 9.0376 47.0384 10.022 47.0384 11.1938C47.0384 12.3892 47.4212 13.397 48.1868 14.2173C48.9525 15.0376 49.9368 15.4438 51.14 15.4438ZM63.4675 17.0376L63.4206 17.0454C62.1706 17.0454 61.1003 16.7173 60.2018 16.0688C59.3034 15.4204 58.694 14.6157 58.3737 13.6626L60.0143 13.1704C60.2721 13.8501 60.7096 14.4126 61.3268 14.8501C61.944 15.2876 62.6706 15.5063 63.5143 15.5063C64.2565 15.5063 64.8659 15.3267 65.3425 14.9751C65.819 14.6235 66.0612 14.2173 66.0612 13.7563C66.0612 13.3813 65.9284 13.0688 65.655 12.811C65.3815 12.5532 64.9284 12.3267 64.2878 12.1235L61.4753 11.2251C59.7956 10.7017 58.9596 9.7876 58.9596 8.48291C58.9596 7.63916 59.3268 6.9126 60.0612 6.31104C60.7956 5.70947 61.7175 5.40479 62.8268 5.40479C63.9675 5.40479 64.9518 5.67041 65.78 6.20166C66.6081 6.73291 67.194 7.39697 67.5378 8.19385L65.9206 8.67822C65.655 8.15479 65.2565 7.73291 64.7175 7.4126C64.1784 7.09229 63.5534 6.93604 62.8425 6.93604C62.2253 6.93604 61.7175 7.08447 61.319 7.38135C60.9206 7.67822 60.7175 8.02979 60.7175 8.43604C60.7175 8.75635 60.8346 9.02197 61.0612 9.23291C61.2878 9.44385 61.655 9.62354 62.155 9.77197L64.905 10.647C65.8737 10.9517 66.6081 11.3267 67.1003 11.772C67.5925 12.2173 67.8425 12.8345 67.8425 13.6313C67.8425 14.5923 67.4362 15.397 66.6237 16.0532C65.8112 16.7095 64.7565 17.0376 63.4675 17.0376Z" fill="currentColor"/>
                   </g>
                 </svg>
               </motion.div>
@@ -52940,13 +52942,13 @@ export default function CircularMenu() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.65, duration: 0.5, ease: [0.22, 0.68, 0.35, 1.0] }}
-                whileHover={{ scale: 1.03, background: "#1E1E28" }}
+                whileHover={{ scale: 1.03, background: darkMode ? "#1E1E28" : "#ffffff" }}
                 whileTap={{ scale: 0.97 }}
                 onClick={handleGoogleLogin}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 14,
                   width: 320, maxWidth: "80vw", boxSizing: "border-box",
-                  background: "#16161E", border: `1px solid ${theme.border}`, borderRadius: 16,
+                  background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 16,
                   padding: "16px 32px", cursor: "pointer",
                   fontSize: 16, fontFamily: FONT, color: theme.text, fontWeight: 400,
                   letterSpacing: 0.2,
@@ -52976,7 +52978,7 @@ export default function CircularMenu() {
               {magicSent ? (
                 <motion.div
                   initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                  style={{ width: 320, maxWidth: "80vw", textAlign: "center", background: "#16161E", border: `1px solid ${theme.border}`, borderRadius: 16, padding: "20px 22px" }}
+                  style={{ width: 320, maxWidth: "80vw", textAlign: "center", background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 16, padding: "20px 22px" }}
                 >
                   <div style={{ fontSize: 22, marginBottom: 8 }}>✉️</div>
                   <div style={{ fontSize: 14, color: theme.text, fontFamily: FONT, fontWeight: 500, marginBottom: 6 }}>
@@ -53003,7 +53005,7 @@ export default function CircularMenu() {
                     placeholder={appLanguage === "de" ? "deine@email.com" : "you@email.com"}
                     style={{
                       width: "100%", boxSizing: "border-box", padding: "15px 18px", borderRadius: 16,
-                      background: "#16161E", border: `1px solid ${theme.border}`, color: theme.text,
+                      background: theme.cardBg, border: `1px solid ${theme.border}`, color: theme.text,
                       fontSize: 15, fontFamily: FONT, outline: "none", caretColor: "#8B7AFF",
                     }}
                   />
@@ -53013,7 +53015,7 @@ export default function CircularMenu() {
                     disabled={magicSending}
                     style={{
                       width: "100%", padding: "15px 18px", borderRadius: 16, border: "none",
-                      background: "#ffffff", color: "#111111", fontSize: 15, fontWeight: 600, fontFamily: FONT,
+                      background: primaryBtn(darkMode).background, color: primaryBtn(darkMode).color, fontSize: 15, fontWeight: 600, fontFamily: FONT,
                       cursor: magicSending ? "default" : "pointer", opacity: magicSending ? 0.7 : 1,
                     }}
                   >
@@ -53074,7 +53076,7 @@ export default function CircularMenu() {
                 placeholder={(userEmail.split("@")[0] || (appLanguage === "de" ? "Dein Name" : "Your name"))}
                 style={{
                   width: "100%", boxSizing: "border-box", padding: "15px 18px", borderRadius: 16,
-                  background: "#16161E", border: "1px solid #ffffff15", color: "#ffffffdd",
+                  background: theme.cardBg, border: `1px solid ${theme.border}`, color: theme.text,
                   fontSize: 15, fontFamily: FONT, outline: "none", caretColor: "#8B7AFF", textAlign: "center", marginBottom: 12,
                 }}
               />
@@ -53084,7 +53086,7 @@ export default function CircularMenu() {
                 disabled={nameSaving || !(nameGateInput.trim() || userEmail.split("@")[0])}
                 style={{
                   width: "100%", padding: "15px 18px", borderRadius: 16, border: "none",
-                  background: "#ffffff", color: "#111111", fontSize: 15, fontWeight: 600, fontFamily: FONT,
+                  background: primaryBtn(darkMode).background, color: primaryBtn(darkMode).color, fontSize: 15, fontWeight: 600, fontFamily: FONT,
                   cursor: nameSaving ? "default" : "pointer", opacity: nameSaving ? 0.7 : 1,
                 }}
               >
