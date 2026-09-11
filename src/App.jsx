@@ -22249,6 +22249,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       "gradient-diamond": de ? "Rauten-Verlauf" : "diamond gradient",
       "gradient-placement": de ? "Verlauf zentriert" : "gradient re-centred",
       "gradient-text": de ? "Textverlauf" : "gradient text",
+      "vector-arc": de ? "Bogen begradigt" : "arc straightened",
+      "vector-gradient": de ? "Vektor einfarbig" : "vector flattened to one colour",
       "shadow-stack": de ? "mehrere Schatten" : "stacked shadows",
       "shadow-spread": de ? "Schatten-Spread" : "shadow spread",
       "background-blur": de ? "Hintergrund-Blur" : "background blur",

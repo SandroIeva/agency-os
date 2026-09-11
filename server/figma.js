@@ -142,6 +142,103 @@ const CONTAINERS = new Set(["FRAME", "GROUP", "COMPONENT", "COMPONENT_SET", "INS
 // format would land somewhere the design never was.
 const VECTORS = new Set(["VECTOR", "STAR", "POLYGON", "BOOLEAN_OPERATION", "REGULAR_POLYGON"]);
 
+// ── SVG path data → the artboard's own path nodes ────────────────────────────
+//
+// Figma hands geometry over as an SVG `d` string. The artboard stores a path as
+// NODES with absolute bezier handles: h2 leaves a node, h1 arrives at the next,
+// and a segment with neither is a straight line. pathSeg in App.jsx is the other
+// half of this contract, and reading it is how these names were chosen.
+//
+// One entry per SUBPATH, because a `d` routinely holds several (a letter with a
+// counter, a boolean result) while an artboard path is one shape with one
+// `closed` flag.
+//
+// Everything becomes a cubic. A quadratic has an exact cubic equivalent, so
+// that conversion loses nothing. An elliptical arc does not, and rather than
+// approximate one badly it is drawn as a straight line to its endpoint and
+// counted out loud. Figma emits M, L, C and Z for its own geometry, so this is
+// a guard on the unexpected rather than a common path.
+const NUM = /-?\d*\.?\d+(?:[eE][-+]?\d+)?/g;
+const CMD = /([MmLlHhVvCcSsQqTtAaZz])([^MmLlHhVvCcSsQqTtAaZz]*)/g;
+
+export function svgPathToSubpaths(d, note = () => {}) {
+  const out = [];
+  let cur = null;                       // { nodes, closed }
+  let cx = 0, cy = 0;                   // current point
+  let sx = 0, sy = 0;                   // where this subpath began
+  let lastC = null;                     // previous cubic's second control, for S
+  let lastQ = null;                     // previous quadratic's control, for T
+
+  const open = (x, y) => { cur = { nodes: [{ x, y }], closed: false }; out.push(cur); };
+  const last = () => cur && cur.nodes[cur.nodes.length - 1];
+  // A command before any M is not a path we can place.
+  const ready = () => { if (!cur) open(cx, cy); return true; };
+  const lineTo = (x, y) => { ready(); cur.nodes.push({ x, y }); cx = x; cy = y; lastC = null; lastQ = null; };
+  const curveTo = (c1x, c1y, c2x, c2y, x, y) => {
+    ready();
+    const a = last();
+    a.h2x = c1x; a.h2y = c1y;
+    cur.nodes.push({ x, y, h1x: c2x, h1y: c2y });
+    cx = x; cy = y; lastC = [c2x, c2y]; lastQ = null;
+  };
+  // A quadratic IS a cubic: both controls sit two thirds of the way out.
+  const quadTo = (qx, qy, x, y) => {
+    const c1x = cx + (2 / 3) * (qx - cx), c1y = cy + (2 / 3) * (qy - cy);
+    const c2x = x + (2 / 3) * (qx - x), c2y = y + (2 / 3) * (qy - y);
+    curveTo(c1x, c1y, c2x, c2y, x, y);
+    lastQ = [qx, qy];
+  };
+
+  for (const m of String(d || "").matchAll(CMD)) {
+    const code = m[1];
+    const rel = code === code.toLowerCase() && code !== "Z" && code !== "z";
+    const n = (m[2].match(NUM) || []).map(Number);
+    const up = code.toUpperCase();
+
+    if (up === "Z") { if (cur) { cur.closed = true; cx = sx; cy = sy; } lastC = null; lastQ = null; continue; }
+
+    // Each command takes a fixed number of arguments and may repeat them. A
+    // repeated M is an L, which is what the spec says and what Figma relies on.
+    const take = { M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, T: 2, A: 7 }[up];
+    if (!take) continue;
+    for (let i = 0; i + take <= n.length; i += take) {
+      const a = n.slice(i, i + take);
+      if (up === "M") {
+        const x = rel ? cx + a[0] : a[0], y = rel ? cy + a[1] : a[1];
+        if (i === 0) { open(x, y); sx = x; sy = y; cx = x; cy = y; lastC = null; lastQ = null; }
+        else lineTo(x, y);
+      } else if (up === "L") {
+        lineTo(rel ? cx + a[0] : a[0], rel ? cy + a[1] : a[1]);
+      } else if (up === "H") {
+        lineTo(rel ? cx + a[0] : a[0], cy);
+      } else if (up === "V") {
+        lineTo(cx, rel ? cy + a[0] : a[0]);
+      } else if (up === "C") {
+        curveTo(rel ? cx + a[0] : a[0], rel ? cy + a[1] : a[1],
+                rel ? cx + a[2] : a[2], rel ? cy + a[3] : a[3],
+                rel ? cx + a[4] : a[4], rel ? cy + a[5] : a[5]);
+      } else if (up === "S") {
+        // The missing control is the previous one mirrored through the point.
+        const c1x = lastC ? 2 * cx - lastC[0] : cx, c1y = lastC ? 2 * cy - lastC[1] : cy;
+        curveTo(c1x, c1y,
+                rel ? cx + a[0] : a[0], rel ? cy + a[1] : a[1],
+                rel ? cx + a[2] : a[2], rel ? cy + a[3] : a[3]);
+      } else if (up === "Q") {
+        quadTo(rel ? cx + a[0] : a[0], rel ? cy + a[1] : a[1],
+               rel ? cx + a[2] : a[2], rel ? cy + a[3] : a[3]);
+      } else if (up === "T") {
+        const qx = lastQ ? 2 * cx - lastQ[0] : cx, qy = lastQ ? 2 * cy - lastQ[1] : cy;
+        quadTo(qx, qy, rel ? cx + a[0] : a[0], rel ? cy + a[1] : a[1]);
+      } else if (up === "A") {
+        note("vector-arc");
+        lineTo(rel ? cx + a[5] : a[5], rel ? cy + a[6] : a[6]);
+      }
+    }
+  }
+  // A subpath of one point draws nothing.
+  return out.filter(sp => sp.nodes.length >= 2);
+}
+
 export function figmaToItems(root, { newId = () => Math.random().toString(36).slice(2) } = {}) {
   const origin = root?.absoluteBoundingBox;
   if (!origin) return { items: [], images: [], warnings: ["no-geometry"], size: null };
@@ -239,7 +336,14 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     if (node.isMask) { note("mask"); return; }
     if (node.type === "TEXT") { items.push(textItem(node, b, opacity)); return; }
 
-    if (VECTORS.has(node.type)) { note("vector"); return; }
+    if (VECTORS.has(node.type)) {
+      const paths = vectorItems(node, b, opacity);
+      if (paths.length) { paths.forEach(i => items.push(i)); return; }
+      // No geometry came back, so there is still nothing to draw. Counted as
+      // before rather than passed over in silence.
+      note("vector");
+      return;
+    }
 
     const img = imageFill(node);
     if (img) {
@@ -308,6 +412,49 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     // Something we have no shape for. Counted, not guessed at.
     note(node.type.toLowerCase());
     if (node.children) node.children.forEach(c => walk(c, opacity));
+  };
+
+  // A drawn shape as the artboard stores one. Figma's geometry is in the node's
+  // own coordinates, which is exactly what ox/oy are for: the numbers stay local
+  // and the offset places them, so dragging and the arrow keys move it the way
+  // they move any other path.
+  const vectorItems = (node, b, opacity) => {
+    const geo = (Array.isArray(node.fillGeometry) && node.fillGeometry.length)
+      ? node.fillGeometry
+      : (Array.isArray(node.strokeGeometry) ? node.strokeGeometry : []);
+    if (!geo.length) return [];
+    const st = strokeOf(node);
+    const solid = solidFill(node);
+    const grad = gradientFill(node);
+    // The path renderer paints a colour string and nothing else, so a gradient
+    // becomes its first stop. A visible shape in one colour beats an invisible
+    // one in the right colours, and it is counted so nobody has to guess why.
+    let fill = "transparent";
+    if (solid) fill = solid.color;
+    else if (grad) {
+      const stop = grad.gradientStops?.[0]?.color;
+      if (stop) { fill = hex(stop); note("vector-gradient"); }
+    }
+    const out = [];
+    for (const g of geo) {
+      for (const sp of svgPathToSubpaths(g.path, note)) {
+        out.push({
+          id: newId(), type: "path", ox: b.x, oy: b.y,
+          nodes: sp.nodes, closed: sp.closed, fill,
+          color: st ? st.color : "transparent",
+          width: st ? st.width : 0,
+          ...(curGid ? { groupId: curGid } : {}),
+        });
+      }
+    }
+    // Several subpaths are one object to whoever drew it. Grouped here when
+    // they are not already inside a group, so a letter with a counter or a
+    // boolean result stays one thing to click.
+    if (out.length > 1 && !curGid) {
+      const g = newId();
+      for (const i of out) i.groupId = g;
+    }
+    return out;
   };
 
   const shapeItem = (type, id, b, paint, node, opacity) => {

@@ -263,7 +263,10 @@ export default async function handler(req) {
     }
 
     const fig = (path) => fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } });
-    const res = await fig(`/files/${link.key}/nodes?ids=${encodeURIComponent(link.nodeId)}`);
+    // geometry=paths is what makes Figma send fillGeometry and strokeGeometry
+    // at all. Without it a VECTOR node arrives with no shape data and there is
+    // nothing to convert, which is why vectors used to be skipped outright.
+    const res = await fig(`/files/${link.key}/nodes?ids=${encodeURIComponent(link.nodeId)}&geometry=paths`);
     if (!res.ok) {
       // Figma runs a leaky bucket and answers 429 when it is full, with the
       // wait in Retry-After. It is a normal condition rather than a fault, and
