@@ -562,6 +562,25 @@ export function fitItems(items, from, to) {
       ...(it.blur != null ? { blur: r(it.blur) } : {}),
       ...(it.bgBlur != null ? { bgBlur: round2(it.bgBlur * k) } : {}),
       ...(it.strokeWidth != null ? { strokeWidth: Math.max(0.5, it.strokeWidth * k) } : {}),
+      // A path does not live in x/y/w/h. Its shape is in `nodes`, its position
+      // in ox/oy and its stroke in `width`, so none of the lines above touched
+      // it: an imported vector kept its full size while the rest of the design
+      // shrank around it, and came out clipped at the edges of the board.
+      //
+      // Rounded to two places, not to whole pixels. A curve is control points a
+      // few units apart, and snapping those to integers at a small scale bends
+      // the shape.
+      ...(it.ox != null ? { ox: round2(it.ox * k) } : {}),
+      ...(it.oy != null ? { oy: round2(it.oy * k) } : {}),
+      ...(Array.isArray(it.nodes) ? { nodes: it.nodes.map(nd => {
+        const out = { ...nd, x: round2(nd.x * k), y: round2(nd.y * k) };
+        if (nd.h1x != null) { out.h1x = round2(nd.h1x * k); out.h1y = round2(nd.h1y * k); }
+        if (nd.h2x != null) { out.h2x = round2(nd.h2x * k); out.h2y = round2(nd.h2y * k); }
+        return out;
+      }) } : {}),
+      // `width` is the stroke of a path, a line or an arrow. Zero stays zero:
+      // a shape with no outline must not grow one.
+      ...(it.width != null ? { width: it.width ? Math.max(0.5, round2(it.width * k)) : 0 } : {}),
     })),
   };
 }
