@@ -437,19 +437,35 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     }
     const out = [];
     for (const g of geo) {
-      for (const sp of svgPathToSubpaths(g.path, note)) {
-        out.push({
-          id: newId(), type: "path", ox: b.x, oy: b.y,
-          nodes: sp.nodes, closed: sp.closed, fill,
-          color: st ? st.color : "transparent",
-          width: st ? st.width : 0,
-          ...(curGid ? { groupId: curGid } : {}),
-        });
-      }
+      const subs = svgPathToSubpaths(g.path, note);
+      if (!subs.length) continue;
+      // ONE item per fill, not one per subpath. A ring, a letter's counter and
+      // a boolean result are several subpaths of a SINGLE fill, and which side
+      // of each is inside is the fill rule's answer, not the subpath's. Handed
+      // out as separate items they are simply painted one over the other: the
+      // outer circle of a copyright mark covered its own hole and the C inside
+      // it, and the whole symbol arrived as a solid white dot.
+      //
+      // The first subpath stays in `nodes` so the node editor keeps working on
+      // it unchanged; the rest ride along in `subs` and are appended to the
+      // same `d`.
+      const [first, ...rest] = subs;
+      out.push({
+        id: newId(), type: "path", ox: b.x, oy: b.y,
+        nodes: first.nodes, closed: first.closed, fill,
+        ...(rest.length ? { subs: rest.map(sp => ({ nodes: sp.nodes, closed: sp.closed })) } : {}),
+        // Figma names the rule per fill. Anything but EVENODD is SVG's default,
+        // and with NONZERO the hole is made by winding the inner subpath the
+        // other way round, which the parser preserves by keeping point order.
+        ...(String(g.windingRule || "").toUpperCase() === "EVENODD" ? { fillRule: "evenodd" } : {}),
+        color: st ? st.color : "transparent",
+        width: st ? st.width : 0,
+        ...(curGid ? { groupId: curGid } : {}),
+      });
     }
-    // Several subpaths are one object to whoever drew it. Grouped here when
-    // they are not already inside a group, so a letter with a counter or a
-    // boolean result stays one thing to click.
+    // A node with several separate fills is still one object to whoever drew
+    // it. Grouped here when it is not already inside a group, so it stays one
+    // thing to click.
     if (out.length > 1 && !curGid) {
       const g = newId();
       for (const i of out) i.groupId = g;
@@ -572,18 +588,27 @@ export function fitItems(items, from, to) {
       // the shape.
       ...(it.ox != null ? { ox: round2(it.ox * k) } : {}),
       ...(it.oy != null ? { oy: round2(it.oy * k) } : {}),
-      ...(Array.isArray(it.nodes) ? { nodes: it.nodes.map(nd => {
-        const out = { ...nd, x: round2(nd.x * k), y: round2(nd.y * k) };
-        if (nd.h1x != null) { out.h1x = round2(nd.h1x * k); out.h1y = round2(nd.h1y * k); }
-        if (nd.h2x != null) { out.h2x = round2(nd.h2x * k); out.h2y = round2(nd.h2y * k); }
-        return out;
-      }) } : {}),
+      ...(Array.isArray(it.nodes) ? { nodes: scaleNodes(it.nodes, k) } : {}),
+      // The subpaths that make the holes are in the same coordinates as
+      // `nodes`. Left behind they would keep their full size inside a shape
+      // that shrank around them, which is a hole in the wrong place.
+      ...(Array.isArray(it.subs) ? { subs: it.subs.map(sp => ({ ...sp, nodes: scaleNodes(sp.nodes || [], k) })) } : {}),
       // `width` is the stroke of a path, a line or an arrow. Zero stays zero:
       // a shape with no outline must not grow one.
       ...(it.width != null ? { width: it.width ? Math.max(0.5, round2(it.width * k)) : 0 } : {}),
     })),
   };
 }
+
+// Path nodes at a new scale. Rounded to two places, not to whole pixels: a
+// curve is control points a few units apart, and snapping those to integers at
+// a small scale bends the shape.
+const scaleNodes = (nodes, k) => nodes.map(nd => {
+  const out = { ...nd, x: round2(nd.x * k), y: round2(nd.y * k) };
+  if (nd.h1x != null) { out.h1x = round2(nd.h1x * k); out.h1y = round2(nd.h1y * k); }
+  if (nd.h2x != null) { out.h2x = round2(nd.h2x * k); out.h2y = round2(nd.h2y * k); }
+  return out;
+});
 
 const round2 = (v) => Math.round(v * 100) / 100;
 const effAlpha = (opacity, paint) => opacity * (paint?.alpha ?? 1);

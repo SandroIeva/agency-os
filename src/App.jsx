@@ -19682,7 +19682,7 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
               style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none" }}>
               {items.filter(it => it && !it.hidden && !it.isMask && ["draw", "line", "arrow", "path"].includes(it.type)).map((it, i) => (
                 it.type === "path" ? (
-                  <path key={it.id || i} d={pathD(it.nodes, it.closed)}
+                  <path key={it.id || i} d={pathFullD(it)} fillRule={pathFillRule(it)}
                     transform={`translate(${it.ox || 0}, ${it.oy || 0})`}
                     fill={typeof it.fill === "string" ? it.fill : "none"} stroke={it.color} strokeWidth={it.width}
                     strokeLinecap={capOf(it)} strokeLinejoin={joinOf(it)} />
@@ -21773,7 +21773,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       ? { x: Math.min(it.x1, it.x2), y: Math.min(it.y1, it.y2),
           w: Math.abs(it.x2 - it.x1), h: Math.abs(it.y2 - it.y1) }
       : it.type === "path"
-      ? pathBBox(it.nodes, it.ox || 0, it.oy || 0)
+      ? pathBBox(pathAllNodes(it), it.ox || 0, it.oy || 0)
       : it.type === "draw"
       ? (() => {
           const xs = it.pts.map(q => q[0] + (it.ox || 0)), ys = it.pts.map(q => q[1] + (it.oy || 0));
@@ -23446,13 +23446,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     }
     if (it.type === "path") {
       const ox = it.ox || 0, oy = it.oy || 0;
+      // The offset is folded in here, so the subpaths that make the holes have
+      // to go through the very same mapping. Left as they were they would sit
+      // in the old coordinates with nothing to place them.
+      const mapNodes = (list) => (list || []).map(n => {
+        const o = { ...n, x: Math.round(mx(n.x + ox)), y: Math.round(my(n.y + oy)) };
+        if (n.h1x != null) { o.h1x = Math.round(mx(n.h1x + ox)); o.h1y = Math.round(my(n.h1y + oy)); }
+        if (n.h2x != null) { o.h2x = Math.round(mx(n.h2x + ox)); o.h2y = Math.round(my(n.h2y + oy)); }
+        return o;
+      });
       return { ...it, ...common, ox: 0, oy: 0, width: (it.width || 0) * s1,
-        nodes: (it.nodes || []).map(n => {
-          const o = { ...n, x: Math.round(mx(n.x + ox)), y: Math.round(my(n.y + oy)) };
-          if (n.h1x != null) { o.h1x = Math.round(mx(n.h1x + ox)); o.h1y = Math.round(my(n.h1y + oy)); }
-          if (n.h2x != null) { o.h2x = Math.round(mx(n.h2x + ox)); o.h2y = Math.round(my(n.h2y + oy)); }
-          return o;
-        }) };
+        nodes: mapNodes(it.nodes),
+        ...(Array.isArray(it.subs) ? { subs: it.subs.map(sp => ({ ...sp, nodes: mapNodes(sp.nodes) })) } : {}) };
     }
     const b = boxOf(it);
     return { ...it, ...common,
@@ -23726,12 +23731,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           // Path2D over the very string the screen draws. Writing the curve out
           // a second time with bezierCurveTo would be two implementations of one
           // shape, and they would part company the first time either changed.
-          const d2 = pathD(it.nodes, it.closed);
+          const d2 = pathFullD(it);
           if (d2) {
             const p2 = new Path2D(d2);
             ctx.save();
             ctx.translate(it.ox || 0, it.oy || 0);
-            if (typeof it.fill === "string") { ctx.fillStyle = it.fill; ctx.fill(p2); }
+            if (typeof it.fill === "string") { ctx.fillStyle = it.fill; ctx.fill(p2, pathFillRule(it)); }
             // Same trap on the other side: ctx.lineWidth = 0 is refused, so a
             // path with its stroke taken off would be drawn with the width of
             // whatever was stroked last.
@@ -24722,7 +24727,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       // into every coordinate, so moving the path stays one number
                       // — the same trick the freehand stroke uses with ox/oy.
                       <g transform={`translate(${it.ox || 0}, ${it.oy || 0})`}>
-                        <path d={pathD(it.nodes, it.closed)}
+                        <path d={pathFullD(it)} fillRule={pathFillRule(it)}
                           fill={typeof it.fill === "string" ? it.fill : "none"} stroke={it.color} strokeWidth={it.width}
                           strokeLinecap={capOf(it)} strokeLinejoin={joinOf(it)}
                           onPointerDown={e => onItemDown(e, it)}
@@ -24944,7 +24949,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     {/* The vector itself: one hairline along the centre of the
                         stroke, a constant width on screen because it describes the
                         geometry and not the drawing. */}
-                    <path d={pathD(it.nodes, it.closed)} fill="none" stroke="#15151c"
+                    <path d={pathFullD(it)} fill="none" stroke="#15151c"
                       strokeWidth={1.2 * k} />
                     {it.nodes.map((n, i) => (
                       <Fragment key={"pe" + i}>
@@ -31558,6 +31563,28 @@ const pathD = (nodes, closed) => {
   if (closed) d += " " + pathSeg(n[n.length - 1], n[0]) + " Z";
   return d;
 };
+// A shape with a hole is ONE path. A ring, a letter's counter and a boolean
+// result are several subpaths of a single fill, and which side of each is
+// inside is the fill rule's answer. Drawn as separate shapes they are just
+// painted over one another: an imported copyright mark came out as a solid
+// dot, because its outer circle covered its own hole and the C inside it.
+//
+// `nodes` is the first subpath and the only one the node editor touches; the
+// rest ride in `subs` and are appended to the same `d`, which is what lets the
+// fill rule see them at all.
+const pathFullD = (it) => {
+  let d = pathD(it.nodes, it.closed);
+  for (const sp of it.subs || []) {
+    const d2 = pathD(sp.nodes, sp.closed);
+    if (d2) d += (d ? " " : "") + d2;
+  }
+  return d;
+};
+const pathFillRule = (it) => (it.fillRule === "evenodd" ? "evenodd" : "nonzero");
+// Every point the shape is made of, subpaths included, so a bounding box round
+// a ring is the ring and not its outer subpath.
+const pathAllNodes = (it) =>
+  (it.subs || []).reduce((all, sp) => all.concat(sp.nodes || []), (it.nodes || []).slice());
 // Nodes AND handles. A hull rather than the true curve bounds — a curve never
 // leaves its control points, so the box always contains the path, and computing
 // the exact extrema would buy a few pixels for a great deal of arithmetic.

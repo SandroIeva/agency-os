@@ -92,3 +92,58 @@ assert.equal(imageFrame.items[2].strokeAlpha,40);
 assert.equal(imageFrame.images[0].id,imageFrame.items[0].id);
 assert.equal(imageFrame.convertedAutoLayouts,1);
 console.log('Passed: auto-layout/native frames, editable background and front outline, resolved positions, image frames and reversed stacking.');
+
+
+// A copyright mark as Figma hands one over: ONE vector node whose fill geometry
+// holds three subpaths - the disc, the counter, and the C inside it.
+const ringNode = {
+  type: 'FRAME', absoluteBoundingBox: { x: 0, y: 0, width: 400, height: 400 }, fills: [],
+  children: [{
+    type: 'VECTOR',
+    absoluteBoundingBox: { x: 100, y: 50, width: 21, height: 21 },
+    fills: [{ type: 'SOLID', color: { r: 1, g: 1, b: 1, a: 1 } }],
+    fillGeometry: [{ windingRule: 'NONZERO',
+      path: 'M 0 10.5 C 0 4.7 4.7 0 10.5 0 C 16.3 0 21 4.7 21 10.5 C 21 16.3 16.3 21 10.5 21 C 4.7 21 0 16.3 0 10.5 Z '
+          + 'M 2.4 10.5 C 2.4 15 6 18.6 10.5 18.6 C 15 18.6 18.6 15 18.6 10.5 C 18.6 6 15 2.4 10.5 2.4 C 6 2.4 2.4 6 2.4 10.5 Z '
+          + 'M 5.2 10.5 C 5.2 13.4 7.6 15.9 10.5 15.9 C 13.4 15.9 15.6 13.4 15.6 10.5 L 13.2 10.5 C 13.2 12 12 13.6 10.5 13.6 C 9 13.6 7.6 12 7.6 10.5 Z' }],
+  }],
+};
+let vid = 0;
+const ringRes = figmaToItems(ringNode, { newId: () => 'id' + (++vid) });
+const ringPaths = ringRes.items.filter(i => i.type === 'path');
+
+assert.equal(ringPaths.length, 1, 'one fill is one item, not one item per subpath');
+assert.equal(ringPaths[0].subs.length, 2, 'the counter and the C ride along as subpaths');
+assert.equal(ringPaths[0].fill, '#ffffff');
+assert.equal(ringPaths[0].ox, 100);
+assert.equal(ringPaths[0].oy, 50);
+assert.equal(ringPaths[0].fillRule, undefined, 'NONZERO is the SVG default and is not written down');
+assert.equal(ringPaths[0].groupId, undefined, 'one item needs no group of its own');
+
+// EVENODD is named, because it is not the default.
+const evenOdd = JSON.parse(JSON.stringify(ringNode));
+evenOdd.children[0].fillGeometry[0].windingRule = 'EVENODD';
+vid = 0;
+assert.equal(figmaToItems(evenOdd, { newId: () => 'id' + (++vid) }).items.find(i => i.type === 'path').fillRule, 'evenodd');
+
+// Fitting a board down scales the holes with the shape.
+const ringFit = fitItems(ringRes.items, ringRes.size, { w: 200, h: 200 });
+assert.equal(ringFit.scale, 0.5);
+const ringFitPath = ringFit.items.find(i => i.type === 'path');
+assert.equal(ringFitPath.ox, 50);
+assert.equal(ringFitPath.oy, 25);
+assert.equal(ringFitPath.subs.length, 2);
+assert.equal(ringFitPath.nodes[0].x, ringRes.items.find(i => i.type === 'path').nodes[0].x * 0.5);
+assert.equal(ringFitPath.subs[0].nodes[0].x, ringRes.items.find(i => i.type === 'path').subs[0].nodes[0].x * 0.5);
+assert.equal(ringFitPath.subs[1].nodes[0].y, ringRes.items.find(i => i.type === 'path').subs[1].nodes[0].y * 0.5);
+assert.equal(ringRes.items.find(i => i.type === 'path').ox, 100, 'fit must not mutate the cached import');
+
+// Two separate fills on one node are still one object: they get a group.
+const twoFills = JSON.parse(JSON.stringify(ringNode));
+twoFills.children[0].fillGeometry = [twoFills.children[0].fillGeometry[0], { windingRule: 'NONZERO', path: 'M 0 0 L 5 0 L 5 5 Z' }];
+vid = 0;
+const twoOut = figmaToItems(twoFills, { newId: () => 'id' + (++vid) }).items.filter(i => i.type === 'path');
+assert.equal(twoOut.length, 2);
+assert.ok(twoOut[0].groupId && twoOut[0].groupId === twoOut[1].groupId);
+
+console.log('Passed: one fill is one path, holes ride in subs, winding rule named only when it differs, scaling and grouping.');
