@@ -22933,7 +22933,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // ⌘/Shift collects a second object without starting a drag, so a pair can be
     // picked on the canvas itself and not only in the layers list.
     if (e.metaKey || e.ctrlKey || e.shiftKey) {
-      setPick(p => p.includes(it.id) ? p.filter(x => x !== it.id) : [...p, it.id]);
+      // Seeded with whatever is already selected. Clicking one object puts it
+      // in `sel` and leaves `pick` empty, so shift-clicking a second used to
+      // produce a pick of ONE: grouping refused it, and the panel never
+      // reached its multi-selection branch either.
+      setPick(p => {
+        const base = p.length ? p : (sel ? [sel] : []);
+        return base.includes(it.id) ? base.filter(x => x !== it.id) : [...base, it.id];
+      });
       setSel(it.id);
       return;
     }
@@ -23115,7 +23122,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // is one level, and pretending otherwise would need a tree the rest of the
   // editor does not have.
   const groupSel = (ids2) => {
-    const ids = [...new Set(ids2 && ids2.length ? ids2 : pick)];
+    // `sel` counts too. Belt and braces beside the seeding above: any future
+    // path that leaves one id in `pick` and another in `sel` still groups the
+    // pair rather than silently doing nothing.
+    const from = ids2 && ids2.length ? ids2 : [...pick, ...(sel ? [sel] : [])];
+    const ids = [...new Set(from)];
     if (ids.length < 2) return;
     markChange();
     const gid = crypto.randomUUID();
@@ -23173,6 +23184,30 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         },
       })
     : selItem;
+
+  // The bounding box of everything picked. A group is ONE thing to the person
+  // looking at it, so the panel answers for the whole of it. The proxy above
+  // returns undefined for every value the members disagree on, which is right
+  // for a colour and wrong for a position: two objects at different heights
+  // reported no Y at all.
+  const panelBox = (() => {
+    if (panelSel.length < 2) return null;
+    const bs = panelSel.map(boxOf);
+    const x = Math.min(...bs.map(b => b.x));
+    const y = Math.min(...bs.map(b => b.y));
+    return { x, y,
+      w: Math.max(...bs.map(b => b.x + b.w)) - x,
+      h: Math.max(...bs.map(b => b.y + b.h)) - y };
+  })();
+  // Moving the whole picked set by a delta, which is what typing an X or a Y
+  // for a group means. Shares movedBy with dragging, duplicating and the arrow
+  // keys, so every shape moves the one right way.
+  const nudgeAll = (dx, dy) => {
+    if (!panelSel.length) return;
+    const ids = new Set(panelSel.map(i => i.id));
+    markChange();
+    setItems(list => list.map(i => (ids.has(i.id) ? { ...i, ...movedBy(i, dx, dy) } : i)));
+  };
 
   const ungroupSel = (gid) => {
     if (!canUngroup(gid)) return;
@@ -26053,7 +26088,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   onDrop={(e) => { e.preventDefault(); moveLayer(dragRow, rev); setDragRow(null); setOverRow(null); }}
                   onClick={(e) => {
                     if (e.metaKey || e.ctrlKey || e.shiftKey) {
-                      setPick(p => p.includes(it.id) ? p.filter(x => x !== it.id) : [...p, it.id]);
+                      // Same seeding as on the canvas, or the two ways of
+                      // picking a pair would disagree about what is picked.
+                      setPick(p => {
+                        const base = p.length ? p : (sel ? [sel] : []);
+                        return base.includes(it.id) ? base.filter(x => x !== it.id) : [...base, it.id];
+                      });
                     } else { setSel(it.id); setPick([]); }
                   }}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px",
@@ -26576,6 +26616,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             })()}
             </>)}
             <div style={two}>
+              {panelBox ? (<>
+                {num(Math.round(panelBox.x), v => nudgeAll((Number(v) || 0) - panelBox.x, 0), "X")}
+                {num(Math.round(panelBox.y), v => nudgeAll(0, (Number(v) || 0) - panelBox.y), "Y")}
+              </>) : (<>
               {num(Math.round(boxOf(selItem).x), v => {
                 const b = boxOf(selItem), d2 = (Number(v) || 0) - b.x;
                 if (selItem.type === "draw" || selItem.type === "path") set2({ ox: (selItem.ox || 0) + d2 });
@@ -26588,6 +26632,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 else if (selItem.type === "arrow" || selItem.type === "line") set2({ y1: selItem.y1 + d2, y2: selItem.y2 + d2 });
                 else set2({ y: Math.round(selItem.y + d2) });
               }, "Y")}
+              </>)}
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
               <div style={{ flex: 1 }}>
@@ -26682,7 +26727,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               );
             })()}
 
-            {!["draw", "arrow", "line", "path"].includes(selItem.type) && (<>
+            {panelBox ? (<>
+              {label(de ? "Maße" : "Layout")}
+              <div style={two}>
+                {numRead(Math.round(panelBox.w), "W",
+                  de ? "Breite der ganzen Auswahl" : "Width of the whole selection")}
+                {numRead(Math.round(panelBox.h), "H",
+                  de ? "Höhe der ganzen Auswahl" : "Height of the whole selection")}
+              </div>
+            </>) : !["draw", "arrow", "line", "path"].includes(selItem.type) && (<>
               {label(de ? "Maße" : "Layout")}
               <div style={two}>
                 {num(Math.round(selItem.w), v => set2({ w: Math.max(8, Number(v) || 8) }), "W")}
