@@ -21800,8 +21800,42 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // and a face nobody loaded would silently fall back to Geist in the file.
   const brandFonts = Array.isArray(brand?.intelligence?.fonts?.google_fonts)
     ? brand.intelligence.fonts.google_fonts.filter(Boolean) : [];
-  const FONT_CHOICES = [...new Set([...brandFonts, "Geist", "Helvetica", "Georgia", "Courier New"])];
-  const WEIGHTS = [[300, "Light"], [400, "Regular"], [500, "Medium"], [600, "Semibold"], [700, "Bold"], [800, "Black"]];
+  // Four faces plus whatever the brand had is a mock-up, not a type tool. The
+  // Brand section has carried 52 Google families all along (28 sans, 11 serif,
+  // 5 display, 3 script, 5 mono); the artboard simply never read the list.
+  // POPULAR_GOOGLE_FONTS is declared further down this file, which is fine:
+  // module constants are initialised long before a component renders.
+  //
+  // Grouped, because a flat list of 56 is a scroll rather than a choice. The
+  // native select this feeds takes optgroups and lets people type to jump,
+  // which beats anything a custom menu would do at this length.
+  const FONT_GROUPS = (() => {
+    const byCat = {};
+    for (const f of POPULAR_GOOGLE_FONTS) (byCat[f.cat] = byCat[f.cat] || []).push(f.name);
+    const g = [];
+    if (brandFonts.length) g.push(["Brand", brandFonts.map(f => [f, f])]);
+    g.push(["System", ["Geist", "Helvetica", "Georgia", "Courier New"].map(f => [f, f])]);
+    for (const cat of Object.keys(byCat)) g.push([cat, byCat[cat].map(f => [f, f])]);
+    return g;
+  })();
+
+  // What each family actually ships. Offering Semibold on a face that has only
+  // Regular and Bold is a control that lies: the panel changes and the canvas
+  // does not. Google's css2 is stricter still, it answers 400 for a weight a
+  // family does not have, and one bad family fails the whole stylesheet.
+  const FONT_WEIGHTS = new Map(POPULAR_GOOGLE_FONTS.map(f => [f.name, f.weights]));
+  const ALL_WEIGHTS = [[300, "Light"], [400, "Regular"], [500, "Medium"], [600, "Semibold"], [700, "Bold"], [800, "Black"]];
+  const weightsFor = (name) => {
+    const have = FONT_WEIGHTS.get(name);
+    return have ? ALL_WEIGHTS.filter(([w]) => have.includes(w)) : ALL_WEIGHTS;
+  };
+  // Switching to a face without the current weight snaps to the nearest one it
+  // has, instead of leaving the panel showing a weight nothing is drawn in.
+  const nearestWeight = (name, want) => {
+    const have = FONT_WEIGHTS.get(name);
+    if (!have || have.includes(want)) return want;
+    return have.reduce((best, w) => (Math.abs(w - want) < Math.abs(best - want) ? w : best), have[0]);
+  };
   const patch = (id, p) => { markChange(); setItems(list => list.map(i => (i.id === id ? { ...i, ...p } : i))); };
   // The same write across several items in ONE history step, so undoing a group
   // effect takes it off the whole group rather than one member per press.
@@ -24234,6 +24268,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         <link rel="stylesheet"
           href={`https://fonts.googleapis.com/css2?${brandFonts.map(f => `family=${encodeURIComponent(f).replace(/%20/g, "+")}:wght@300;400;500;600;700;800`).join("&")}&display=swap`} />
       )}
+      {/* One request for all 52. Google's CSS only declares the faces, so a
+          font file is fetched when something is actually drawn in it, not on
+          open. Kept SEPARATE from the brand link above rather than merged:
+          that one asks every family for 300 to 800, and merging would let one
+          brand face without a light weight fail the whole stylesheet. */}
+      <link rel="stylesheet"
+        href={`https://fonts.googleapis.com/css2?${POPULAR_GOOGLE_FONTS
+          .map(f => `family=${f.name.replace(/ /g, "+")}:wght@${[...f.weights].sort((a, b) => a - b).join(";")}`)
+          .join("&")}&display=swap`} />
 
       {/* the stage */}
       <div ref={stageRef}
@@ -26442,6 +26485,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           const isText = selItem.type === "text" || selItem.type === "sticky";
           // A field that reports on all of them also writes to all of them.
           const set = (k, v) => (many ? patchMany(many, { [k]: v }) : patch(selItem.id, { [k]: v }));
+          // Several fields as ONE history step. Changing a font that also has
+          // to move the weight is one action to the person doing it, so it is
+          // one press of undo.
+          const setAll = (o) => (many ? patchMany(many, o) : patch(selItem.id, o));
           const set2 = (o) => (many ? patchMany(many, o) : patch(selItem.id, o));
           // Effects only. A group selection means the group is the object, so a
           // shadow lands on every member and the renderer draws it once around
@@ -26742,10 +26789,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             {isText && (<>
               {label(de ? "Typografie" : "Typography")}
               <div style={{ marginTop: 6 }}>
-                {dropdown(selItem.font || "Geist", FONT_CHOICES.map(f => [f, f]), v => set("font", v))}
+                {dropdown(selItem.font || "Geist", FONT_GROUPS, v => {
+                  const w = nearestWeight(v, selItem.weight || 600);
+                  setAll(w === (selItem.weight || 600) ? { font: v } : { font: v, weight: w });
+                })}
               </div>
               <div style={two}>
-                {dropdown(String(selItem.weight || 600), WEIGHTS.map(([v, l]) => [String(v), l]),
+                {dropdown(String(selItem.weight || 600), weightsFor(selItem.font || "Geist").map(([v, l]) => [String(v), l]),
                   v => set("weight", Number(v)))}
                 {num(selItem.size, v => set("size", Math.max(6, Number(v) || 6)), "T")}
               </div>
