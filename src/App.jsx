@@ -31325,6 +31325,20 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     return { blob, type: "image/jpeg", name: "post-visual.jpg" };
   };
 
+  // What went wrong, in words, even when the answer was not ours. A function
+  // that runs into its time limit is answered by the platform with a page, not
+  // with JSON, and the composer used to render that as the bare word
+  // "Instagram", which says nothing at all.
+  const readFail = async (res, j, who) => {
+    if (j?.error) return String(j.error);
+    if (res.status === 504 || res.status === 502) {
+      return de ? `${who} hat zu lange gebraucht. Bei einem Karussell kann das am Format einer Folie liegen.`
+                : `${who} took too long. With a carousel that is often one slide's format.`;
+    }
+    const text = await res.text().catch(() => "");
+    return `${who} ${res.status}${text ? ": " + text.slice(0, 140) : ""}`;
+  };
+
   // One file into our own bucket, handed to the server as a path it signs for an
   // hour. Instagram cannot be given bytes, only a url it fetches itself, and
   // brand-assets is not public.
@@ -31493,7 +31507,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
               platform: "instagram",
               status: f.ok ? "published" : "failed",
               url: fj?.url || null,
-              error: f.ok ? null : (fj?.error || "Instagram"),
+              error: f.ok ? null : await readFail(f, fj, "Instagram"),
             });
             j = null;
             break;
@@ -31508,7 +31522,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           platform: "instagram",
           status: res.ok ? "published" : "failed",
           url: j?.url || null,
-          error: res.ok ? null : (j?.error || "Instagram"),
+          error: res.ok ? null : await readFail(res, j, "Instagram"),
         });
       }
 
@@ -31537,7 +31551,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
             const fj = await f.json().catch(() => null);
             if (f.status === 202) continue;
             parts.push({ platform: "threads", status: f.ok ? "published" : "failed",
-              url: fj?.url || null, error: f.ok ? null : (fj?.error || "Threads") });
+              url: fj?.url || null, error: f.ok ? null : await readFail(f, fj, "Threads") });
             j = null;
             break;
           }
@@ -31546,7 +31560,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           continue;
         }
         parts.push({ platform: "threads", status: res.ok ? "published" : "failed",
-          url: j?.url || null, error: res.ok ? null : (j?.error || "Threads") });
+          url: j?.url || null, error: res.ok ? null : await readFail(res, j, "Threads") });
       }
 
       const failedAll = parts.length > 0 && parts.every(p => p.status === "failed");
