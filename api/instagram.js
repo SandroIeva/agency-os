@@ -20,6 +20,7 @@
 //   GET  ?mode=callback&code=…        → Instagram sends them back here (/instagram/callback)
 //   POST ?mode=deauthorize            → Meta calls this when somebody removes the app
 //   POST ?mode=delete                 → Meta's data deletion request callback
+//   GET  ?mode=delete-status&id=…     → the page that callback's url points at
 //   POST { mode: "status",     orgId } → which accounts are connected, and as whom
 //   POST { mode: "disconnect", orgId, igUserId } → forget one account
 //   POST { mode: "publish",    orgId, igUserId, … } → one post, container flow
@@ -262,6 +263,37 @@ export default async function handler(req) {
       return back("save_failed");
     }
     return back("connected");
+  }
+
+  // ── Where a deletion request can be read back ─────────────────────────────
+  //
+  // Meta requires the deletion callback to hand back a url a person can open to
+  // see what happened, and it checks that url. Without a route of its own the
+  // SPA catch-all swallows this path and answers 1439 bytes of empty shell: a
+  // reviewer, and anybody who actually asked to have their data removed, would
+  // see a blank page. Answered by the function instead, in both languages,
+  // because there is no session here to ask which one.
+  if (mode === "delete-status") {
+    const id = (url.searchParams.get("id") || "").replace(/[^\w-]/g, "").slice(0, 64);
+    const { count } = await db.from("instagram_connections")
+      .select("ig_user_id", { count: "exact", head: true }).eq("ig_user_id", id);
+    const gone = !count;
+    const html = `<!doctype html><html lang="de"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>i7OS</title>
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+background:#f4f4f7;color:#15151c;font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+main{max-width:34rem;padding:40px 24px}h1{font-size:19px;margin:0 0 14px}
+p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
+<main><h1>Instagram-Daten</h1>
+<p>${gone
+  ? "Die Verbindung dieses Instagram-Kontos zu i7OS wurde gelöscht. Wir haben keine Zugangsdaten und keine Kontodaten mehr dazu gespeichert."
+  : "Die Löschung dieses Instagram-Kontos ist bei uns eingegangen und wird bearbeitet."}</p>
+<p>${gone
+  ? "This Instagram account's connection to i7OS has been deleted. We no longer hold any access token or account data for it."
+  : "The deletion request for this Instagram account has reached us and is being processed."}</p>
+<p><code>${id || "-"}</code></p></main></html>`;
+    return new Response(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
   }
 
   // ── Meta's own callbacks ──────────────────────────────────────────────────

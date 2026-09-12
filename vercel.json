@@ -36,6 +36,10 @@
       "destination": "/api/instagram?mode=delete"
     },
     {
+      "source": "/instagram/delete-status",
+      "destination": "/api/instagram?mode=delete-status"
+    },
+    {
       "source": "/((?!api/|@|node_modules/|src/|i/|s/|.*\\.).*)",
       "destination": "/"
     }
