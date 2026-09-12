@@ -520,9 +520,15 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
         // A slide is a picture, so the short wait is the whole wait. Still
         // pending after it means something is wrong with that file, not that it
         // needs more time.
-        const ready = await waitReady(made.id);
+        // Most often a shape Instagram will not take: it accepts nothing
+        // outside 4:5 to 1.91:1 and wants every slide of a carousel in the
+        // same shape. Named, because "still processing" sends somebody away
+        // to wait for something that will never finish.
+        const ready = await waitReady(made.id, 8000);
         if (!ready.ok) return json({
-          error: ready.error || (ready.pending ? "Instagram is still processing a slide" : "Media was not accepted"),
+          error: ready.error || (ready.pending
+            ? `Instagram is still working on slide ${children.length + 1}. Check that every slide has the same shape, between 4:5 and 1.91:1.`
+            : "Media was not accepted"),
           code: "media_failed",
         }, 502);
         children.push(made.id);
