@@ -40,6 +40,22 @@
       "destination": "/api/instagram?mode=delete-status"
     },
     {
+      "source": "/threads/callback",
+      "destination": "/api/threads?mode=callback"
+    },
+    {
+      "source": "/threads/deauthorize",
+      "destination": "/api/threads?mode=deauthorize"
+    },
+    {
+      "source": "/threads/delete",
+      "destination": "/api/threads?mode=delete"
+    },
+    {
+      "source": "/threads/delete-status",
+      "destination": "/api/threads?mode=delete-status"
+    },
+    {
       "source": "/((?!api/|@|node_modules/|src/|i/|s/|.*\\.).*)",
       "destination": "/"
     }

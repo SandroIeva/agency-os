@@ -18861,7 +18861,7 @@ const RESERVED_SLUGS = new Set([
   "api", "i", "s", "slack", "pinterest", "assets", "src", "admin",
   // Every one of these owns a real callback path in vercel.json. `figma` was
   // missed when that route was added and is caught up here; nobody had taken it.
-  "figma", "instagram",
+  "figma", "instagram", "threads",
   // Kept free for pages this domain may want later. A workspace called `login`
   // is only a problem on the day somebody builds /login, and by then it is
   // somebody's workspace and cannot be taken away.
@@ -30923,13 +30923,15 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     //
     // Asked in parallel and failing apart: Instagram being unreachable must not
     // empty the list of everything else.
-    const [zern, meta] = await Promise.all([
+    const askDirect = (what) => fetch(`/api/${what}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+      body: JSON.stringify({ mode: "status", orgId }),
+    }).then(r => r.ok ? r.json() : null).catch(() => null);
+    const [zern, meta, thr] = await Promise.all([
       zernioRequest(session, { mode: "status", orgId }).catch(e => { setError(e); return null; }),
-      fetch("/api/instagram", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
-        body: JSON.stringify({ mode: "status", orgId }),
-      }).then(r => r.ok ? r.json() : null).catch(() => null),
+      askDirect("instagram"),
+      askDirect("threads"),
     ]);
     const direct = (meta?.enabled ? meta.accounts || [] : []).map(a => ({
       // Prefixed, so an id can never collide with a Zernio one and so the
@@ -30943,7 +30945,20 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       profileUrl: a.username ? `https://www.instagram.com/${a.username}` : null,
       isActive: !a.needsReconnect,
     }));
-    setAccounts([...(zern?.accounts || []), ...direct]);
+    // Threads is a second direct provider, not a second Instagram: it posts to a
+    // different network and, unlike Instagram, it takes a post with no picture
+    // at all. `submit` is the only place that has to care.
+    const threads = (thr?.enabled ? thr.accounts || [] : []).map(a => ({
+      id: `threads:${a.threadsUserId}`,
+      provider: "threads",
+      threadsUserId: a.threadsUserId,
+      platform: "threads",
+      username: a.username || "",
+      displayName: a.username || "Threads",
+      profileUrl: a.username ? `https://www.threads.net/@${a.username}` : null,
+      isActive: !a.needsReconnect,
+    }));
+    setAccounts([...(zern?.accounts || []), ...direct, ...threads]);
   }, [orgId, session?.access_token]); // eslint-disable-line
 
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
@@ -31264,11 +31279,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     // no draft and no scheduled post, so a queue would have to be ours, and a
     // queue nobody can see inside is worse than saying so.
     const metaSel = selected.filter(a => a.provider === "meta");
-    const zernSel = selected.filter(a => a.provider !== "meta");
-    if (metaSel.length && (isDraft || schedule)) {
+    const thrSel = selected.filter(a => a.provider === "threads");
+    const zernSel = selected.filter(a => !a.provider);
+    if ((metaSel.length || thrSel.length) && (isDraft || schedule)) {
       setError(new Error(de
-        ? "Die direkte Instagram-Verbindung kann nur sofort veröffentlichen. Nimm Instagram raus, oder veröffentliche jetzt."
-        : "The direct Instagram connection can only publish right away. Take Instagram out, or publish now."));
+        ? "Die direkten Meta-Kanäle können nur sofort veröffentlichen. Nimm sie raus, oder veröffentliche jetzt."
+        : "The direct Meta channels can only publish right away. Take them out, or publish now."));
       return;
     }
     // Instagram fetches the media itself and refuses a post without any.
@@ -31305,7 +31321,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           if (!up.ok) throw new Error(de ? "Bild-Upload fehlgeschlagen." : "Image upload failed.");
           mediaItems = [{ type: "image", url: pre.publicUrl, filename: rendered.name }];
         }
-        if (metaSel.length) {
+        if (metaSel.length || thrSel.length) {
           metaMedia = await toMetaMedia(rendered.blob, rendered.type, "jpg");
         }
       }
@@ -31313,12 +31329,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       // They are not rendered through the canvas: the editor composes one flat
       // picture, and a slide it never touched must arrive as the file it is.
       let metaExtras = [];
-      if (metaSel.length && extras.length) {
+      if ((metaSel.length || thrSel.length) && extras.length) {
         metaExtras = await Promise.all(extras.map(x =>
           toMetaMedia(x.file, x.file.type, (x.file.name.split(".").pop() || "jpg").toLowerCase())));
       }
       let metaReel = null;
-      if (metaSel.length && reel) {
+      if ((metaSel.length || thrSel.length) && reel) {
         metaReel = await toMetaMedia(reel.file, reel.file.type, (reel.file.name.split(".").pop() || "mp4").toLowerCase());
       }
 
@@ -31390,6 +31406,43 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           url: j?.url || null,
           error: res.ok ? null : (j?.error || "Instagram"),
         });
+      }
+
+      // Threads, one account at a time like Instagram. It differs in one way
+      // that matters here: text on its own is a post, so there is no media
+      // guard above it and none needed.
+      for (const a of thrSel) {
+        const send = (payload) => fetch("/api/threads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+          body: JSON.stringify({ orgId, threadsUserId: a.threadsUserId, ...payload }),
+        });
+        const media = metaReel
+          ? [{ ...metaReel, kind: "VIDEO" }]
+          : (metaMedia ? [metaMedia, ...metaExtras] : []);
+        const res = await send({ mode: "publish", text: text.trim() || undefined, media });
+        let j = await res.json().catch(() => null);
+        // 202 means Threads is still processing the media. The container is
+        // already made, so finishing it is a different call: asking to publish
+        // again would build a second one and post twice.
+        if (res.status === 202 && j?.containerId) {
+          setResult({ status: "pending", platforms: [{ platform: "threads", status: "pending" }] });
+          for (let tries = 0; tries < 24; tries++) {
+            await new Promise(done => setTimeout(done, 5000));
+            const f = await send({ mode: "publish-finish", containerId: j.containerId });
+            const fj = await f.json().catch(() => null);
+            if (f.status === 202) continue;
+            parts.push({ platform: "threads", status: f.ok ? "published" : "failed",
+              url: fj?.url || null, error: f.ok ? null : (fj?.error || "Threads") });
+            j = null;
+            break;
+          }
+          if (j) parts.push({ platform: "threads", status: "pending", url: null,
+            error: de ? "Threads verarbeitet das Video noch. Schau gleich noch mal nach." : "Threads is still processing the video. Check again shortly." });
+          continue;
+        }
+        parts.push({ platform: "threads", status: res.ok ? "published" : "failed",
+          url: j?.url || null, error: res.ok ? null : (j?.error || "Threads") });
       }
 
       const failedAll = parts.length > 0 && parts.every(p => p.status === "failed");
@@ -31664,7 +31717,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                                 Colour comes from `currentColor`, so it reads on
                                 the dark selected pill and the light idle one
                                 without either being written down twice. */}
-                            {a.provider === "meta" && (
+                            {(a.provider === "meta" || a.provider === "threads") && (
                               <span style={{ fontSize: 9.5, fontFamily: FONT, fontWeight: 600, letterSpacing: 0.6,
                                 textTransform: "uppercase", padding: "2px 6px", borderRadius: 5, flexShrink: 0,
                                 border: "1px solid currentColor", opacity: 0.62 }}>
@@ -31902,11 +31955,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
                 </motion.button>
               )}
-              {/* Which slide, in the footer. Under the picture it took a line
-                  from the picture's own area, and the picture is meant to have
-                  all of it. Here it costs nothing and cannot shrink anything. */}
+              {/* Center the slide count beneath the image, independently of the footer buttons. */}
               {stepIdx === S_VISUAL && !reel && slides.length > 1 && (
-                <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>
+                <span style={{ position: "absolute", left: "50%", transform: "translateX(-50%)",
+                  fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>
                   {slideIdx + 1} / {slides.length}
                 </span>
               )}
@@ -50729,6 +50781,100 @@ export default function CircularMenu() {
     }
   }, []); // eslint-disable-line
 
+  // ── Threads, directly through Meta ───────────────────────────────────────
+  // The same shape as the Instagram block above, and a separate connection:
+  // Threads is its own app use case with its own review, and a workspace can
+  // have one without the other.
+  const [thReady, setThReady] = useState(false);
+  const [thConn, setThConn] = useState(null);
+  const [thBusy, setThBusy] = useState(false);
+  const [thErr, setThErr] = useState("");
+
+  const readThreads = useCallback(async () => {
+    if (!userOrg?.id) return null;
+    try {
+      const r = await fetch("/api/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ mode: "status", orgId: userOrg.id }),
+      });
+      if (!r.ok) return null;
+      return await r.json().catch(() => null);
+    } catch { return null; }
+  }, [userOrg?.id, session?.access_token]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const st = await readThreads();
+      if (!alive) return;
+      setThReady(!!st?.enabled);
+      setThConn(st?.enabled ? st : null);
+    })();
+    return () => { alive = false; };
+  }, [readThreads]);
+
+  const startThreadsConnect = async () => {
+    setThBusy(true); setThErr("");
+    try {
+      const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
+        p_org: userOrg?.id || null, p_kind: "threads", p_lang: appLanguage === "en" ? "en" : "de",
+      });
+      if (error || !token) throw error || new Error("token");
+      window.location.href = `/api/threads?mode=install&state=${encodeURIComponent(token)}`;
+    } catch (e) {
+      setThErr(appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection.");
+      setThBusy(false);
+    }
+  };
+
+  const disconnectThreads = async (threadsUserId) => {
+    if (!userOrg?.id) return;
+    setThBusy(true); setThErr("");
+    try {
+      await fetch("/api/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ mode: "disconnect", orgId: userOrg.id, threadsUserId }),
+      });
+      setThConn(await readThreads());
+    } catch (e) {
+      setThErr(appLanguage === "de" ? "Trennen hat nicht funktioniert." : "Disconnecting did not work.");
+    }
+    setThBusy(false);
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("threads");
+    if (!status) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("threads");
+    window.history.replaceState({}, "", url.pathname + (url.search || ""));
+    if (status === "connected") {
+      readThreads().then(st => { setThReady(!!st?.enabled); setThConn(st?.enabled ? st : null); });
+      setSettingsTab("account");
+      setCurrentView("settings");
+    } else if (status !== "cancelled") {
+      setThErr(
+        status === "not_enabled"
+          ? (appLanguage === "de"
+              ? "Dieser Workspace ist für die direkte Threads-Verbindung noch nicht freigeschaltet."
+              : "This workspace is not cleared for the direct Threads connection yet.")
+        : status === "forbidden"
+          ? (appLanguage === "de"
+              ? "Du gehörst nicht mehr zu diesem Workspace, deshalb wurde die Verbindung nicht hergestellt."
+              : "You are no longer a member of that workspace, so the connection was not made.")
+        : status === "save_failed"
+          ? (appLanguage === "de"
+              ? "Threads hat geantwortet, aber die Verbindung konnte nicht gespeichert werden. Bitte noch einmal verbinden."
+              : "Threads answered, but the connection could not be saved. Please connect again.")
+          : (appLanguage === "de"
+              ? "Die Verbindung zu Threads ist nicht zustande gekommen. Versuch es noch einmal."
+              : "The Threads connection did not go through. Try again."));
+    }
+  }, []); // eslint-disable-line
+
   // ── Figma ────────────────────────────────────────────────────────────────
   // Also a workspace connection rather than a personal one: the files a team
   // imports designs from are the team's.
@@ -58224,6 +58370,59 @@ export default function CircularMenu() {
                   )}
                   {igErr && (
                     <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{igErr}</div>
+                  )}
+                  {/* Threads. Beside Instagram and connected on its own, because
+                      Meta reviews the two separately. */}
+                  {thReady && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px", borderTop: `1px solid ${theme.borderFaint}`,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      {/* The at-sign Threads uses, drawn the way every other
+                          glyph in this list is: one stroke weight, round caps. */}
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.text}
+                        strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M16.4 11.6c-.1-.05-.2-.1-.3-.14-.18-3.3-1.98-5.18-5-5.2h-.04c-1.8 0-3.3.77-4.22 2.17l1.66 1.14c.69-1.04 1.77-1.27 2.56-1.27h.03c.98.01 1.72.3 2.2.85.35.4.58.96.7 1.66a12.6 12.6 0 0 0-2.82-.14c-2.84.17-4.67 1.82-4.55 4.13.06 1.17.65 2.18 1.65 2.84.85.56 1.94.83 3.08.77 1.5-.08 2.68-.65 3.5-1.7.63-.79 1.02-1.82 1.2-3.11.72.43 1.25 1 1.55 1.68.5 1.16.53 3.07-1.02 4.62-1.36 1.36-3 1.95-5.48 1.97-2.75-.02-4.83-.9-6.18-2.62C3.9 17.6 3.24 15.35 3.22 12c.02-3.35.68-5.6 1.96-7.23C6.53 3.05 8.61 2.17 11.36 2.15c2.77.02 4.88.9 6.28 2.63.69.85 1.2 1.91 1.55 3.15l1.9-.5c-.42-1.53-1.07-2.85-1.96-3.94C17.35 1.28 14.72.17 11.37.15h-.01C8.02.17 5.42 1.29 3.7 3.48 2.16 5.43 1.37 8.14 1.34 11.99v.02c.03 3.85.82 6.56 2.36 8.51 1.72 2.19 4.32 3.31 7.66 3.33h.01c2.98-.02 5.08-.8 6.8-2.53 2.26-2.25 2.19-5.08 1.45-6.81-.54-1.25-1.56-2.26-2.95-2.92z"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Threads</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {thConn?.accounts?.length
+                          ? (thConn.accounts[0].needsReconnect
+                              ? (appLanguage === "de"
+                                  ? "Die Verbindung ist abgelaufen. Einmal neu verbinden."
+                                  : "The connection expired. Connect again.")
+                              : (appLanguage === "de"
+                                  ? `Verbunden${thConn.accounts[0].username ? ` als @${thConn.accounts[0].username}` : ""}. Gilt für diesen Workspace.`
+                                  : `Connected${thConn.accounts[0].username ? ` as @${thConn.accounts[0].username}` : ""}. Applies to this workspace.`))
+                          : (appLanguage === "de"
+                              ? "Direkt über Meta veröffentlichen, auch reine Textbeiträge."
+                              : "Publish straight through Meta, text-only posts included.")}
+                      </div>
+                    </div>
+                    <motion.button whileTap={{ scale: 0.97 }}
+                      onClick={thBusy ? undefined : (thConn?.accounts?.length
+                        ? () => disconnectThreads(thConn.accounts[0].threadsUserId)
+                        : startThreadsConnect)}
+                      style={{ padding: "8px 14px", borderRadius: 10, cursor: thBusy ? "wait" : "pointer",
+                        border: `1px solid ${thConn?.accounts?.length ? theme.borderFaint : "transparent"}`,
+                        background: thConn?.accounts?.length ? "transparent" : "#15151c",
+                        color: thConn?.accounts?.length ? theme.text : "#fff",
+                        fontFamily: FONT, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0,
+                        opacity: thBusy ? 0.6 : 1 }}>
+                      {thConn?.accounts?.length ? (appLanguage === "de" ? "Trennen" : "Disconnect")
+                        : (appLanguage === "de" ? "Verbinden" : "Connect")}
+                    </motion.button>
+                  </div>
+                  )}
+                  {thErr && (
+                    <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{thErr}</div>
                   )}
                   {/* Figma. Like Pinterest, this belongs to the workspace and
                       not to the person signed in, so it says whose account it
