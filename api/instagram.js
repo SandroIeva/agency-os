@@ -475,7 +475,16 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
         body: JSON.stringify({ ...params, access_token: token }),
       });
       const j = await res.json().catch(() => null);
-      return { ok: res.ok, id: j?.id, error: j?.error?.message || null };
+      // Written down with what was asked for, minus the token. A post fails in
+      // one of several places and the message alone does not say which.
+      if (!res.ok || !j?.id) {
+        const { access_token, ...asked } = { ...params };
+        console.error("[instagram] container failed", res.status, JSON.stringify(asked),
+          j?.error?.message || "", j?.error?.error_user_msg || "");
+      }
+      // error_user_msg is the one written for a person; it is usually the more
+      // specific of the two and it is what the composer shows.
+      return { ok: res.ok, id: j?.id, error: j?.error?.error_user_msg || j?.error?.message || null };
     };
 
     // A picture is ready in a second or two; a reel is transcoded and routinely
@@ -571,7 +580,8 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     if (!pub.ok || !pubJ?.id) {
       // The 24h ceiling reads like any other error otherwise, and it is the one
       // a person can do something about: wait, or post from the app.
-      const msg = pubJ?.error?.message || "Instagram refused to publish";
+      const msg = pubJ?.error?.error_user_msg || pubJ?.error?.message || "Instagram refused to publish";
+      console.error("[instagram] publish failed", pub.status, creationId, msg);
       const limited = /limit/i.test(msg);
       return json({ error: msg, code: limited ? "rate_limited" : "instagram_error" }, 502);
     }
