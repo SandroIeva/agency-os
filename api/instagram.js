@@ -24,7 +24,8 @@
 //   POST { mode: "status",     orgId } → which accounts are connected, and as whom
 //   POST { mode: "disconnect", orgId, igUserId } → forget one account
 //   POST { mode: "publish",    orgId, igUserId, … } → one post, container flow
-//   POST { mode: "insights",   orgId, igUserId, … } → account metrics
+//   POST { mode: "overview",   orgId, igUserId, days } → the dashboard's numbers
+//   POST { mode: "insights",   orgId, igUserId, … } → one raw insights call
 //   POST { mode: "limit",      orgId, igUserId }    → posts left in the 24h window
 //
 // Every POST from the app carries the caller's Supabase JWT and has to resolve
@@ -378,6 +379,59 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     if (!r.ok) return json({ error: r.body?.error?.message || "Instagram rejected the request", code: "instagram_error" }, 502);
     const d = r.body?.data?.[0] || {};
     return json({ used: d.quota_usage ?? null, limit: d.config?.quota_total ?? 100 });
+  }
+
+  // ── overview — the numbers a dashboard shows, in one round trip ───────────
+  //
+  // Soft in three places, because the three answers fail for different reasons
+  // and independently: a metric Instagram has retired takes the whole insights
+  // call down with it, the quota endpoint needs the publishing permission, and
+  // the profile needs none of that. One failing part must not blank the card.
+  if (body.mode === "overview") {
+    const days = Math.min(90, Math.max(1, Number(body.days) || 28));
+    const until = Math.floor(Date.now() / 1000);
+    const since = until - days * 86400;
+
+    // Instagram refuses the WHOLE call when one metric in the list is not
+    // supported for this account, and the message names it. So the list is
+    // narrowed and retried rather than guessed at once: whatever survives is
+    // shown, and what did not is named instead of silently missing.
+    const wanted = ["reach", "views", "total_interactions", "likes", "comments", "shares", "saves", "accounts_engaged"];
+    let metrics = [...wanted];
+    let insights = null, dropped = [];
+    for (let attempt = 0; attempt < wanted.length && metrics.length; attempt++) {
+      const r = await ig(token, `/${row.ig_user_id}/insights`, {
+        metric: metrics.join(","), period: "day", metric_type: "total_value", since, until,
+      });
+      if (r.ok) { insights = r.body?.data || []; break; }
+      const msg = r.body?.error?.message || "";
+      const bad = metrics.find(m => msg.includes(m));
+      if (!bad) break;
+      dropped.push(bad);
+      metrics = metrics.filter(m => m !== bad);
+    }
+
+    const profile = await ig(token, "/me",
+      { fields: "user_id,username,account_type,followers_count,follows_count,media_count" });
+    const quota = await ig(token, `/${row.ig_user_id}/content_publishing_limit`, { fields: "config,quota_usage" });
+    const q = quota.ok ? (quota.body?.data?.[0] || {}) : null;
+
+    return json({
+      account: {
+        igUserId: row.ig_user_id,
+        username: profile.body?.username || row.username,
+        followers: profile.body?.followers_count ?? null,
+        following: profile.body?.follows_count ?? null,
+        posts: profile.body?.media_count ?? null,
+      },
+      days,
+      // name → number, which is all a tile needs. The raw shape nests the value
+      // one level deeper than anybody rendering it cares about.
+      metrics: Object.fromEntries((insights || []).map(m => [m.name, m.total_value?.value ?? null])),
+      unavailable: dropped.length ? dropped : undefined,
+      quota: q ? { used: q.quota_usage ?? 0, total: q.config?.quota_total ?? 100 } : null,
+      tokenExpiresAt: row.token_expires_at,
+    });
   }
 
   if (body.mode === "insights") {

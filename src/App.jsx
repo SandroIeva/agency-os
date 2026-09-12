@@ -30121,6 +30121,94 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
   );
 }
 
+// ── Analytics → Instagram, straight from Meta ──────────────────────────────
+//
+// A panel of its own rather than numbers folded into the Zernio dashboard
+// above. Zernio reports top posts, weekly follower stats and daily metrics;
+// Instagram reports a different set over a window it picks. Translating one
+// into the other would mean inventing the parts that do not line up, and the
+// place that invention showed would be a chart that quietly disagreed with
+// Instagram's own app.
+//
+// It renders nothing at all when this workspace has no direct connection, so
+// every other workspace is unaffected.
+function InstagramDirectPanel({ theme, darkMode, de, session, orgId, card, secLabel }) {
+  const [state, setState] = useState(null);   // null | { loading } | payload | { error }
+
+  useEffect(() => {
+    if (!orgId || !session?.access_token) return;
+    let on = true;
+    setState({ loading: true });
+    (async () => {
+      try {
+        const st = await fetch("/api/instagram", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ mode: "status", orgId }),
+        }).then(r => r.ok ? r.json() : null);
+        const first = st?.enabled ? (st.accounts || [])[0] : null;
+        if (!first) { if (on) setState(null); return; }
+        const r = await fetch("/api/instagram", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ mode: "overview", orgId, igUserId: first.igUserId, days: 28 }),
+        });
+        const j = await r.json().catch(() => null);
+        if (!on) return;
+        setState(r.ok ? j : { error: j?.error || (de ? "Instagram hat nicht geantwortet." : "Instagram did not answer.") });
+      } catch { if (on) setState({ error: de ? "Instagram hat nicht geantwortet." : "Instagram did not answer." }); }
+    })();
+    return () => { on = false; };
+  }, [orgId, session?.access_token, de]);
+
+  if (!state) return null;
+
+  const num = (v) => v == null ? "–" : new Intl.NumberFormat(de ? "de-DE" : "en-US").format(v);
+  const tile = (label, value) => (
+    <div key={label} style={{ flex: "1 1 42%", minWidth: 0 }}>
+      <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{value}</div>
+      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{label}</div>
+    </div>
+  );
+
+  return (
+    <div style={card}>
+      <div style={secLabel}>{de ? "Instagram direkt" : "Instagram direct"}</div>
+      {state.loading ? (
+        <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>{de ? "Wird geladen …" : "Loading …"}</div>
+      ) : state.error ? (
+        <div style={{ fontSize: 12.5, fontFamily: FONT, color: "#E86767" }}>{state.error}</div>
+      ) : (<>
+        <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginBottom: 14 }}>
+          @{state.account?.username}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+          {tile(de ? "Follower" : "Followers", num(state.account?.followers))}
+          {tile(de ? "Beiträge" : "Posts", num(state.account?.posts))}
+          {tile(de ? `Reichweite, ${state.days} Tage` : `Reach, ${state.days} days`, num(state.metrics?.reach))}
+          {tile(de ? `Interaktionen, ${state.days} Tage` : `Interactions, ${state.days} days`, num(state.metrics?.total_interactions))}
+        </div>
+        {state.quota && (
+          <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 16,
+            paddingTop: 14, borderTop: `1px solid ${theme.borderFaint}` }}>
+            {de
+              ? `${state.quota.used} von ${state.quota.total} Beiträgen in den letzten 24 Stunden veröffentlicht.`
+              : `${state.quota.used} of ${state.quota.total} posts published in the last 24 hours.`}
+          </div>
+        )}
+        {/* Named rather than left blank. A tile showing a dash because Instagram
+            retired the metric looks exactly like a tile showing a dash because
+            nothing happened. */}
+        {state.unavailable?.length > 0 && (
+          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 8 }}>
+            {(de ? "Von Instagram nicht geliefert: " : "Not returned by Instagram: ") + state.unavailable.join(", ")}
+          </div>
+        )}
+      </>)}
+    </div>
+  );
+}
+
 function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, projectId = null, projectName = "" }) {
   // Read from the module-level mirror rather than threaded through two more
   // components — the same mirror the upload guards use. Advisory only: the real
@@ -30555,6 +30643,8 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
                   );
                 })}
               </div>
+              <InstagramDirectPanel theme={theme} darkMode={darkMode} de={de}
+                session={session} orgId={orgId} card={card} secLabel={secLabel} />
               {unconnected.length > 0 && (
                 <div style={card}>
                   <div style={secLabel}>{de ? "Weitere verbinden" : "Connect more"}</div>
