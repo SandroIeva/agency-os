@@ -31536,7 +31536,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
                   {!visual && !reel ? (
                     <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center" }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, width: "100%" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: `repeat(${hasDirectIg ? 4 : 3}, 1fr)`, gap: 16, width: "100%" }}>
                         {[
                           { key: "upload", label: de ? "Bild hochladen" : "Upload image",
                             sub: de ? "PNG oder JPG von diesem Rechner" : "PNG or JPG from this machine",
@@ -31550,6 +31550,16 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                             sub: de ? "Was du in Creations gebaut hast" : "What you built in Creations",
                             icon: <><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></>,
                             onClick: () => setBoardsOpen(true) },
+                          // A reel is not another source of pictures, it is a
+                          // different KIND of post, and this is the screen where
+                          // that is decided. It used to be a pill lying on the
+                          // picture it would have replaced, which is why the
+                          // first question anybody asked about it was what it
+                          // did. Only where a reel can be sent.
+                          ...(hasDirectIg ? [{ key: "reel", label: "Reel",
+                            sub: de ? "Ein Video statt eines Bildes" : "A video instead of a picture",
+                            icon: <><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M10 9.5l5 2.5-5 2.5z"/></>,
+                            onClick: () => reelRef.current?.click() }] : []),
                         ].map(o => (
                           <motion.div key={o.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.99 }} onClick={o.onClick}
                             style={{ padding: "53px 22px", borderRadius: 18, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", cursor: assetBusy ? "wait" : "pointer", opacity: assetBusy ? 0.6 : 1 }}>
@@ -31617,17 +31627,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                       </motion.div>
 
-                      {/* Not a picture and not a slide, so it sits in the one
-                          free corner. Bottom right put it on top of the slide
-                          counter as soon as the picture was a portrait. */}
-                      {hasDirectIg && !reel && (
-                        <span onClick={() => reelRef.current?.click()}
-                          style={{ position: "absolute", left: 10, top: 10, padding: "6px 12px", borderRadius: 999,
-                            background: "rgba(21,21,28,0.72)", color: "#fff", fontSize: 11.5, fontFamily: FONT,
-                            fontWeight: 600, cursor: "pointer", backdropFilter: "blur(6px)" }}>
-                          {de ? "Video als Reel" : "Video as a reel"}
-                        </span>
-                      )}
                       </div>
                       {!reel && slides.length > 1 && (
                         <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim, lineHeight: 1 }}>
