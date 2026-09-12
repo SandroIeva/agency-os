@@ -24,6 +24,18 @@
       "destination": "/api/figma?mode=callback"
     },
     {
+      "source": "/instagram/callback",
+      "destination": "/api/instagram?mode=callback"
+    },
+    {
+      "source": "/instagram/deauthorize",
+      "destination": "/api/instagram?mode=deauthorize"
+    },
+    {
+      "source": "/instagram/delete",
+      "destination": "/api/instagram?mode=delete"
+    },
+    {
       "source": "/((?!api/|@|node_modules/|src/|i/|s/|.*\\.).*)",
       "destination": "/"
     }

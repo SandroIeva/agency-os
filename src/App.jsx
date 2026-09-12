@@ -18859,6 +18859,9 @@ const RESET_ICON = (
 // swallow a route that already exists.
 const RESERVED_SLUGS = new Set([
   "api", "i", "s", "slack", "pinterest", "assets", "src", "admin",
+  // Every one of these owns a real callback path in vercel.json. `figma` was
+  // missed when that route was added and is caught up here; nobody had taken it.
+  "figma", "instagram",
   // Kept free for pages this domain may want later. A workspace called `login`
   // is only a problem on the day somebody builds /login, and by then it is
   // somebody's workspace and cannot be taken away.
@@ -49982,6 +49985,109 @@ export default function CircularMenu() {
     }
   }, []); // eslint-disable-line
 
+  // ── Instagram, directly through Meta ─────────────────────────────────────
+  // Beside Zernio, not instead of it. The row appears only for workspaces on
+  // the server's allowlist, because until Meta grants Advanced Access the Meta
+  // app can only serve accounts that hold a role on it. Everybody else keeps
+  // posting through Zernio and never sees that there are two paths.
+  //
+  // `enabled` is the server's answer, not a flag in the bundle: the allowlist
+  // is an env var, and an env var added after a build does not reach a
+  // build-time constant.
+  const [igReady, setIgReady] = useState(false);
+  const [igConn, setIgConn] = useState(null);   // { accounts: [{ igUserId, username, needsReconnect }] }
+  const [igBusy, setIgBusy] = useState(false);
+  const [igErr, setIgErr] = useState("");
+
+  const readInstagram = useCallback(async () => {
+    if (!userOrg?.id) return null;
+    try {
+      const r = await fetch("/api/instagram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ mode: "status", orgId: userOrg.id }),
+      });
+      if (!r.ok) return null;
+      return await r.json().catch(() => null);
+    } catch { return null; }
+  }, [userOrg?.id, session?.access_token]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const st = await readInstagram();
+      if (!alive) return;
+      setIgReady(!!st?.enabled);
+      setIgConn(st?.enabled ? st : null);
+    })();
+    return () => { alive = false; };
+  }, [readInstagram]);
+
+  const startInstagramConnect = async () => {
+    setIgBusy(true); setIgErr("");
+    try {
+      const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
+        p_org: userOrg?.id || null, p_kind: "instagram", p_lang: appLanguage === "en" ? "en" : "de",
+      });
+      if (error || !token) throw error || new Error("token");
+      // A full navigation, not a popup: Instagram's consent screen is a page,
+      // and a blocked popup would look like a dead button.
+      window.location.href = `/api/instagram?mode=install&state=${encodeURIComponent(token)}`;
+    } catch (e) {
+      setIgErr(appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection.");
+      setIgBusy(false);
+    }
+  };
+
+  const disconnectInstagram = async (igUserId) => {
+    if (!userOrg?.id) return;
+    setIgBusy(true); setIgErr("");
+    try {
+      await fetch("/api/instagram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ mode: "disconnect", orgId: userOrg.id, igUserId }),
+      });
+      setIgConn(await readInstagram());
+    } catch (e) {
+      setIgErr(appLanguage === "de" ? "Trennen hat nicht funktioniert." : "Disconnecting did not work.");
+    }
+    setIgBusy(false);
+  };
+
+  // Instagram sends people back to /?instagram=<status>. Read once, then taken
+  // out of the URL so a reload does not replay it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("instagram");
+    if (!status) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("instagram");
+    window.history.replaceState({}, "", url.pathname + (url.search || ""));
+    if (status === "connected") {
+      readInstagram().then(st => { setIgReady(!!st?.enabled); setIgConn(st?.enabled ? st : null); });
+      setSettingsTab("account");
+      setCurrentView("settings");
+    } else if (status !== "cancelled") {
+      setIgErr(
+        status === "not_enabled"
+          ? (appLanguage === "de"
+              ? "Dieser Workspace ist für die direkte Instagram-Verbindung noch nicht freigeschaltet."
+              : "This workspace is not cleared for the direct Instagram connection yet.")
+        : status === "forbidden"
+          ? (appLanguage === "de"
+              ? "Du gehörst nicht mehr zu diesem Workspace, deshalb wurde die Verbindung nicht hergestellt."
+              : "You are no longer a member of that workspace, so the connection was not made.")
+        : status === "save_failed"
+          ? (appLanguage === "de"
+              ? "Instagram hat geantwortet, aber die Verbindung konnte nicht gespeichert werden. Bitte noch einmal verbinden."
+              : "Instagram answered, but the connection could not be saved. Please connect again.")
+          : (appLanguage === "de"
+              ? "Die Verbindung zu Instagram ist nicht zustande gekommen. Versuch es noch einmal."
+              : "The Instagram connection did not go through. Try again."));
+    }
+  }, []); // eslint-disable-line
+
   // ── Figma ────────────────────────────────────────────────────────────────
   // Also a workspace connection rather than a personal one: the files a team
   // imports designs from are the team's.
@@ -57418,6 +57524,65 @@ export default function CircularMenu() {
                   )}
                   {pinErr && (
                     <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{pinErr}</div>
+                  )}
+                  {/* Instagram, straight through Meta rather than through
+                      Zernio. Only shown where the server says this workspace is
+                      cleared for it, so nobody is offered a connection Meta
+                      would refuse. One row per connected account: a brand can
+                      run more than one, and Instagram authorises exactly one
+                      per consent. */}
+                  {igReady && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px", borderTop: `1px solid ${theme.borderFaint}`,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      {/* The outline mark, drawn the way every other glyph in
+                          this list is: one stroke weight, round caps. */}
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.text}
+                        strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" />
+                        <circle cx="12" cy="12" r="4.2" />
+                        <circle cx="17.4" cy="6.6" r="1" fill={theme.text} stroke="none" />
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Instagram</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {igConn?.accounts?.length
+                          ? (igConn.accounts[0].needsReconnect
+                              ? (appLanguage === "de"
+                                  ? "Die Verbindung ist abgelaufen. Einmal neu verbinden."
+                                  : "The connection expired. Connect again.")
+                              : (appLanguage === "de"
+                                  ? `Verbunden${igConn.accounts[0].username ? ` als @${igConn.accounts[0].username}` : ""}. Gilt für diesen Workspace.`
+                                  : `Connected${igConn.accounts[0].username ? ` as @${igConn.accounts[0].username}` : ""}. Applies to this workspace.`))
+                          : (appLanguage === "de"
+                              ? "Direkt über Meta veröffentlichen und die Zahlen des Kontos lesen."
+                              : "Publish straight through Meta and read the account's numbers.")}
+                      </div>
+                    </div>
+                    <motion.button whileTap={{ scale: 0.97 }}
+                      onClick={igBusy ? undefined : (igConn?.accounts?.length
+                        ? () => disconnectInstagram(igConn.accounts[0].igUserId)
+                        : startInstagramConnect)}
+                      style={{ padding: "8px 14px", borderRadius: 10, cursor: igBusy ? "wait" : "pointer",
+                        border: `1px solid ${igConn?.accounts?.length ? theme.borderFaint : "transparent"}`,
+                        background: igConn?.accounts?.length ? "transparent" : "#15151c",
+                        color: igConn?.accounts?.length ? theme.text : "#fff",
+                        fontFamily: FONT, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0,
+                        opacity: igBusy ? 0.6 : 1 }}>
+                      {igConn?.accounts?.length ? (appLanguage === "de" ? "Trennen" : "Disconnect")
+                        : (appLanguage === "de" ? "Verbinden" : "Connect")}
+                    </motion.button>
+                  </div>
+                  )}
+                  {igErr && (
+                    <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{igErr}</div>
                   )}
                   {/* Figma. Like Pinterest, this belongs to the workspace and
                       not to the person signed in, so it says whose account it
