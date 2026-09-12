@@ -31719,11 +31719,16 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         </motion.div>
                       ))}
 
+                      {/* Bounded in BOTH directions. With only a height cap a
+                          landscape picture ran the full width of the column and
+                          became a banner. 760 is about as wide as a social post
+                          is ever read; wider than that it stops looking like
+                          one. The arrows keep their gutters on top of that. */}
                       <div style={{ position: "relative", lineHeight: 0,
-                        maxWidth: !reel && slides.length > 1 ? "calc(100% - 116px)" : "100%" }}>
+                        maxWidth: !reel && slides.length > 1 ? "min(760px, calc(100% - 116px))" : "min(760px, 100%)" }}>
                       {reel ? (
                         <video src={reel.url} controls playsInline
-                          style={{ maxWidth: "100%", maxHeight: mediaMaxH || "100%", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, display: "block" }} />
+                          style={{ maxWidth: "min(760px, 100%)", maxHeight: mediaMaxH || "100%", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, display: "block" }} />
                       ) : (
                         // The stage hugs the picture rather than boxing it, so
                         // the text overlays, which are placed as fractions of
