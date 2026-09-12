@@ -454,7 +454,15 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
       body: JSON.stringify({ ...params, access_token: token }),
     });
     const j = await res.json().catch(() => null);
-    return { ok: res.ok, id: j?.id, error: j?.error?.message || null };
+    // Written down with what was asked for, minus the token. A carousel fails
+    // in one of four places and the message alone does not say which, so the
+    // log says what the call was.
+    if (!res.ok || !j?.id) {
+      const { access_token, ...asked } = { ...params };
+      console.error("[threads] container failed", res.status, JSON.stringify(asked),
+        j?.error?.message || "", j?.error?.error_user_msg || "");
+    }
+    return { ok: res.ok, id: j?.id, error: j?.error?.error_user_msg || j?.error?.message || null };
   };
   const publishContainer = async (creationId) => {
     const res = await fetch(`${GRAPH}/${row.threads_user_id}/threads_publish`, {
@@ -464,7 +472,8 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     });
     const j = await res.json().catch(() => null);
     if (!res.ok || !j?.id) {
-      const msg = j?.error?.message || "Threads refused to publish";
+      const msg = j?.error?.error_user_msg || j?.error?.message || "Threads refused to publish";
+      console.error("[threads] publish failed", res.status, creationId, msg);
       return json({ error: msg, code: /limit/i.test(msg) ? "rate_limited" : "threads_error" }, 502);
     }
     const perma = await th(token, `/${j.id}`, { fields: "permalink" });
@@ -533,6 +542,10 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
         }, 502);
         children.push(made.id);
       }
+      // Meta's own guidance is to leave a moment between the last child being
+      // ready and the parent being made. Cheap insurance next to a whole post
+      // that fails.
+      await new Promise(done => setTimeout(done, 1500));
       const parent = await makeContainer({ media_type: "CAROUSEL", children: children.join(","), text });
       if (!parent.ok || !parent.id) return json({ error: parent.error || "Container failed", code: "threads_error" }, 502);
       creationId = parent.id;
