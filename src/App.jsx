@@ -30805,6 +30805,23 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // Only a workspace with the direct connection can use either, so the controls
   // are absent everywhere else instead of being offered and then refused.
   const hasDirectIg = (accounts || []).some(a => a.provider === "meta");
+  // The picture from the editor is slide one; the extras follow in order. One
+  // list, because the viewer pages through them and does not care which of them
+  // the canvas composed.
+  const slides = visual
+    ? [{ key: "main", url: visual.url }, ...extras.map(x => ({ key: x.id, url: x.url, extra: x }))]
+    : [];
+  const [slideIdx, setSlideIdx] = useState(0);
+  // The height the picture may take, in pixels, measured off the viewer.
+  //
+  // Not `max-height: 100%` on the image: the stage hugs the picture and so has
+  // no definite height of its own, which makes a percentage max-height resolve
+  // against `auto` and do nothing. The width constraint still applied, so a
+  // portrait picture came out at full column width and was then CLIPPED by the
+  // stage rather than fitted inside it. A measured number has no such hole, and
+  // it keeps the stage hugging, which is what keeps the text overlays honest.
+  const viewRef = useRef(null);
+  const [viewH, setViewH] = useState(0);
   const [overlays, setOverlays] = useState([]);     // [{ id, text, x, y, size, color, bold }] — x/y/size relative to image
   const [selOverlay, setSelOverlay] = useState(null);
   // Dictation for the caption, the same SpeechRecognition the notes and the
@@ -31028,6 +31045,27 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     if (hit) URL.revokeObjectURL(hit.url);
     return list.filter(x => x.id !== id);
   });
+  const dropReel = () => setReel(r => { if (r) URL.revokeObjectURL(r.url); return null; });
+  // Slide one is the one the editor holds, so removing it is not a removal but
+  // a handover: the next slide becomes the picture the canvas composes. Its
+  // object url is deliberately NOT revoked - it is still on screen, just under
+  // a different name.
+  const promoteExtra = (x) => {
+    imageFileRef.current = x.file;
+    setOverlays([]); setSelOverlay(null);
+    const img = new Image();
+    img.onload = () => setVisual({ url: x.url, w: img.naturalWidth, h: img.naturalHeight });
+    img.src = x.url;
+    setExtras(list => list.filter(e => e.id !== x.id));
+  };
+  const removeCurrentSlide = () => {
+    if (slideIdx === 0) {
+      if (extras.length) return promoteExtra(extras[0]);
+      return clearVisual();
+    }
+    removeExtra(slides[slideIdx].key);
+    setSlideIdx(i => Math.max(0, i - 1));
+  };
   const onPickReel = (e) => {
     const f = e.target.files?.[0];
     e.target.value = "";
@@ -31089,6 +31127,19 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // One file into our own bucket, handed to the server as a path it signs for an
   // hour. Instagram cannot be given bytes, only a url it fetches itself, and
   // brand-assets is not public.
+  // A slide removed from the end must not leave the viewer pointing past it.
+  useEffect(() => { setSlideIdx(i => Math.min(i, Math.max(0, slides.length - 1))); }, [slides.length]);
+
+  useEffect(() => {
+    const el = viewRef.current;
+    if (!el) { setViewH(0); return; }
+    setViewH(el.clientHeight);
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setViewH(el.clientHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [stepIdx, !!visual, !!reel]);
+
   const toMetaMedia = async (blob, contentType, ext) => {
     const path = `instagram/${orgId}/${crypto.randomUUID()}.${ext}`;
     const up = await uploadTracked({
@@ -31466,151 +31517,130 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 </>)}
 
                 {/* ── 02 Visual — mini creator: image + draggable text overlays ── */}
+                {/* ── 02 Visual — one picture at a time, as large as the box
+                    allows. It used to be a fixed-width stage with a strip of
+                    thumbnails under it, which meant scrolling inside a step
+                    that has a whole panel to itself. Now the viewer takes the
+                    height that is left and the slides are paged through, so
+                    every one of them is seen at the size it will be posted. */}
                 {stepIdx === S_VISUAL && (<>
                   <input ref={fileRef} type="file" accept="image/*" onChange={onPickImage} style={{ display: "none" }} />
-                  {!visual ? (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
-                      {[
-                        { key: "upload", label: de ? "Bild hochladen" : "Upload image",
-                          sub: de ? "PNG oder JPG von diesem Rechner" : "PNG or JPG from this machine",
-                          icon: <><rect x="3" y="3" width="18" height="18" rx="3.5"/><circle cx="8.5" cy="8.5" r="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></>,
-                          onClick: () => fileRef.current?.click() },
-                        { key: "assets", label: de ? "Aus den Assets" : "From Assets",
-                          sub: de ? "Was in diesem Workspace schon liegt" : "What this workspace already has",
-                          icon: <><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2.5h7A2.5 2.5 0 0 1 21 10v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17z"/></>,
-                          onClick: () => setAssetOpen(true) },
-                        { key: "boards", label: "Artboards",
-                          sub: de ? "Was du in Creations gebaut hast" : "What you built in Creations",
-                          icon: <><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></>,
-                          onClick: () => setBoardsOpen(true) },
-                      ].map(o => (
-                        <motion.div key={o.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.99 }} onClick={o.onClick}
-                          style={{ padding: "53px 22px", borderRadius: 18, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", cursor: assetBusy ? "wait" : "pointer", opacity: assetBusy ? 0.6 : 1 }}>
-                          <div style={{ width: 46, height: 46, borderRadius: 14, margin: "0 auto 12px", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text }}>
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{o.icon}</svg>
-                          </div>
-                          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{o.label}</div>
-                          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>{o.sub}</div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  ) : (<>
-                    {/* Editor stage — overlays are draggable; click empty space deselects */}
-                    {/* The stage hugs the picture instead of filling a fixed
-                        width, and the picture is bounded by HEIGHT. A wide
-                        photo in a 620px box came out as a strip with most of
-                        the step left empty under it. Hugging also keeps the
-                        overlay maths honest: they are placed as fractions of
-                        this box, so a letterboxed image would put them where
-                        the export does not. */}
-                    <div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
-                    <div ref={stageRef} onPointerDown={() => setSelOverlay(null)}
-                      style={{ position: "relative", maxWidth: "100%", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, userSelect: "none", touchAction: "none", lineHeight: 0 }}>
-                      <img src={visual.url} alt="" draggable={false}
-                        style={{ display: "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: "min(66vh, 760px)" }} />
-                      {overlays.map(o => (
-                        <div key={o.id} onPointerDown={(e) => onOverlayDown(e, o)}
-                          style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500,
-                            fontSize: Math.max(9, o.size * (stageW || 1)), lineHeight: 1.22, whiteSpace: "pre", cursor: "move",
-                            outline: selOverlay === o.id ? "1.5px dashed rgba(77,159,255,0.9)" : "none", outlineOffset: 3 }}>
-                          {o.text}
-                        </div>
-                      ))}
-                      <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); clearVisual(); }} onPointerDown={e => e.stopPropagation()}
-                        style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: 9, background: "rgba(21,21,28,0.72)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                      </motion.div>
-                    </div>
-                    </div>
-                    {/* Selected-overlay properties */}
-                    {selectedOverlayObj && (
-                      <div style={{ width: "100%", maxWidth: 620, margin: "14px auto 0", borderRadius: 14, border: `1px solid ${theme.borderFaint}`, background: theme.cardBg, padding: 14 }}>
-                        <textarea value={selectedOverlayObj.text} onChange={e => patchOverlay(selectedOverlayObj.id, { text: e.target.value })} rows={2}
-                          style={{ width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", resize: "none", caretColor: theme.text, marginBottom: 12 }} />
-                        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-                          <input type="range" min="0.02" max="0.16" step="0.005" value={selectedOverlayObj.size}
-                            onChange={e => patchOverlay(selectedOverlayObj.id, { size: parseFloat(e.target.value) })} style={{ width: 120, accentColor: "#15151c" }} />
-                          <div style={{ display: "flex", gap: 6 }}>
-                            {POST_OVERLAY_COLORS.map(c => (
-                              <div key={c} onClick={() => patchOverlay(selectedOverlayObj.id, { color: c })}
-                                style={{ width: 20, height: 20, borderRadius: "50%", background: c, cursor: "pointer", boxSizing: "border-box",
-                                  border: selectedOverlayObj.color === c ? "2px solid #4D9FFF" : `1.5px solid ${theme.borderFaint}` }} />
-                            ))}
-                          </div>
-                          <div onClick={() => patchOverlay(selectedOverlayObj.id, { bold: !selectedOverlayObj.bold })}
-                            style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontWeight: 800, fontSize: 13,
-                              background: selectedOverlayObj.bold ? (darkMode ? "rgba(255,255,255,0.14)" : "#15151c") : "transparent", color: selectedOverlayObj.bold ? "#fff" : theme.textDim, border: `1px solid ${selectedOverlayObj.bold ? "transparent" : theme.borderFaint}` }}>B</div>
-                          <div style={{ flex: 1 }} />
-                          <span onClick={() => removeOverlay(selectedOverlayObj.id)}
-                            style={{ fontSize: 11.5, fontFamily: FONT, color: "#E86767", cursor: "pointer" }}>{de ? "Entfernen" : "Remove"}</span>
-                        </div>
-                      </div>
-                    )}
-                  </>)}
+                  <input ref={extraRef} type="file" accept="image/*" multiple onChange={onPickExtras} style={{ display: "none" }} />
+                  <input ref={reelRef} type="file" accept="video/*" onChange={onPickReel} style={{ display: "none" }} />
 
-                  {/* Karussell und Reel. Nur da, wo es hingehen kann: ein
-                      Workspace ohne die direkte Instagram-Verbindung sieht das
-                      hier gar nicht, statt es angeboten und dann verweigert zu
-                      bekommen. Beides läuft am Editor vorbei, weil der EINE
-                      flache Bild baut und weder ein Video noch eine Folie, die
-                      er nie angefasst hat, durch ein Canvas gehört. */}
-                  {hasDirectIg && (
-                    <div style={{ width: "100%", maxWidth: 620, margin: "26px auto 0",
-                      paddingTop: 20, borderTop: `1px solid ${theme.borderFaint}` }}>
-                      <input ref={extraRef} type="file" accept="image/*" multiple onChange={onPickExtras} style={{ display: "none" }} />
-                      <input ref={reelRef} type="file" accept="video/*" onChange={onPickReel} style={{ display: "none" }} />
-
-                      {!reel && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                          {visual && (
-                            <div style={{ width: 56, height: 56, borderRadius: 10, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, flexShrink: 0, position: "relative" }}>
-                              <img src={visual.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                              <div style={{ position: "absolute", left: 0, bottom: 0, right: 0, textAlign: "center", fontSize: 9, fontFamily: FONT, fontWeight: 600, color: "#fff", background: "rgba(21,21,28,0.66)", padding: "1px 0" }}>1</div>
+                  {!visual && !reel ? (
+                    <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, width: "100%" }}>
+                        {[
+                          { key: "upload", label: de ? "Bild hochladen" : "Upload image",
+                            sub: de ? "PNG oder JPG von diesem Rechner" : "PNG or JPG from this machine",
+                            icon: <><rect x="3" y="3" width="18" height="18" rx="3.5"/><circle cx="8.5" cy="8.5" r="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></>,
+                            onClick: () => fileRef.current?.click() },
+                          { key: "assets", label: de ? "Aus den Assets" : "From Assets",
+                            sub: de ? "Was in diesem Workspace schon liegt" : "What this workspace already has",
+                            icon: <><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2.5h7A2.5 2.5 0 0 1 21 10v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17z"/></>,
+                            onClick: () => setAssetOpen(true) },
+                          { key: "boards", label: "Artboards",
+                            sub: de ? "Was du in Creations gebaut hast" : "What you built in Creations",
+                            icon: <><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></>,
+                            onClick: () => setBoardsOpen(true) },
+                        ].map(o => (
+                          <motion.div key={o.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.99 }} onClick={o.onClick}
+                            style={{ padding: "53px 22px", borderRadius: 18, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", cursor: assetBusy ? "wait" : "pointer", opacity: assetBusy ? 0.6 : 1 }}>
+                            <div style={{ width: 46, height: 46, borderRadius: 14, margin: "0 auto 12px", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text }}>
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{o.icon}</svg>
                             </div>
-                          )}
-                          {extras.map((x, i) => (
-                            <div key={x.id} style={{ width: 56, height: 56, borderRadius: 10, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, flexShrink: 0, position: "relative" }}>
-                              <img src={x.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                              <div onClick={() => removeExtra(x.id)}
-                                style={{ position: "absolute", top: 3, right: 3, width: 17, height: 17, borderRadius: 6, background: "rgba(21,21,28,0.72)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                              </div>
-                              <div style={{ position: "absolute", left: 0, bottom: 0, right: 0, textAlign: "center", fontSize: 9, fontFamily: FONT, fontWeight: 600, color: "#fff", background: "rgba(21,21,28,0.66)", padding: "1px 0" }}>{i + 2}</div>
+                            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{o.label}</div>
+                            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>{o.sub}</div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    // The viewer claims what is left of the box. Everything it
+                    // needs sits ON the picture, so nothing below it can push
+                    // the picture smaller.
+                    <div ref={viewRef} style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {/* This box hugs the media, and every control is anchored
+                          to IT rather than to the row. Anchored to the row they
+                          sat against the grey a long way from a portrait
+                          picture, pointing at nothing. */}
+                      <div style={{ position: "relative", maxWidth: "100%", lineHeight: 0 }}>
+                      {reel ? (
+                        <video src={reel.url} controls playsInline
+                          style={{ maxWidth: "100%", maxHeight: viewH || "100%", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, display: "block" }} />
+                      ) : (
+                        // The stage hugs the picture rather than boxing it, so
+                        // the text overlays, which are placed as fractions of
+                        // this box, land where the export puts them.
+                        <div ref={stageRef} onPointerDown={() => setSelOverlay(null)}
+                          style={{ position: "relative", maxWidth: "100%", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, userSelect: "none", touchAction: "none", lineHeight: 0 }}>
+                          <img src={slides[slideIdx]?.url || visual.url} alt="" draggable={false}
+                            style={{ display: "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: viewH || undefined }} />
+                          {slideIdx === 0 && overlays.map(o => (
+                            <div key={o.id} onPointerDown={(e) => onOverlayDown(e, o)}
+                              style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500,
+                                fontSize: Math.max(9, o.size * (stageW || 1)), lineHeight: 1.22, whiteSpace: "pre", cursor: "move",
+                                outline: selOverlay === o.id ? "1.5px dashed rgba(77,159,255,0.9)" : "none", outlineOffset: 3 }}>
+                              {o.text}
                             </div>
                           ))}
-                          {visual && extras.length < 9 && (
-                            <motion.div whileTap={{ scale: 0.96 }} onClick={() => extraRef.current?.click()}
-                              style={{ width: 56, height: 56, borderRadius: 10, border: `1.5px dashed ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, flexShrink: 0 }}>
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                            </motion.div>
-                          )}
-                          {!visual && (
-                            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>
-                              {de ? "Erst ein Bild oben wählen, dann kommen weitere Folien dazu." : "Pick the first picture above, then add more slides."}
-                            </div>
-                          )}
                         </div>
                       )}
 
-                      <div style={{ marginTop: 16 }}>
-                        {reel ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                            <video src={reel.url} muted playsInline
-                              style={{ width: 56, height: 56, borderRadius: 10, objectFit: "cover", border: `1px solid ${theme.borderFaint}`, display: "block", flexShrink: 0 }} />
-                            <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontFamily: FONT, color: theme.text }}>
-                              {de ? "Wird als Reel veröffentlicht." : "Will be published as a reel."}
-                            </div>
-                            <span onClick={() => setReel(r => { if (r) URL.revokeObjectURL(r.url); return null; })}
-                              style={{ fontSize: 11.5, fontFamily: FONT, color: "#E86767", cursor: "pointer" }}>
-                              {de ? "Entfernen" : "Remove"}
-                            </span>
-                          </div>
-                        ) : (
-                          <span onClick={() => reelRef.current?.click()}
-                            style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>
-                            {de ? "Stattdessen ein Video als Reel" : "A video as a reel instead"}
-                          </span>
-                        )}
+                      {/* Paging. Only when there is more than one, because two
+                          arrows that do nothing are two arrows to wonder about. */}
+                      {!reel && slides.length > 1 && ([["prev", -1, "M15 18l-6-6 6-6"], ["next", 1, "M9 6l6 6-6 6"]]).map(([k, step, d]) => (
+                        <motion.div key={k} whileTap={{ scale: 0.92 }}
+                          onClick={() => setSlideIdx(i => (i + step + slides.length) % slides.length)}
+                          style={{ position: "absolute", top: "50%", transform: "translateY(-50%)",
+                            [k === "prev" ? "left" : "right"]: 10, width: 38, height: 38, borderRadius: 999,
+                            background: "rgba(21,21,28,0.72)", color: "#fff", display: "flex", alignItems: "center",
+                            justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" }}>
+                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
+                        </motion.div>
+                      ))}
+
+                      {/* Add a slide, bottom left. Hidden once a video is
+                          chosen: a reel is one video and never a carousel. */}
+                      {!reel && hasDirectIg && slides.length < 10 && (
+                        <motion.div whileTap={{ scale: 0.92 }} onClick={() => extraRef.current?.click()}
+                          title={de ? "Weiteres Bild" : "Another picture"}
+                          style={{ position: "absolute", left: 10, bottom: 10, width: 38, height: 38, borderRadius: 999,
+                            background: "rgba(21,21,28,0.72)", color: "#fff", display: "flex", alignItems: "center",
+                            justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" }}>
+                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                        </motion.div>
+                      )}
+
+                      {/* Which slide, out of how many. */}
+                      {!reel && slides.length > 1 && (
+                        <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)",
+                          padding: "5px 11px", borderRadius: 999, background: "rgba(21,21,28,0.72)", color: "#fff",
+                          fontSize: 11, fontFamily: FONT, fontWeight: 600, backdropFilter: "blur(6px)" }}>
+                          {slideIdx + 1} / {slides.length}
+                        </div>
+                      )}
+
+                      {/* Removes the slide you are looking at, or the video. */}
+                      <motion.div whileTap={{ scale: 0.9 }} onClick={reel ? dropReel : removeCurrentSlide}
+                        style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 999,
+                          background: "rgba(21,21,28,0.72)", color: "#fff", display: "flex", alignItems: "center",
+                          justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                      </motion.div>
+
+                      {/* Not a picture and not a slide, so it sits in the one
+                          free corner. Bottom right put it on top of the slide
+                          counter as soon as the picture was a portrait. */}
+                      {hasDirectIg && !reel && (
+                        <span onClick={() => reelRef.current?.click()}
+                          style={{ position: "absolute", left: 10, top: 10, padding: "6px 12px", borderRadius: 999,
+                            background: "rgba(21,21,28,0.72)", color: "#fff", fontSize: 11.5, fontFamily: FONT,
+                            fontWeight: 600, cursor: "pointer", backdropFilter: "blur(6px)" }}>
+                          {de ? "Video als Reel" : "Video as a reel"}
+                        </span>
+                      )}
                       </div>
                     </div>
                   )}
