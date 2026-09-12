@@ -31469,61 +31469,83 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         });
         parts.push(...(r.platforms || []));
       }
-      // One call per account. Instagram authorises exactly one account per
-      // token, so there is no batch to make.
-      for (const a of metaSel) {
-        const res = await fetch("/api/instagram", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
-          body: JSON.stringify({
-            mode: "publish", orgId, igUserId: a.igUserId,
-            caption: text.trim() || undefined,
-            // What was picked decides the kind; there is no separate switch to
-            // get out of step with it.
-            ...(metaReel
-              ? { kind: "REELS", media: { ...metaReel, kind: "VIDEO" } }
-              : metaExtras.length
-                ? { kind: "CAROUSEL", media: [metaMedia, ...metaExtras] }
-                : { kind: "IMAGE", media: metaMedia }),
-          }),
-        });
-        let j = await res.json().catch(() => null);
-        // 202 means the media is still being processed on Instagram's side,
-        // which is the normal answer for a reel. The container already exists,
-        // so finishing it is a different call: asking `publish` again would
-        // build a second one and post twice.
-        if (res.status === 202 && j?.containerId) {
-          setResult({ status: "pending", platforms: [{ platform: "instagram", status: "pending" }] });
-          for (let tries = 0; tries < 24; tries++) {
-            await new Promise(done => setTimeout(done, 5000));
-            const f = await fetch("/api/instagram", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
-              body: JSON.stringify({ mode: "publish-finish", orgId, igUserId: a.igUserId, containerId: j.containerId }),
-            });
-            const fj = await f.json().catch(() => null);
-            if (f.status === 202) continue;
-            parts.push({
-              platform: "instagram",
-              status: f.ok ? "published" : "failed",
-              url: fj?.url || null,
-              error: f.ok ? null : await readFail(f, fj, "Instagram"),
-            });
-            j = null;
-            break;
-          }
-          // Two minutes and still nothing. The post is not lost, Instagram is
-          // simply slow, and saying that is better than saying it failed.
-          if (j) parts.push({ platform: "instagram", status: "pending", url: null,
-            error: de ? "Instagram verarbeitet das Video noch. Schau gleich noch mal nach." : "Instagram is still processing the video. Check again shortly." });
-          continue;
+      // One call per account, and one call per STEP. Instagram authorises a
+      // single account per token, so there is no batch to make, and the steps
+      // are separate requests because doing a whole carousel inside one of them
+      // is more than an Edge function is allowed to take. That is what came
+      // back as "Failed: Instagram": not an error, a platform timeout page.
+      const igStep = (payload) => fetch("/api/instagram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ orgId, ...payload }),
+      });
+      // Waiting happens HERE, where there is no time limit. Instagram fetches
+      // each picture itself, and a reel is transcoded, so this is minutes for a
+      // video and a blink for a photo.
+      const igWaitFor = async (igUserId, containerId, tries) => {
+        for (let n = 0; n < tries; n++) {
+          const r = await igStep({ mode: "container-status", igUserId, containerId });
+          const j2 = await r.json().catch(() => null);
+          if (j2?.status === "ready") return { ok: true };
+          if (j2?.status === "error") return { ok: false, error: j2.error };
+          if (!r.ok) return { ok: false, error: await readFail(r, j2, "Instagram") };
+          await new Promise(done => setTimeout(done, 2000));
         }
-        parts.push({
-          platform: "instagram",
-          status: res.ok ? "published" : "failed",
-          url: j?.url || null,
-          error: res.ok ? null : await readFail(res, j, "Instagram"),
-        });
+        return { ok: false, error: de
+          ? "Instagram ist damit noch beschäftigt. Prüf, ob alle Folien dasselbe Format haben, zwischen 4:5 und 1,91:1."
+          : "Instagram is still working on it. Check that every slide has the same shape, between 4:5 and 1.91:1." };
+      };
+
+      for (const a of metaSel) {
+        const igUserId = a.igUserId;
+        const fail = (error) => parts.push({ platform: "instagram", status: "failed", url: null, error });
+        let creationId = null;
+
+        if (metaReel) {
+          const r = await igStep({ mode: "container", igUserId, kind: "REELS",
+            caption: text.trim() || undefined, media: { ...metaReel, kind: "VIDEO" } });
+          const j2 = await r.json().catch(() => null);
+          if (!r.ok || !j2?.containerId) { fail(await readFail(r, j2, "Instagram")); continue; }
+          // A video is transcoded, so it gets minutes rather than seconds.
+          const ready = await igWaitFor(igUserId, j2.containerId, 90);
+          if (!ready.ok) { fail(ready.error); continue; }
+          creationId = j2.containerId;
+        } else if (metaExtras.length) {
+          const children = [];
+          let broke = null;
+          for (const [idx, m] of [metaMedia, ...metaExtras].entries()) {
+            const r = await igStep({ mode: "container", igUserId, media: m, isCarouselItem: true });
+            const j2 = await r.json().catch(() => null);
+            if (!r.ok || !j2?.containerId) { broke = await readFail(r, j2, "Instagram"); break; }
+            const ready = await igWaitFor(igUserId, j2.containerId, 15);
+            if (!ready.ok) {
+              broke = de ? `Folie ${idx + 1}: ${ready.error}` : `Slide ${idx + 1}: ${ready.error}`;
+              break;
+            }
+            children.push(j2.containerId);
+          }
+          if (broke) { fail(broke); continue; }
+          const r = await igStep({ mode: "container", igUserId, kind: "CAROUSEL",
+            children, caption: text.trim() || undefined });
+          const j2 = await r.json().catch(() => null);
+          if (!r.ok || !j2?.containerId) { fail(await readFail(r, j2, "Instagram")); continue; }
+          const ready = await igWaitFor(igUserId, j2.containerId, 15);
+          if (!ready.ok) { fail(ready.error); continue; }
+          creationId = j2.containerId;
+        } else {
+          const r = await igStep({ mode: "container", igUserId,
+            caption: text.trim() || undefined, media: metaMedia });
+          const j2 = await r.json().catch(() => null);
+          if (!r.ok || !j2?.containerId) { fail(await readFail(r, j2, "Instagram")); continue; }
+          const ready = await igWaitFor(igUserId, j2.containerId, 15);
+          if (!ready.ok) { fail(ready.error); continue; }
+          creationId = j2.containerId;
+        }
+
+        const pub = await igStep({ mode: "publish-finish", igUserId, containerId: creationId });
+        const pj = await pub.json().catch(() => null);
+        parts.push({ platform: "instagram", status: pub.ok ? "published" : "failed",
+          url: pj?.url || null, error: pub.ok ? null : await readFail(pub, pj, "Instagram") });
       }
 
       // Threads, one account at a time like Instagram. It differs in one way

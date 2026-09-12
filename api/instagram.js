@@ -447,114 +447,73 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     return json({ data: r.body?.data || [] });
   }
 
-  // ── publish ───────────────────────────────────────────────────────────────
+  // ── container / container-status / publish-finish ────────────────────────
   //
-  // Three calls, not one: a container is created, it is polled until Instagram
-  // has fetched and processed the media, and only then is it published. There
-  // is no way to hand Instagram the bytes - it fetches the url itself - which
-  // is why a file in our private `user-files` bucket has to be handed over as a
-  // SIGNED url. Pinterest takes base64; Instagram does not, and that difference
-  // is the reason this path cannot simply mirror the Pinterest one.
-  if (body.mode === "publish") {
+  // One request does ONE thing. A carousel used to be built entirely inside a
+  // single call - a container per slide, a wait on each, the parent over them,
+  // then the publish - and that is more than an Edge function is allowed to
+  // take. It came back as a platform error page rather than an answer, which
+  // is all "Failed: Instagram" ever was.
+  //
+  // The browser drives it now. Every step below returns immediately, so no
+  // number of slides can run anything out of time.
+  const publicUrl = async (m) => {
+    if (m?.url) return String(m.url);
+    if (!m?.bucket || !m?.path) return null;
+    // Instagram fetches the picture itself and will not take bytes, so a file
+    // in our private bucket goes over as a signed url.
+    const { data } = await db.storage.from(m.bucket).createSignedUrl(m.path, 3600);
+    return data?.signedUrl || null;
+  };
+
+  if (body.mode === "container") {
     const kind = String(body.kind || "IMAGE").toUpperCase();
     const caption = body.caption ? String(body.caption).slice(0, 2200) : undefined;
+    let params;
 
-    // A media reference is either already public, or a path in one of our
-    // buckets that is signed here and never leaves the server unsigned.
-    const publicUrl = async (m) => {
-      if (m?.url) return String(m.url);
-      if (!m?.bucket || !m?.path) return null;
-      const { data } = await db.storage.from(m.bucket).createSignedUrl(m.path, 3600);
-      return data?.signedUrl || null;
-    };
-
-    const makeContainer = async (params) => {
-      const res = await fetch(`${GRAPH}/${row.ig_user_id}/media`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...params, access_token: token }),
-      });
-      const j = await res.json().catch(() => null);
-      // Written down with what was asked for, minus the token. A post fails in
-      // one of several places and the message alone does not say which.
-      if (!res.ok || !j?.id) {
-        const { access_token, ...asked } = { ...params };
-        console.error("[instagram] container failed", res.status, JSON.stringify(asked),
-          j?.error?.message || "", j?.error?.error_user_msg || "");
-      }
-      // error_user_msg is the one written for a person; it is usually the more
-      // specific of the two and it is what the composer shows.
-      return { ok: res.ok, id: j?.id, error: j?.error?.error_user_msg || j?.error?.message || null };
-    };
-
-    // A picture is ready in a second or two; a reel is transcoded and routinely
-    // takes a minute. An Edge function cannot sit and wait that long, so this
-    // waits only as long as it safely can and says "still going" otherwise. The
-    // caller then asks `publish-finish`, which is the same check without the
-    // container being built again.
-    const waitReady = async (containerId, budgetMs = 12000) => {
-      const until = Date.now() + budgetMs;
-      for (;;) {
-        const r = await ig(token, `/${containerId}`, { fields: "status_code,status" });
-        const st = r.body?.status_code;
-        if (st === "FINISHED") return { ok: true };
-        if (st === "ERROR" || st === "EXPIRED") return { ok: false, error: r.body?.status || st };
-        if (Date.now() >= until) return { ok: false, pending: true };
-        await new Promise(done => setTimeout(done, 3000));
-      }
-    };
-
-    let creationId = null;
     if (kind === "CAROUSEL") {
-      const items = Array.isArray(body.media) ? body.media.slice(0, 10) : [];
-      if (items.length < 2) return json({ error: "A carousel needs at least two items", code: "invalid_media" }, 400);
-      const children = [];
-      for (const m of items) {
-        const u = await publicUrl(m);
-        if (!u) return json({ error: "Media could not be resolved to a url", code: "invalid_media" }, 400);
-        const isVideo = String(m.kind || "").toUpperCase() === "VIDEO";
-        const made = await makeContainer(isVideo
-          ? { media_type: "VIDEO", video_url: u, is_carousel_item: true }
-          : { image_url: u, is_carousel_item: true, ...(m.altText ? { alt_text: m.altText } : {}) });
-        if (!made.ok || !made.id) return json({ error: made.error || "Container failed", code: "instagram_error" }, 502);
-        // A slide is a picture, so the short wait is the whole wait. Still
-        // pending after it means something is wrong with that file, not that it
-        // needs more time.
-        // Most often a shape Instagram will not take: it accepts nothing
-        // outside 4:5 to 1.91:1 and wants every slide of a carousel in the
-        // same shape. Named, because "still processing" sends somebody away
-        // to wait for something that will never finish.
-        const ready = await waitReady(made.id, 8000);
-        if (!ready.ok) return json({
-          error: ready.error || (ready.pending
-            ? `Instagram is still working on slide ${children.length + 1}. Check that every slide has the same shape, between 4:5 and 1.91:1.`
-            : "Media was not accepted"),
-          code: "media_failed",
-        }, 502);
-        children.push(made.id);
-      }
-      const parent = await makeContainer({ media_type: "CAROUSEL", children: children.join(","), caption });
-      if (!parent.ok || !parent.id) return json({ error: parent.error || "Container failed", code: "instagram_error" }, 502);
-      creationId = parent.id;
+      const children = Array.isArray(body.children) ? body.children.filter(Boolean) : [];
+      if (children.length < 2) return json({ error: "A carousel needs at least two items", code: "invalid_media" }, 400);
+      params = { media_type: "CAROUSEL", children: children.slice(0, 10).join(","), caption };
     } else {
       const m = Array.isArray(body.media) ? body.media[0] : body.media;
       const u = await publicUrl(m);
       if (!u) return json({ error: "Media could not be resolved to a url", code: "invalid_media" }, 400);
-      const params = kind === "REELS" || kind === "STORIES"
-        ? { media_type: kind, ...(String(m.kind || "").toUpperCase() === "VIDEO" || kind === "REELS"
-              ? { video_url: u } : { image_url: u }), ...(kind === "REELS" ? { caption } : {}) }
-        : { image_url: u, caption, ...(m?.altText ? { alt_text: m.altText } : {}) };
-      const made = await makeContainer(params);
-      if (!made.ok || !made.id) return json({ error: made.error || "Container failed", code: "instagram_error" }, 502);
-      const ready = await waitReady(made.id, kind === "REELS" ? 18000 : 12000);
-      // Handed back so the caller can finish it, rather than failing something
-      // that is merely slow. This is the normal path for a reel.
-      if (!ready.ok && ready.pending) return json({ status: "processing", containerId: made.id }, 202);
-      if (!ready.ok) return json({ error: ready.error || "Media was not accepted", code: "media_failed" }, 502);
-      creationId = made.id;
+      const isVideo = String(m.kind || "").toUpperCase() === "VIDEO" || kind === "REELS";
+      params = kind === "REELS" || kind === "STORIES"
+        ? { media_type: kind, ...(isVideo ? { video_url: u } : { image_url: u }), ...(kind === "REELS" ? { caption } : {}) }
+        : {
+            ...(isVideo ? { video_url: u, media_type: "VIDEO" } : { image_url: u }),
+            ...(body.isCarouselItem ? { is_carousel_item: true } : { caption }),
+            ...(m?.altText ? { alt_text: m.altText } : {}),
+          };
     }
 
-    return publishContainer(creationId);
+    const res = await fetch(`${GRAPH}/${row.ig_user_id}/media`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...params, access_token: token }),
+    });
+    const j2 = await res.json().catch(() => null);
+    if (!res.ok || !j2?.id) {
+      const { access_token, ...asked } = { ...params };
+      const msg = j2?.error?.error_user_msg || j2?.error?.message || "Instagram refused the media";
+      console.error("[instagram] container failed", res.status, JSON.stringify(asked), msg);
+      return json({ error: msg, code: "instagram_error" }, 502);
+    }
+    return json({ containerId: j2.id });
+  }
+
+  // Is it ready? One question, one answer, no sleeping.
+  if (body.mode === "container-status") {
+    const containerId = String(body.containerId || "");
+    if (!/^\d+$/.test(containerId)) return json({ error: "containerId is required", code: "invalid_container" }, 400);
+    const r = await ig(token, `/${containerId}`, { fields: "status_code,status" });
+    const st = r.body?.status_code;
+    if (st === "ERROR" || st === "EXPIRED") {
+      return json({ status: "error", error: r.body?.status || st }, 200);
+    }
+    return json({ status: st === "FINISHED" ? "ready" : "processing" });
   }
 
   // ── publish-finish — the second half, for media that was still processing ──
