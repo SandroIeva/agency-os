@@ -30727,6 +30727,17 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // screen you are already on.
   const [connectBusy, setConnectBusy] = useState(null);   // uiKey mid-OAuth
   const [connectOpen, setConnectOpen] = useState(false);  // the plus menu on step 03
+  const [whenOpen, setWhenOpen] = useState(false);        // the scheduling popover in the footer
+  const draftRef = useRef(null);
+  const [draftW, setDraftW] = useState(0);
+  // An hour from now, on the minute, in the shape a datetime-local wants. Local
+  // time, not UTC: toISOString would hand somebody in Berlin a time two hours
+  // in the past.
+  const defaultWhen = () => {
+    const d = new Date(Date.now() + 3600000);
+    d.setSeconds(0, 0);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
   // Advisory, like the one in Analytics: the real gate is api/zernio.js,
   // because connecting bills us upstream. This only shows the reason before the
   // click rather than after it.
@@ -31136,6 +31147,19 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // One file into our own bucket, handed to the server as a path it signs for an
   // hour. Instagram cannot be given bytes, only a url it fetches itself, and
   // brand-assets is not public.
+  // The draft button's width, so the publish button beside it is never
+  // narrower. Measured rather than guessed at with a minWidth: the two labels
+  // differ in both languages and change while a post is being sent.
+  useEffect(() => {
+    const el = draftRef.current;
+    if (!el) { setDraftW(0); return; }
+    setDraftW(el.offsetWidth);
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setDraftW(el.offsetWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [stepIdx, canPublish, de, busy]);
+
   // A slide removed from the end must not leave the viewer pointing past it.
   useEffect(() => { setSlideIdx(i => Math.min(i, Math.max(0, slides.length - 1))); }, [slides.length]);
 
@@ -31507,17 +31531,20 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
                         </motion.div>
                       )}
-                      {connectOpen && (
-                        <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 5,
-                          minWidth: 210, borderRadius: 14, background: theme.cardBg,
-                          border: `1px solid ${theme.border}`, boxShadow: "0 12px 32px rgba(0,0,0,0.14)",
-                          overflow: "hidden", padding: 5 }}>
+                      {connectOpen && (<>
+                        {/* A menu that only closes by hitting the same button
+                            again is a menu you fight with. */}
+                        <div onClick={() => setConnectOpen(false)}
+                          style={{ position: "fixed", inset: 0, zIndex: 4 }} />
+                        <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, zIndex: 5,
+                          minWidth: 260, borderRadius: 16, background: theme.cardBg,
+                          boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 8 }}>
                           {unconnectedHere.map(k => {
                             const m = TOUCHPOINT_PLATFORMS.find(x => x.key === k) || { color: "#15151c", label: k };
                             return (
                               <div key={k} onClick={() => { setConnectOpen(false); connectChannel(k); }}
-                                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
-                                  borderRadius: 10, cursor: connectBusy ? "wait" : "pointer",
+                                style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px",
+                                  borderRadius: 12, cursor: connectBusy ? "wait" : "pointer",
                                   opacity: connectBusy === k ? 0.5 : 1 }}>
                                 <div style={{ width: 22, height: 22, borderRadius: 7, background: m.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                   <svg width={tpGlyphSize(k, 13)} height={tpGlyphSize(k, 13)} viewBox="0 0 24 24">{touchpointGlyph(k)}</svg>
@@ -31534,7 +31561,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                             );
                           })}
                         </div>
-                      )}
+                      </>)}
                     </div>
                     {/* One under the other and all the same width. Wrapped pills
                         put two channels on one line and a third on the next,
@@ -31622,7 +31649,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     // The viewer claims what is left of the box. Everything it
                     // needs sits ON the picture, so nothing below it can push
                     // the picture smaller.
-                    <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                    <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       {/* The picture's own area, and the one thing measured.
                           The count sits under it as a caption, outside the
                           measurement, so it cannot be double counted. */}
@@ -31682,11 +31709,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
                       </div>
                       </div>
-                      {!reel && slides.length > 1 && (
-                        <div style={{ paddingTop: 10, fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim, lineHeight: 1, flexShrink: 0 }}>
-                          {slideIdx + 1} / {slides.length}
-                        </div>
-                      )}
                     </div>
                   )}
                 </>)}
@@ -31762,33 +31784,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       <span onClick={() => setStepIdx(0)} style={{ textDecoration: "underline", cursor: "pointer" }}>{de ? "Kürzen" : "Shorten it"}</span>
                     </div>
                   )}
-                  <div style={{ height: 22 }} />
-                  {/* Two words instead of an empty date mask. `TT.MM.JJJJ --:--`
-                      is what the browser draws in an empty datetime field, and
-                      it looks like something already went wrong. The field
-                      appears once somebody has said they want a later time. */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 13, fontFamily: FONT }}>
-                    <span onClick={() => setSchedule("")}
-                      style={{ cursor: "pointer", fontWeight: schedule ? 500 : 600,
-                        color: schedule ? theme.textDim : theme.text }}>
-                      {de ? "Jetzt" : "Now"}
-                    </span>
-                    <span onClick={() => { if (!schedule) { const d = new Date(Date.now() + 3600000); d.setSeconds(0, 0); setSchedule(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)); } }}
-                      style={{ cursor: "pointer", fontWeight: schedule ? 600 : 500,
-                        color: schedule ? theme.text : theme.textDim }}>
-                      {de ? "Später" : "Later"}
-                    </span>
-                  </div>
-                  {schedule && (
-                    <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                      <input type="datetime-local" value={schedule} onChange={e => setSchedule(e.target.value)}
-                        style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.6)",
-                          color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", colorScheme: darkMode ? "dark" : "light" }} />
-                      <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
-                        {new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "full", timeStyle: "short" }).format(new Date(schedule))}
-                      </span>
-                    </div>
-                  )}
+
                   {result && (
                     <div style={{ marginTop: 18, borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: theme.cardBg, padding: 16 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: (result.platforms || []).length ? 10 : 0 }}>
@@ -31817,7 +31813,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 under whatever the step happened to end with, so they moved
                 as the content did. Left is the way out of the flow, right is
                 the way on, and both are the same height. */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, paddingTop: 22 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, paddingTop: 22, position: "relative" }}>
               {/* Another slide. It belongs on the ground and not on the
                   picture: on the picture it reads as something you are doing TO
                   that picture. Here it sits opposite the button that moves you
@@ -31830,17 +31826,72 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
                 </motion.button>
               )}
+              {/* Which slide, beside the plus. Under the picture it was taking
+                  the picture's height away: adding a second slide made the
+                  first one smaller, which is not what adding a slide means.
+                  Here it costs nothing, because the footer is already there. */}
+              {stepIdx === S_VISUAL && !reel && slides.length > 1 && (
+                <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>
+                  {slideIdx + 1} / {slides.length}
+                </span>
+              )}
               {canPublish && (
-                <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("draft")} disabled={Boolean(busy)}
+                <motion.button ref={draftRef} whileTap={{ scale: 0.97 }} onClick={() => submit("draft")} disabled={Boolean(busy)}
                   style={{ ...footBtn, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text,
                     cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>
                   {busy === "draft" ? "…" : (de ? "Entwurf speichern" : "Save draft")}
                 </motion.button>
               )}
               <div style={{ flex: 1 }} />
+              {/* Now or later belongs beside the button that does it, not in a
+                  corner of the step above. Anchored to the footer rather than
+                  fixed: this panel's root is an animating motion.div, and a
+                  transformed ancestor makes `fixed` mean "inside that box". */}
+              {canPublish && (
+                <div style={{ position: "relative" }}>
+                  <span onClick={() => setWhenOpen(o => !o)}
+                    style={{ padding: "0 6px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
+                      color: schedule ? theme.text : theme.textDim, cursor: "pointer", whiteSpace: "nowrap" }}>
+                    {schedule
+                      ? new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(schedule))
+                      : (de ? "Später" : "Later")}
+                  </span>
+                  {whenOpen && (<>
+                    <div onClick={() => setWhenOpen(false)}
+                      style={{ position: "fixed", inset: 0, zIndex: 5 }} />
+                    <div style={{ position: "absolute", bottom: "calc(100% + 12px)", right: 0, zIndex: 6,
+                      minWidth: 264, padding: 16, borderRadius: 16, background: theme.cardBg,
+                      boxShadow: "0 16px 44px rgba(0,0,0,0.18)" }}>
+                      <div style={{ ...label, marginBottom: 10 }}>{de ? "Zeitpunkt" : "When"}</div>
+                      <input type="datetime-local" value={schedule || defaultWhen()} onChange={e => setSchedule(e.target.value)}
+                        style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 12,
+                          border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                          color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none",
+                          colorScheme: darkMode ? "dark" : "light" }} />
+                      <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 14 }}>
+                        <span onClick={() => { setSchedule(""); setWhenOpen(false); }}
+                          style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, cursor: "pointer" }}>
+                          {de ? "Doch sofort" : "Post now instead"}
+                        </span>
+                        <motion.button whileTap={{ scale: 0.97 }}
+                          onClick={() => { if (!schedule) setSchedule(defaultWhen()); setWhenOpen(false); }}
+                          style={{ marginLeft: "auto", height: 34, padding: "0 16px", borderRadius: 999, border: "none",
+                            background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
+                            fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
+                          {de ? "Übernehmen" : "Apply"}
+                        </motion.button>
+                      </div>
+                    </div>
+                  </>)}
+                </div>
+              )}
               {canPublish ? (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("post")} disabled={Boolean(busy)}
                   style={{ ...footBtn, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
+                    // Never narrower than the draft button beside it. Measured,
+                    // because the two labels differ in every language and in
+                    // every state the button has.
+                    minWidth: draftW || undefined,
                     cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}>
                   {busy === "post" ? (de ? "Wird gesendet…" : "Sending…") : schedule ? (de ? "Planen" : "Schedule") : (de ? "Posten" : "Post")}
                 </motion.button>
