@@ -385,6 +385,22 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     const media = Array.isArray(body.media) ? body.media : (body.media ? [body.media] : []);
     if (!text && !media.length) return json({ error: "A post needs text or media", code: "invalid_content" }, 400);
 
+    // A child container is not usable the moment it is created: Threads has to
+    // fetch the picture first. Asked once a second, which is plenty for a photo
+    // and is what was missing - a CAROUSEL built over children that were still
+    // being fetched is refused, so only single pictures ever went through.
+    const waitReady = async (containerId, budgetMs = 20000) => {
+      const until = Date.now() + budgetMs;
+      for (;;) {
+        const r = await th(token, `/${containerId}`, { fields: "status,error_message" });
+        const st = r.body?.status;
+        if (st === "FINISHED" || st === "PUBLISHED" || !st) return { ok: true };
+        if (st === "ERROR" || st === "EXPIRED") return { ok: false, error: r.body?.error_message || st };
+        if (Date.now() >= until) return { ok: false, pending: true };
+        await new Promise(done => setTimeout(done, 1000));
+      }
+    };
+
     let creationId = null;
     if (media.length > 1) {
       const children = [];
@@ -396,6 +412,11 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
           ? { media_type: "VIDEO", video_url: u, is_carousel_item: true }
           : { media_type: "IMAGE", image_url: u, is_carousel_item: true });
         if (!made.ok || !made.id) return json({ error: made.error || "Container failed", code: "threads_error" }, 502);
+        const ready = await waitReady(made.id);
+        if (!ready.ok) return json({
+          error: ready.error || (ready.pending ? "Threads is still fetching a slide" : "Media was not accepted"),
+          code: "media_failed",
+        }, 502);
         children.push(made.id);
       }
       const parent = await makeContainer({ media_type: "CAROUSEL", children: children.join(","), text });
@@ -417,17 +438,12 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
       return publishContainer(made.id);
     }
 
-    // Media was involved, so give Threads a moment and then hand the rest to the
-    // caller if it is still working. An Edge function cannot sit out a video.
-    const until = Date.now() + 12000;
-    for (;;) {
-      const r = await th(token, `/${creationId}`, { fields: "status,error_message" });
-      const st = r.body?.status;
-      if (st === "FINISHED" || st === "PUBLISHED" || !st) break;
-      if (st === "ERROR" || st === "EXPIRED") return json({ error: r.body?.error_message || st, code: "media_failed" }, 502);
-      if (Date.now() >= until) return json({ status: "processing", containerId: creationId }, 202);
-      await new Promise(done => setTimeout(done, 3000));
-    }
+    // The container itself, which for a video is the slow one. Still working
+    // after the budget is handed back to the caller rather than failed: an Edge
+    // function cannot sit out a transcode.
+    const ready = await waitReady(creationId, 12000);
+    if (!ready.ok && ready.pending) return json({ status: "processing", containerId: creationId }, 202);
+    if (!ready.ok) return json({ error: ready.error || "Media was not accepted", code: "media_failed" }, 502);
     return publishContainer(creationId);
   }
 
