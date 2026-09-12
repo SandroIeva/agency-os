@@ -30699,6 +30699,12 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
 // draggable TEXT OVERLAYS on it; at publish time the composition is rendered to a
 // JPEG via <canvas> and uploaded through Zernio's presigned direct upload.
 // Templates (loadable layouts) are planned — see docs/zernio-integration.md.
+// How much of the grey area the picture may take, as a SHARE of it. Not pixels:
+// a browser window changes size and a number baked in at 480 is right at one
+// size and wrong at every other. The height is the whole of what is there; the
+// width is held back so a landscape picture cannot spread into a banner.
+const POST_MEDIA_W_SHARE = 0.58;
+
 const POST_CHAR_LIMITS = { x: 280, threads: 500, pinterest: 500, instagram: 2200, linkedin: 3000 };
 const POST_OVERLAY_COLORS = ["#FFFFFF", "#15151c", "#F5C518", "#E86767", "#4D9FFF"];
 
@@ -30832,13 +30838,14 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // stage rather than fitted inside it. A measured number has no such hole, and
   // it keeps the stage hugging, which is what keeps the text overlays honest.
   const viewRef = useRef(null);
-  const [viewH, setViewH] = useState(0);
+  const [viewBox, setViewBox] = useState({ w: 0, h: 0 });
   // The height the picture may take. `viewRef` is put on the picture's OWN area
   // rather than on the whole row, so nothing has to be guessed and subtracted:
   // the slide count lives outside that area and takes its space from the
   // layout, not from an estimate. The estimate was wrong by about a hundred
   // pixels, which a portrait picture showed as a gap under it.
-  const mediaMaxH = viewH || undefined;
+  const mediaMaxH = viewBox.h || undefined;
+  const mediaMaxW = viewBox.w ? Math.round(viewBox.w * POST_MEDIA_W_SHARE) : undefined;
   const [overlays, setOverlays] = useState([]);     // [{ id, text, x, y, size, color, bold }] — x/y/size relative to image
   const [selOverlay, setSelOverlay] = useState(null);
   // Dictation for the caption, the same SpeechRecognition the notes and the
@@ -31189,12 +31196,16 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // A slide removed from the end must not leave the viewer pointing past it.
   useEffect(() => { setSlideIdx(i => Math.min(i, Math.max(0, slides.length - 1))); }, [slides.length]);
 
+  // Both dimensions of the area the picture lives in, re-read whenever it
+  // changes, which is what makes the picture follow the window instead of a
+  // number somebody typed once.
   useEffect(() => {
     const el = viewRef.current;
-    if (!el) { setViewH(0); return; }
-    setViewH(el.clientHeight);
+    if (!el) { setViewBox({ w: 0, h: 0 }); return; }
+    const read = () => setViewBox({ w: el.clientWidth, h: el.clientHeight });
+    read();
     if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => setViewH(el.clientHeight));
+    const ro = new ResizeObserver(read);
     ro.observe(el);
     return () => ro.disconnect();
   }, [stepIdx, !!visual, !!reel]);
@@ -31718,7 +31729,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         maxWidth: !reel && slides.length > 1 ? "calc(100% - 116px)" : "100%" }}>
                       {reel ? (
                         <video src={reel.url} controls playsInline
-                          style={{ maxWidth: "min(760px, 100%)", maxHeight: mediaMaxH || "100%", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, display: "block" }} />
+                          style={{ maxWidth: mediaMaxW, maxHeight: mediaMaxH || "100%", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, display: "block" }} />
                       ) : (
                         // The stage hugs the picture rather than boxing it, so
                         // the text overlays, which are placed as fractions of
@@ -31726,19 +31737,20 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         <div ref={stageRef} onPointerDown={() => setSelOverlay(null)}
                           style={{ position: "relative", maxWidth: "100%", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, userSelect: "none", touchAction: "none", lineHeight: 0 }}>
                           <img src={slides[slideIdx]?.url || visual.url} alt="" draggable={false}
-                            // Measured again once the picture is actually in the
-                            // layout. Insurance: the observer covers a box that
-                            // changes size, and the first measurement is taken
-                            // before there is anything in it.
-                            onLoad={() => setViewH(viewRef.current?.clientHeight || 0)}
-                            // Bounded in BOTH directions, and the width cap sits
-                            // HERE rather than on the stage. On the stage it cut
-                            // the picture off: a box that shrinks to fit its
-                            // content gives `max-width: 100%` inside it nothing
-                            // to resolve against, so the picture stayed full
-                            // width and the box clipped the rest away.
+                            // Measured again once the picture is in the layout.
+                            // Insurance: the observer watches a box that changes
+                            // size, and the first read happens before there is
+                            // anything in it.
+                            //
+                            // Both caps sit HERE and not on the stage around it.
+                            // On the stage the width cap CUT the picture off: a
+                            // box that shrinks to fit its content gives a
+                            // percentage inside it nothing to resolve against,
+                            // so the picture stayed full width and the box
+                            // clipped away the rest.
+                            onLoad={() => { const el = viewRef.current; if (el) setViewBox({ w: el.clientWidth, h: el.clientHeight }); }}
                             style={{ display: "block", width: "auto", height: "auto",
-                              maxWidth: "min(760px, 100%)", maxHeight: mediaMaxH }} />
+                              maxWidth: mediaMaxW, maxHeight: mediaMaxH }} />
                           {slideIdx === 0 && overlays.map(o => (
                             <div key={o.id} onPointerDown={(e) => onOverlayDown(e, o)}
                               style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500,
