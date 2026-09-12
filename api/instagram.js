@@ -24,6 +24,7 @@
 //   POST { mode: "status",     orgId } → which accounts are connected, and as whom
 //   POST { mode: "disconnect", orgId, igUserId } → forget one account
 //   POST { mode: "publish",    orgId, igUserId, … } → one post, container flow
+//   POST { mode: "publish-finish", orgId, igUserId, containerId } → finish a slow one
 //   POST { mode: "overview",   orgId, igUserId, days } → the dashboard's numbers
 //   POST { mode: "insights",   orgId, igUserId, … } → one raw insights call
 //   POST { mode: "limit",      orgId, igUserId }    → posts left in the 24h window
@@ -477,17 +478,21 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
       return { ok: res.ok, id: j?.id, error: j?.error?.message || null };
     };
 
-    // Instagram's own advice: ask once a minute, give up after five. A reel is
-    // transcoded, so the first answer is almost always IN_PROGRESS.
-    const waitReady = async (containerId) => {
-      for (let i = 0; i < 30; i++) {
+    // A picture is ready in a second or two; a reel is transcoded and routinely
+    // takes a minute. An Edge function cannot sit and wait that long, so this
+    // waits only as long as it safely can and says "still going" otherwise. The
+    // caller then asks `publish-finish`, which is the same check without the
+    // container being built again.
+    const waitReady = async (containerId, budgetMs = 12000) => {
+      const until = Date.now() + budgetMs;
+      for (;;) {
         const r = await ig(token, `/${containerId}`, { fields: "status_code,status" });
-        const s = r.body?.status_code;
-        if (s === "FINISHED") return { ok: true };
-        if (s === "ERROR" || s === "EXPIRED") return { ok: false, error: r.body?.status || s };
-        await new Promise(done => setTimeout(done, 5000));
+        const st = r.body?.status_code;
+        if (st === "FINISHED") return { ok: true };
+        if (st === "ERROR" || st === "EXPIRED") return { ok: false, error: r.body?.status || st };
+        if (Date.now() >= until) return { ok: false, pending: true };
+        await new Promise(done => setTimeout(done, 3000));
       }
-      return { ok: false, error: "timeout" };
     };
 
     let creationId = null;
@@ -503,8 +508,14 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
           ? { media_type: "VIDEO", video_url: u, is_carousel_item: true }
           : { image_url: u, is_carousel_item: true, ...(m.altText ? { alt_text: m.altText } : {}) });
         if (!made.ok || !made.id) return json({ error: made.error || "Container failed", code: "instagram_error" }, 502);
+        // A slide is a picture, so the short wait is the whole wait. Still
+        // pending after it means something is wrong with that file, not that it
+        // needs more time.
         const ready = await waitReady(made.id);
-        if (!ready.ok) return json({ error: ready.error || "Media was not accepted", code: "media_failed" }, 502);
+        if (!ready.ok) return json({
+          error: ready.error || (ready.pending ? "Instagram is still processing a slide" : "Media was not accepted"),
+          code: "media_failed",
+        }, 502);
         children.push(made.id);
       }
       const parent = await makeContainer({ media_type: "CAROUSEL", children: children.join(","), caption });
@@ -520,11 +531,37 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
         : { image_url: u, caption, ...(m?.altText ? { alt_text: m.altText } : {}) };
       const made = await makeContainer(params);
       if (!made.ok || !made.id) return json({ error: made.error || "Container failed", code: "instagram_error" }, 502);
-      const ready = await waitReady(made.id);
+      const ready = await waitReady(made.id, kind === "REELS" ? 18000 : 12000);
+      // Handed back so the caller can finish it, rather than failing something
+      // that is merely slow. This is the normal path for a reel.
+      if (!ready.ok && ready.pending) return json({ status: "processing", containerId: made.id }, 202);
       if (!ready.ok) return json({ error: ready.error || "Media was not accepted", code: "media_failed" }, 502);
       creationId = made.id;
     }
 
+    return publishContainer(creationId);
+  }
+
+  // ── publish-finish — the second half, for media that was still processing ──
+  //
+  // The same check and the same publish, with no container built: a caller that
+  // polls must never be able to create a second post by asking again.
+  if (body.mode === "publish-finish") {
+    const containerId = String(body.containerId || "");
+    if (!/^\d+$/.test(containerId)) return json({ error: "containerId is required", code: "invalid_container" }, 400);
+    const r = await ig(token, `/${containerId}`, { fields: "status_code,status" });
+    const st = r.body?.status_code;
+    if (st === "ERROR" || st === "EXPIRED") return json({ error: r.body?.status || st, code: "media_failed" }, 502);
+    if (st !== "FINISHED") return json({ status: "processing", containerId }, 202);
+    return publishContainer(containerId);
+  }
+
+  return json({ error: "Unknown mode" }, 400);
+
+  // Shared by both halves, declared last because it is the tail of the story
+  // rather than the start of it. A function declaration, so both callers above
+  // can reach it.
+  async function publishContainer(creationId) {
     const pub = await fetch(`${GRAPH}/${row.ig_user_id}/media_publish`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -542,6 +579,4 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     const perma = await ig(token, `/${pubJ.id}`, { fields: "permalink" });
     return json({ id: pubJ.id, url: perma.body?.permalink || null, status: "published" });
   }
-
-  return json({ error: "Unknown mode" }, 400);
 }

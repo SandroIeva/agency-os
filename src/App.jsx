@@ -30792,6 +30792,19 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // Visual (step 01)
   const [visual, setVisual] = useState(null);       // { url, w, h } — local object URL + natural dims
   const imageFileRef = useRef(null);
+  // Everything Instagram can take that is not one flat picture. Kept beside the
+  // editor rather than inside it: the editor composes ONE image with text on it,
+  // and neither a video nor the second slide of a carousel goes through a
+  // canvas. Zernio never sees any of this - its path still sends the single
+  // rendered visual, and `submit` says so out loud rather than dropping slides
+  // on the floor.
+  const [extras, setExtras] = useState([]);        // [{ id, file, url }] — carousel slides 2..10
+  const [reel, setReel] = useState(null);          // { file, url } — a video instead of a picture
+  const extraRef = useRef(null);
+  const reelRef = useRef(null);
+  // Only a workspace with the direct connection can use either, so the controls
+  // are absent everywhere else instead of being offered and then refused.
+  const hasDirectIg = (accounts || []).some(a => a.provider === "meta");
   const [overlays, setOverlays] = useState([]);     // [{ id, text, x, y, size, color, bold }] — x/y/size relative to image
   const [selOverlay, setSelOverlay] = useState(null);
   // Dictation for the caption, the same SpeechRecognition the notes and the
@@ -30998,7 +31011,29 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     } catch (e) { setError(e); }
     setAssetBusy(false);
   };
-  const clearVisual = () => { imageFileRef.current = null; setVisual(null); setOverlays([]); setSelOverlay(null); };
+  const clearVisual = () => { imageFileRef.current = null; setVisual(null); setOverlays([]); setSelOverlay(null); clearExtras(); };
+  // Object urls are revoked on the way out. A composer somebody keeps open all
+  // day otherwise holds on to every picture they ever picked.
+  const clearExtras = () => {
+    setExtras(list => { list.forEach(x => URL.revokeObjectURL(x.url)); return []; });
+    setReel(r => { if (r) URL.revokeObjectURL(r.url); return null; });
+  };
+  const onPickExtras = (e) => {
+    const files = [...(e.target.files || [])].filter(f => f.type.startsWith("image/"));
+    setExtras(list => [...list, ...files.map(f => ({ id: crypto.randomUUID(), file: f, url: URL.createObjectURL(f) }))].slice(0, 9));
+    e.target.value = "";
+  };
+  const removeExtra = (id) => setExtras(list => {
+    const hit = list.find(x => x.id === id);
+    if (hit) URL.revokeObjectURL(hit.url);
+    return list.filter(x => x.id !== id);
+  });
+  const onPickReel = (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f || !f.type.startsWith("video/")) return;
+    setReel(r => { if (r) URL.revokeObjectURL(r.url); return { file: f, url: URL.createObjectURL(f) }; });
+  };
   const addOverlay = () => {
     const id = crypto.randomUUID();
     setOverlays(prev => [...prev, { id, text: de ? "Dein Text" : "Your text", x: 0.07, y: 0.08, size: 0.065, color: "#FFFFFF", bold: true }]);
@@ -31051,6 +31086,19 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     return { blob, type: "image/jpeg", name: "post-visual.jpg" };
   };
 
+  // One file into our own bucket, handed to the server as a path it signs for an
+  // hour. Instagram cannot be given bytes, only a url it fetches itself, and
+  // brand-assets is not public.
+  const toMetaMedia = async (blob, contentType, ext) => {
+    const path = `instagram/${orgId}/${crypto.randomUUID()}.${ext}`;
+    const up = await uploadTracked({
+      bucket: "brand-assets", path, file: blob, orgId,
+      userId: session?.user?.id, contentType, sizeBytes: blob.size,
+    });
+    if (up.error) throw new Error(de ? "Upload fehlgeschlagen." : "Upload failed.");
+    return { bucket: "brand-assets", path };
+  };
+
   const submit = async (kind) => {
     if (busy) return;
     setError(null); setResult(null);
@@ -31069,9 +31117,23 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         : "The direct Instagram connection can only publish right away. Take Instagram out, or publish now."));
       return;
     }
-    // Instagram fetches the picture itself and refuses a post without one.
-    if (metaSel.length && !imageFileRef.current) {
-      setError(new Error(de ? "Instagram braucht ein Bild." : "Instagram needs an image."));
+    // Instagram fetches the media itself and refuses a post without any.
+    if (metaSel.length && !imageFileRef.current && !reel) {
+      setError(new Error(de ? "Instagram braucht ein Bild oder ein Video." : "Instagram needs an image or a video."));
+      return;
+    }
+    // A video only has somewhere to go on the direct path. Said here rather
+    // than letting Zernio receive a post whose picture silently went missing.
+    if (reel && zernSel.length) {
+      setError(new Error(de
+        ? "Ein Reel geht nur an den direkten Instagram-Kanal. Nimm die anderen Kanäle raus."
+        : "A reel can only go to the direct Instagram channel. Take the other channels out."));
+      return;
+    }
+    if (extras.length && zernSel.length) {
+      setError(new Error(de
+        ? "Ein Karussell geht nur an den direkten Instagram-Kanal. Die anderen Kanäle bekämen nur das erste Bild."
+        : "A carousel can only go to the direct Instagram channel. The others would get the first slide only."));
       return;
     }
     setBusy(kind);
@@ -31090,14 +31152,20 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           mediaItems = [{ type: "image", url: pre.publicUrl, filename: rendered.name }];
         }
         if (metaSel.length) {
-          const path = `instagram/${orgId}/${crypto.randomUUID()}.jpg`;
-          const up = await uploadTracked({
-            bucket: "brand-assets", path, file: rendered.blob, orgId,
-            userId: session?.user?.id, contentType: rendered.type, sizeBytes: rendered.blob.size,
-          });
-          if (up.error) throw new Error(de ? "Bild-Upload fehlgeschlagen." : "Image upload failed.");
-          metaMedia = { bucket: "brand-assets", path };
+          metaMedia = await toMetaMedia(rendered.blob, rendered.type, "jpg");
         }
+      }
+      // The slides after the first, and the video, go up exactly the same way.
+      // They are not rendered through the canvas: the editor composes one flat
+      // picture, and a slide it never touched must arrive as the file it is.
+      let metaExtras = [];
+      if (metaSel.length && extras.length) {
+        metaExtras = await Promise.all(extras.map(x =>
+          toMetaMedia(x.file, x.file.type, (x.file.name.split(".").pop() || "jpg").toLowerCase())));
+      }
+      let metaReel = null;
+      if (metaSel.length && reel) {
+        metaReel = await toMetaMedia(reel.file, reel.file.type, (reel.file.name.split(".").pop() || "mp4").toLowerCase());
       }
 
       const parts = [];
@@ -31121,10 +31189,47 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
           body: JSON.stringify({
             mode: "publish", orgId, igUserId: a.igUserId,
-            kind: "IMAGE", caption: text.trim() || undefined, media: metaMedia,
+            caption: text.trim() || undefined,
+            // What was picked decides the kind; there is no separate switch to
+            // get out of step with it.
+            ...(metaReel
+              ? { kind: "REELS", media: { ...metaReel, kind: "VIDEO" } }
+              : metaExtras.length
+                ? { kind: "CAROUSEL", media: [metaMedia, ...metaExtras] }
+                : { kind: "IMAGE", media: metaMedia }),
           }),
         });
-        const j = await res.json().catch(() => null);
+        let j = await res.json().catch(() => null);
+        // 202 means the media is still being processed on Instagram's side,
+        // which is the normal answer for a reel. The container already exists,
+        // so finishing it is a different call: asking `publish` again would
+        // build a second one and post twice.
+        if (res.status === 202 && j?.containerId) {
+          setResult({ status: "pending", platforms: [{ platform: "instagram", status: "pending" }] });
+          for (let tries = 0; tries < 24; tries++) {
+            await new Promise(done => setTimeout(done, 5000));
+            const f = await fetch("/api/instagram", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+              body: JSON.stringify({ mode: "publish-finish", orgId, igUserId: a.igUserId, containerId: j.containerId }),
+            });
+            const fj = await f.json().catch(() => null);
+            if (f.status === 202) continue;
+            parts.push({
+              platform: "instagram",
+              status: f.ok ? "published" : "failed",
+              url: fj?.url || null,
+              error: f.ok ? null : (fj?.error || "Instagram"),
+            });
+            j = null;
+            break;
+          }
+          // Two minutes and still nothing. The post is not lost, Instagram is
+          // simply slow, and saying that is better than saying it failed.
+          if (j) parts.push({ platform: "instagram", status: "pending", url: null,
+            error: de ? "Instagram verarbeitet das Video noch. Schau gleich noch mal nach." : "Instagram is still processing the video. Check again shortly." });
+          continue;
+        }
         parts.push({
           platform: "instagram",
           status: res.ok ? "published" : "failed",
@@ -31134,7 +31239,16 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       }
 
       const failedAll = parts.length > 0 && parts.every(p => p.status === "failed");
-      const r = { status: failedAll ? "failed" : (isDraft ? "draft" : (schedule ? "scheduled" : "published")), platforms: parts };
+      // A reel Instagram is still chewing on is neither published nor failed,
+      // and the summary has to say so or somebody goes looking for a post that
+      // is not there yet.
+      const anyPending = parts.some(p => p.status === "pending");
+      const r = {
+        status: failedAll ? "failed"
+          : anyPending ? "pending"
+          : (isDraft ? "draft" : (schedule ? "scheduled" : "published")),
+        platforms: parts,
+      };
       setResult(r);
       if (r.status !== "failed" && !isDraft) { setText(""); clearVisual(); setSchedule(""); setSelectedIds([]); }
     } catch (e) { setError(e); }
@@ -31434,6 +31548,80 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       </div>
                     )}
                   </>)}
+
+                  {/* Karussell und Reel. Nur da, wo es hingehen kann: ein
+                      Workspace ohne die direkte Instagram-Verbindung sieht das
+                      hier gar nicht, statt es angeboten und dann verweigert zu
+                      bekommen. Beides läuft am Editor vorbei, weil der EINE
+                      flache Bild baut und weder ein Video noch eine Folie, die
+                      er nie angefasst hat, durch ein Canvas gehört. */}
+                  {hasDirectIg && (
+                    <div style={{ width: "100%", maxWidth: 620, margin: "26px auto 0",
+                      paddingTop: 20, borderTop: `1px solid ${theme.borderFaint}` }}>
+                      <div style={{ ...label, marginBottom: 4 }}>{de ? "Nur Instagram direkt" : "Instagram direct only"}</div>
+                      <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55, marginBottom: 16 }}>
+                        {de
+                          ? "Ein Karussell oder ein Reel geht nur an den direkten Kanal. Andere Kanäle müssen dann abgewählt sein."
+                          : "A carousel or a reel can only go to the direct channel. Other channels have to be off."}
+                      </div>
+
+                      <input ref={extraRef} type="file" accept="image/*" multiple onChange={onPickExtras} style={{ display: "none" }} />
+                      <input ref={reelRef} type="file" accept="video/*" onChange={onPickReel} style={{ display: "none" }} />
+
+                      {!reel && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                          {visual && (
+                            <div style={{ width: 56, height: 56, borderRadius: 10, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, flexShrink: 0, position: "relative" }}>
+                              <img src={visual.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                              <div style={{ position: "absolute", left: 0, bottom: 0, right: 0, textAlign: "center", fontSize: 9, fontFamily: FONT, fontWeight: 600, color: "#fff", background: "rgba(21,21,28,0.66)", padding: "1px 0" }}>1</div>
+                            </div>
+                          )}
+                          {extras.map((x, i) => (
+                            <div key={x.id} style={{ width: 56, height: 56, borderRadius: 10, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, flexShrink: 0, position: "relative" }}>
+                              <img src={x.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                              <div onClick={() => removeExtra(x.id)}
+                                style={{ position: "absolute", top: 3, right: 3, width: 17, height: 17, borderRadius: 6, background: "rgba(21,21,28,0.72)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                              </div>
+                              <div style={{ position: "absolute", left: 0, bottom: 0, right: 0, textAlign: "center", fontSize: 9, fontFamily: FONT, fontWeight: 600, color: "#fff", background: "rgba(21,21,28,0.66)", padding: "1px 0" }}>{i + 2}</div>
+                            </div>
+                          ))}
+                          {visual && extras.length < 9 && (
+                            <motion.div whileTap={{ scale: 0.96 }} onClick={() => extraRef.current?.click()}
+                              style={{ width: 56, height: 56, borderRadius: 10, border: `1.5px dashed ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, flexShrink: 0 }}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                            </motion.div>
+                          )}
+                          {!visual && (
+                            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>
+                              {de ? "Erst ein Bild oben wählen, dann kommen weitere Folien dazu." : "Pick the first picture above, then add more slides."}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div style={{ marginTop: 16 }}>
+                        {reel ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <video src={reel.url} muted playsInline
+                              style={{ width: 56, height: 56, borderRadius: 10, objectFit: "cover", border: `1px solid ${theme.borderFaint}`, display: "block", flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontFamily: FONT, color: theme.text }}>
+                              {de ? "Wird als Reel veröffentlicht." : "Will be published as a reel."}
+                            </div>
+                            <span onClick={() => setReel(r => { if (r) URL.revokeObjectURL(r.url); return null; })}
+                              style={{ fontSize: 11.5, fontFamily: FONT, color: "#E86767", cursor: "pointer" }}>
+                              {de ? "Entfernen" : "Remove"}
+                            </span>
+                          </div>
+                        ) : (
+                          <span onClick={() => reelRef.current?.click()}
+                            style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>
+                            {de ? "Stattdessen ein Video als Reel" : "A video as a reel instead"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </>)}
 
                 {/* ── 01 Text ── */}
