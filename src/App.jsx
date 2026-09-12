@@ -27927,7 +27927,12 @@ const TOUCHPOINT_PLATFORMS = [
 // Compact white glyph per platform (letters via <text> where a logo would be fiddly).
 // Per-platform optical-size correction — each glyph fills its 24×24 box
 // differently, so we nudge the rendered size to make them look balanced.
-const TP_GLYPH_SCALE = { x: 0.72, tiktok: 1.3, facebook: 1.65, youtube: 1.12, instagram: 1.0, website: 1.0, pinterest: 1.2 };
+// A glyph drawn as a LETTER reads smaller than one drawn as a shape at the same
+// number, because the letter carries its own margins inside the box. That is
+// what `facebook: 1.65` has always been for; `linkedin` and `threads` are
+// letters too and were missing from the table, so they sat visibly small beside
+// Instagram.
+const TP_GLYPH_SCALE = { x: 0.72, tiktok: 1.3, facebook: 1.65, youtube: 1.12, instagram: 1.0, website: 1.0, pinterest: 1.2, linkedin: 1.3, threads: 1.3 };
 const tpGlyphSize = (key, base) => Math.round(base * (TP_GLYPH_SCALE[key] || 1));
 
 function touchpointGlyph(key) {
@@ -31871,9 +31876,13 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                                       textTransform: "uppercase", padding: "1px 5px", borderRadius: 5, flexShrink: 0,
                                       color: theme.textDim, border: `1px solid ${theme.borderFaint}` }}>Meta</span>
                                   )}
+                                  {/* The same weight as Connect below it. Red
+                                      is for something that went wrong, and
+                                      taking a channel out is neither wrong nor
+                                      irreversible. */}
                                   <span onClick={() => disconnectChannel(a)}
                                     style={{ marginLeft: "auto", paddingLeft: 12, fontSize: 11, fontFamily: FONT,
-                                      fontWeight: 600, color: "#E86767", cursor: connectBusy ? "wait" : "pointer", flexShrink: 0 }}>
+                                      fontWeight: 600, color: theme.textDim, cursor: connectBusy ? "wait" : "pointer", flexShrink: 0 }}>
                                     {connectBusy === a.id ? "…" : (de ? "Trennen" : "Disconnect")}
                                   </span>
                                 </div>
