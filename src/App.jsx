@@ -30699,11 +30699,16 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
 // draggable TEXT OVERLAYS on it; at publish time the composition is rendered to a
 // JPEG via <canvas> and uploaded through Zernio's presigned direct upload.
 // Templates (loadable layouts) are planned — see docs/zernio-integration.md.
-// How much of the grey area the picture may take, as a SHARE of it. Not pixels:
-// a browser window changes size and a number baked in at 480 is right at one
-// size and wrong at every other. The height is the whole of what is there; the
-// width is held back so a landscape picture cannot spread into a banner.
-const POST_MEDIA_W_SHARE = 0.58;
+// How much of the grey area's WIDTH the picture may take. A share, not pixels: a
+// browser window changes size and a length baked in is right at one size and
+// wrong at every other. Height is never capped below what is there.
+//
+// 0.8 is not a taste. Measured against the real nesting: below it the width
+// binds first and a 4:5 portrait, which is what these posts are, leaves height
+// unused - at 0.58 it used 74% of the height and looked small for no reason. At
+// 0.8 a portrait fills the height exactly, and above it nothing improves for a
+// portrait while a landscape only gets wider.
+const POST_MEDIA_W_SHARE = 0.8;
 
 const POST_CHAR_LIMITS = { x: 280, threads: 500, pinterest: 500, instagram: 2200, linkedin: 3000 };
 const POST_OVERLAY_COLORS = ["#FFFFFF", "#15151c", "#F5C518", "#E86767", "#4D9FFF"];
