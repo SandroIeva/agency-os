@@ -66,6 +66,29 @@ Datenbank.
 
 Also: kurz vor der Einreichung einmal öffnen, nicht Wochen vorher.
 
+## User data deletion
+
+Das Feld in den App-Einstellungen nimmt entweder einen Callback oder eine Seite
+mit Anleitung. Wir nehmen die **Anleitung**, aus einem konkreten Grund: der
+Callback wird mit dem **App**-Secret signiert, und wir halten nur die Instagram-
+und die Threads-Produkt-Secrets. Ein drittes Secret nur hierfür wäre ein
+Schlüssel mehr zu verwahren, für nichts.
+
+Die Produkt-Callbacks bei Instagram und Threads bleiben davon unberührt. Sie
+sind auch die, die tatsächlich eine Zeile löschen.
+
+Die Anleitung gehört in die bestehende Datenschutzerklärung und nicht auf eine
+eigene Seite, sonst laufen zwei Texte über dieselbe Sache auseinander. Der
+fertige Wortlaut liegt in `docs/privacy-meta-sections.md`; eingetragen wird
+dann:
+
+```
+https://www.i7os.com/privacy#data-deletion
+```
+
+⚠ Die Datenschutzerklärung nennt Meta, Instagram und Threads bisher an keiner
+Stelle. Das ist für das Review zu wenig, unabhängig von der Löschung.
+
 ## Der Prüfer muss hineinkommen
 
 "Inaccessible app" und "fake test accounts" sind zwei der benannten
