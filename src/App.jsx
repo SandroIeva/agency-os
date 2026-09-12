@@ -30838,17 +30838,13 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // the slide count lives outside that area and takes its space from the
   // layout, not from an estimate. The estimate was wrong by about a hundred
   // pixels, which a portrait picture showed as a gap under it.
-  // The picture always fits inside a SQUARE as tall as the area it sits in.
-  //
-  // One rule, and it is the height that governs, because the height is the
-  // scarce dimension: a browser window is wide and short far more often than
-  // the reverse. Tying the width to the area's WIDTH instead was the mistake -
-  // in a wide window 80% of a wide area is an enormous picture, which is what
-  // a landscape post turned into. This way a portrait fills the height, a
-  // square fills it, and a landscape is held to the same height rather than
-  // spreading with the window. Nothing here is a length, so it all scales.
+  // The picture is never larger than the area it sits in, in either direction,
+  // and never anything less either. A portrait runs out of HEIGHT first and so
+  // fills the height; a landscape runs out of WIDTH first and so fills the
+  // width. There is no share and no ratio in here: every factor I put in was
+  // right for one shape of picture and wrong for the other.
   const mediaMaxH = viewBox.h || undefined;
-  const mediaMaxW = viewBox.h ? Math.min(viewBox.w, viewBox.h) : undefined;
+  const mediaMaxW = viewBox.w || undefined;
   const [overlays, setOverlays] = useState([]);     // [{ id, text, x, y, size, color, bold }] — x/y/size relative to image
   const [selOverlay, setSelOverlay] = useState(null);
   // Dictation for the caption, the same SpeechRecognition the notes and the
