@@ -31467,7 +31467,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
                 {/* ── 02 Visual — mini creator: image + draggable text overlays ── */}
                 {stepIdx === S_VISUAL && (<>
-                  {stepHead("Visual", de ? "Woher kommt das Bild?" : "Where does the picture come from?")}
                   <input ref={fileRef} type="file" accept="image/*" onChange={onPickImage} style={{ display: "none" }} />
                   {!visual ? (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
@@ -31497,9 +31496,18 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     </div>
                   ) : (<>
                     {/* Editor stage — overlays are draggable; click empty space deselects */}
+                    {/* The stage hugs the picture instead of filling a fixed
+                        width, and the picture is bounded by HEIGHT. A wide
+                        photo in a 620px box came out as a strip with most of
+                        the step left empty under it. Hugging also keeps the
+                        overlay maths honest: they are placed as fractions of
+                        this box, so a letterboxed image would put them where
+                        the export does not. */}
+                    <div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
                     <div ref={stageRef} onPointerDown={() => setSelOverlay(null)}
-                      style={{ position: "relative", width: "100%", maxWidth: 620, margin: "0 auto", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, userSelect: "none", touchAction: "none" }}>
-                      <img src={visual.url} alt="" draggable={false} style={{ display: "block", width: "100%" }} />
+                      style={{ position: "relative", maxWidth: "100%", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, userSelect: "none", touchAction: "none", lineHeight: 0 }}>
+                      <img src={visual.url} alt="" draggable={false}
+                        style={{ display: "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: "min(66vh, 760px)" }} />
                       {overlays.map(o => (
                         <div key={o.id} onPointerDown={(e) => onOverlayDown(e, o)}
                           style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500,
@@ -31513,15 +31521,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                       </motion.div>
                     </div>
-                    {/* Editor toolbar */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, flexWrap: "wrap", width: "100%", maxWidth: 620, margin: "14px auto 0" }}>
-                      <motion.button whileTap={{ scale: 0.97 }} onClick={addOverlay}
-                        style={{ padding: "8px 15px", borderRadius: 999, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
-                        + {de ? "Text hinzufügen" : "Add text"}
-                      </motion.button>
-                      <div style={{ padding: "6px 12px", borderRadius: 999, border: `1px solid ${theme.borderFaint}`, fontSize: 11.5, fontFamily: FONT, color: theme.textFaint }}>
-                        {de ? "Vorlagen — bald" : "Templates — soon"}
-                      </div>
                     </div>
                     {/* Selected-overlay properties */}
                     {selectedOverlayObj && (
@@ -31558,13 +31557,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   {hasDirectIg && (
                     <div style={{ width: "100%", maxWidth: 620, margin: "26px auto 0",
                       paddingTop: 20, borderTop: `1px solid ${theme.borderFaint}` }}>
-                      <div style={{ ...label, marginBottom: 4 }}>{de ? "Nur Instagram direkt" : "Instagram direct only"}</div>
-                      <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55, marginBottom: 16 }}>
-                        {de
-                          ? "Ein Karussell oder ein Reel geht nur an den direkten Kanal. Andere Kanäle müssen dann abgewählt sein."
-                          : "A carousel or a reel can only go to the direct channel. Other channels have to be off."}
-                      </div>
-
                       <input ref={extraRef} type="file" accept="image/*" multiple onChange={onPickExtras} style={{ display: "none" }} />
                       <input ref={reelRef} type="file" accept="video/*" onChange={onPickReel} style={{ display: "none" }} />
 
