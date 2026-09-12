@@ -21506,37 +21506,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // The canvas filter takes the same functions CSS does, so building the string
   // once is what makes a shadow land in the same place in both — two separate
   // implementations of "drop shadow" would not.
-  const effectFilter = (it) => {
-    const parts = [];
-    if (it.blur) parts.push(`blur(${it.blur}px)`);
-    if (it.shadow) {
-      const d2 = it.shadow;
-      parts.push(`drop-shadow(${d2.x || 0}px ${d2.y || 0}px ${d2.blur || 0}px ${shadowColor(d2)})`);
-    }
-    return parts.length ? parts.join(" ") : "none";
-  };
+
   // A group is one object, so it casts ONE shadow — around the outline of the
   // whole group, not one shadow per member falling across the others. Both the
   // screen and the export draw the members first and put the shadow around the
   // result, which is the only way to get a single silhouette.
   //
   // Returns the shadow to hoist, or null to leave every member drawing its own.
-  const groupShadowOf = (gid, list) => {
-    if (!gid) return null;
-    const mem = list.filter(i => i.groupId === gid);
-    if (mem.length < 2) return null;
-    const sh = mem[0].shadow;
-    if (!sh) return null;
-    // Every member has to carry the SAME shadow, which is what the panel writes
-    // when a group is selected. Members that were given a shadow of their own
-    // before being grouped keep them, one each — that is what they asked for.
-    if (!mem.every(m => cvSame(m.shadow, sh))) return null;
-    // A backdrop blur samples whatever is behind the item. On the offscreen
-    // canvas the export needs, there is nothing behind it, so such a group is
-    // left alone rather than exported wrong.
-    if (mem.some(m => m.bgBlur)) return null;
-    return sh;
-  };
+
   // Wraps each contiguous run of a shadow-sharing group in one filtered box.
   // Contiguous on purpose: a run is what can be lifted without changing which
   // items are painted between the members.
@@ -21545,7 +21522,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     let i = 0;
     while (i < list.length) {
       const it = list[i];
-      const sh = groupShadowOf(it.groupId, list);
+      const sh = canvasRenderGroupShadowOf(it.groupId, list);
       if (!sh) { out.push(render(it)); i += 1; continue; }
       const gid = it.groupId, run = [];
       while (i < list.length && list[i].groupId === gid) { run.push(list[i]); i += 1; }
@@ -21553,7 +21530,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         // pointerEvents none, and the items inside turn it back on: an empty
         // transparent box still swallows clicks, and this one covers the frame.
         <div key={"gfx-" + gid + "-" + run[0].id} style={{ position: "absolute", left: 0, top: 0,
-          width: W, height: H, pointerEvents: "none", filter: effectFilter({ shadow: sh }) }}>
+          width: W, height: H, pointerEvents: "none", filter: canvasRenderEffectFilter({ shadow: sh }) }}>
           {run.map(m => render({ ...m, shadow: undefined }))}
         </div>
       );
@@ -21575,11 +21552,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // A shadow's colour is a hex plus its own opacity, like every other colour
   // here — older documents stored a finished rgba() string, so those are passed
   // through untouched rather than being mangled into a hex.
-  const shadowColor = (sh) => {
-    if (!sh) return "rgba(0,0,0,0.35)";
-    const c = sh.color || "#000000";
-    return /^#/.test(c) ? withAlpha(c, sh.alpha == null ? 35 : sh.alpha) : c;
-  };
+
 
   // One fill, four kinds, one CSS value. Everything that paints something in
   // this editor — a shape, the frame behind it, the swatch in the panel — goes
@@ -21737,7 +21710,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const maskClip = (it) => {
     const m = maskOf(it);
     if (!m) return undefined;
-    const b = boxOf(m), dx = b.x - it.x, dy = b.y - it.y;
+    const b = canvasRenderBoxOf(m), dx = b.x - it.x, dy = b.y - it.y;
     const poly = polyOf(m);
     if (poly) return `polygon(${poly.map(([fx, fy]) =>
       `${dx + fx * b.w}px ${dy + fy * b.h}px`).join(", ")})`;
@@ -21747,44 +21720,19 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     return `inset(${dy}px ${it.w - (dx + b.w)}px ${it.h - (dy + b.h)}px ${dx}px round ${r}px)`;
   };
 
-  const canStroke = (it) => ["rect", "image", "sticky", "ellipse"].includes(it.type) || !!polyOf(it);
+
   // Two ways to draw the same outline, because the shapes are drawn two ways.
   // A CSS border follows the border BOX, so on a clip-path polygon it would draw
   // a rectangle around a triangle. Those shapes get a real line along their
   // outline instead — an SVG on screen, a stroked path on export, both centred
   // on the edge, which is why they land in the same place.
-  const strokeIsBox = (it) => !polyOf(it);
 
-  const tracePath = (ctx, it, b) => {
-    ctx.beginPath();
-    if (it.type === "ellipse") ctx.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2);
-    else if (polyOf(it)) {
-      polyOf(it).forEach(([fx, fy], i2) => {
-        const px2 = b.x + fx * b.w, py2 = b.y + fy * b.h;
-        i2 ? ctx.lineTo(px2, py2) : ctx.moveTo(px2, py2);
-      });
-      ctx.closePath();
-    } else if (ctx.roundRect) {
-      ctx.roundRect(b.x, b.y, b.w, b.h, radiiOf(it).map(v => Math.min(v, Math.min(b.w, b.h) / 2)));
-    } else ctx.rect(b.x, b.y, b.w, b.h);
-  };
 
-  const canInnerShadow = (it) => ["rect", "image", "sticky", "ellipse"].includes(it.type);
 
-  const boxOf = (it) =>
-    (it.type === "arrow" || it.type === "line")
-      ? { x: Math.min(it.x1, it.x2), y: Math.min(it.y1, it.y2),
-          w: Math.abs(it.x2 - it.x1), h: Math.abs(it.y2 - it.y1) }
-      : it.type === "path"
-      ? pathBBox(pathAllNodes(it), it.ox || 0, it.oy || 0)
-      : it.type === "draw"
-      ? (() => {
-          const xs = it.pts.map(q => q[0] + (it.ox || 0)), ys = it.pts.map(q => q[1] + (it.oy || 0));
-          return { x: Math.min(...xs), y: Math.min(...ys),
-            w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
-        })()
-      : { x: it.x, y: it.y, w: it.w,
-          h: it.h || canvasTextH(it) };
+
+
+
+
 
   const selItem = items.find(i => i.id === sel) || null;
 
@@ -22448,7 +22396,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     if (!clipRef.current.length) return;
     const made = clipRef.current.map(it => {
       if (!at) return cloneOf(it, 20, 20);
-      const b = boxOf(it);
+      const b = canvasRenderBoxOf(it);
       return cloneOf(it, Math.round(at.x - b.x), Math.round(at.y - b.y));
     });
     setItems(list => [...list, ...made]);
@@ -22471,7 +22419,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // Topmost first, so a right-click hits what the eye sees on top.
   const itemAt = (pt) => {
     for (let i = items.length - 1; i >= 0; i--) {
-      const b = boxOf(items[i]);
+      const b = canvasRenderBoxOf(items[i]);
       if (pt.x >= b.x && pt.x <= b.x + b.w && pt.y >= b.y && pt.y <= b.y + b.h) return items[i];
     }
     return null;
@@ -22888,7 +22836,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       if (!m || (m.w < 3 && m.h < 3)) { if (!d.onFrame) setSel(null); return; }
       const inside = items.filter(o => {
         if (o.hidden || o.locked) return false;
-        const b = boxOf(o);
+        const b = canvasRenderBoxOf(o);
         return b.x < m.x + m.w && b.x + b.w > m.x && b.y < m.y + m.h && b.y + b.h > m.y;
       }).map(o => o.id);
       setPick(prev => d.add ? [...new Set([...prev, ...inside])] : inside);
@@ -22983,8 +22931,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     dragRef.current = { mode: "move", id: it.id, ids, bases, sx: e.clientX, sy: e.clientY,
       // The frame is a target like any other, which is what makes an element
       // centre itself in the banner instead of only against its neighbours.
-      baseBox: boxOf(it),
-      targets: [{ x: 0, y: 0, w: W, h: H }, ...items.filter(o => !ids.includes(o.id)).map(boxOf)] };
+      baseBox: canvasRenderBoxOf(it),
+      targets: [{ x: 0, y: 0, w: W, h: H }, ...items.filter(o => !ids.includes(o.id)).map(canvasRenderBoxOf)] };
   };
 
   // Orbiting is a handle rather than a held key: every modifier here is spoken
@@ -23210,7 +23158,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // reported no Y at all.
   const panelBox = (() => {
     if (panelSel.length < 2) return null;
-    const bs = panelSel.map(boxOf);
+    const bs = panelSel.map(canvasRenderBoxOf);
     const x = Math.min(...bs.map(b => b.x));
     const y = Math.min(...bs.map(b => b.y));
     return { x, y,
@@ -23302,7 +23250,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setItems(prev => prev.map(i => {
       if (!ids.includes(i.id)) return i;
       if (o === null) return { ...i, d3: undefined };
-      const b = boxOf(i);
+      const b = canvasRenderBoxOf(i);
       return { ...i, d3: { ...base, ...(i.d3 || {}), ...o,
         ox: gx - (b.x + b.w / 2), oy: gy - (b.y + b.h / 2) } };
     }));
@@ -23336,7 +23284,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     markChange();
     setItems(prev => prev.map(i => {
       if (!ids.includes(i.id)) return i;
-      const b = boxOf(i);
+      const b = canvasRenderBoxOf(i);
       const moved = shiftItem(i, cx - (b.x + b.w / 2), cy - (b.y + b.h / 2));
       return { ...moved, groupId: gid, d3: { ...base, ...(i.d3 || {}),
         z: order.get(i.id) * gap, stackGap: gap, ox: 0, oy: 0 } };
@@ -23370,7 +23318,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setItems(list => list.map(i => {
       if (i.groupId !== gid) return i;
       if (o === null) return { ...i, d3: undefined };
-      const b = boxOf(i);
+      const b = canvasRenderBoxOf(i);
       return { ...i, d3: { ...base, ...o,
         ox: gx - (b.x + b.w / 2), oy: gy - (b.y + b.h / 2) } };
     }));
@@ -23381,12 +23329,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // Where the two strokes of an arrowhead end. One function, because the
   // editor and the export both draw it and a head that differs between them is
   // the whole point of having a single source.
-  const arrowHead = (it) => {
-    const a = Math.atan2(it.y2 - it.y1, it.x2 - it.x1);
-    const hl = WB_ARROW_HEAD_SIZES[it.hs] || WB_ARROW_HEAD_SIZES.m;
-    return { x1: it.x2 - hl * Math.cos(a - 0.46), y1: it.y2 - hl * Math.sin(a - 0.46),
-             x2: it.x2 - hl * Math.cos(a + 0.46), y2: it.y2 - hl * Math.sin(a + 0.46) };
-  };
+
 
   const shiftItem = (i, dx, dy) =>
     (!dx && !dy) ? i
@@ -23407,7 +23350,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // Half-extents of a rotated rectangle: |w/2·cos| + |h/2·sin| across, the other
   // way round down. The centre does not move, so the box grows around it.
   const rotBoxOf = (it) => {
-    const b = boxOf(it);
+    const b = canvasRenderBoxOf(it);
     const r = ((it?.rot || 0) * Math.PI) / 180;
     if (!r) return b;
     const c = Math.abs(Math.cos(r)), s2 = Math.abs(Math.sin(r));
@@ -23462,7 +23405,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         nodes: mapNodes(it.nodes),
         ...(Array.isArray(it.subs) ? { subs: it.subs.map(sp => ({ ...sp, nodes: mapNodes(sp.nodes) })) } : {}) };
     }
-    const b = boxOf(it);
+    const b = canvasRenderBoxOf(it);
     return { ...it, ...common,
       x: Math.round(mx(b.x)), y: Math.round(my(b.y)),
       w: Math.max(1, Math.round((it.w || b.w) * sx)),
@@ -23479,7 +23422,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
              h: Math.max(...bs.map(b => b.y + b.h)) - y };
   };
   const unionBox = (list) => {
-    const bs = list.map(boxOf);
+    const bs = list.map(canvasRenderBoxOf);
     const x = Math.min(...bs.map(b => b.x)), y = Math.min(...bs.map(b => b.y));
     return { x, y, w: Math.max(...bs.map(b => b.x + b.w)) - x,
              h: Math.max(...bs.map(b => b.y + b.h)) - y };
@@ -23545,27 +23488,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // ── export ────────────────────────────────────────────────────────────────
   // Drawn item by item at the frame's real pixel size. Nothing is scaled from a
   // screenshot, so the file is exactly W x H however far the camera is zoomed.
-  const loadImage = (src) => new Promise((res, rej) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => res(img);
-    img.onerror = () => rej(new Error(src));
-    img.src = src;
-  });
 
-  const drawFitted = (ctx, img, it) => {
-    const ir = img.naturalWidth / img.naturalHeight, br = it.w / it.h;
-    if (it.fit === "contain") {
-      const w = ir > br ? it.w : it.h * ir, h = ir > br ? it.w / ir : it.h;
-      ctx.drawImage(img, it.x + (it.w - w) / 2, it.y + (it.h - h) / 2, w, h);
-      return;
-    }
-    // cover: crop the overflowing axis rather than squashing it
-    const sw = ir > br ? img.naturalHeight * br : img.naturalWidth;
-    const sh = ir > br ? img.naturalHeight : img.naturalWidth / br;
-    ctx.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh,
-      it.x, it.y, it.w, it.h);
-  };
+
+
 
   // The same four kinds, for the export. Async because an image fill cannot be
   // painted before it has loaded.
@@ -23575,377 +23500,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // so two identical shapes at different positions would show the tile cut at
   // different places — CSS anchors a background to its own element, and this is
   // what makes the export agree.
-  const paintCanvas = async (ctx, v, b, alpha) => {
-    // No paint means TRANSPARENT, spelled out. Returning undefined here would
-    // hand ctx.fillStyle a value the canvas silently refuses, leaving whatever
-    // colour was set last — so an unfilled shape would export filled with the
-    // previous one's colour.
-    if (v == null || v === "") return "transparent";
-    if (isGradient(v)) return gradientCanvas(ctx, v, b);
-    if (isPattern(v)) {
-      const pat = ctx.createPattern(patternTile(v), "repeat");
-      pat.setTransform(new DOMMatrix().translate(b.x, b.y).scale(1 / PATTERN_SCALE));
-      return pat;
-    }
-    if (isImageFill(v)) {
-      const img = await loadImage(v.src);
-      const off = document.createElement("canvas");
-      off.width = Math.max(1, Math.round(b.w));
-      off.height = Math.max(1, Math.round(b.h));
-      // Fitted by the same function an image ITEM uses, so "cover" means the
-      // same thing whether the picture is the object or its fill.
-      drawFitted(off.getContext("2d"), img,
-        { x: 0, y: 0, w: off.width, h: off.height, fit: v.fit });
-      const pat = ctx.createPattern(off, "no-repeat");
-      pat.setTransform(new DOMMatrix().translate(b.x, b.y));
-      return pat;
-    }
-    return withAlpha(v, alpha);
-  };
 
-  const spunOf = (it) => !!(it.rot || it.flipX || it.flipY);
-  const applySpin = (ctx, it) => {
-    const b = boxOf(it), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-    ctx.translate(cx, cy);
-    if (it.rot) ctx.rotate(it.rot * Math.PI / 180);
-    if (it.flipX || it.flipY) ctx.scale(it.flipX ? -1 : 1, it.flipY ? -1 : 1);
-    ctx.translate(-cx, -cy);
-  };
 
-  const exportBlob = async (type = "image/png") => {
-    if (document.fonts?.ready) await document.fonts.ready;   // or the text draws in a fallback face
-    const cvs = document.createElement("canvas");
-    cvs.width = W; cvs.height = H;
-    const ctx = cvs.getContext("2d");
-    // "transparent" must leave the alpha channel alone — painting white would
-    // export a white rectangle that only looks like nothing on a white page.
-    // A rounded frame clips everything, so the corners come out genuinely empty
-    // rather than filled with the background colour.
-    // The file is always the frame — a 1080 x 1080 format cannot grow to fit
-    // an overhang. What this decides is the frame's SHAPE: unclipped, content
-    // may cover the rounded corners instead of being cut by them.
-    if (frameCorners().some(v => v > 0) && ctx.roundRect) {
-      ctx.beginPath();
-      ctx.roundRect(0, 0, W, H, frameCorners());
-      ctx.clip();
-    }
-    // JPEG has no alpha channel: a transparent frame would come out black
-    // rather than empty, so it gets white to sit on.
-    if (bg !== "transparent") {
-      ctx.fillStyle = await paintCanvas(ctx, bg, { x: 0, y: 0, w: W, h: H }, 100);
-      ctx.fillRect(0, 0, W, H);
-    }
-    else if (type === "image/jpeg") { ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0, 0, W, H); }
-    // Split out of the loop it used to be, so a GROUP can be drawn onto its own
-    // canvas first and the shadow put around the RESULT — one silhouette, the
-    // same thing the screen does with a filtered box. Draws onto whichever
-    // context it is handed; `ctx` here is the parameter, not the outer one.
-    const drawItemTo = async (ctx, it) => {
-      // Comments are notes ABOUT the design. Exporting one would print a review
-      // remark onto the banner, which is the one thing a comment must never do.
-      if (it.type === "comment") return;
-      // The shape used as a mask lends its outline and nothing else.
-      if (it.isMask) return;
-      // Hidden means hidden everywhere, the exported file included.
-      if (it.hidden) return;
-      ctx.globalAlpha = it.opacity == null ? 1 : it.opacity;
-      // Background blur, before the item's own paint: take what is already on
-      // the canvas — which is exactly "everything behind", since items are drawn
-      // in order — blur it, and put it back through the item's own outline.
-      // Drawn at identity with the clip already set, because a clip lives in
-      // device space; that is what makes it come out right on a rotated shape
-      // instead of blurring a rectangle at the wrong angle.
-      if (it.bgBlur) {
-        const snap = document.createElement("canvas");
-        snap.width = W; snap.height = H;
-        snap.getContext("2d").drawImage(cvs, 0, 0);
-        ctx.save();
-        if (spunOf(it)) applySpin(ctx, it);
-        tracePath(ctx, it, boxOf(it));
-        ctx.clip();
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.filter = `blur(${it.bgBlur}px)`;
-        ctx.drawImage(snap, 0, 0);
-        ctx.restore();
-      }
-      ctx.globalCompositeOperation = (it.blend && it.blend !== "normal") ? it.blend : "source-over";
-      ctx.filter = effectFilter(it);
-      // With depth, the element's own rotation is baked into the picture that
-      // gets warped, so the projection happens in frame coordinates — the same
-      // thing the conjugated CSS transform achieves on screen.
-      const spun = (it.rot || it.flipX || it.flipY) && !has3d(it);
-      const maskShape = maskOf(it);
-      if (maskShape) { ctx.save(); tracePath(ctx, maskShape, boxOf(maskShape)); ctx.clip(); }
-      if (spun) { ctx.save(); applySpin(ctx, it); }
-      // The same list the editor walks. Each placement is applied about the
-      // object's centre, because that is where CSS puts its transform origin —
-      // get that wrong and every copy lands somewhere else in the file than on
-      // the screen.
-      const places = repeatPlacements(it.repeat);
-      const home = boxOf(it);
-      const cx0 = home.x + home.w / 2, cy0 = home.y + home.h / 2;
-      for (const pl of places) {
-        const moved = pl.x || pl.y || pl.rot || pl.s !== 1;
-        if (moved) {
-          ctx.save();
-          ctx.translate(cx0 + pl.x, cy0 + pl.y);
-          ctx.rotate((pl.rot * Math.PI) / 180);
-          ctx.scale(pl.s, pl.s);
-          ctx.translate(-cx0, -cy0);
-        }
-      // The whole picture of one item, as a function of the canvas it goes on.
-      // Flat, that canvas is the export itself; turned in space, it is an
-      // offscreen one that gets warped into place afterwards — the drawing must
-      // not know which.
-      const paintFlat = async (ctx) => {
-        if (it.type === "image" && it.url) {
-          const img = await loadImage(it.url);
-          drawFitted(ctx, img, it);
-        } else if (it.type === "sticky") {
-          ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha); ctx.fillRect(it.x, it.y, it.w, it.h);
-          const pad = Math.round(it.w * 0.08);
-          ctx.fillStyle = it.color; ctx.font = canvasFont(it);
-          const ms = ctx.measureText("Hg"), Ls = canvasLH(it);
-          const bs = (Ls - (ms.fontBoundingBoxAscent + ms.fontBoundingBoxDescent)) / 2 + ms.fontBoundingBoxAscent;
-          ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
-          ctx.save(); ctx.beginPath(); ctx.rect(it.x, it.y, it.w, it.h); ctx.clip();
-          canvasText(it).split("\n").forEach((line, i2) =>
-            ctx.fillText(line, it.x + pad, it.y + pad + i2 * Ls + bs));
-          ctx.restore();
-        } else if (it.type === "rect") {
-          ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha);
-          const cap = Math.min(it.w, it.h) / 2;
-          const rr = radiiOf(it).map(v => Math.min(v, cap));
-          if (rr.some(v => v > 0) && ctx.roundRect) {
-            ctx.beginPath(); ctx.roundRect(it.x, it.y, it.w, it.h, rr); ctx.fill();
-          } else ctx.fillRect(it.x, it.y, it.w, it.h);
-        } else if (it.type === "ellipse") {
-          ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha); ctx.beginPath();
-          ctx.ellipse(it.x + it.w / 2, it.y + it.h / 2, it.w / 2, it.h / 2, 0, 0, Math.PI * 2);
-          ctx.fill();
-        } else if (polyOf(it)) {
-          ctx.fillStyle = await paintCanvas(ctx, it.fill, boxOf(it), it.fillAlpha); ctx.beginPath();
-          polyOf(it).forEach(([fx, fy], i) => {
-            const x = it.x + fx * it.w, y = it.y + fy * it.h;
-            i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-          });
-          ctx.closePath(); ctx.fill();
-        } else if (it.type === "path") {
-          // Path2D over the very string the screen draws. Writing the curve out
-          // a second time with bezierCurveTo would be two implementations of one
-          // shape, and they would part company the first time either changed.
-          const d2 = pathFullD(it);
-          if (d2) {
-            const p2 = new Path2D(d2);
-            ctx.save();
-            ctx.translate(it.ox || 0, it.oy || 0);
-            if (typeof it.fill === "string") { ctx.fillStyle = it.fill; ctx.fill(p2, pathFillRule(it)); }
-            // Same trap on the other side: ctx.lineWidth = 0 is refused, so a
-            // path with its stroke taken off would be drawn with the width of
-            // whatever was stroked last.
-            if (it.width > 0) {
-              ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
-              ctx.lineCap = capOf(it); ctx.lineJoin = joinOf(it);
-              ctx.stroke(p2);
-            }
-            ctx.restore();
-          }
-        } else if (it.type === "draw") {
-          ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
-          ctx.lineCap = capOf(it); ctx.lineJoin = joinOf(it);
-          ctx.beginPath();
-          it.pts.forEach(([x, y], i) => {
-            const px2 = x + (it.ox || 0), py2 = y + (it.oy || 0);
-            i ? ctx.lineTo(px2, py2) : ctx.moveTo(px2, py2);
-          });
-          ctx.stroke();
-        } else if (it.type === "arrow" || it.type === "line") {
-          ctx.strokeStyle = it.color; ctx.fillStyle = it.color;
-          ctx.lineWidth = it.width; ctx.lineCap = capOf(it); ctx.lineJoin = joinOf(it);
-          ctx.beginPath(); ctx.moveTo(it.x1, it.y1); ctx.lineTo(it.x2, it.y2); ctx.stroke();
-          // A line is an arrow without the head. This was a `continue` while the
-          // code sat in a loop; in a function of its own it is a return, and it
-          // skips exactly the same rest.
-          if (it.type === "line") return;
-          // Two strokes to the tip, the same ones the editor draws.
-          const hd = arrowHead(it);
-          ctx.beginPath();
-          ctx.moveTo(hd.x1, hd.y1); ctx.lineTo(it.x2, it.y2); ctx.lineTo(hd.x2, hd.y2);
-          ctx.stroke();
-        } else if (it.type === "text" && canvasTextBoxes(it).length) {
-          // The highlight first, then the words on top of it, from the same
-          // boxes the screen drew. A CSS border sits INSIDE its box, so the
-          // path is inset by half its width to put the centred canvas stroke
-          // where the screen put the border.
-          const sw = it.bgStrokeW && it.bgStroke ? it.bgStrokeW : 0;
-          const path = (x, y, w2, h2, rr) => {
-            ctx.beginPath();
-            if (rr > 0 && ctx.roundRect) ctx.roundRect(x, y, w2, h2, rr);
-            else ctx.rect(x, y, w2, h2);
-          };
-          for (const b of canvasTextBoxes(it)) {
-            const r = b.r;
-            if (it.bg) {
-              ctx.fillStyle = it.bg;
-              path(it.x + b.x, it.y + b.y, b.w, b.h, r);
-              ctx.fill();
-            }
-            if (sw) {
-              ctx.strokeStyle = it.bgStroke;
-              ctx.lineWidth = sw;
-              ctx.lineJoin = "round";
-              path(it.x + b.x + sw / 2, it.y + b.y + sw / 2,
-                   Math.max(0, b.w - sw), Math.max(0, b.h - sw), Math.max(0, r - sw / 2));
-              ctx.stroke();
-            }
-          }
-          drawStraightText(ctx, it);
-        } else if (it.type === "text" && canvasArc(it)) {
-          // The ring, drawn from the same layout the screen used. A letter's
-          // line box is centred on the point the layout gives, and its baseline
-          // sits half the leading below that box's top — the same sum the
-          // straight branch below makes, which is what keeps the two agreeing.
-          const L = canvasArcLayout(it);
-          ctx.fillStyle = it.color; ctx.font = canvasFont(it);
-          // Never the canvas letter-spacing here: the gaps are already in the
-          // angles, and adding them again would push every glyph off centre.
-          if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
-          const mA = ctx.measureText("Hg");
-          const baseA = (L.lh - (mA.fontBoundingBoxAscent + mA.fontBoundingBoxDescent)) / 2
-            + mA.fontBoundingBoxAscent - L.lh / 2;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "alphabetic";
-          for (const ch of L.chars) {
-            if (!ch.ch.trim()) continue;
-            ctx.save();
-            ctx.translate(it.x, it.y);
-            // The same matrix the screen used, handed to the canvas whole. A
-            // rotation would have been enough for the flat ring and wrong for
-            // the leaning one, where a letter is squashed and sometimes
-            // mirrored as well.
-            ctx.transform(ch.m[0], ch.m[1], ch.m[2], ch.m[3], ch.m[4], ch.m[5]);
-            ctx.fillText(ch.ch, 0, baseA);
-            ctx.restore();
-          }
-        } else if (it.type === "text") {
-          drawStraightText(ctx, it);
-        }
-        // The outline, after the fill and before the inner shadow.
-        if (it.strokeWidth && canStroke(it)) {
-          const b = boxOf(it), sw2 = it.strokeWidth;
-          ctx.save();
-          ctx.filter = "none";
-          if (strokeIsBox(it)) {
-            // A CSS border draws INSIDE the box, so the path is inset by half the
-            // width to put the centred canvas stroke in the same place.
-            tracePath(ctx, { ...it, radii: radiiOf(it).map(v => Math.max(0, v - sw2 / 2)) },
-              { x: b.x + sw2 / 2, y: b.y + sw2 / 2, w: Math.max(0, b.w - sw2), h: Math.max(0, b.h - sw2) });
-          } else {
-            // An SVG stroke is centred on the edge already — inset here and the two
-            // would sit half a stroke apart.
-            tracePath(ctx, it, b);
-          }
-          ctx.lineJoin = "round";
-          ctx.lineWidth = sw2;
-          ctx.strokeStyle = withAlpha(it.stroke || "#15151c", it.strokeAlpha);
-          ctx.stroke();
-          ctx.restore();
-        }
 
-        // Inner shadow, after the fill: clip to the shape, then cast a shadow from
-        // the INVERSE path so it falls inward. The canvas has no inset shadow.
-        if (it.innerShadow && canInnerShadow(it)) {
-          const b = boxOf(it), sh = it.innerShadow;
-          ctx.save();
-          ctx.filter = "none";
-          tracePath(ctx, it, b);
-          ctx.clip();
-          const pad = (sh.blur || 0) * 2 + Math.abs(sh.x || 0) + Math.abs(sh.y || 0) + 40;
-          ctx.beginPath();
-          ctx.rect(b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2);
-          if (it.type === "ellipse") ctx.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2, true);
-          else if (ctx.roundRect) ctx.roundRect(b.x, b.y, b.w, b.h, radiiOf(it).map(v => Math.min(v, Math.min(b.w, b.h) / 2)));
-          else ctx.rect(b.x, b.y, b.w, b.h);
-          ctx.shadowColor = shadowColor(sh);
-          ctx.shadowBlur = sh.blur || 0;
-          ctx.shadowOffsetX = sh.x || 0;
-          ctx.shadowOffsetY = sh.y || 0;
-          ctx.fillStyle = "#000";
-        ctx.fill("evenodd");
-        ctx.restore();
-        }
-      };
 
-      if (has3d(it)) {
-        // A canvas has no perspective, so the item is drawn flat into an
-        // offscreen picture and that picture is laid onto the plane its corners
-        // project to. The padding is room for what reaches outside the box —
-        // a shadow, a blur — because the warp can only carry what was drawn.
-        const d = d3Of(it);
-        const bx = boxOf(it);
-        const sh = it.shadow || {};
-        const pad = Math.ceil(30 + (Number(it.blur) || 0) * 2
-          + (it.shadow ? (Number(sh.blur) || 0) + Math.max(Math.abs(sh.x || 0), Math.abs(sh.y || 0)) : 0));
-        // Square and big enough for the item at any angle: it is drawn into
-        // this picture already turned, so the diagonal is what has to fit.
-        const R = Math.ceil(Math.hypot(bx.w, bx.h) / 2) + pad;
-        const tw = R * 2, th = R * 2;
-        const off = document.createElement("canvas");
-        off.width = tw; off.height = th;
-        const oc = off.getContext("2d");
-        oc.translate(R - (bx.x + bx.w / 2), R - (bx.y + bx.h / 2));
-        if (it.rot || it.flipX || it.flipY) applySpin(oc, it);
-        // The effects belong to the object, so they are baked into the picture
-        // before it is turned — the same order CSS uses, where the filter sits
-        // on the element and the transform on the wrapper around it.
-        oc.filter = effectFilter(it);
-        await paintFlat(oc);
-        const keep = ctx.filter;
-        ctx.filter = "none";
-        drawProjected(ctx, off, d, tw / 2, th / 2,
-          bx.x + bx.w / 2 + (Number(d.ox) || 0), bx.y + bx.h / 2 + (Number(d.oy) || 0), 20);
-        ctx.filter = keep;
-      } else {
-        await paintFlat(ctx);
-      }
-        if (moved) ctx.restore();
-      }
-      ctx.filter = "none";
-      ctx.globalCompositeOperation = "source-over";
-      if (spun) ctx.restore();
-      if (maskShape) ctx.restore();
-        };
 
-    // The SAME list the screen groups over — masks and hidden rows filtered out
-    // first. Grouping over the raw array instead would let a hidden member with
-    // no shadow of its own break up a run that the screen had already lifted,
-    // and the exported file would then disagree with what was on the screen.
-    const drawable = items.filter(it => !it.isMask && !it.hidden);
-    let gi = 0;
-    while (gi < drawable.length) {
-      const it0 = drawable[gi];
-      const gsh = groupShadowOf(it0.groupId, drawable);
-      if (!gsh) { await drawItemTo(ctx, it0); gi += 1; continue; }
-      // The contiguous run of this group, onto a canvas of its own.
-      const gid = it0.groupId, run = [];
-      while (gi < drawable.length && drawable[gi].groupId === gid) { run.push(drawable[gi]); gi += 1; }
-      const oc = document.createElement("canvas");
-      oc.width = W; oc.height = H;
-      const octx = oc.getContext("2d");
-      for (const m of run) await drawItemTo(octx, { ...m, shadow: undefined });
-      // globalAlpha is reset: the last item drawn leaves its own opacity behind
-      // on the context, and it would otherwise fade the whole group.
-      ctx.save();
-      ctx.filter = effectFilter({ shadow: gsh });
-      ctx.globalAlpha = 1;
-      ctx.drawImage(oc, 0, 0);
-      ctx.restore();
-    }
-    ctx.globalAlpha = 1;
-    return await new Promise((res, rej) =>
-      cvs.toBlob(b => (b ? res(b) : rej(new Error("toBlob"))), type,
-        type === "image/jpeg" ? 0.92 : undefined));
-  };
+  const exportBlob = (type = "image/png") => renderPostArtboard({ w: W, h: H, bg, items, radius: frameRadius, radii: frameRadii }, type);
 
   // The frame at its true pixel size, handed to the browser as a file. Not a
   // screenshot of the view — the export redraws, so a 2480x3508 A4 comes out at
@@ -24172,7 +23732,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // while it turns in the file is the two disagreeing about one design.
   const depthWrap = (it, children) => {
     if (!has3d(it)) return children;
-    const b = boxOf(it);
+    const b = canvasRenderBoxOf(it);
     return (
       <div style={{ transform: d3Transform(d3Of(it), it),
         transformOrigin: d3Origin(d3Of(it), it, b.w, b.h) }}>
@@ -24606,9 +24166,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       padding: Math.round(it.w * 0.08), boxSizing: "border-box",
                       opacity: it.opacity == null ? 1 : it.opacity,
                       mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
-                      filter: effectFilter(it),
+                      filter: canvasRenderEffectFilter(it),
                       boxShadow: it.innerShadow
-                        ? `inset ${it.innerShadow.x || 0}px ${it.innerShadow.y || 0}px ${it.innerShadow.blur || 0}px ${shadowColor(it.innerShadow)}, 0 2px 8px rgba(0,0,0,0.12)`
+                        ? `inset ${it.innerShadow.x || 0}px ${it.innerShadow.y || 0}px ${it.innerShadow.blur || 0}px ${canvasRenderShadowColor(it.innerShadow)}, 0 2px 8px rgba(0,0,0,0.12)`
                         : "0 2px 8px rgba(0,0,0,0.12)",
                       font: canvasFont(it), color: it.color,
                       lineHeight: `${canvasLH(it)}px`, whiteSpace: "pre", overflow: "hidden" }}>
@@ -24661,7 +24221,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     .filter(Boolean).join(" ") || undefined,
                       letterSpacing: `${canvasLS(it)}px`, opacity: it.opacity == null ? 1 : it.opacity,
                       mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
-                      filter: effectFilter(it),
+                      filter: canvasRenderEffectFilter(it),
                       whiteSpace: "pre", overflow: "visible",
                       ...(arc || boxes.length ? { position: "relative" } : {}),
                       ...(arc ? { height: canvasTextH(it) } : {}) }}>
@@ -24720,7 +24280,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 // instead of a multiple of the stroke width. A filled wedge
                 // that grows with the line is what made these look wrong beside
                 // the same arrow drawn on a board.
-                const hd = it.type === "arrow" ? arrowHead(it) : null;
+                const hd = it.type === "arrow" ? canvasRenderArrowHead(it) : null;
                 return (
                   <svg key={it.id} width={W} height={H} viewBox={`0 0 ${W} ${H}`}
                     style={{ position: "absolute", left: 0, top: 0, overflow: "visible",
@@ -24795,23 +24355,23 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     // silently back to the centre — which is exactly the bug
                     // this is meant to fix, only quieter.
                     transformOrigin: has3d(it)
-                      ? d3Origin(d3Of(it), it, boxOf(it).w, boxOf(it).h) : undefined }}>
+                      ? d3Origin(d3Of(it), it, canvasRenderBoxOf(it).w, canvasRenderBoxOf(it).h) : undefined }}>
                   <div style={{ position: "absolute", inset: 0, clipPath: maskClip(it) || polyClip(it),
                     opacity: it.opacity == null ? 1 : it.opacity,
                     mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
-                    filter: effectFilter(it),
+                    filter: canvasRenderEffectFilter(it),
                     // Only the original blurs what is behind it. The export
                     // takes that blur from the canvas as it stands, at identity,
                     // before any placement transform — so a blurring copy is one
                     // the file could not reproduce. One place, both sides agree.
                     ...(it.bgBlur && !ri ? { backdropFilter: `blur(${it.bgBlur}px)`,
                       WebkitBackdropFilter: `blur(${it.bgBlur}px)` } : {}),
-                    boxShadow: (it.innerShadow && canInnerShadow(it))
-                      ? `inset ${it.innerShadow.x || 0}px ${it.innerShadow.y || 0}px ${it.innerShadow.blur || 0}px ${shadowColor(it.innerShadow)}`
+                    boxShadow: (it.innerShadow && canvasRenderCanInnerShadow(it))
+                      ? `inset ${it.innerShadow.x || 0}px ${it.innerShadow.y || 0}px ${it.innerShadow.blur || 0}px ${canvasRenderShadowColor(it.innerShadow)}`
                       : undefined,
                     borderRadius: it.type === "ellipse" ? "50%" : radiiOf(it).map(v => `${v}px`).join(" "),
                     boxSizing: "border-box",
-                    border: (it.strokeWidth && canStroke(it) && strokeIsBox(it))
+                    border: (it.strokeWidth && canvasRenderCanStroke(it) && canvasRenderStrokeIsBox(it))
                       ? `${it.strokeWidth}px solid ${withAlpha(it.stroke || "#15151c", it.strokeAlpha)}`
                       : undefined,
                     background: it.type === "image"
@@ -25013,7 +24573,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
             {!editing && !selGid && items.filter(it => (it.id === sel || pick.includes(it.id))
               && !["comment", "draw", "arrow", "line", "path"].includes(it.type)).map(it => {
-              const b = boxOf(it);
+              const b = canvasRenderBoxOf(it);
               const xf = [it.rot ? `rotate(${it.rot}deg)` : "",
                 it.flipX ? "scaleX(-1)" : "", it.flipY ? "scaleY(-1)" : ""].filter(Boolean).join(" ");
               return (
@@ -25069,7 +24629,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         // Over the GROUP when a group is selected, not over whichever member was
         // clicked — the bar belongs to the thing with the frame around it.
         const gMembers = selGid ? items.filter(i => i.groupId === selGid && !i.hidden) : null;
-        const b = (gMembers && gMembers.length > 1) ? unionRotBox(gMembers) : boxOf(selItem);
+        const b = (gMembers && gMembers.length > 1) ? unionRotBox(gMembers) : canvasRenderBoxOf(selItem);
         const left = cam.x + (b.x + b.w / 2) * cam.s;
         const top = cam.y + b.y * cam.s - 46;
         const isText = selItem.type === "text" || selItem.type === "sticky";
@@ -25281,7 +24841,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   than a list of types written out here that would drift from
                   it. A line or a pen stroke is left out because it is all edge
                   already. */}
-              {canStroke(selItem) && !isStroke && (<>
+              {canvasRenderCanStroke(selItem) && !isStroke && (<>
                 {barSwatch("stroke", selItem.strokeWidth ? selItem.stroke : null,
                   de ? "Kontur" : "Outline", true)}
                 {/* Thickness only once there is something to be thick, and as a
@@ -26643,14 +26203,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 {num(Math.round(panelBox.x), v => nudgeAll((Number(v) || 0) - panelBox.x, 0), "X")}
                 {num(Math.round(panelBox.y), v => nudgeAll(0, (Number(v) || 0) - panelBox.y), "Y")}
               </>) : (<>
-              {num(Math.round(boxOf(selItem).x), v => {
-                const b = boxOf(selItem), d2 = (Number(v) || 0) - b.x;
+              {num(Math.round(canvasRenderBoxOf(selItem).x), v => {
+                const b = canvasRenderBoxOf(selItem), d2 = (Number(v) || 0) - b.x;
                 if (selItem.type === "draw" || selItem.type === "path") set2({ ox: (selItem.ox || 0) + d2 });
                 else if (selItem.type === "arrow" || selItem.type === "line") set2({ x1: selItem.x1 + d2, x2: selItem.x2 + d2 });
                 else set2({ x: Math.round(selItem.x + d2) });
               }, "X")}
-              {num(Math.round(boxOf(selItem).y), v => {
-                const b = boxOf(selItem), d2 = (Number(v) || 0) - b.y;
+              {num(Math.round(canvasRenderBoxOf(selItem).y), v => {
+                const b = canvasRenderBoxOf(selItem), d2 = (Number(v) || 0) - b.y;
                 if (selItem.type === "draw" || selItem.type === "path") set2({ oy: (selItem.oy || 0) + d2 });
                 else if (selItem.type === "arrow" || selItem.type === "line") set2({ y1: selItem.y1 + d2, y2: selItem.y2 + d2 });
                 else set2({ y: Math.round(selItem.y + d2) });
@@ -26768,7 +26328,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     rather than left as an empty gap, because a row with one
                     number in it reads as a field that failed to fill. */}
                 {selItem.type === "text"
-                  ? numRead(Math.round(boxOf(selItem).h), "H",
+                  ? numRead(Math.round(canvasRenderBoxOf(selItem).h), "H",
                       de ? "Ergibt sich aus Text, Breite und Schriftgröße"
                          : "Follows from the text, the width and the size")
                   : num(Math.round(selItem.h), v => set2({ h: Math.max(8, Number(v) || 8) }), "H")}
@@ -27355,7 +26915,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               )}
             </>)}
 
-            {canStroke(selItem) && (<>
+            {canvasRenderCanStroke(selItem) && (<>
               {label(de ? "Kontur" : "Stroke")}
               {!selItem.strokeWidth ? (
                 <div onClick={() => set2({ strokeWidth: 2, stroke: palette[0], strokeAlpha: 100 })}
@@ -27477,7 +27037,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 {row(!!selItem.shadow,
                   () => setFx({ shadow: selItem.shadow ? undefined : { x: 0, y: 4, blur: 10, color: "#000000", alpha: 35 } }),
                   de ? "Schlagschatten" : "Drop shadow", shadowBody("shadow"))}
-                {canInnerShadow(selItem) && row(!!selItem.innerShadow,
+                {canvasRenderCanInnerShadow(selItem) && row(!!selItem.innerShadow,
                   () => setFx({ innerShadow: selItem.innerShadow ? undefined : { x: 0, y: 4, blur: 10, color: "#000000", alpha: 35 } }),
                   de ? "Innerer Schatten" : "Inner shadow", shadowBody("innerShadow"))}
                 {row(!!selItem.bgBlur,
@@ -30702,6 +30262,468 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
 const POST_CHAR_LIMITS = { x: 280, threads: 500, pinterest: 500, instagram: 2200, linkedin: 3000 };
 const POST_OVERLAY_COLORS = ["#FFFFFF", "#15151c", "#F5C518", "#E86767", "#4D9FFF"];
 
+// Shared full-resolution artboard renderer for editor exports and carousel imports.
+const canvasRenderEffectFilter = (it) => {
+    const parts = [];
+    if (it.blur) parts.push(`blur(${it.blur}px)`);
+    if (it.shadow) {
+      const d2 = it.shadow;
+      parts.push(`drop-shadow(${d2.x || 0}px ${d2.y || 0}px ${d2.blur || 0}px ${canvasRenderShadowColor(d2)})`);
+    }
+    return parts.length ? parts.join(" ") : "none";
+  };
+const canvasRenderGroupShadowOf = (gid, list) => {
+    if (!gid) return null;
+    const mem = list.filter(i => i.groupId === gid);
+    if (mem.length < 2) return null;
+    const sh = mem[0].shadow;
+    if (!sh) return null;
+    // Every member has to carry the SAME shadow, which is what the panel writes
+    // when a group is selected. Members that were given a shadow of their own
+    // before being grouped keep them, one each — that is what they asked for.
+    if (!mem.every(m => cvSame(m.shadow, sh))) return null;
+    // A backdrop blur samples whatever is behind the item. On the offscreen
+    // canvas the export needs, there is nothing behind it, so such a group is
+    // left alone rather than exported wrong.
+    if (mem.some(m => m.bgBlur)) return null;
+    return sh;
+  };
+const canvasRenderShadowColor = (sh) => {
+    if (!sh) return "rgba(0,0,0,0.35)";
+    const c = sh.color || "#000000";
+    return /^#/.test(c) ? withAlpha(c, sh.alpha == null ? 35 : sh.alpha) : c;
+  };
+const canvasRenderCanStroke = (it) => ["rect", "image", "sticky", "ellipse"].includes(it.type) || !!polyOf(it);
+const canvasRenderStrokeIsBox = (it) => !polyOf(it);
+const canvasRenderTracePath = (ctx, it, b) => {
+    ctx.beginPath();
+    if (it.type === "ellipse") ctx.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2);
+    else if (polyOf(it)) {
+      polyOf(it).forEach(([fx, fy], i2) => {
+        const px2 = b.x + fx * b.w, py2 = b.y + fy * b.h;
+        i2 ? ctx.lineTo(px2, py2) : ctx.moveTo(px2, py2);
+      });
+      ctx.closePath();
+    } else if (ctx.roundRect) {
+      ctx.roundRect(b.x, b.y, b.w, b.h, radiiOf(it).map(v => Math.min(v, Math.min(b.w, b.h) / 2)));
+    } else ctx.rect(b.x, b.y, b.w, b.h);
+  };
+const canvasRenderCanInnerShadow = (it) => ["rect", "image", "sticky", "ellipse"].includes(it.type);
+const canvasRenderBoxOf = (it) =>
+    (it.type === "arrow" || it.type === "line")
+      ? { x: Math.min(it.x1, it.x2), y: Math.min(it.y1, it.y2),
+          w: Math.abs(it.x2 - it.x1), h: Math.abs(it.y2 - it.y1) }
+      : it.type === "path"
+      ? pathBBox(pathAllNodes(it), it.ox || 0, it.oy || 0)
+      : it.type === "draw"
+      ? (() => {
+          const xs = it.pts.map(q => q[0] + (it.ox || 0)), ys = it.pts.map(q => q[1] + (it.oy || 0));
+          return { x: Math.min(...xs), y: Math.min(...ys),
+            w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+        })()
+      : { x: it.x, y: it.y, w: it.w,
+          h: it.h || canvasTextH(it) };
+const canvasRenderArrowHead = (it) => {
+    const a = Math.atan2(it.y2 - it.y1, it.x2 - it.x1);
+    const hl = WB_ARROW_HEAD_SIZES[it.hs] || WB_ARROW_HEAD_SIZES.m;
+    return { x1: it.x2 - hl * Math.cos(a - 0.46), y1: it.y2 - hl * Math.sin(a - 0.46),
+             x2: it.x2 - hl * Math.cos(a + 0.46), y2: it.y2 - hl * Math.sin(a + 0.46) };
+  };
+const canvasRenderLoadImage = (src) => new Promise((res, rej) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error(src));
+    img.src = src;
+  });
+const canvasRenderDrawFitted = (ctx, img, it) => {
+    const ir = img.naturalWidth / img.naturalHeight, br = it.w / it.h;
+    if (it.fit === "contain") {
+      const w = ir > br ? it.w : it.h * ir, h = ir > br ? it.w / ir : it.h;
+      ctx.drawImage(img, it.x + (it.w - w) / 2, it.y + (it.h - h) / 2, w, h);
+      return;
+    }
+    // cover: crop the overflowing axis rather than squashing it
+    const sw = ir > br ? img.naturalHeight * br : img.naturalWidth;
+    const sh = ir > br ? img.naturalHeight : img.naturalWidth / br;
+    ctx.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh,
+      it.x, it.y, it.w, it.h);
+  };
+const canvasRenderPaintCanvas = async (ctx, v, b, alpha) => {
+    // No paint means TRANSPARENT, spelled out. Returning undefined here would
+    // hand ctx.fillStyle a value the canvas silently refuses, leaving whatever
+    // colour was set last — so an unfilled shape would export filled with the
+    // previous one's colour.
+    if (v == null || v === "") return "transparent";
+    if (isGradient(v)) return gradientCanvas(ctx, v, b);
+    if (isPattern(v)) {
+      const pat = ctx.createPattern(patternTile(v), "repeat");
+      pat.setTransform(new DOMMatrix().translate(b.x, b.y).scale(1 / PATTERN_SCALE));
+      return pat;
+    }
+    if (isImageFill(v)) {
+      const img = await canvasRenderLoadImage(v.src);
+      const off = document.createElement("canvas");
+      off.width = Math.max(1, Math.round(b.w));
+      off.height = Math.max(1, Math.round(b.h));
+      // Fitted by the same function an image ITEM uses, so "cover" means the
+      // same thing whether the picture is the object or its fill.
+      canvasRenderDrawFitted(off.getContext("2d"), img,
+        { x: 0, y: 0, w: off.width, h: off.height, fit: v.fit });
+      const pat = ctx.createPattern(off, "no-repeat");
+      pat.setTransform(new DOMMatrix().translate(b.x, b.y));
+      return pat;
+    }
+    return withAlpha(v, alpha);
+  };
+const canvasRenderSpunOf = (it) => !!(it.rot || it.flipX || it.flipY);
+const canvasRenderApplySpin = (ctx, it) => {
+    const b = canvasRenderBoxOf(it), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    ctx.translate(cx, cy);
+    if (it.rot) ctx.rotate(it.rot * Math.PI / 180);
+    if (it.flipX || it.flipY) ctx.scale(it.flipX ? -1 : 1, it.flipY ? -1 : 1);
+    ctx.translate(-cx, -cy);
+  };
+async function renderPostArtboard(board, type = "image/png") {
+  const { w: W, h: H, items = [], bg = "#FFFFFF" } = board;
+  const frameCorners = () => radiiOf(board).map(v => Math.min(Math.min(W, H) / 2, v));
+  const maskOf = it => it.maskId ? items.find(o => o.id === it.maskId) : null;
+
+    if (document.fonts?.ready) await document.fonts.ready;   // or the text draws in a fallback face
+    const cvs = document.createElement("canvas");
+    cvs.width = W; cvs.height = H;
+    const ctx = cvs.getContext("2d");
+    // "transparent" must leave the alpha channel alone — painting white would
+    // export a white rectangle that only looks like nothing on a white page.
+    // A rounded frame clips everything, so the corners come out genuinely empty
+    // rather than filled with the background colour.
+    // The file is always the frame — a 1080 x 1080 format cannot grow to fit
+    // an overhang. What this decides is the frame's SHAPE: unclipped, content
+    // may cover the rounded corners instead of being cut by them.
+    if (frameCorners().some(v => v > 0) && ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(0, 0, W, H, frameCorners());
+      ctx.clip();
+    }
+    // JPEG has no alpha channel: a transparent frame would come out black
+    // rather than empty, so it gets white to sit on.
+    if (bg !== "transparent") {
+      ctx.fillStyle = await canvasRenderPaintCanvas(ctx, bg, { x: 0, y: 0, w: W, h: H }, 100);
+      ctx.fillRect(0, 0, W, H);
+    }
+    else if (type === "image/jpeg") { ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0, 0, W, H); }
+    // Split out of the loop it used to be, so a GROUP can be drawn onto its own
+    // canvas first and the shadow put around the RESULT — one silhouette, the
+    // same thing the screen does with a filtered box. Draws onto whichever
+    // context it is handed; `ctx` here is the parameter, not the outer one.
+    const drawItemTo = async (ctx, it) => {
+      // Comments are notes ABOUT the design. Exporting one would print a review
+      // remark onto the banner, which is the one thing a comment must never do.
+      if (it.type === "comment") return;
+      // The shape used as a mask lends its outline and nothing else.
+      if (it.isMask) return;
+      // Hidden means hidden everywhere, the exported file included.
+      if (it.hidden) return;
+      ctx.globalAlpha = it.opacity == null ? 1 : it.opacity;
+      // Background blur, before the item's own paint: take what is already on
+      // the canvas — which is exactly "everything behind", since items are drawn
+      // in order — blur it, and put it back through the item's own outline.
+      // Drawn at identity with the clip already set, because a clip lives in
+      // device space; that is what makes it come out right on a rotated shape
+      // instead of blurring a rectangle at the wrong angle.
+      if (it.bgBlur) {
+        const snap = document.createElement("canvas");
+        snap.width = W; snap.height = H;
+        snap.getContext("2d").drawImage(cvs, 0, 0);
+        ctx.save();
+        if (canvasRenderSpunOf(it)) canvasRenderApplySpin(ctx, it);
+        canvasRenderTracePath(ctx, it, canvasRenderBoxOf(it));
+        ctx.clip();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.filter = `blur(${it.bgBlur}px)`;
+        ctx.drawImage(snap, 0, 0);
+        ctx.restore();
+      }
+      ctx.globalCompositeOperation = (it.blend && it.blend !== "normal") ? it.blend : "source-over";
+      ctx.filter = canvasRenderEffectFilter(it);
+      // With depth, the element's own rotation is baked into the picture that
+      // gets warped, so the projection happens in frame coordinates — the same
+      // thing the conjugated CSS transform achieves on screen.
+      const spun = (it.rot || it.flipX || it.flipY) && !has3d(it);
+      const maskShape = maskOf(it);
+      if (maskShape) { ctx.save(); canvasRenderTracePath(ctx, maskShape, canvasRenderBoxOf(maskShape)); ctx.clip(); }
+      if (spun) { ctx.save(); canvasRenderApplySpin(ctx, it); }
+      // The same list the editor walks. Each placement is applied about the
+      // object's centre, because that is where CSS puts its transform origin —
+      // get that wrong and every copy lands somewhere else in the file than on
+      // the screen.
+      const places = repeatPlacements(it.repeat);
+      const home = canvasRenderBoxOf(it);
+      const cx0 = home.x + home.w / 2, cy0 = home.y + home.h / 2;
+      for (const pl of places) {
+        const moved = pl.x || pl.y || pl.rot || pl.s !== 1;
+        if (moved) {
+          ctx.save();
+          ctx.translate(cx0 + pl.x, cy0 + pl.y);
+          ctx.rotate((pl.rot * Math.PI) / 180);
+          ctx.scale(pl.s, pl.s);
+          ctx.translate(-cx0, -cy0);
+        }
+      // The whole picture of one item, as a function of the canvas it goes on.
+      // Flat, that canvas is the export itself; turned in space, it is an
+      // offscreen one that gets warped into place afterwards — the drawing must
+      // not know which.
+      const paintFlat = async (ctx) => {
+        if (it.type === "image" && it.url) {
+          const img = await canvasRenderLoadImage(it.url);
+          canvasRenderDrawFitted(ctx, img, it);
+        } else if (it.type === "sticky") {
+          ctx.fillStyle = await canvasRenderPaintCanvas(ctx, it.fill, canvasRenderBoxOf(it), it.fillAlpha); ctx.fillRect(it.x, it.y, it.w, it.h);
+          const pad = Math.round(it.w * 0.08);
+          ctx.fillStyle = it.color; ctx.font = canvasFont(it);
+          const ms = ctx.measureText("Hg"), Ls = canvasLH(it);
+          const bs = (Ls - (ms.fontBoundingBoxAscent + ms.fontBoundingBoxDescent)) / 2 + ms.fontBoundingBoxAscent;
+          ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
+          ctx.save(); ctx.beginPath(); ctx.rect(it.x, it.y, it.w, it.h); ctx.clip();
+          canvasText(it).split("\n").forEach((line, i2) =>
+            ctx.fillText(line, it.x + pad, it.y + pad + i2 * Ls + bs));
+          ctx.restore();
+        } else if (it.type === "rect") {
+          ctx.fillStyle = await canvasRenderPaintCanvas(ctx, it.fill, canvasRenderBoxOf(it), it.fillAlpha);
+          const cap = Math.min(it.w, it.h) / 2;
+          const rr = radiiOf(it).map(v => Math.min(v, cap));
+          if (rr.some(v => v > 0) && ctx.roundRect) {
+            ctx.beginPath(); ctx.roundRect(it.x, it.y, it.w, it.h, rr); ctx.fill();
+          } else ctx.fillRect(it.x, it.y, it.w, it.h);
+        } else if (it.type === "ellipse") {
+          ctx.fillStyle = await canvasRenderPaintCanvas(ctx, it.fill, canvasRenderBoxOf(it), it.fillAlpha); ctx.beginPath();
+          ctx.ellipse(it.x + it.w / 2, it.y + it.h / 2, it.w / 2, it.h / 2, 0, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (polyOf(it)) {
+          ctx.fillStyle = await canvasRenderPaintCanvas(ctx, it.fill, canvasRenderBoxOf(it), it.fillAlpha); ctx.beginPath();
+          polyOf(it).forEach(([fx, fy], i) => {
+            const x = it.x + fx * it.w, y = it.y + fy * it.h;
+            i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+          });
+          ctx.closePath(); ctx.fill();
+        } else if (it.type === "path") {
+          // Path2D over the very string the screen draws. Writing the curve out
+          // a second time with bezierCurveTo would be two implementations of one
+          // shape, and they would part company the first time either changed.
+          const d2 = pathFullD(it);
+          if (d2) {
+            const p2 = new Path2D(d2);
+            ctx.save();
+            ctx.translate(it.ox || 0, it.oy || 0);
+            if (typeof it.fill === "string") { ctx.fillStyle = it.fill; ctx.fill(p2, pathFillRule(it)); }
+            // Same trap on the other side: ctx.lineWidth = 0 is refused, so a
+            // path with its stroke taken off would be drawn with the width of
+            // whatever was stroked last.
+            if (it.width > 0) {
+              ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
+              ctx.lineCap = capOf(it); ctx.lineJoin = joinOf(it);
+              ctx.stroke(p2);
+            }
+            ctx.restore();
+          }
+        } else if (it.type === "draw") {
+          ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
+          ctx.lineCap = capOf(it); ctx.lineJoin = joinOf(it);
+          ctx.beginPath();
+          it.pts.forEach(([x, y], i) => {
+            const px2 = x + (it.ox || 0), py2 = y + (it.oy || 0);
+            i ? ctx.lineTo(px2, py2) : ctx.moveTo(px2, py2);
+          });
+          ctx.stroke();
+        } else if (it.type === "arrow" || it.type === "line") {
+          ctx.strokeStyle = it.color; ctx.fillStyle = it.color;
+          ctx.lineWidth = it.width; ctx.lineCap = capOf(it); ctx.lineJoin = joinOf(it);
+          ctx.beginPath(); ctx.moveTo(it.x1, it.y1); ctx.lineTo(it.x2, it.y2); ctx.stroke();
+          // A line is an arrow without the head. This was a `continue` while the
+          // code sat in a loop; in a function of its own it is a return, and it
+          // skips exactly the same rest.
+          if (it.type === "line") return;
+          // Two strokes to the tip, the same ones the editor draws.
+          const hd = canvasRenderArrowHead(it);
+          ctx.beginPath();
+          ctx.moveTo(hd.x1, hd.y1); ctx.lineTo(it.x2, it.y2); ctx.lineTo(hd.x2, hd.y2);
+          ctx.stroke();
+        } else if (it.type === "text" && canvasTextBoxes(it).length) {
+          // The highlight first, then the words on top of it, from the same
+          // boxes the screen drew. A CSS border sits INSIDE its box, so the
+          // path is inset by half its width to put the centred canvas stroke
+          // where the screen put the border.
+          const sw = it.bgStrokeW && it.bgStroke ? it.bgStrokeW : 0;
+          const path = (x, y, w2, h2, rr) => {
+            ctx.beginPath();
+            if (rr > 0 && ctx.roundRect) ctx.roundRect(x, y, w2, h2, rr);
+            else ctx.rect(x, y, w2, h2);
+          };
+          for (const b of canvasTextBoxes(it)) {
+            const r = b.r;
+            if (it.bg) {
+              ctx.fillStyle = it.bg;
+              path(it.x + b.x, it.y + b.y, b.w, b.h, r);
+              ctx.fill();
+            }
+            if (sw) {
+              ctx.strokeStyle = it.bgStroke;
+              ctx.lineWidth = sw;
+              ctx.lineJoin = "round";
+              path(it.x + b.x + sw / 2, it.y + b.y + sw / 2,
+                   Math.max(0, b.w - sw), Math.max(0, b.h - sw), Math.max(0, r - sw / 2));
+              ctx.stroke();
+            }
+          }
+          drawStraightText(ctx, it);
+        } else if (it.type === "text" && canvasArc(it)) {
+          // The ring, drawn from the same layout the screen used. A letter's
+          // line box is centred on the point the layout gives, and its baseline
+          // sits half the leading below that box's top — the same sum the
+          // straight branch below makes, which is what keeps the two agreeing.
+          const L = canvasArcLayout(it);
+          ctx.fillStyle = it.color; ctx.font = canvasFont(it);
+          // Never the canvas letter-spacing here: the gaps are already in the
+          // angles, and adding them again would push every glyph off centre.
+          if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+          const mA = ctx.measureText("Hg");
+          const baseA = (L.lh - (mA.fontBoundingBoxAscent + mA.fontBoundingBoxDescent)) / 2
+            + mA.fontBoundingBoxAscent - L.lh / 2;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "alphabetic";
+          for (const ch of L.chars) {
+            if (!ch.ch.trim()) continue;
+            ctx.save();
+            ctx.translate(it.x, it.y);
+            // The same matrix the screen used, handed to the canvas whole. A
+            // rotation would have been enough for the flat ring and wrong for
+            // the leaning one, where a letter is squashed and sometimes
+            // mirrored as well.
+            ctx.transform(ch.m[0], ch.m[1], ch.m[2], ch.m[3], ch.m[4], ch.m[5]);
+            ctx.fillText(ch.ch, 0, baseA);
+            ctx.restore();
+          }
+        } else if (it.type === "text") {
+          drawStraightText(ctx, it);
+        }
+        // The outline, after the fill and before the inner shadow.
+        if (it.strokeWidth && canvasRenderCanStroke(it)) {
+          const b = canvasRenderBoxOf(it), sw2 = it.strokeWidth;
+          ctx.save();
+          ctx.filter = "none";
+          if (canvasRenderStrokeIsBox(it)) {
+            // A CSS border draws INSIDE the box, so the path is inset by half the
+            // width to put the centred canvas stroke in the same place.
+            canvasRenderTracePath(ctx, { ...it, radii: radiiOf(it).map(v => Math.max(0, v - sw2 / 2)) },
+              { x: b.x + sw2 / 2, y: b.y + sw2 / 2, w: Math.max(0, b.w - sw2), h: Math.max(0, b.h - sw2) });
+          } else {
+            // An SVG stroke is centred on the edge already — inset here and the two
+            // would sit half a stroke apart.
+            canvasRenderTracePath(ctx, it, b);
+          }
+          ctx.lineJoin = "round";
+          ctx.lineWidth = sw2;
+          ctx.strokeStyle = withAlpha(it.stroke || "#15151c", it.strokeAlpha);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Inner shadow, after the fill: clip to the shape, then cast a shadow from
+        // the INVERSE path so it falls inward. The canvas has no inset shadow.
+        if (it.innerShadow && canvasRenderCanInnerShadow(it)) {
+          const b = canvasRenderBoxOf(it), sh = it.innerShadow;
+          ctx.save();
+          ctx.filter = "none";
+          canvasRenderTracePath(ctx, it, b);
+          ctx.clip();
+          const pad = (sh.blur || 0) * 2 + Math.abs(sh.x || 0) + Math.abs(sh.y || 0) + 40;
+          ctx.beginPath();
+          ctx.rect(b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2);
+          if (it.type === "ellipse") ctx.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2, true);
+          else if (ctx.roundRect) ctx.roundRect(b.x, b.y, b.w, b.h, radiiOf(it).map(v => Math.min(v, Math.min(b.w, b.h) / 2)));
+          else ctx.rect(b.x, b.y, b.w, b.h);
+          ctx.shadowColor = canvasRenderShadowColor(sh);
+          ctx.shadowBlur = sh.blur || 0;
+          ctx.shadowOffsetX = sh.x || 0;
+          ctx.shadowOffsetY = sh.y || 0;
+          ctx.fillStyle = "#000";
+        ctx.fill("evenodd");
+        ctx.restore();
+        }
+      };
+
+      if (has3d(it)) {
+        // A canvas has no perspective, so the item is drawn flat into an
+        // offscreen picture and that picture is laid onto the plane its corners
+        // project to. The padding is room for what reaches outside the box —
+        // a shadow, a blur — because the warp can only carry what was drawn.
+        const d = d3Of(it);
+        const bx = canvasRenderBoxOf(it);
+        const sh = it.shadow || {};
+        const pad = Math.ceil(30 + (Number(it.blur) || 0) * 2
+          + (it.shadow ? (Number(sh.blur) || 0) + Math.max(Math.abs(sh.x || 0), Math.abs(sh.y || 0)) : 0));
+        // Square and big enough for the item at any angle: it is drawn into
+        // this picture already turned, so the diagonal is what has to fit.
+        const R = Math.ceil(Math.hypot(bx.w, bx.h) / 2) + pad;
+        const tw = R * 2, th = R * 2;
+        const off = document.createElement("canvas");
+        off.width = tw; off.height = th;
+        const oc = off.getContext("2d");
+        oc.translate(R - (bx.x + bx.w / 2), R - (bx.y + bx.h / 2));
+        if (it.rot || it.flipX || it.flipY) canvasRenderApplySpin(oc, it);
+        // The effects belong to the object, so they are baked into the picture
+        // before it is turned — the same order CSS uses, where the filter sits
+        // on the element and the transform on the wrapper around it.
+        oc.filter = canvasRenderEffectFilter(it);
+        await paintFlat(oc);
+        const keep = ctx.filter;
+        ctx.filter = "none";
+        drawProjected(ctx, off, d, tw / 2, th / 2,
+          bx.x + bx.w / 2 + (Number(d.ox) || 0), bx.y + bx.h / 2 + (Number(d.oy) || 0), 20);
+        ctx.filter = keep;
+      } else {
+        await paintFlat(ctx);
+      }
+        if (moved) ctx.restore();
+      }
+      ctx.filter = "none";
+      ctx.globalCompositeOperation = "source-over";
+      if (spun) ctx.restore();
+      if (maskShape) ctx.restore();
+        };
+
+    // The SAME list the screen groups over — masks and hidden rows filtered out
+    // first. Grouping over the raw array instead would let a hidden member with
+    // no shadow of its own break up a run that the screen had already lifted,
+    // and the exported file would then disagree with what was on the screen.
+    const drawable = items.filter(it => !it.isMask && !it.hidden);
+    let gi = 0;
+    while (gi < drawable.length) {
+      const it0 = drawable[gi];
+      const gsh = canvasRenderGroupShadowOf(it0.groupId, drawable);
+      if (!gsh) { await drawItemTo(ctx, it0); gi += 1; continue; }
+      // The contiguous run of this group, onto a canvas of its own.
+      const gid = it0.groupId, run = [];
+      while (gi < drawable.length && drawable[gi].groupId === gid) { run.push(drawable[gi]); gi += 1; }
+      const oc = document.createElement("canvas");
+      oc.width = W; oc.height = H;
+      const octx = oc.getContext("2d");
+      for (const m of run) await drawItemTo(octx, { ...m, shadow: undefined });
+      // globalAlpha is reset: the last item drawn leaves its own opacity behind
+      // on the context, and it would otherwise fade the whole group.
+      ctx.save();
+      ctx.filter = canvasRenderEffectFilter({ shadow: gsh });
+      ctx.globalAlpha = 1;
+      ctx.drawImage(oc, 0, 0);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    return await new Promise((res, rej) =>
+      cvs.toBlob(b => (b ? res(b) : rej(new Error("toBlob"))), type,
+        type === "image/jpeg" ? 0.92 : undefined));
+
+}
+
 function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage = "de", incomingVisual = null, onViewContext = null }) {
   const de = appLanguage === "de";
   const L = (o) => (de ? o.de : o.en);
@@ -30813,8 +30835,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const [extras, setExtras] = useState([]);        // [{ id, file, url }] — carousel slides 2..10
   const [reel, setReel] = useState(null);          // { file, url } — a video instead of a picture
   const extraRef = useRef(null);
-  // Only a workspace with the direct connection can use either, so the controls
-  // are absent everywhere else instead of being offered and then refused.
+  // Video selection requires a direct Instagram connection.
   const hasDirectIg = (accounts || []).some(a => a.provider === "meta");
   // The picture from the editor is slide one; the extras follow in order. One
   // list, because the viewer pages through them and does not care which of them
@@ -30823,34 +30844,18 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     ? [{ key: "main", url: visual.url }, ...extras.map(x => ({ key: x.id, url: x.url, extra: x }))]
     : [];
   const [slideIdx, setSlideIdx] = useState(0);
-  // The height the picture may take, in pixels, measured off the viewer.
-  //
-  // Not `max-height: 100%` on the image: the stage hugs the picture and so has
-  // no definite height of its own, which makes a percentage max-height resolve
-  // against `auto` and do nothing. The width constraint still applied, so a
-  // portrait picture came out at full column width and was then CLIPPED by the
-  // stage rather than fitted inside it. A measured number has no such hole, and
-  // it keeps the stage hugging, which is what keeps the text overlays honest.
+  // Measure a fixed viewport, independent of the image's intrinsic size.
+  // The carousel gutters belong to the layout, so the measurement excludes them.
   const viewRef = useRef(null);
   const [viewBox, setViewBox] = useState({ w: 0, h: 0 });
-  // The height the picture may take. `viewRef` is put on the picture's OWN area
-  // rather than on the whole row, so nothing has to be guessed and subtracted:
-  // the slide count lives outside that area and takes its space from the
-  // layout, not from an estimate. The estimate was wrong by about a hundred
-  // pixels, which a portrait picture showed as a gap under it.
-  // The picture is never larger than the area it sits in, in either direction,
-  // and never anything less either. A portrait runs out of HEIGHT first and so
-  // fills the height; a landscape runs out of WIDTH first and so fills the
-  // width. There is no share and no ratio in here: every factor I put in was
-  // right for one shape of picture and wrong for the other.
-  const mediaMaxH = viewBox.h || undefined;
-  // Wider than tall is the shape of a browser window and therefore the shape of
-  // this area, so a LANDSCAPE picture runs out of height before it runs out of
-  // width: bounded only by the area it fills the height completely and becomes
-  // the loudest thing on the screen. Held to 1.4 times the height it comes down
-  // to about four fifths of it, while a portrait, which is narrower than that
-  // anyway, is untouched and still fills the height.
-  const mediaMaxW = viewBox.h ? Math.min(viewBox.w, Math.round(viewBox.h * 1.4)) : undefined;
+  const [loadedMedia, setLoadedMedia] = useState(null);
+  const currentMediaUrl = reel?.url || slides[slideIdx]?.url || visual?.url;
+  const mediaSize = loadedMedia?.url === currentMediaUrl ? loadedMedia
+    : (!reel && currentMediaUrl === visual?.url ? visual : null);
+  const mediaScale = mediaSize?.w > 0 && mediaSize?.h > 0
+    ? Math.min(viewBox.w / mediaSize.w, viewBox.h / mediaSize.h) : 0;
+  const mediaWidth = (mediaSize?.w || 0) * mediaScale;
+  const mediaHeight = (mediaSize?.h || 0) * mediaScale;
   const [overlays, setOverlays] = useState([]);     // [{ id, text, x, y, size, color, bold }] — x/y/size relative to image
   const [selOverlay, setSelOverlay] = useState(null);
   // Dictation for the caption, the same SpeechRecognition the notes and the
@@ -30890,7 +30895,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // editor is closed. One that has never been opened since this existed has
   // none yet, and says so rather than being silently missing.
   const [boardsOpen, setBoardsOpen] = useState(false);
+  const [selectedArtboards, setSelectedArtboards] = useState([]);
   const [boards, setBoards] = useState(null);          // null = loading
+  const selectedArtboardImageCount = (boards || []).filter(b => selectedArtboards.includes(b.id))
+    .reduce((n, b) => n + (b.doc ? boardsFromDoc(b.doc, [b.w, b.h], de).length : 1), 0);
   const [stageW, setStageW] = useState(0);
   const stageRef = useRef(null);
   const overlayDragRef = useRef(null);
@@ -30948,7 +30956,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     const ro = new ResizeObserver(() => setStageW(el.offsetWidth));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [visual]);
+  }, [visual, stepIdx, !!reel]);
 
   const selected = (accounts || []).filter(a => selectedIds.includes(a.id));
   // What there is still to connect. Read once here rather than filtered in two
@@ -31021,72 +31029,90 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   useEffect(() => {
     if (!boardsOpen || !orgId || boards) return;
     supabase.from("brand_canvases")
-      .select("id, name, w, h, thumb_url, export_url, updated_at")
+      .select("id, name, w, h, doc, thumb_url, export_url, updated_at")
       .eq("org_id", orgId).eq("is_template", false)
       .order("updated_at", { ascending: false }).limit(60)
       .then(({ data }) => setBoards(data || []));
   }, [boardsOpen, orgId]); // eslint-disable-line
 
-  // One field takes both, and as many pictures as you like. A video IS the
-  // decision to post a reel, so there is no second control asking which kind of
-  // post this is: the files answer it.
-  //
-  // Several pictures at once because a carousel is a normal thing to want from
-  // the start. Picking them one after another was possible before, through the
-  // plus, but it made the first upload look like a rule that there is only ever
-  // one picture.
-  const onPickImage = (e) => {
+  const mediaImportRef = useRef(false);
+  const postImageLimitError = () => new Error(de ? "Ein Karussell kann bis zu 10 Bilder enthalten." : "A carousel can contain up to 10 images.");
+  // Commit only after every image has loaded, preserving the user's selection order.
+  const adoptPostFiles = async (files) => {
+    if (!files.length) return;
+    if (files.length > 10) throw postImageLimitError();
+    const prepared = [];
+    try {
+      for (const file of files) {
+        const url = URL.createObjectURL(file);
+        prepared.push({ id: crypto.randomUUID(), file, url });
+        const size = await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+          img.onerror = () => reject(new Error(de ? `„${file.name}“ konnte nicht geladen werden.` : `Could not load "${file.name}".`));
+          img.src = url;
+        });
+        Object.assign(prepared[prepared.length - 1], size);
+      }
+    } catch (error) { prepared.forEach(x => URL.revokeObjectURL(x.url)); throw error; }
+    if (visual?.url?.startsWith("blob:")) URL.revokeObjectURL(visual.url);
+    extras.forEach(x => URL.revokeObjectURL(x.url));
+    if (reel) URL.revokeObjectURL(reel.url);
+    const [first, ...rest] = prepared;
+    imageFileRef.current = first.file;
+    setVisual({ url: first.url, w: first.w, h: first.h });
+    setExtras(rest); setReel(null); setOverlays([]); setSelOverlay(null); setSlideIdx(0);
+  };
+  const withMediaImport = async (load) => {
+    if (mediaImportRef.current) return;
+    mediaImportRef.current = true; setAssetBusy(true); setError(null);
+    try { await adoptPostFiles(await load()); }
+    catch (error) { setError(error); }
+    finally { mediaImportRef.current = false; setAssetBusy(false); }
+  };
+  const fileFromAsset = async (url) => {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(de ? "Bild konnte nicht geladen werden." : "Could not load that image.");
+    const blob = await response.blob();
+    return new File([blob], url.split("?")[0].split("/").pop() || "image.png", { type: blob.type || "image/png" });
+  };
+  const onPickImage = async (e) => {
     const picked = [...(e.target.files || [])];
     e.target.value = "";
-    if (!picked.length) return;
-
-    // A reel is one video. If a video is in the selection it decides the whole
-    // thing, and the pictures beside it have nowhere to go.
-    const video = picked.find(f => f.type.startsWith("video/"));
-    if (video) {
+    if (!picked.length || mediaImportRef.current) return;
+    const videos = picked.filter(f => f.type.startsWith("video/"));
+    if (videos.length) {
+      if (picked.length !== 1) { setError(new Error(de ? "Bitte entweder mehrere Bilder oder ein einzelnes Video auswählen." : "Please choose multiple images or one video.")); return; }
       clearVisual();
-      setReel(r => { if (r) URL.revokeObjectURL(r.url); return { file: video, url: URL.createObjectURL(video) }; });
+      setReel({ file: videos[0], url: URL.createObjectURL(videos[0]) });
       return;
     }
-
-    const images = picked.filter(f => f.type.startsWith("image/")).slice(0, 10);
-    if (!images.length) return;
-    dropReel();
-    const [first, ...rest] = images;
-    imageFileRef.current = first;
-    const url = URL.createObjectURL(first);
-    const img = new Image();
-    img.onload = () => setVisual({ url, w: img.naturalWidth, h: img.naturalHeight });
-    img.src = url;
-    // The first one is the editor's; the others are slides two and up. Replaced
-    // rather than appended, because this is the upload that starts the post.
-    setExtras(list => {
-      list.forEach(x => URL.revokeObjectURL(x.url));
-      return rest.map(f => ({ id: crypto.randomUUID(), file: f, url: URL.createObjectURL(f) }));
-    });
-    setSlideIdx(0);
+    await withMediaImport(async () => picked.filter(f => f.type.startsWith("image/")));
   };
-  // A picture chosen from Assets arrives as a url, and everything downstream
-  // wants a File: the canvas export reads one, and the upload to Zernio needs
-  // its size and type. So it is fetched once, here, and from that point on it
-  // is indistinguishable from a file that was dragged in. Storage answers with
-  // access-control-allow-origin: *, so the fetch is allowed and the canvas it
-  // ends up on is not tainted.
-  const adoptAssetUrl = async (url) => {
-    if (!url) return;
-    setAssetOpen(false); setAssetBusy(true); setError(null);
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(de ? "Bild konnte nicht geladen werden." : "Could not load that image.");
-      const blob = await res.blob();
-      const name = (url.split("?")[0].split("/").pop() || "bild.jpg");
-      imageFileRef.current = new File([blob], name, { type: blob.type || "image/jpeg" });
-      const objUrl = URL.createObjectURL(blob);
-      const img = new Image();
-      img.onload = () => setVisual({ url: objUrl, w: img.naturalWidth, h: img.naturalHeight });
-      img.src = objUrl;
-    } catch (e) { setError(e); }
-    setAssetBusy(false);
+  const adoptAssetUrls = async (urls) => {
+    setAssetOpen(false);
+    await withMediaImport(async () => {
+      if (urls.length > 10) throw postImageLimitError();
+      return Promise.all(urls.map(fileFromAsset));
+    });
+  };
+  const adoptArtboards = async () => {
+    const chosen = selectedArtboards.map(id => boards.find(b => b.id === id)).filter(Boolean);
+    if (!chosen.length) return;
+    setBoardsOpen(false);
+    await withMediaImport(async () => {
+      const count = chosen.reduce((n, row) => n + (row.doc ? boardsFromDoc(row.doc, [row.w, row.h], de).length : 1), 0);
+      if (count > 10) throw postImageLimitError();
+      const files = [];
+      for (const row of chosen) {
+        if (!row.doc) { files.push(await fileFromAsset(row.export_url || row.thumb_url)); continue; }
+        for (const board of boardsFromDoc(row.doc, [row.w, row.h], de)) {
+          const blob = await renderPostArtboard({ ...board, bg: board.bg ?? "#FFFFFF" });
+          files.push(new File([blob], `${row.name || "Artboard"}-${board.name}.png`, { type: "image/png" }));
+        }
+      }
+      return files;
+    });
   };
   const clearVisual = () => { imageFileRef.current = null; setVisual(null); setOverlays([]); setSelOverlay(null); clearExtras(); };
   // Object urls are revoked on the way out. A composer somebody keeps open all
@@ -31097,8 +31123,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   };
   const onPickExtras = (e) => {
     const files = [...(e.target.files || [])].filter(f => f.type.startsWith("image/"));
-    setExtras(list => [...list, ...files.map(f => ({ id: crypto.randomUUID(), file: f, url: URL.createObjectURL(f) }))].slice(0, 9));
     e.target.value = "";
+    if (1 + extras.length + files.length > 10) { setError(postImageLimitError()); return; }
+    if (mediaImportRef.current) return;
+    setExtras(list => [...list, ...files.map(file => ({ id: crypto.randomUUID(), file, url: URL.createObjectURL(file) }))]);
   };
   const removeExtra = (id) => setExtras(list => {
     const hit = list.find(x => x.id === id);
@@ -31204,7 +31232,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // Both dimensions of the area the picture lives in, re-read whenever it
   // changes, which is what makes the picture follow the window instead of a
   // number somebody typed once.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = viewRef.current;
     if (!el) { setViewBox({ w: 0, h: 0 }); return; }
     const read = () => setViewBox({ w: el.clientWidth, h: el.clientHeight });
@@ -31660,10 +31688,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     height that is left and the slides are paged through, so
                     every one of them is seen at the size it will be posted. */}
                 {stepIdx === S_VISUAL && (<>
-                  {/* Several at once only where several can be posted. Without
-                      the direct connection there is nowhere for slide two to
-                      go, and offering it would be a promise we cannot keep. */}
-                  <input ref={fileRef} type="file" multiple={hasDirectIg}
+                  {/* Images can be selected together before connecting a channel. */}
+                  <input ref={fileRef} type="file" multiple
                     accept={hasDirectIg ? "image/*,video/*" : "image/*"}
                     onChange={onPickImage} style={{ display: "none" }} />
                   <input ref={extraRef} type="file" accept="image/*" multiple onChange={onPickExtras} style={{ display: "none" }} />
@@ -31675,7 +31701,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           { key: "upload", label: de ? "Hochladen" : "Upload",
                             // Named, because a file dialog does not announce
                             // that it takes more than one.
-                            note: hasDirectIg ? (de ? "Mehrere Bilder für ein Karussell" : "Several pictures for a carousel") : null,
+                            note: de ? "Mehrere Bilder für ein Karussell" : "Several pictures for a carousel",
                             // The formats say what is possible, so no fourth
                             // card has to announce that a video is allowed. A
                             // video IS the reel, and the file says so.
@@ -31689,9 +31715,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           { key: "boards", label: "Artboards",
                             sub: de ? "Was du in Creations gebaut hast" : "What you built in Creations",
                             icon: <><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></>,
-                            onClick: () => setBoardsOpen(true) },
+                            onClick: () => { setSelectedArtboards([]); setBoardsOpen(true); } },
                         ].map(o => (
-                          <motion.div key={o.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.99 }} onClick={o.onClick}
+                          <motion.div key={o.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.99 }} onClick={assetBusy ? undefined : o.onClick}
                             style={{ padding: "53px 22px", borderRadius: 18, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", cursor: assetBusy ? "wait" : "pointer", opacity: assetBusy ? 0.6 : 1 }}>
                             <div style={{ width: 46, height: 46, borderRadius: 14, margin: "0 auto 12px", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text }}>
                               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{o.icon}</svg>
@@ -31706,63 +31732,38 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       </div>
                     </div>
                   ) : (
-                    // The viewer claims what is left of the box. Everything it
-                    // needs sits ON the picture, so nothing below it can push
-                    // the picture smaller.
-                    <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      {/* The picture's own area, and the one thing measured.
-                          The count sits under it as a caption, outside the
-                          measurement, so it cannot be double counted. */}
-                      <div ref={viewRef} style={{ flex: 1, minHeight: 0, width: "100%", position: "relative",
-                        display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: "relative", overflow: "hidden" }}>
                       {/* Paging sits in the grey, at the very edges, so the two
                           arrows line up with the plus and the publish button in
                           the footer below. On the picture they read as part of
                           the picture, which is the one thing they are not. */}
                       {!reel && slides.length > 1 && ([["prev", -1, "M15 18l-6-6 6-6", "left"], ["next", 1, "M9 6l6 6-6 6", "right"]]).map(([k, step, d, side]) => (
-                        <motion.div key={k} whileTap={{ scale: 0.92 }}
-                          onClick={() => setSlideIdx(i => (i + step + slides.length) % slides.length)}
-                          style={{ position: "absolute", top: "50%", transform: "translateY(-50%)", [side]: 0,
-                            width: 42, height: 42, borderRadius: 999, border: `1px solid ${theme.border}`,
-                            color: theme.text, display: "flex", alignItems: "center", justifyContent: "center",
-                            cursor: "pointer" }}>
-                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
-                        </motion.div>
+                        <div key={k} style={{ position: "absolute", top: "50%", transform: "translateY(-50%)", [side]: 0 }}>
+                          <motion.button type="button" whileTap={{ scale: 0.92 }}
+                            aria-label={step < 0 ? (de ? "Vorheriges Bild" : "Previous image") : (de ? "Nächstes Bild" : "Next image")}
+                            onClick={() => setSlideIdx(i => (i + step + slides.length) % slides.length)}
+                            style={{ width: 42, height: 42, borderRadius: 999, border: `1px solid ${theme.border}`,
+                              background: "transparent", padding: 0, color: theme.text, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
+                          </motion.button>
+                        </div>
                       ))}
 
-                      <div style={{ position: "relative", lineHeight: 0,
-                        maxWidth: !reel && slides.length > 1 ? "calc(100% - 116px)" : "100%" }}>
+                      <div ref={viewRef} style={{ position: "absolute", inset: !reel && slides.length > 1 ? "0 58px" : 0,
+                        display: "flex", alignItems: "center", justifyContent: "center", minWidth: 0, minHeight: 0 }}>
+                      <div style={{ position: "relative", lineHeight: 0, flexShrink: 0, width: mediaWidth, height: mediaHeight }}>
                       {reel ? (
                         <video src={reel.url} controls playsInline
-                          style={{ maxWidth: mediaMaxW, maxHeight: mediaMaxH || "100%", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, display: "block" }} />
+                          onLoadedMetadata={e => setLoadedMedia({ url: reel.url, w: e.currentTarget.videoWidth, h: e.currentTarget.videoHeight })}
+                          style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 16, outline: `1px solid ${theme.borderFaint}`, outlineOffset: -1, display: "block" }} />
                       ) : (
-                        // The stage hugs the picture rather than boxing it, so
-                        // the text overlays, which are placed as fractions of
-                        // this box, land where the export puts them.
+                        // Overlays use this fitted image rectangle as their coordinate system.
                         <div ref={stageRef} onPointerDown={() => setSelOverlay(null)}
-                          // No `overflow: hidden` here. It was cutting the
-                          // picture off instead of letting it be small: this box
-                          // hugs its content, and anything the content did that
-                          // the box had not accounted for was simply clipped
-                          // away. The rounding and the outline moved onto the
-                          // picture itself, where nothing can crop it.
-                          style={{ position: "relative", maxWidth: "100%", userSelect: "none", touchAction: "none", lineHeight: 0 }}>
-                          <img src={slides[slideIdx]?.url || visual.url} alt="" draggable={false}
-                            // Measured again once the picture is in the layout.
-                            // Insurance: the observer watches a box that changes
-                            // size, and the first read happens before there is
-                            // anything in it.
-                            //
-                            // Both caps sit HERE and not on the stage around it.
-                            // On the stage the width cap CUT the picture off: a
-                            // box that shrinks to fit its content gives a
-                            // percentage inside it nothing to resolve against,
-                            // so the picture stayed full width and the box
-                            // clipped away the rest.
-                            onLoad={() => { const el = viewRef.current; if (el) setViewBox({ w: el.clientWidth, h: el.clientHeight }); }}
-                            style={{ display: "block", width: "auto", height: "auto",
-                              maxWidth: mediaMaxW, maxHeight: mediaMaxH,
-                              borderRadius: 16, border: `1px solid ${theme.borderFaint}` }} />
+                          style={{ position: "relative", width: "100%", height: "100%", userSelect: "none", touchAction: "none", lineHeight: 0 }}>
+                          <img src={currentMediaUrl} alt="" draggable={false}
+                            onLoad={e => setLoadedMedia({ url: currentMediaUrl, w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+                            style={{ display: "block", width: "100%", height: "100%", objectFit: "contain",
+                              borderRadius: 16, outline: `1px solid ${theme.borderFaint}`, outlineOffset: -1 }} />
                           {slideIdx === 0 && overlays.map(o => (
                             <div key={o.id} onPointerDown={(e) => onOverlayDown(e, o)}
                               style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500,
@@ -31893,7 +31894,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   picture: on the picture it reads as something you are doing TO
                   that picture. Here it sits opposite the button that moves you
                   on, which is the other thing you can do from this step. */}
-              {stepIdx === S_VISUAL && visual && !reel && hasDirectIg && slides.length < 10 && (
+              {stepIdx === S_VISUAL && visual && !reel && slides.length < 10 && (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => extraRef.current?.click()}
                   title={de ? "Weiteres Bild" : "Another picture"}
                   style={{ ...footBtn, width: 42, padding: 0, border: `1px solid ${theme.border}`,
@@ -31986,7 +31987,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       </div>
 
       {/* The same asset browser the documents and the canvas use. It hands back
-          a url; adoptAssetUrl turns that into the File the rest of this view
+          URLs; adoptAssetUrls turns them into the Files the rest of this view
           already knows how to handle. Its own upload tab is answered with an
           object url for the same reason: one path in, one path out. */}
       {/* Artboards, as a sheet of their own. The shared image browser lists
@@ -32018,19 +32019,22 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
                 {boards.map(b => {
                   const pic = b.export_url || b.thumb_url || null;
+                  const count = b.doc ? boardsFromDoc(b.doc, [b.w, b.h], de).length : 1;
+                  const available = !!b.doc || !!pic;
+                  const selected = selectedArtboards.includes(b.id);
                   return (
-                    <motion.div key={b.id} whileHover={pic ? { y: -3 } : undefined} whileTap={pic ? { scale: 0.98 } : undefined}
-                      onClick={() => { if (pic) { setBoardsOpen(false); adoptAssetUrl(pic); } }}
-                      style={{ borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`,
-                        cursor: pic ? "pointer" : "default", opacity: pic ? 1 : 0.65, background: theme.cardBg }}>
+                    <motion.div key={b.id} whileHover={available ? { y: -3 } : undefined} whileTap={available ? { scale: 0.98 } : undefined}
+                      onClick={() => { if (available) setSelectedArtboards(ids => ids.includes(b.id) ? ids.filter(id => id !== b.id) : [...ids, b.id]); }}
+                      style={{ borderRadius: 16, overflow: "hidden", border: `2px solid ${selected ? theme.text : theme.borderFaint}`,
+                        cursor: available ? "pointer" : "default", opacity: available ? 1 : 0.65, background: theme.cardBg }}>
                       <div style={{ aspectRatio: "4/3", background: darkMode ? "#111117" : "#f3f3f5",
                         backgroundImage: pic ? `url(${pic})` : "none", backgroundSize: "contain",
                         backgroundPosition: "center", backgroundRepeat: "no-repeat" }} />
                       <div style={{ padding: "10px 12px" }}>
                         <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text,
-                          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name || "Artboard"}</div>
+                          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{selected ? `${selectedArtboards.indexOf(b.id) + 1}. ` : ""}{b.name || "Artboard"}</div>
                         <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
-                          {pic ? `${b.w} × ${b.h}` : (de ? "Einmal öffnen und schließen" : "Open and close it once")}
+                          {available ? `${count} ${de ? (count === 1 ? "Bild" : "Bilder") : (count === 1 ? "image" : "images")}` : (de ? "Keine Bilddaten vorhanden" : "No image data available")}
                         </div>
                       </div>
                     </motion.div>
@@ -32039,9 +32043,14 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
               </div>
             )}
             <div style={{ marginTop: 16, fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
-              {de ? "Ein Artboard bekommt sein Bild, sobald sein Editor einmal geschlossen wurde."
-                  : "An artboard gets its picture the first time its editor is closed."}
+              {de ? "Alle enthaltenen Artboards werden in ihrer Reihenfolge als einzelne Bilder übernommen. Maximal 10 Bilder."
+                  : "All contained artboards are added as individual images in their saved order. Up to 10 images."}
             </div>
+            {selectedArtboardImageCount > 10 && <div style={{ marginTop: 10, fontFamily: FONT, fontSize: 12, color: "#E86767" }}>{de ? "Bitte höchstens 10 Bilder auswählen." : "Please select up to 10 images."}</div>}
+            <motion.button type="button" onClick={adoptArtboards} disabled={!selectedArtboards.length || selectedArtboardImageCount > 10 || assetBusy}
+              style={{ marginTop: 16, padding: "11px 20px", borderRadius: 999, border: "none", background: "#15151c", color: "#fff", fontFamily: FONT, cursor: selectedArtboards.length ? "pointer" : "default", opacity: selectedArtboards.length ? 1 : 0.5 }}>
+              {de ? `${selectedArtboardImageCount} ${selectedArtboardImageCount === 1 ? "Bild" : "Bilder"} übernehmen` : `Use ${selectedArtboardImageCount} ${selectedArtboardImageCount === 1 ? "image" : "images"}`}
+            </motion.button>
           </div>
         </div>, document.body)}
 
@@ -32050,7 +32059,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           orgId={orgId} session={session} userOrg={userOrg} appLanguage={appLanguage}
           uploadFile={async (file) => URL.createObjectURL(file)}
           theme={theme} darkMode={darkMode} accent={theme.accent}
-          onPick={(url) => adoptAssetUrl(url)}
+          multiple maxSelection={10} onPickMany={adoptAssetUrls}
+          onPick={(url) => adoptAssetUrls([url])}
           onClose={() => setAssetOpen(false)} />
       )}
     </motion.div>
@@ -38366,7 +38376,16 @@ function CommentPopover({ block, comments, memberById, mentionables, currentUser
 //   • Hochladen — pick a file from disk (reuses the editor's uploadFile)
 //   • URL       — paste an image URL
 // All of them resolve to a URL and call onPick(url) → inserted as an image block.
-function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadFile, theme, darkMode, accent, onPick, onClose }) {
+function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadFile, theme, darkMode, accent, onPick, onClose, multiple = false, maxSelection = 10, onPickMany }) {
+  const de = appLanguage === "de";
+  const [selectedUrls, setSelectedUrls] = useState([]);
+  const pick = (url) => {
+    if (!multiple) { onPick(url); return; }
+    setErr("");
+    if (selectedUrls.includes(url)) { setSelectedUrls(list => list.filter(u => u !== url)); return; }
+    if (selectedUrls.length >= maxSelection) { setErr(de ? `Bitte höchstens ${maxSelection} Bilder auswählen.` : `Please select up to ${maxSelection} images.`); return; }
+    setSelectedUrls(list => [...list, url]);
+  };
   const [tab, setTab] = useState("creations"); // "creations" | "stock" | "upload" | "url"
   const [imgs, setImgs] = useState(null); // null = loading
   const [q, setQ] = useState("");
@@ -38407,11 +38426,24 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
     if (!file || !file.type?.startsWith("image/")) { setErr("Bitte eine Bilddatei auswählen."); return; }
     if (!uploadFile) { setErr("Upload ist hier nicht verfügbar."); return; }
     setErr(""); setBusy(true);
-    try { const u = await uploadFile(file); if (u) onPick(u); else setErr("Upload fehlgeschlagen."); }
+    try { const u = await uploadFile(file); if (u) pick(u); else setErr("Upload fehlgeschlagen."); }
     catch (e) { setErr("Upload fehlgeschlagen: " + (e?.message || "")); }
     finally { setBusy(false); }
   };
-  const submitUrl = () => { const u = url.trim(); if (u) onPick(u); };
+  const handleFiles = async (files) => {
+    if (!multiple) { await handleFile(files[0]); return; }
+    const images = files.filter(f => f.type?.startsWith("image/"));
+    if (selectedUrls.length + images.length > maxSelection) { setErr(de ? `Bitte höchstens ${maxSelection} Bilder auswählen.` : `Please select up to ${maxSelection} images.`); return; }
+    if (!uploadFile || !images.length) return;
+    setBusy(true); setErr("");
+    try {
+      const urls = [];
+      for (const file of images) { const url = await uploadFile(file); if (!url) throw new Error(de ? "Upload fehlgeschlagen." : "Upload failed."); urls.push(url); }
+      setSelectedUrls(list => [...new Set([...list, ...urls])]);
+    } catch (error) { setErr(error.message); }
+    finally { setBusy(false); }
+  };
+  const submitUrl = () => { const u = url.trim(); if (u) pick(u); };
 
   const shown = (imgs || []).filter(f => !q.trim() || (f.name || "").toLowerCase().includes(q.trim().toLowerCase()));
   const tabBtn = (id, label) => {
@@ -38440,7 +38472,7 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
         style={{ width: "100%", maxWidth: 640, height: "min(620px, 82vh)", display: "flex", flexDirection: "column", borderRadius: 20, overflow: "hidden", background: darkMode ? "rgba(22,22,30,0.99)" : "#ffffff", border: `1px solid ${theme.border}`, boxShadow: "0 24px 70px rgba(0,0,0,0.4)" }}>
         <div style={{ padding: "18px 20px 14px", borderBottom: `1px solid ${theme.borderFaint}` }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Bild hinzufügen</div>
+            <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{multiple ? (de ? "Bilder auswählen" : "Choose images") : (de ? "Bild hinzufügen" : "Add image")}</div>
             <motion.div whileTap={{ scale: 0.9 }} onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </motion.div>
@@ -38474,12 +38506,12 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 12 }}>
                 {shown.map(f => (
-                  <motion.div key={f.id} whileHover={{ y: -3 }} whileTap={{ scale: 0.97 }} onClick={() => onPick(f.public_url)} title={f.name}
-                    style={{ cursor: "pointer", borderRadius: 12, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+                  <motion.div key={f.id} whileHover={{ y: -3 }} whileTap={{ scale: 0.97 }} onClick={() => pick(f.public_url)} title={f.name}
+                    style={{ cursor: "pointer", borderRadius: 12, overflow: "hidden", border: `2px solid ${selectedUrls.includes(f.public_url) ? theme.text : theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
                     <div style={{ width: "100%", aspectRatio: "1 / 1", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
                       <img src={f.public_url} alt={f.name} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     </div>
-                    <div style={{ padding: "7px 9px", fontSize: 11.5, fontFamily: FONT, color: theme.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name || "—"}</div>
+                    <div style={{ padding: "7px 9px", fontSize: 11.5, fontFamily: FONT, color: theme.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{multiple && selectedUrls.includes(f.public_url) ? `${selectedUrls.indexOf(f.public_url) + 1}. ` : ""}{f.name || "—"}</div>
                   </motion.div>
                 ))}
               </div>
@@ -38496,17 +38528,17 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
                 theme={theme}
                 darkMode={darkMode}
                 appLanguage={appLanguage}
-                onPick={(url) => onPick(url)}
+                onPick={(url) => pick(url)}
               />
             </div>
           ) : tab === "upload" ? (
             <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
-              <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; handleFile(f); }} />
+              <input ref={fileRef} type="file" accept="image/*" multiple={multiple} style={{ display: "none" }} onChange={e => { const files = [...(e.target.files || [])]; e.target.value = ""; handleFiles(files); }} />
               <motion.div whileHover={{ scale: busy ? 1 : 1.01 }}
                 onClick={() => !busy && fileRef.current?.click()}
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
-                onDrop={e => { e.preventDefault(); setDragOver(false); if (!busy) handleFile(e.dataTransfer.files?.[0]); }}
+                onDrop={e => { e.preventDefault(); setDragOver(false); if (!busy) handleFiles([...(e.dataTransfer.files || [])]); }}
                 style={{ width: "100%", maxWidth: 460, padding: "44px 24px", borderRadius: 16, cursor: busy ? "default" : "pointer", textAlign: "center",
                   border: `2px dashed ${dragOver ? accent : theme.borderFaint}`, background: dragOver ? accent + "12" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)") }}>
                 {busy ? (
@@ -38539,6 +38571,15 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
             </div>
           )}
         </div>
+        {multiple && (
+          <div style={{ flexShrink: 0, padding: "14px 20px", borderTop: `1px solid ${theme.borderFaint}`, fontFamily: FONT }}>
+            {err && <div style={{ color: "#E86767", fontSize: 12, marginBottom: 8 }}>{err}</div>}
+            <motion.button type="button" onClick={() => onPickMany?.(selectedUrls)} disabled={!selectedUrls.length || busy}
+              style={{ width: "100%", padding: "11px 16px", borderRadius: 999, border: "none", background: "#15151c", color: "#fff", fontFamily: FONT, cursor: selectedUrls.length && !busy ? "pointer" : "default", opacity: selectedUrls.length && !busy ? 1 : 0.5 }}>
+              {de ? `${selectedUrls.length} ${selectedUrls.length === 1 ? "Bild" : "Bilder"} übernehmen` : `Use ${selectedUrls.length} ${selectedUrls.length === 1 ? "image" : "images"}`}
+            </motion.button>
+          </div>
+        )}
       </motion.div>
     </motion.div>, document.body);
 }
