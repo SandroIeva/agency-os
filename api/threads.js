@@ -23,6 +23,7 @@
 //   POST { mode: "disconnect", orgId, threadsUserId } → forget one account
 //   POST { mode: "publish",    orgId, … } → one post, container flow
 //   POST { mode: "publish-finish", orgId, containerId } → finish a slow one
+//   POST { mode: "overview",   orgId } → profile and the 24h window, one trip
 //   POST { mode: "limit",      orgId } → posts left in the 24h window
 import { createClient } from "@supabase/supabase-js";
 
@@ -319,6 +320,28 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
   if (!row) return json({ error: "Threads is not connected", code: "not_connected" }, 409);
   const token = await usableToken(db, row);
   if (!token) return json({ error: "Threads needs to be connected again", code: "reconnect_required" }, 401);
+
+  // ── overview — the numbers a dashboard shows, in one round trip ───────────
+  //
+  // It also does something Meta asks for before a permission can be submitted:
+  // each permission needs at least one successful API call against it. Reading
+  // the profile exercises threads_basic and the publishing limit exercises
+  // threads_content_publish, so opening the panel is a real call on both rather
+  // than something that has to be staged by hand.
+  if (body.mode === "overview") {
+    const profile = await th(token, "/me", { fields: "id,username" });
+    const quota = await th(token, `/${row.threads_user_id}/threads_publishing_limit`,
+      { fields: "quota_usage,config" });
+    const q = quota.ok ? (quota.body?.data?.[0] || {}) : null;
+    return json({
+      account: { threadsUserId: row.threads_user_id, username: profile.body?.username || row.username },
+      quota: q ? { used: q.quota_usage ?? 0, total: q.config?.quota_total ?? 250 } : null,
+      // Named rather than swallowed: if one of the two fails, that is exactly
+      // the permission whose call count will stay at zero.
+      unavailable: [!profile.ok && "threads_basic", !quota.ok && "threads_content_publish"].filter(Boolean),
+      tokenExpiresAt: row.token_expires_at,
+    });
+  }
 
   if (body.mode === "limit") {
     const r = await th(token, `/${row.threads_user_id}/threads_publishing_limit`,

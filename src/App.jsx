@@ -29694,6 +29694,32 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
 // every other workspace is unaffected.
 function InstagramDirectPanel({ theme, darkMode, de, session, orgId, card, secLabel }) {
   const [state, setState] = useState(null);   // null | { loading } | payload | { error }
+  const [thState, setThState] = useState(null);
+
+  // Threads, beside the Instagram numbers rather than in a panel of its own:
+  // there are two of them and they answer the same question. It also gives both
+  // Threads permissions a real API call, which Meta requires before either can
+  // be submitted for review.
+  useEffect(() => {
+    if (!orgId || !session?.access_token) return;
+    let on = true;
+    (async () => {
+      try {
+        const ask = (payload) => fetch("/api/threads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ orgId, ...payload }),
+        });
+        const st = await ask({ mode: "status" }).then(r => r.ok ? r.json() : null);
+        const first = st?.enabled ? (st.accounts || [])[0] : null;
+        if (!first) { if (on) setThState(null); return; }
+        const r = await ask({ mode: "overview", threadsUserId: first.threadsUserId });
+        const j = await r.json().catch(() => null);
+        if (on) setThState(r.ok ? j : { error: j?.error || (de ? "Threads hat nicht geantwortet." : "Threads did not answer.") });
+      } catch { if (on) setThState({ error: de ? "Threads hat nicht geantwortet." : "Threads did not answer." }); }
+    })();
+    return () => { on = false; };
+  }, [orgId, session?.access_token, de]);
 
   useEffect(() => {
     if (!orgId || !session?.access_token) return;
@@ -29721,7 +29747,7 @@ function InstagramDirectPanel({ theme, darkMode, de, session, orgId, card, secLa
     return () => { on = false; };
   }, [orgId, session?.access_token, de]);
 
-  if (!state) return null;
+  if (!state && !thState) return null;
 
   const num = (v) => v == null ? "–" : new Intl.NumberFormat(de ? "de-DE" : "en-US").format(v);
   const tile = (label, value) => (
@@ -29730,6 +29756,34 @@ function InstagramDirectPanel({ theme, darkMode, de, session, orgId, card, secLa
       <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{label}</div>
     </div>
   );
+
+  const threadsBlock = thState && (
+    <div style={{ marginTop: state ? 18 : 0, paddingTop: state ? 16 : 0,
+      borderTop: state ? `1px solid ${theme.borderFaint}` : "none" }}>
+      <div style={{ ...secLabel, marginBottom: 8 }}>{de ? "Threads direkt" : "Threads direct"}</div>
+      {thState.error ? (
+        <div style={{ fontSize: 12.5, fontFamily: FONT, color: "#E86767" }}>{thState.error}</div>
+      ) : (<>
+        <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>
+          @{thState.account?.username}
+        </div>
+        {thState.quota && (
+          <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 8 }}>
+            {de
+              ? `${thState.quota.used} von ${thState.quota.total} Beiträgen in den letzten 24 Stunden veröffentlicht.`
+              : `${thState.quota.used} of ${thState.quota.total} posts published in the last 24 hours.`}
+          </div>
+        )}
+        {thState.unavailable?.length > 0 && (
+          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 6 }}>
+            {(de ? "Von Threads nicht geliefert: " : "Not returned by Threads: ") + thState.unavailable.join(", ")}
+          </div>
+        )}
+      </>)}
+    </div>
+  );
+
+  if (!state) return <div style={card}>{threadsBlock}</div>;
 
   return (
     <div style={card}>
@@ -29765,6 +29819,7 @@ function InstagramDirectPanel({ theme, darkMode, de, session, orgId, card, secLa
           </div>
         )}
       </>)}
+      {threadsBlock}
     </div>
   );
 }
