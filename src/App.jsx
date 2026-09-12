@@ -30821,10 +30821,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // it keeps the stage hugging, which is what keeps the text overlays honest.
   const viewRef = useRef(null);
   const [viewH, setViewH] = useState(0);
-  // What is left for the picture once the slide count has had its line under
-  // it. Subtracted rather than left to the layout: the picture is capped by a
-  // number, so the number has to know about everything sharing the column.
-  const mediaMaxH = viewH ? Math.max(80, viewH - (slides.length > 1 ? 32 : 0)) : undefined;
+  // The height the picture may take. `viewRef` is put on the picture's OWN area
+  // rather than on the whole row, so nothing has to be guessed and subtracted:
+  // the slide count lives outside that area and takes its space from the
+  // layout, not from an estimate. The estimate was wrong by about a hundred
+  // pixels, which a portrait picture showed as a gap under it.
+  const mediaMaxH = viewH || undefined;
   const [overlays, setOverlays] = useState([]);     // [{ id, text, x, y, size, color, bold }] — x/y/size relative to image
   const [selOverlay, setSelOverlay] = useState(null);
   // Dictation for the caption, the same SpeechRecognition the notes and the
@@ -31567,7 +31569,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     // The viewer claims what is left of the box. Everything it
                     // needs sits ON the picture, so nothing below it can push
                     // the picture smaller.
-                    <div ref={viewRef} style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                      {/* The picture's own area, and the one thing measured.
+                          The count sits under it as a caption, outside the
+                          measurement, so it cannot be double counted. */}
+                      <div ref={viewRef} style={{ flex: 1, minHeight: 0, width: "100%", position: "relative",
+                        display: "flex", alignItems: "center", justifyContent: "center" }}>
                       {/* Paging sits in the grey, at the very edges, so the two
                           arrows line up with the plus and the publish button in
                           the footer below. On the picture they read as part of
@@ -31582,12 +31589,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
                         </motion.div>
                       ))}
-                      {/* The picture and its count, one under the other. The
-                          count used to lie ON the picture; under it, it is a
-                          caption and needs no dark plate to be readable. */}
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
-                        maxWidth: !reel && slides.length > 1 ? "calc(100% - 116px)" : "100%", minHeight: 0 }}>
-                      <div style={{ position: "relative", maxWidth: "100%", lineHeight: 0 }}>
+
+                      <div style={{ position: "relative", lineHeight: 0,
+                        maxWidth: !reel && slides.length > 1 ? "calc(100% - 116px)" : "100%" }}>
                       {reel ? (
                         <video src={reel.url} controls playsInline
                           style={{ maxWidth: "100%", maxHeight: mediaMaxH || "100%", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, display: "block" }} />
@@ -31619,12 +31623,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       </motion.div>
 
                       </div>
+                      </div>
                       {!reel && slides.length > 1 && (
-                        <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim, lineHeight: 1 }}>
+                        <div style={{ paddingTop: 10, fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim, lineHeight: 1, flexShrink: 0 }}>
                           {slideIdx + 1} / {slides.length}
                         </div>
                       )}
-                      </div>
                     </div>
                   )}
                 </>)}
