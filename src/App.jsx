@@ -27932,14 +27932,30 @@ const TOUCHPOINT_PLATFORMS = [
 // what `facebook: 1.65` has always been for; `linkedin` and `threads` are
 // letters too and were missing from the table, so they sat visibly small beside
 // Instagram.
-const TP_GLYPH_SCALE = { x: 0.72, tiktok: 1.3, facebook: 1.65, youtube: 1.12, instagram: 1.0, website: 1.0, pinterest: 1.2, linkedin: 1.3, threads: 1.3 };
+// The real Instagram and Threads marks, the ones in public/instagram-logo.svg
+// and public/threads-logo.svg, written down ONCE. They are drawn in a 640 box
+// and every consumer works in a 24 box, so `metaMark` does the arithmetic in
+// one place: two drawings of one logo is how it stops reading as one thing.
+const META_MARK = {
+  instagram: "M320.3 205C256.8 204.8 205.2 256.2 205 319.7C204.8 383.2 256.2 434.8 319.7 435C383.2 435.2 434.8 383.8 435 320.3C435.2 256.8 383.8 205.2 320.3 205zM319.7 245.4C360.9 245.2 394.4 278.5 394.6 319.7C394.8 360.9 361.5 394.4 320.3 394.6C279.1 394.8 245.6 361.5 245.4 320.3C245.2 279.1 278.5 245.6 319.7 245.4zM413.1 200.3C413.1 185.5 425.1 173.5 439.9 173.5C454.7 173.5 466.7 185.5 466.7 200.3C466.7 215.1 454.7 227.1 439.9 227.1C425.1 227.1 413.1 215.1 413.1 200.3zM542.8 227.5C541.1 191.6 532.9 159.8 506.6 133.6C480.4 107.4 448.6 99.2 412.7 97.4C375.7 95.3 264.8 95.3 227.8 97.4C192 99.1 160.2 107.3 133.9 133.5C107.6 159.7 99.5 191.5 97.7 227.4C95.6 264.4 95.6 375.3 97.7 412.3C99.4 448.2 107.6 480 133.9 506.2C160.2 532.4 191.9 540.6 227.8 542.4C264.8 544.5 375.7 544.5 412.7 542.4C448.6 540.7 480.4 532.5 506.6 506.2C532.8 480 541 448.2 542.8 412.3C544.9 375.3 544.9 264.5 542.8 227.5zM495 452C487.2 471.6 472.1 486.7 452.4 494.6C422.9 506.3 352.9 503.6 320.3 503.6C287.7 503.6 217.6 506.2 188.2 494.6C168.6 486.8 153.5 471.7 145.6 452C133.9 422.5 136.6 352.5 136.6 319.9C136.6 287.3 134 217.2 145.6 187.8C153.4 168.2 168.5 153.1 188.2 145.2C217.7 133.5 287.7 136.2 320.3 136.2C352.9 136.2 423 133.6 452.4 145.2C472 153 487.1 168.1 495 187.8C506.7 217.3 504 287.3 504 319.9C504 352.5 506.7 422.6 495 452z",
+  threads: "M436.8 302C436.2 232.4 398.5 190.5 334.8 190.5C292.3 190.5 256.5 209.7 237.7 240.4L278.9 269.1C289.6 252.3 304.3 238.3 331.3 238.3C361.8 238.3 377.6 255.3 382.1 286.8C367.4 284.5 352.6 283.3 337.5 283.3C255.1 283.3 216.4 320.6 216.4 369.9C216.4 419.2 255.2 449.6 312.3 449.6C375 449.6 412.4 407.4 427.7 355.1C443.6 362.3 454.6 379.1 454.6 404.4C454.6 472 376.6 508.9 310.5 508.9C213 508.9 149.2 444.9 149.2 340.7C149.2 213.1 233.5 131.3 346.8 131.3C422.8 131.3 460.4 164.7 486 209.4L528 179.9C500.2 121.9 438.1 80.4 344.9 80.4C196.4 80.4 95.4 185.8 95.4 338.6C95.4 478.4 194.3 559.5 312.1 559.5C409.5 559.5 507.9 502.7 507.9 405.5C507.9 354.7 478.7 321 436.7 302zM310.4 398.9C288.9 398.9 270 388.7 270 369.9C270 340.3 306.4 331.3 342 331.3C355.5 331.3 368.8 332.2 380.5 334.8C372.1 373.3 347.1 399 310.5 399L310.5 399z",
+};
+const metaMark = (key, fill) => (
+  <g transform="scale(0.0375)"><path d={META_MARK[key]} fill={fill} /></g>
+);
+
+const TP_GLYPH_SCALE = { x: 0.72, tiktok: 1.3, facebook: 1.65, youtube: 1.12, instagram: 1.0, website: 1.0, pinterest: 1.2, linkedin: 1.3,
+  // Both Meta marks are real drawings now rather than letters. They carry a
+  // little more air inside their own box than the stroked glyph they replaced,
+  // so they take the same small correction as each other.
+  instagram: 1.15, threads: 1.15 };
 const tpGlyphSize = (key, base) => Math.round(base * (TP_GLYPH_SCALE[key] || 1));
 
 function touchpointGlyph(key) {
   const L = (s, size = 13) => <text x="12" y="16.5" textAnchor="middle" fontSize={size} fontWeight="700" fill="#fff" fontFamily="sans-serif">{s}</text>;
   switch (key) {
     case "website":   return <g fill="none" stroke="#fff" strokeWidth="1.7"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5a13 13 0 010 17M12 3.5a13 13 0 000 17"/></g>;
-    case "instagram": return <g fill="none" stroke="#fff" strokeWidth="1.7"><rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.8"/><circle cx="17" cy="7" r="0.9" fill="#fff" stroke="none"/></g>;
+    case "instagram": return metaMark("instagram", "#fff");
     case "youtube":   return <g><rect x="3" y="6" width="18" height="12" rx="3.5" fill="#fff"/><path d="M10.5 9.2l4.2 2.8-4.2 2.8z" fill="#FF0000"/></g>;
     case "tiktok":    return <g fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" transform="translate(1.8, 1.1)"><path d="M9 9.5a3.5 3.5 0 103.5 3.5V4.5c.6 1.8 2 3 4 3.2"/></g>;
     case "x":         return <path fill="#fff" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>;
@@ -27948,7 +27964,7 @@ function touchpointGlyph(key) {
     // The glyph alone in white, the way every other chip is drawn. It carries
     // its own 640 box, hence the scale into this 24-unit one.
     case "pinterest": return <g transform={`scale(${PINTEREST_P_SCALE})`}><path fill="#fff" d={PINTEREST_P}/></g>;
-    case "threads":   return L("@", 15);
+    case "threads":   return metaMark("threads", "#fff");
     case "newsletter":return <g fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/></g>;
     default:          return L((key[0] || "?").toUpperCase());
   }
@@ -58558,10 +58574,10 @@ export default function CircularMenu() {
                       background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
-                      {/* The real mark, the one in public/instagram-logo.svg,
-                          rather than a drawing of it from memory. */}
-                      <svg width="21" height="21" viewBox="0 0 640 640" fill={theme.text} aria-hidden="true">
-                        <path d="M320.3 205C256.8 204.8 205.2 256.2 205 319.7C204.8 383.2 256.2 434.8 319.7 435C383.2 435.2 434.8 383.8 435 320.3C435.2 256.8 383.8 205.2 320.3 205zM319.7 245.4C360.9 245.2 394.4 278.5 394.6 319.7C394.8 360.9 361.5 394.4 320.3 394.6C279.1 394.8 245.6 361.5 245.4 320.3C245.2 279.1 278.5 245.6 319.7 245.4zM413.1 200.3C413.1 185.5 425.1 173.5 439.9 173.5C454.7 173.5 466.7 185.5 466.7 200.3C466.7 215.1 454.7 227.1 439.9 227.1C425.1 227.1 413.1 215.1 413.1 200.3zM542.8 227.5C541.1 191.6 532.9 159.8 506.6 133.6C480.4 107.4 448.6 99.2 412.7 97.4C375.7 95.3 264.8 95.3 227.8 97.4C192 99.1 160.2 107.3 133.9 133.5C107.6 159.7 99.5 191.5 97.7 227.4C95.6 264.4 95.6 375.3 97.7 412.3C99.4 448.2 107.6 480 133.9 506.2C160.2 532.4 191.9 540.6 227.8 542.4C264.8 544.5 375.7 544.5 412.7 542.4C448.6 540.7 480.4 532.5 506.6 506.2C532.8 480 541 448.2 542.8 412.3C544.9 375.3 544.9 264.5 542.8 227.5zM495 452C487.2 471.6 472.1 486.7 452.4 494.6C422.9 506.3 352.9 503.6 320.3 503.6C287.7 503.6 217.6 506.2 188.2 494.6C168.6 486.8 153.5 471.7 145.6 452C133.9 422.5 136.6 352.5 136.6 319.9C136.6 287.3 134 217.2 145.6 187.8C153.4 168.2 168.5 153.1 188.2 145.2C217.7 133.5 287.7 136.2 320.3 136.2C352.9 136.2 423 133.6 452.4 145.2C472 153 487.1 168.1 495 187.8C506.7 217.3 504 287.3 504 319.9C504 352.5 506.7 422.6 495 452z"/>
+                      {/* The same mark the channel chips draw, from the one place it is
+                          written down. */}
+                      <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true">
+                        {metaMark("instagram", theme.text)}
                       </svg>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -58610,10 +58626,10 @@ export default function CircularMenu() {
                       background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
-                      {/* The real mark, the one in public/threads-logo.svg,
-                          rather than a drawing of it from memory. */}
-                      <svg width="21" height="21" viewBox="0 0 640 640" fill={theme.text} aria-hidden="true">
-                        <path d="M436.8 302C436.2 232.4 398.5 190.5 334.8 190.5C292.3 190.5 256.5 209.7 237.7 240.4L278.9 269.1C289.6 252.3 304.3 238.3 331.3 238.3C361.8 238.3 377.6 255.3 382.1 286.8C367.4 284.5 352.6 283.3 337.5 283.3C255.1 283.3 216.4 320.6 216.4 369.9C216.4 419.2 255.2 449.6 312.3 449.6C375 449.6 412.4 407.4 427.7 355.1C443.6 362.3 454.6 379.1 454.6 404.4C454.6 472 376.6 508.9 310.5 508.9C213 508.9 149.2 444.9 149.2 340.7C149.2 213.1 233.5 131.3 346.8 131.3C422.8 131.3 460.4 164.7 486 209.4L528 179.9C500.2 121.9 438.1 80.4 344.9 80.4C196.4 80.4 95.4 185.8 95.4 338.6C95.4 478.4 194.3 559.5 312.1 559.5C409.5 559.5 507.9 502.7 507.9 405.5C507.9 354.7 478.7 321 436.7 302zM310.4 398.9C288.9 398.9 270 388.7 270 369.9C270 340.3 306.4 331.3 342 331.3C355.5 331.3 368.8 332.2 380.5 334.8C372.1 373.3 347.1 399 310.5 399L310.5 399z"/>
+                      {/* The same mark the channel chips draw, from the one place it is
+                          written down. */}
+                      <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true">
+                        {metaMark("threads", theme.text)}
                       </svg>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
