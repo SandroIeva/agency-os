@@ -30759,8 +30759,34 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // it now has a second caller and two copies of it would drift.
   const loadAccounts = useCallback(async () => {
     if (!orgId) return;
-    try { const r = await zernioRequest(session, { mode: "status", orgId }); setAccounts(r.accounts || []); }
-    catch (e) { setAccounts([]); setError(e); }
+    // Two providers, one list. Zernio holds every network; a workspace cleared
+    // for the direct Meta path also has its Instagram account here, and the
+    // channel picker cannot tell the difference because there is nothing it
+    // needs to do differently. Only `submit` cares, and it reads `provider`.
+    //
+    // Asked in parallel and failing apart: Instagram being unreachable must not
+    // empty the list of everything else.
+    const [zern, meta] = await Promise.all([
+      zernioRequest(session, { mode: "status", orgId }).catch(e => { setError(e); return null; }),
+      fetch("/api/instagram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ mode: "status", orgId }),
+      }).then(r => r.ok ? r.json() : null).catch(() => null),
+    ]);
+    const direct = (meta?.enabled ? meta.accounts || [] : []).map(a => ({
+      // Prefixed, so an id can never collide with a Zernio one and so the
+      // provider is readable off the id in a log.
+      id: `meta:${a.igUserId}`,
+      provider: "meta",
+      igUserId: a.igUserId,
+      platform: "instagram",
+      username: a.username || "",
+      displayName: a.username || "Instagram",
+      profileUrl: a.username ? `https://www.instagram.com/${a.username}` : null,
+      isActive: !a.needsReconnect,
+    }));
+    setAccounts([...(zern?.accounts || []), ...direct]);
   }, [orgId, session?.access_token]); // eslint-disable-line
 
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
@@ -30942,25 +30968,83 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     if (!isDraft && selected.length === 0) { setError(new Error(de ? "Wähle mindestens einen Kanal." : "Pick at least one channel.")); setStepIdx(2); return; }
     if (!text.trim() && !imageFileRef.current) { setError(new Error(de ? "Text oder Visual fehlt." : "Text or visual required.")); return; }
     if (overLimit) { setError(new Error(de ? `Text zu lang (max. ${charLimit} Zeichen für die gewählten Kanäle).` : `Text too long (max ${charLimit} chars for the selected channels).`)); setStepIdx(0); return; }
+    // The direct Meta connection publishes and nothing else: Instagram's API has
+    // no draft and no scheduled post, so a queue would have to be ours, and a
+    // queue nobody can see inside is worse than saying so.
+    const metaSel = selected.filter(a => a.provider === "meta");
+    const zernSel = selected.filter(a => a.provider !== "meta");
+    if (metaSel.length && (isDraft || schedule)) {
+      setError(new Error(de
+        ? "Die direkte Instagram-Verbindung kann nur sofort veröffentlichen. Nimm Instagram raus, oder veröffentliche jetzt."
+        : "The direct Instagram connection can only publish right away. Take Instagram out, or publish now."));
+      return;
+    }
+    // Instagram fetches the picture itself and refuses a post without one.
+    if (metaSel.length && !imageFileRef.current) {
+      setError(new Error(de ? "Instagram braucht ein Bild." : "Instagram needs an image."));
+      return;
+    }
     setBusy(kind);
     try {
-      let mediaItems;
+      let mediaItems, metaMedia;
       const rendered = await exportVisual();
       if (rendered) {
-        const pre = await zernioRequest(session, { mode: "presign", orgId, filename: rendered.name, contentType: rendered.type, size: rendered.blob.size });
-        const up = await fetch(pre.uploadUrl, { method: "PUT", headers: { "Content-Type": rendered.type }, body: rendered.blob });
-        if (!up.ok) throw new Error(de ? "Bild-Upload fehlgeschlagen." : "Image upload failed.");
-        mediaItems = [{ type: "image", url: pre.publicUrl, filename: rendered.name }];
+        // Zernio hosts its own uploads. The Meta path does not go near them: it
+        // puts the picture in OUR bucket and hands the server a path, which is
+        // signed there for an hour. Instagram cannot be given bytes, only a url
+        // it can fetch, and user-files is private.
+        if (zernSel.length) {
+          const pre = await zernioRequest(session, { mode: "presign", orgId, filename: rendered.name, contentType: rendered.type, size: rendered.blob.size });
+          const up = await fetch(pre.uploadUrl, { method: "PUT", headers: { "Content-Type": rendered.type }, body: rendered.blob });
+          if (!up.ok) throw new Error(de ? "Bild-Upload fehlgeschlagen." : "Image upload failed.");
+          mediaItems = [{ type: "image", url: pre.publicUrl, filename: rendered.name }];
+        }
+        if (metaSel.length) {
+          const path = `instagram/${orgId}/${crypto.randomUUID()}.jpg`;
+          const up = await uploadTracked({
+            bucket: "brand-assets", path, file: rendered.blob, orgId,
+            userId: session?.user?.id, contentType: rendered.type, sizeBytes: rendered.blob.size,
+          });
+          if (up.error) throw new Error(de ? "Bild-Upload fehlgeschlagen." : "Image upload failed.");
+          metaMedia = { bucket: "brand-assets", path };
+        }
       }
-      const r = await zernioRequest(session, {
-        mode: "post", orgId,
-        content: text.trim() || undefined,
-        platforms: selected.map(a => ({ platform: a.platform, accountId: a.id })),
-        mediaItems,
-        isDraft: isDraft || undefined,
-        scheduledFor: (!isDraft && schedule) ? new Date(schedule).toISOString() : undefined,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      });
+
+      const parts = [];
+      if (zernSel.length) {
+        const r = await zernioRequest(session, {
+          mode: "post", orgId,
+          content: text.trim() || undefined,
+          platforms: zernSel.map(a => ({ platform: a.platform, accountId: a.id })),
+          mediaItems,
+          isDraft: isDraft || undefined,
+          scheduledFor: (!isDraft && schedule) ? new Date(schedule).toISOString() : undefined,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        });
+        parts.push(...(r.platforms || []));
+      }
+      // One call per account. Instagram authorises exactly one account per
+      // token, so there is no batch to make.
+      for (const a of metaSel) {
+        const res = await fetch("/api/instagram", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+          body: JSON.stringify({
+            mode: "publish", orgId, igUserId: a.igUserId,
+            kind: "IMAGE", caption: text.trim() || undefined, media: metaMedia,
+          }),
+        });
+        const j = await res.json().catch(() => null);
+        parts.push({
+          platform: "instagram",
+          status: res.ok ? "published" : "failed",
+          url: j?.url || null,
+          error: res.ok ? null : (j?.error || "Instagram"),
+        });
+      }
+
+      const failedAll = parts.length > 0 && parts.every(p => p.status === "failed");
+      const r = { status: failedAll ? "failed" : (isDraft ? "draft" : (schedule ? "scheduled" : "published")), platforms: parts };
       setResult(r);
       if (r.status !== "failed" && !isDraft) { setText(""); clearVisual(); setSchedule(""); setSelectedIds([]); }
     } catch (e) { setError(e); }
