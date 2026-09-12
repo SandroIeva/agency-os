@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "check:unbound": "node scripts/check-unbound.cjs src/App.jsx src/DesktopView.jsx src/PublicBrandLanding.jsx src/main.jsx src/BillingSettings.jsx src/AdminView.jsx",
     "check:writes": "node scripts/check-unsent-writes.cjs src/App.jsx src/DesktopView.jsx src/PublicBrandLanding.jsx src/main.jsx api/*.js server/*.js",
-    "check": "npm run check:unbound && npm run check:writes"
+    "check": "npm run check:unbound && npm run check:writes && npm run check:tdz",
+    "check:tdz": "node scripts/check-tdz-deps.cjs src/App.jsx src/DesktopView.jsx src/PublicBrandLanding.jsx src/main.jsx src/BillingSettings.jsx src/AdminView.jsx"
   },
   "dependencies": {
     "@blocknote/core": "^0.51.4",

@@ -31158,7 +31158,11 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     const ro = new ResizeObserver(() => setDraftW(el.offsetWidth));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [stepIdx, canPublish, de, busy]);
+    // `canPublish` is NOT in here on purpose: it is declared far below this
+    // effect, and naming it would read a const before its line runs. That is
+    // the `de is not defined` family, and it crashed the step on load.
+    // `accounts` is the half of it that changes.
+  }, [stepIdx, accounts, de, busy]);
 
   // A slide removed from the end must not leave the viewer pointing past it.
   useEffect(() => { setSlideIdx(i => Math.min(i, Math.max(0, slides.length - 1))); }, [slides.length]);
