@@ -31235,6 +31235,19 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                               <svg width={tpGlyphSize(uiKey, 13)} height={tpGlyphSize(uiKey, 13)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
                             </div>
                             <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500 }}>{a.username || a.displayName}</span>
+                            {/* Two Instagram accounts with the same handle are
+                                the same account reached two different ways, and
+                                without this nobody can tell which chip is which.
+                                Colour comes from `currentColor`, so it reads on
+                                the dark selected pill and the light idle one
+                                without either being written down twice. */}
+                            {a.provider === "meta" && (
+                              <span style={{ fontSize: 9.5, fontFamily: FONT, fontWeight: 600, letterSpacing: 0.6,
+                                textTransform: "uppercase", padding: "2px 6px", borderRadius: 5, flexShrink: 0,
+                                border: "1px solid currentColor", opacity: 0.62 }}>
+                                {de ? "Direkt" : "Direct"}
+                              </span>
+                            )}
                           </motion.div>
                         );
                       })}
