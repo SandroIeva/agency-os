@@ -31015,22 +31015,44 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       .then(({ data }) => setBoards(data || []));
   }, [boardsOpen, orgId]); // eslint-disable-line
 
-  // One field takes both. A video IS the decision to post a reel, so there is
-  // no second control asking which kind of post this is: the file answers it.
+  // One field takes both, and as many pictures as you like. A video IS the
+  // decision to post a reel, so there is no second control asking which kind of
+  // post this is: the files answer it.
+  //
+  // Several pictures at once because a carousel is a normal thing to want from
+  // the start. Picking them one after another was possible before, through the
+  // plus, but it made the first upload look like a rule that there is only ever
+  // one picture.
   const onPickImage = (e) => {
-    const f = e.target.files?.[0];
-    if (f && f.type.startsWith("video/")) {
-      clearVisual();
-      setReel(r => { if (r) URL.revokeObjectURL(r.url); return { file: f, url: URL.createObjectURL(f) }; });
-    } else if (f && f.type.startsWith("image/")) {
-      dropReel();
-      imageFileRef.current = f;
-      const url = URL.createObjectURL(f);
-      const img = new Image();
-      img.onload = () => setVisual({ url, w: img.naturalWidth, h: img.naturalHeight });
-      img.src = url;
-    }
+    const picked = [...(e.target.files || [])];
     e.target.value = "";
+    if (!picked.length) return;
+
+    // A reel is one video. If a video is in the selection it decides the whole
+    // thing, and the pictures beside it have nowhere to go.
+    const video = picked.find(f => f.type.startsWith("video/"));
+    if (video) {
+      clearVisual();
+      setReel(r => { if (r) URL.revokeObjectURL(r.url); return { file: video, url: URL.createObjectURL(video) }; });
+      return;
+    }
+
+    const images = picked.filter(f => f.type.startsWith("image/")).slice(0, 10);
+    if (!images.length) return;
+    dropReel();
+    const [first, ...rest] = images;
+    imageFileRef.current = first;
+    const url = URL.createObjectURL(first);
+    const img = new Image();
+    img.onload = () => setVisual({ url, w: img.naturalWidth, h: img.naturalHeight });
+    img.src = url;
+    // The first one is the editor's; the others are slides two and up. Replaced
+    // rather than appended, because this is the upload that starts the post.
+    setExtras(list => {
+      list.forEach(x => URL.revokeObjectURL(x.url));
+      return rest.map(f => ({ id: crypto.randomUUID(), file: f, url: URL.createObjectURL(f) }));
+    });
+    setSlideIdx(0);
   };
   // A picture chosen from Assets arrives as a url, and everything downstream
   // wants a File: the canvas export reads one, and the upload to Zernio needs
@@ -31541,8 +31563,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         <div onClick={() => setConnectOpen(false)}
                           style={{ position: "fixed", inset: 0, zIndex: 4 }} />
                         <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, zIndex: 5,
-                          minWidth: 260, borderRadius: 16, background: theme.cardBg,
-                          boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 8 }}>
+                          minWidth: 260, borderRadius: 16, overflow: "hidden", padding: 8,
+                          background: darkMode ? "#1c1c24" : "#ffffff",
+                          boxShadow: "0 18px 50px rgba(0,0,0,0.22)" }}>
                           {unconnectedHere.map(k => {
                             const m = TOUCHPOINT_PLATFORMS.find(x => x.key === k) || { color: "#15151c", label: k };
                             return (
@@ -31615,7 +31638,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     height that is left and the slides are paged through, so
                     every one of them is seen at the size it will be posted. */}
                 {stepIdx === S_VISUAL && (<>
-                  <input ref={fileRef} type="file" accept={hasDirectIg ? "image/*,video/*" : "image/*"} onChange={onPickImage} style={{ display: "none" }} />
+                  {/* Several at once only where several can be posted. Without
+                      the direct connection there is nowhere for slide two to
+                      go, and offering it would be a promise we cannot keep. */}
+                  <input ref={fileRef} type="file" multiple={hasDirectIg}
+                    accept={hasDirectIg ? "image/*,video/*" : "image/*"}
+                    onChange={onPickImage} style={{ display: "none" }} />
                   <input ref={extraRef} type="file" accept="image/*" multiple onChange={onPickExtras} style={{ display: "none" }} />
 
                   {!visual && !reel ? (
@@ -31623,6 +31651,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, width: "100%" }}>
                         {[
                           { key: "upload", label: de ? "Hochladen" : "Upload",
+                            // Named, because a file dialog does not announce
+                            // that it takes more than one.
+                            note: hasDirectIg ? (de ? "Mehrere Bilder für ein Karussell" : "Several pictures for a carousel") : null,
                             // The formats say what is possible, so no fourth
                             // card has to announce that a video is allowed. A
                             // video IS the reel, and the file says so.
@@ -31645,6 +31676,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                             </div>
                             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{o.label}</div>
                             <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>{o.sub}</div>
+                            {o.note && (
+                              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, marginTop: 3 }}>{o.note}</div>
+                            )}
                           </motion.div>
                         ))}
                       </div>
@@ -31653,7 +31687,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     // The viewer claims what is left of the box. Everything it
                     // needs sits ON the picture, so nothing below it can push
                     // the picture smaller.
-                    <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
                       {/* The picture's own area, and the one thing measured.
                           The count sits under it as a caption, outside the
                           measurement, so it cannot be double counted. */}
@@ -31713,6 +31747,18 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
                       </div>
                       </div>
+                      {/* The count, and its line is reserved whether or not
+                          there is anything to count. Showing it only from the
+                          second slide made the first picture shrink the moment
+                          one was added, which is not what adding a slide means.
+                          Reserved, the picture is the same size throughout. */}
+                      {!reel && (
+                        <div style={{ paddingTop: 10, fontSize: 12, fontFamily: FONT, fontWeight: 600,
+                          color: theme.textDim, lineHeight: 1, flexShrink: 0,
+                          visibility: slides.length > 1 ? "visible" : "hidden" }}>
+                          {slideIdx + 1} / {Math.max(2, slides.length)}
+                        </div>
+                      )}
                     </div>
                   )}
                 </>)}
@@ -31830,15 +31876,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
                 </motion.button>
               )}
-              {/* Which slide, beside the plus. Under the picture it was taking
-                  the picture's height away: adding a second slide made the
-                  first one smaller, which is not what adding a slide means.
-                  Here it costs nothing, because the footer is already there. */}
-              {stepIdx === S_VISUAL && !reel && slides.length > 1 && (
-                <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>
-                  {slideIdx + 1} / {slides.length}
-                </span>
-              )}
               {canPublish && (
                 <motion.button ref={draftRef} whileTap={{ scale: 0.97 }} onClick={() => submit("draft")} disabled={Boolean(busy)}
                   style={{ ...footBtn, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text,
@@ -31852,9 +31889,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   fixed: this panel's root is an animating motion.div, and a
                   transformed ancestor makes `fixed` mean "inside that box". */}
               {canPublish && (
-                <div style={{ position: "relative" }}>
+                <div style={{ position: "relative", marginRight: 12 }}>
                   <span onClick={() => setWhenOpen(o => !o)}
-                    style={{ padding: "0 6px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
+                    style={{ padding: "0 10px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
                       color: schedule ? theme.text : theme.textDim, cursor: "pointer", whiteSpace: "nowrap" }}>
                     {schedule
                       ? new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(schedule))
@@ -31863,9 +31900,14 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   {whenOpen && (<>
                     <div onClick={() => setWhenOpen(false)}
                       style={{ position: "fixed", inset: 0, zIndex: 5 }} />
+                    {/* An opaque ground, not theme.cardBg: that is translucent
+                        by design and everything under this panel showed
+                        through it. */}
                     <div style={{ position: "absolute", bottom: "calc(100% + 12px)", right: 0, zIndex: 6,
-                      minWidth: 264, padding: 16, borderRadius: 16, background: theme.cardBg,
-                      boxShadow: "0 16px 44px rgba(0,0,0,0.18)" }}>
+                      minWidth: 264, padding: 16, borderRadius: 16,
+                      background: darkMode ? "#1c1c24" : "#ffffff",
+                      border: `1px solid ${theme.borderFaint}`,
+                      boxShadow: "0 18px 50px rgba(0,0,0,0.22)" }}>
                       <div style={{ ...label, marginBottom: 10 }}>{de ? "Zeitpunkt" : "When"}</div>
                       <input type="datetime-local" value={schedule || defaultWhen()} onChange={e => setSchedule(e.target.value)}
                         style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 12,
