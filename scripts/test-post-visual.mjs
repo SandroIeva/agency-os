@@ -34,7 +34,8 @@ const node = ast.program.body.find(n => n.type === 'FunctionDeclaration' && n.id
 // Exercise the actual component and layout with local images and no account/API.
 let component = source.slice(node.start, node.end)
   .replace('const [visual, setVisual] = useState(null)', 'const [visual, setVisual] = useState(testEmpty ? null : testSlides[0])')
-  .replace('const [extras, setExtras] = useState([])', 'const [extras, setExtras] = useState(testEmpty ? [] : testSlides.slice(1).map((s,i) => ({...s,id:String(i)})))');
+  .replace('const [extras, setExtras] = useState([])', 'const [extras, setExtras] = useState(testEmpty ? [] : testSlides.slice(1).map((s,i) => ({...s,id:String(i)})))')
+  .replace('const canPublish = stepIdx === LAST && (accounts || []).length > 0', 'const canPublish = stepIdx === LAST && ((accounts || []).length > 0 || new URLSearchParams(location.search).has("preview"))');
 const code = `
 import React, {useState,useRef,useEffect,useLayoutEffect,useCallback} from 'react';
 import {createRoot} from 'react-dom/client';
@@ -122,6 +123,36 @@ try {
  await page.locator('input[type=file]').first().setInputFiles(Array.from({length:11},(_,i)=>({...uploads[0],name:'limit-'+i+'.svg'})));
  await page.getByText('Ein Karussell kann bis zu 10 Bilder enthalten.',{exact:true}).waitFor();
  assert.equal(await page.locator('img').count(),0,'over-limit selection must not partially replace the visual');
+ // Channel preview: hover-only arrows stay centered through the first press.
+ await page.goto('http://127.0.0.1:'+server.address().port+'/?preview=1&sizes=800x1000,1600x900');
+ await page.waitForTimeout(550);
+ await page.getByText('Kanäle',{exact:true}).click();
+ const frame=page.locator('.post-preview-media');
+ const next=frame.getByRole('button',{name:'Nächstes Bild'});
+ const arrow=frame.locator('.post-preview-arrow').last();
+ await page.mouse.move(0,0); await page.waitForTimeout(220);
+ assert.equal(await arrow.evaluate(e=>getComputedStyle(e).opacity),'0');
+ await frame.hover(); await page.waitForTimeout(220);
+ assert.equal(await arrow.evaluate(e=>getComputedStyle(e).opacity),'1');
+ const before=await next.boundingBox();
+ await next.hover(); await page.mouse.down(); await page.waitForTimeout(150);
+ const pressed=await next.boundingBox();
+ assert(Math.abs(before.y+before.height/2-pressed.y-pressed.height/2)<1,'first press must preserve arrow center');
+ await page.mouse.up(); await page.waitForTimeout(250);
+ const after=await next.boundingBox();
+ assert(Math.abs(before.y-after.y)<1,'arrow must not jump after first click');
+ for(let i=0;i<2;i++) {
+  await frame.locator('img').evaluate(img=>img.decode());
+  const inset=await frame.locator('img').evaluate(img=>{const r=img.getBoundingClientRect(),f=img.parentElement.getBoundingClientRect();return [r.left-f.left,f.right-r.right,r.top-f.top,f.bottom-r.bottom]});
+  assert(inset.every(n=>n>=23),'preview image must have at least 24px breathing room: '+inset);
+  await next.click(); await page.waitForTimeout(200);
+ }
+ await page.mouse.move(0,0); await page.waitForTimeout(220);
+ assert.equal(await arrow.evaluate(e=>getComputedStyle(e).opacity),'0','arrows fade out after clicking and leaving the frame');
+ await page.keyboard.press("Tab"); await next.focus(); await page.waitForTimeout(220);
+ assert.equal(await arrow.evaluate(e=>getComputedStyle(e).opacity),'1','keyboard users can reveal arrows');
+ await page.screenshot({path:join(dir,'channel-preview.png')});
+ console.log('Channel preview passed: first-click stability, hover fade, keyboard focus, portrait and landscape insets.');
  assert.deepEqual(errors,[]);
  console.log('Visual layout passed: portrait, landscape, panorama, small images, mixed carousel, three window sizes, resize, step remount, initial multi-upload, multi-asset selection and all nested artboards.');
  console.log('Screenshot: '+join(dir,'landscape.png'));

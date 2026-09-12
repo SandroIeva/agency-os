@@ -31498,23 +31498,34 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         /* Mini composited preview — same relative overlay coordinates as the
            editor; cqw units (container query width) keep the text-to-image scale
            identical at this smaller size. */
-        <div style={{ position: "relative", flex: 1, minHeight: 0, width: "100%", containerType: "inline-size",
+        <div className="post-preview-media" style={{ position: "relative", flex: 1, minHeight: 0, width: "100%", containerType: "inline-size",
           display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(0,0,0,0.18)" : "rgba(0,0,0,0.04)" }}>
+          <style>{`
+            .post-preview-arrow { opacity: 0; pointer-events: none; transition: opacity 180ms ease; }
+            .post-preview-media:hover .post-preview-arrow,
+            .post-preview-media:has(button:focus-visible) .post-preview-arrow { opacity: 1; pointer-events: auto; }
+            @media (hover: none) { .post-preview-arrow { opacity: 1; pointer-events: auto; } }
+            @media (prefers-reduced-motion: reduce) { .post-preview-arrow { transition: none; } }
+          `}</style>
           <img src={slides[slideIdx]?.url || visual.url} alt=""
-            style={{ display: "block", maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto" }} />
+            style={{ display: "block", maxWidth: "calc(100% - 48px)", maxHeight: "calc(100% - 48px)", width: "auto", height: "auto", objectFit: "contain" }} />
           {slideIdx === 0 && overlays.map(o => (
             <div key={o.id} style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500, fontSize: `${o.size * 100}cqw`, lineHeight: 1.22, whiteSpace: "pre", pointerEvents: "none" }}>{o.text}</div>
           ))}
           {/* The same paging as the Visual step. A carousel previewed as its
               first slide is a preview of a third of the post. */}
           {slides.length > 1 && ([["prev", -1, "M15 18l-6-6 6-6", "left"], ["next", 1, "M9 6l6 6-6 6", "right"]]).map(([k, step, d, side]) => (
-            <motion.div key={k} whileTap={{ scale: 0.92 }}
-              onClick={() => setSlideIdx(i => (i + step + slides.length) % slides.length)}
-              style={{ position: "absolute", top: "50%", transform: "translateY(-50%)", [side]: 8,
-                width: 30, height: 30, borderRadius: 999, background: "rgba(21,21,28,0.66)", color: "#fff",
-                display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
-            </motion.div>
+            <div key={k} className="post-preview-arrow"
+              style={{ position: "absolute", top: "50%", transform: "translateY(-50%)", [side]: 8 }}>
+              <motion.button type="button" whileTap={{ scale: 0.92 }}
+                aria-label={step < 0 ? (de ? "Vorheriges Bild" : "Previous image") : (de ? "Nächstes Bild" : "Next image")}
+                onClick={() => setSlideIdx(i => (i + step + slides.length) % slides.length)}
+                style={{ width: 30, height: 30, padding: 0, border: "none", borderRadius: 999,
+                  background: "rgba(21,21,28,0.66)", color: "#fff", display: "flex", alignItems: "center",
+                  justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
+              </motion.button>
+            </div>
           ))}
           {slides.length > 1 && (
             <div style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)",
