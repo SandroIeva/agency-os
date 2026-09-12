@@ -30726,6 +30726,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // the middle of writing a post. Same offer, same chip, same OAuth, on the
   // screen you are already on.
   const [connectBusy, setConnectBusy] = useState(null);   // uiKey mid-OAuth
+  const [connectOpen, setConnectOpen] = useState(false);  // the plus menu on step 03
   // Advisory, like the one in Analytics: the real gate is api/zernio.js,
   // because connecting bills us upstream. This only shows the reason before the
   // click rather than after it.
@@ -30927,6 +30928,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   }, [visual]);
 
   const selected = (accounts || []).filter(a => selectedIds.includes(a.id));
+  // What there is still to connect. Read once here rather than filtered in two
+  // places that would drift: the plus hides itself when the list is empty.
+  const unconnectedHere = ZERNIO_UI_PLATFORMS.filter(k => !(accounts || []).some(a => uiKeyFor(a.platform) === k));
   const toggleAccount = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const charLimit = selected.length ? Math.min(...selected.map(a => POST_CHAR_LIMITS[uiKeyFor(a.platform)] || 3000)) : 3000;
   const overLimit = text.length > charLimit;
@@ -31432,8 +31436,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
                 {/* ── 03 Kanäle, and publishing ── */}
                 {stepIdx === S_CHANNELS && (<>
-                  {(accounts || []).length > 0 && stepHead(de ? "Kanäle" : "Channels",
-                    de ? "Wohin soll der Post? Rechts siehst du, wie er ankommt." : "Where should this post go? On the right you see how it arrives.")}
                   {accounts == null ? (
                     <div style={{ color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{de ? "Lädt…" : "Loading…"}</div>
                   ) : accounts.length === 0 ? (
@@ -31483,24 +31485,64 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       )}
                     </div>
                   ) : (<>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {/* Only what is connected. The networks you do NOT have
+                        used to stand in the same row as the ones you do, so the
+                        list was mostly things that were not choices. They moved
+                        behind the plus, which is where adding belongs. */}
+                    <div style={{ display: "flex", alignItems: "center", marginBottom: 12, position: "relative" }}>
+                      <div style={{ ...label, marginBottom: 0 }}>{de ? "Kanäle" : "Channels"}</div>
+                      {!socialBlocked && unconnectedHere.length > 0 && (
+                        <motion.div whileTap={{ scale: 0.92 }} onClick={() => setConnectOpen(o => !o)}
+                          title={de ? "Kanal verbinden" : "Connect a channel"}
+                          style={{ marginLeft: "auto", width: 26, height: 26, borderRadius: 999,
+                            border: `1px solid ${theme.border}`, color: theme.text, display: "flex",
+                            alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                        </motion.div>
+                      )}
+                      {connectOpen && (
+                        <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 5,
+                          minWidth: 210, borderRadius: 14, background: theme.cardBg,
+                          border: `1px solid ${theme.border}`, boxShadow: "0 12px 32px rgba(0,0,0,0.14)",
+                          overflow: "hidden", padding: 5 }}>
+                          {unconnectedHere.map(k => {
+                            const m = TOUCHPOINT_PLATFORMS.find(x => x.key === k) || { color: "#15151c", label: k };
+                            return (
+                              <div key={k} onClick={() => { setConnectOpen(false); connectChannel(k); }}
+                                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
+                                  borderRadius: 10, cursor: connectBusy ? "wait" : "pointer",
+                                  opacity: connectBusy === k ? 0.5 : 1 }}>
+                                <div style={{ width: 22, height: 22, borderRadius: 7, background: m.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                  <svg width={tpGlyphSize(k, 13)} height={tpGlyphSize(k, 13)} viewBox="0 0 24 24">{touchpointGlyph(k)}</svg>
+                                </div>
+                                <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text }}>{m.label}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {/* One under the other and all the same width. Wrapped pills
+                        put two channels on one line and a third on the next,
+                        which reads as a group that is not one. */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {accounts.map(a => {
                         const uiKey = uiKeyFor(a.platform);
                         const p = TOUCHPOINT_PLATFORMS.find(x => x.key === uiKey) || { color: "#15151c", label: a.platform };
                         const on = selectedIds.includes(a.id);
                         return (
-                          <motion.div key={a.id} whileTap={{ scale: 0.96 }} onClick={() => toggleAccount(a.id)}
-                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px 7px 8px", borderRadius: 999, cursor: "pointer",
+                          <motion.div key={a.id} whileTap={{ scale: 0.99 }} onClick={() => toggleAccount(a.id)}
+                            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 14px 9px 9px", borderRadius: 999, cursor: "pointer",
                               background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
                               border: `1px solid ${on ? "transparent" : theme.borderFaint}`,
                               color: on ? (darkMode ? "#15151c" : "#fff") : theme.textDim, transition: "background 0.15s ease, color 0.15s ease" }}>
-                            <div style={{ width: 22, height: 22, borderRadius: 7, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                              <svg width={tpGlyphSize(uiKey, 13)} height={tpGlyphSize(uiKey, 13)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
+                            <div style={{ width: 24, height: 24, borderRadius: 8, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                              <svg width={tpGlyphSize(uiKey, 14)} height={tpGlyphSize(uiKey, 14)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
                             </div>
-                            <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500 }}>{a.username || a.displayName}</span>
+                            <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.username || a.displayName}</span>
                             {/* Two Instagram accounts with the same handle are
                                 the same account reached two different ways, and
-                                without this nobody can tell which chip is which.
+                                without this nobody can tell which row is which.
                                 Colour comes from `currentColor`, so it reads on
                                 the dark selected pill and the light idle one
                                 without either being written down twice. */}
@@ -31511,15 +31553,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                                 {de ? "Direkt" : "Direct"}
                               </span>
                             )}
+                            <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: FONT, opacity: 0.7, flexShrink: 0 }}>
+                              {p.label}
+                            </span>
                           </motion.div>
                         );
                       })}
-                      {!socialBlocked && ZERNIO_UI_PLATFORMS
-                        .filter(k => !accounts.some(a => uiKeyFor(a.platform) === k))
-                        .map(k => (
-                          <ChannelConnectChip key={k} uiKey={k} theme={theme} de={de}
-                            busy={connectBusy === k} onConnect={connectChannel} />
-                        ))}
                     </div>
                   </>)}
                 </>)}
