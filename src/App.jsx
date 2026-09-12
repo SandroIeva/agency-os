@@ -31735,7 +31735,13 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         // the text overlays, which are placed as fractions of
                         // this box, land where the export puts them.
                         <div ref={stageRef} onPointerDown={() => setSelOverlay(null)}
-                          style={{ position: "relative", maxWidth: "100%", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, userSelect: "none", touchAction: "none", lineHeight: 0 }}>
+                          // No `overflow: hidden` here. It was cutting the
+                          // picture off instead of letting it be small: this box
+                          // hugs its content, and anything the content did that
+                          // the box had not accounted for was simply clipped
+                          // away. The rounding and the outline moved onto the
+                          // picture itself, where nothing can crop it.
+                          style={{ position: "relative", maxWidth: "100%", userSelect: "none", touchAction: "none", lineHeight: 0 }}>
                           <img src={slides[slideIdx]?.url || visual.url} alt="" draggable={false}
                             // Measured again once the picture is in the layout.
                             // Insurance: the observer watches a box that changes
@@ -31750,7 +31756,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                             // clipped away the rest.
                             onLoad={() => { const el = viewRef.current; if (el) setViewBox({ w: el.clientWidth, h: el.clientHeight }); }}
                             style={{ display: "block", width: "auto", height: "auto",
-                              maxWidth: mediaMaxW, maxHeight: mediaMaxH }} />
+                              maxWidth: mediaMaxW, maxHeight: mediaMaxH,
+                              borderRadius: 16, border: `1px solid ${theme.borderFaint}` }} />
                           {slideIdx === 0 && overlays.map(o => (
                             <div key={o.id} onPointerDown={(e) => onOverlayDown(e, o)}
                               style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500,
