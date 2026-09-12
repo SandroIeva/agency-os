@@ -31433,11 +31433,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         {"  "}
         {text || (de ? "Dein Text erscheint hier …" : "Your text will appear here …")}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 20, padding: "10px 16px", borderTop: `1px solid ${theme.borderFaint}`, color: theme.textFaint, flexShrink: 0 }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontFamily: FONT }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8l8.8 8.9 8.8-8.9a5.5 5.5 0 000-7.8z"/></svg>0</span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontFamily: FONT }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 11.5a8.4 8.4 0 01-9 8.4 8.6 8.6 0 01-3.9-.9L3 21l2-4.9a8.4 8.4 0 1116-4.6z"/></svg>0</span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontFamily: FONT }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>0</span>
-      </div>
     </div>
   );
 
@@ -31719,13 +31714,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         </motion.div>
                       ))}
 
-                      {/* Bounded in BOTH directions. With only a height cap a
-                          landscape picture ran the full width of the column and
-                          became a banner. 760 is about as wide as a social post
-                          is ever read; wider than that it stops looking like
-                          one. The arrows keep their gutters on top of that. */}
                       <div style={{ position: "relative", lineHeight: 0,
-                        maxWidth: !reel && slides.length > 1 ? "min(760px, calc(100% - 116px))" : "min(760px, 100%)" }}>
+                        maxWidth: !reel && slides.length > 1 ? "calc(100% - 116px)" : "100%" }}>
                       {reel ? (
                         <video src={reel.url} controls playsInline
                           style={{ maxWidth: "min(760px, 100%)", maxHeight: mediaMaxH || "100%", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, display: "block" }} />
@@ -31741,7 +31731,14 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                             // changes size, and the first measurement is taken
                             // before there is anything in it.
                             onLoad={() => setViewH(viewRef.current?.clientHeight || 0)}
-                            style={{ display: "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: mediaMaxH }} />
+                            // Bounded in BOTH directions, and the width cap sits
+                            // HERE rather than on the stage. On the stage it cut
+                            // the picture off: a box that shrinks to fit its
+                            // content gives `max-width: 100%` inside it nothing
+                            // to resolve against, so the picture stayed full
+                            // width and the box clipped the rest away.
+                            style={{ display: "block", width: "auto", height: "auto",
+                              maxWidth: "min(760px, 100%)", maxHeight: mediaMaxH }} />
                           {slideIdx === 0 && overlays.map(o => (
                             <div key={o.id} onPointerDown={(e) => onOverlayDown(e, o)}
                               style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500,
