@@ -31418,7 +31418,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 box so the caption field can grow into it. With alignItems
                 start the column stayed as tall as its content and the box
                 scrolled around a field that could have been taller. */}
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "grid", gap: 30, alignItems: "stretch",
+            {/* Scrollable, but with no scrollbar drawn. Setting overflow to
+                hidden instead would make anything that does not fit on a short
+                window unreachable, which is worse than a bar nobody wanted. */}
+            <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarWidth: "none", display: "grid", gap: 30, alignItems: "stretch",
               gridTemplateColumns: canPublish ? "minmax(0, 1fr) minmax(0, 0.7fr)" : "minmax(0, 1fr)" }}>
               <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
 
@@ -31516,7 +31519,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   </>)}
                 </>)}
 
-                {/* ── 02 Visual — mini creator: image + draggable text overlays ── */}
                 {/* ── 02 Visual — one picture at a time, as large as the box
                     allows. It used to be a fixed-width stage with a strip of
                     thumbnails under it, which meant scrolling inside a step
@@ -31600,18 +31602,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
                         </motion.div>
                       ))}
-
-                      {/* Add a slide, bottom left. Hidden once a video is
-                          chosen: a reel is one video and never a carousel. */}
-                      {!reel && hasDirectIg && slides.length < 10 && (
-                        <motion.div whileTap={{ scale: 0.92 }} onClick={() => extraRef.current?.click()}
-                          title={de ? "Weiteres Bild" : "Another picture"}
-                          style={{ position: "absolute", left: 10, bottom: 10, width: 38, height: 38, borderRadius: 999,
-                            background: "rgba(21,21,28,0.72)", color: "#fff", display: "flex", alignItems: "center",
-                            justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" }}>
-                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                        </motion.div>
-                      )}
 
                       {/* Which slide, out of how many. */}
                       {!reel && slides.length > 1 && (
@@ -31757,6 +31747,18 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 as the content did. Left is the way out of the flow, right is
                 the way on, and both are the same height. */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, paddingTop: 22 }}>
+              {/* Another slide. It belongs on the ground and not on the
+                  picture: on the picture it reads as something you are doing TO
+                  that picture. Here it sits opposite the button that moves you
+                  on, which is the other thing you can do from this step. */}
+              {stepIdx === S_VISUAL && visual && !reel && hasDirectIg && slides.length < 10 && (
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => extraRef.current?.click()}
+                  title={de ? "Weiteres Bild" : "Another picture"}
+                  style={{ ...footBtn, width: 42, padding: 0, border: `1px solid ${theme.border}`,
+                    background: "transparent", color: theme.text, cursor: "pointer" }}>
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                </motion.button>
+              )}
               {canPublish && (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("draft")} disabled={Boolean(busy)}
                   style={{ ...footBtn, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text,
