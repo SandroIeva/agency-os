@@ -58277,12 +58277,13 @@ export default function CircularMenu() {
                     display: "flex", alignItems: "center", gap: 14,
                     padding: "16px 20px", borderTop: `1px solid ${theme.borderFaint}`,
                   }}>
-                    {/* Same mark as the connect dialog, so the same white
-                        ground. Two places drawing one logo differently is how
-                        it stops reading as one thing. */}
+                    {/* The same ground every other row in this list uses.
+                        Pinterest had a white one of its own with a border, left
+                        over from the connect dialog, and one row that does not
+                        match is the one the eye stops at. */}
                     <div style={{
                       width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-                      background: "#fff", border: `1px solid ${theme.borderFaint}`,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="#E60023" aria-hidden="true">
@@ -58394,11 +58395,10 @@ export default function CircularMenu() {
                       background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
-                      {/* The at-sign Threads uses, drawn the way every other
-                          glyph in this list is: one stroke weight, round caps. */}
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.text}
-                        strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M16.4 11.6c-.1-.05-.2-.1-.3-.14-.18-3.3-1.98-5.18-5-5.2h-.04c-1.8 0-3.3.77-4.22 2.17l1.66 1.14c.69-1.04 1.77-1.27 2.56-1.27h.03c.98.01 1.72.3 2.2.85.35.4.58.96.7 1.66a12.6 12.6 0 0 0-2.82-.14c-2.84.17-4.67 1.82-4.55 4.13.06 1.17.65 2.18 1.65 2.84.85.56 1.94.83 3.08.77 1.5-.08 2.68-.65 3.5-1.7.63-.79 1.02-1.82 1.2-3.11.72.43 1.25 1 1.55 1.68.5 1.16.53 3.07-1.02 4.62-1.36 1.36-3 1.95-5.48 1.97-2.75-.02-4.83-.9-6.18-2.62C3.9 17.6 3.24 15.35 3.22 12c.02-3.35.68-5.6 1.96-7.23C6.53 3.05 8.61 2.17 11.36 2.15c2.77.02 4.88.9 6.28 2.63.69.85 1.2 1.91 1.55 3.15l1.9-.5c-.42-1.53-1.07-2.85-1.96-3.94C17.35 1.28 14.72.17 11.37.15h-.01C8.02.17 5.42 1.29 3.7 3.48 2.16 5.43 1.37 8.14 1.34 11.99v.02c.03 3.85.82 6.56 2.36 8.51 1.72 2.19 4.32 3.31 7.66 3.33h.01c2.98-.02 5.08-.8 6.8-2.53 2.26-2.25 2.19-5.08 1.45-6.81-.54-1.25-1.56-2.26-2.95-2.92z"/>
+                      {/* The real mark, the one in public/threads-logo.svg,
+                          rather than a drawing of it from memory. */}
+                      <svg width="18" height="18" viewBox="0 0 640 640" fill={theme.text} aria-hidden="true">
+                        <path d="M436.8 302C436.2 232.4 398.5 190.5 334.8 190.5C292.3 190.5 256.5 209.7 237.7 240.4L278.9 269.1C289.6 252.3 304.3 238.3 331.3 238.3C361.8 238.3 377.6 255.3 382.1 286.8C367.4 284.5 352.6 283.3 337.5 283.3C255.1 283.3 216.4 320.6 216.4 369.9C216.4 419.2 255.2 449.6 312.3 449.6C375 449.6 412.4 407.4 427.7 355.1C443.6 362.3 454.6 379.1 454.6 404.4C454.6 472 376.6 508.9 310.5 508.9C213 508.9 149.2 444.9 149.2 340.7C149.2 213.1 233.5 131.3 346.8 131.3C422.8 131.3 460.4 164.7 486 209.4L528 179.9C500.2 121.9 438.1 80.4 344.9 80.4C196.4 80.4 95.4 185.8 95.4 338.6C95.4 478.4 194.3 559.5 312.1 559.5C409.5 559.5 507.9 502.7 507.9 405.5C507.9 354.7 478.7 321 436.7 302zM310.4 398.9C288.9 398.9 270 388.7 270 369.9C270 340.3 306.4 331.3 342 331.3C355.5 331.3 368.8 332.2 380.5 334.8C372.1 373.3 347.1 399 310.5 399L310.5 399z"/>
                       </svg>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
