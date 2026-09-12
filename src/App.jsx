@@ -30822,6 +30822,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // it keeps the stage hugging, which is what keeps the text overlays honest.
   const viewRef = useRef(null);
   const [viewH, setViewH] = useState(0);
+  // What is left for the picture once the slide count has had its line under
+  // it. Subtracted rather than left to the layout: the picture is capped by a
+  // number, so the number has to know about everything sharing the column.
+  const mediaMaxH = viewH ? Math.max(80, viewH - (slides.length > 1 ? 32 : 0)) : undefined;
   const [overlays, setOverlays] = useState([]);     // [{ id, text, x, y, size, color, bold }] — x/y/size relative to image
   const [selOverlay, setSelOverlay] = useState(null);
   // Dictation for the caption, the same SpeechRecognition the notes and the
@@ -31562,15 +31566,30 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     // The viewer claims what is left of the box. Everything it
                     // needs sits ON the picture, so nothing below it can push
                     // the picture smaller.
-                    <div ref={viewRef} style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      {/* This box hugs the media, and every control is anchored
-                          to IT rather than to the row. Anchored to the row they
-                          sat against the grey a long way from a portrait
-                          picture, pointing at nothing. */}
+                    <div ref={viewRef} style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {/* Paging sits in the grey, at the very edges, so the two
+                          arrows line up with the plus and the publish button in
+                          the footer below. On the picture they read as part of
+                          the picture, which is the one thing they are not. */}
+                      {!reel && slides.length > 1 && ([["prev", -1, "M15 18l-6-6 6-6", "left"], ["next", 1, "M9 6l6 6-6 6", "right"]]).map(([k, step, d, side]) => (
+                        <motion.div key={k} whileTap={{ scale: 0.92 }}
+                          onClick={() => setSlideIdx(i => (i + step + slides.length) % slides.length)}
+                          style={{ position: "absolute", top: "50%", transform: "translateY(-50%)", [side]: 0,
+                            width: 42, height: 42, borderRadius: 999, border: `1px solid ${theme.border}`,
+                            color: theme.text, display: "flex", alignItems: "center", justifyContent: "center",
+                            cursor: "pointer" }}>
+                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
+                        </motion.div>
+                      ))}
+                      {/* The picture and its count, one under the other. The
+                          count used to lie ON the picture; under it, it is a
+                          caption and needs no dark plate to be readable. */}
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+                        maxWidth: !reel && slides.length > 1 ? "calc(100% - 116px)" : "100%", minHeight: 0 }}>
                       <div style={{ position: "relative", maxWidth: "100%", lineHeight: 0 }}>
                       {reel ? (
                         <video src={reel.url} controls playsInline
-                          style={{ maxWidth: "100%", maxHeight: viewH || "100%", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, display: "block" }} />
+                          style={{ maxWidth: "100%", maxHeight: mediaMaxH || "100%", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, display: "block" }} />
                       ) : (
                         // The stage hugs the picture rather than boxing it, so
                         // the text overlays, which are placed as fractions of
@@ -31578,7 +31597,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         <div ref={stageRef} onPointerDown={() => setSelOverlay(null)}
                           style={{ position: "relative", maxWidth: "100%", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, userSelect: "none", touchAction: "none", lineHeight: 0 }}>
                           <img src={slides[slideIdx]?.url || visual.url} alt="" draggable={false}
-                            style={{ display: "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: viewH || undefined }} />
+                            style={{ display: "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: mediaMaxH }} />
                           {slideIdx === 0 && overlays.map(o => (
                             <div key={o.id} onPointerDown={(e) => onOverlayDown(e, o)}
                               style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500,
@@ -31587,28 +31606,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                               {o.text}
                             </div>
                           ))}
-                        </div>
-                      )}
-
-                      {/* Paging. Only when there is more than one, because two
-                          arrows that do nothing are two arrows to wonder about. */}
-                      {!reel && slides.length > 1 && ([["prev", -1, "M15 18l-6-6 6-6"], ["next", 1, "M9 6l6 6-6 6"]]).map(([k, step, d]) => (
-                        <motion.div key={k} whileTap={{ scale: 0.92 }}
-                          onClick={() => setSlideIdx(i => (i + step + slides.length) % slides.length)}
-                          style={{ position: "absolute", top: "50%", transform: "translateY(-50%)",
-                            [k === "prev" ? "left" : "right"]: 10, width: 38, height: 38, borderRadius: 999,
-                            background: "rgba(21,21,28,0.72)", color: "#fff", display: "flex", alignItems: "center",
-                            justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" }}>
-                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
-                        </motion.div>
-                      ))}
-
-                      {/* Which slide, out of how many. */}
-                      {!reel && slides.length > 1 && (
-                        <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)",
-                          padding: "5px 11px", borderRadius: 999, background: "rgba(21,21,28,0.72)", color: "#fff",
-                          fontSize: 11, fontFamily: FONT, fontWeight: 600, backdropFilter: "blur(6px)" }}>
-                          {slideIdx + 1} / {slides.length}
                         </div>
                       )}
 
@@ -31630,6 +31627,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                             fontWeight: 600, cursor: "pointer", backdropFilter: "blur(6px)" }}>
                           {de ? "Video als Reel" : "Video as a reel"}
                         </span>
+                      )}
+                      </div>
+                      {!reel && slides.length > 1 && (
+                        <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim, lineHeight: 1 }}>
+                          {slideIdx + 1} / {slides.length}
+                        </div>
                       )}
                       </div>
                     </div>
