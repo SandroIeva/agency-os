@@ -30878,6 +30878,32 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   //
   // The popup is opened SYNCHRONOUSLY, before the await. Opened afterwards it
   // is no longer attributable to the click and browsers block it.
+  // Trennen, egal wer den Account hält. Ohne das gibt es im Composer keinen Weg
+  // zurück: eine Verbindung, die man nicht mehr braucht, bleibt für immer in
+  // der Liste stehen.
+  const disconnectChannel = async (a) => {
+    if (connectBusy) return;
+    setConnectBusy(a.id); setError(null);
+    try {
+      if (a.provider === "meta" || a.provider === "threads") {
+        const what = a.provider === "meta" ? "instagram" : "threads";
+        await fetch(`/api/${what}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+          body: JSON.stringify({
+            mode: "disconnect", orgId,
+            ...(a.provider === "meta" ? { igUserId: a.igUserId } : { threadsUserId: a.threadsUserId }),
+          }),
+        });
+      } else {
+        await zernioRequest(session, { mode: "disconnect", orgId, accountId: a.id });
+      }
+      setSelectedIds(ids => ids.filter(id => id !== a.id));
+      await loadAccounts();
+    } catch (e) { setError(e); }
+    setConnectBusy(null);
+  };
+
   const connectChannel = async (uiKey) => {
     if (connectBusy) return;
     setConnectBusy(uiKey); setError(null);
@@ -31802,9 +31828,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         behind the plus, which is where adding belongs. */}
                     <div style={{ display: "flex", alignItems: "center", marginBottom: 12, position: "relative" }}>
                       <div style={{ ...label, marginBottom: 0 }}>{de ? "Kanäle" : "Channels"}</div>
-                      {!socialBlocked && unconnectedHere.length > 0 && (
+                      {!socialBlocked && (unconnectedHere.length > 0 || accounts.length > 0) && (
                         <motion.div whileTap={{ scale: 0.92 }} onClick={() => setConnectOpen(o => !o)}
-                          title={de ? "Kanal verbinden" : "Connect a channel"}
+                          title={de ? "Kanäle verwalten" : "Manage channels"}
                           style={{ marginLeft: "auto", width: 26, height: 26, borderRadius: 999,
                             border: `1px solid ${theme.border}`, color: theme.text, display: "flex",
                             alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
@@ -31817,9 +31843,49 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         <div onClick={() => setConnectOpen(false)}
                           style={{ position: "fixed", inset: 0, zIndex: 4 }} />
                         <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, zIndex: 5,
-                          minWidth: 260, borderRadius: 16, overflow: "hidden", padding: 8,
+                          minWidth: 280, borderRadius: 16, overflow: "hidden", padding: 8,
                           background: darkMode ? "#1c1c24" : "#ffffff",
                           boxShadow: "0 18px 50px rgba(0,0,0,0.22)" }}>
+                          {/* Trennen gehört hierher und nicht in die Liste
+                              darunter: die Liste ist zum Auswählen, und ein
+                              Kreuz neben einem Kanal, den man gerade anklickt,
+                              ist ein Kreuz, das irgendwann versehentlich
+                              getroffen wird. */}
+                          {accounts.length > 0 && (<>
+                            <div style={{ ...label, margin: "4px 10px 6px" }}>{de ? "Verbunden" : "Connected"}</div>
+                            {accounts.map(a => {
+                              const k = uiKeyFor(a.platform);
+                              const m = TOUCHPOINT_PLATFORMS.find(x => x.key === k) || { color: "#15151c", label: a.platform };
+                              return (
+                                <div key={a.id}
+                                  style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px",
+                                    borderRadius: 12, opacity: connectBusy === a.id ? 0.5 : 1 }}>
+                                  <div style={{ width: 22, height: 22, borderRadius: 7, background: m.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                    <svg width={tpGlyphSize(k, 13)} height={tpGlyphSize(k, 13)} viewBox="0 0 24 24">{touchpointGlyph(k)}</svg>
+                                  </div>
+                                  <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    {a.username || a.displayName}
+                                  </span>
+                                  {(a.provider === "meta" || a.provider === "threads") && (
+                                    <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 600, letterSpacing: 0.6,
+                                      textTransform: "uppercase", padding: "1px 5px", borderRadius: 5, flexShrink: 0,
+                                      color: theme.textDim, border: `1px solid ${theme.borderFaint}` }}>Meta</span>
+                                  )}
+                                  <span onClick={() => disconnectChannel(a)}
+                                    style={{ marginLeft: "auto", paddingLeft: 12, fontSize: 11, fontFamily: FONT,
+                                      fontWeight: 600, color: "#E86767", cursor: connectBusy ? "wait" : "pointer", flexShrink: 0 }}>
+                                    {connectBusy === a.id ? "…" : (de ? "Trennen" : "Disconnect")}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </>)}
+                          {unconnectedHere.length > 0 && accounts.length > 0 && (
+                            <div style={{ height: 1, background: theme.borderFaint, margin: "8px 10px" }} />
+                          )}
+                          {unconnectedHere.length > 0 && (
+                            <div style={{ ...label, margin: "4px 10px 6px" }}>{de ? "Hinzufügen" : "Add"}</div>
+                          )}
                           {unconnectedHere.map(k => {
                             const m = TOUCHPOINT_PLATFORMS.find(x => x.key === k) || { color: "#15151c", label: k };
                             return (
@@ -31868,11 +31934,14 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                                 Colour comes from `currentColor`, so it reads on
                                 the dark selected pill and the light idle one
                                 without either being written down twice. */}
+                            {/* Named after who serves it. "Direkt" said that
+                                it was not the other one, which is only useful
+                                if you already know there is another one. */}
                             {(a.provider === "meta" || a.provider === "threads") && (
                               <span style={{ fontSize: 9.5, fontFamily: FONT, fontWeight: 600, letterSpacing: 0.6,
                                 textTransform: "uppercase", padding: "2px 6px", borderRadius: 5, flexShrink: 0,
                                 border: "1px solid currentColor", opacity: 0.62 }}>
-                                {de ? "Direkt" : "Direct"}
+                                Meta
                               </span>
                             )}
                             <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: FONT, opacity: 0.7, flexShrink: 0 }}>
