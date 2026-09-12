@@ -30844,7 +30844,13 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // width. There is no share and no ratio in here: every factor I put in was
   // right for one shape of picture and wrong for the other.
   const mediaMaxH = viewBox.h || undefined;
-  const mediaMaxW = viewBox.w || undefined;
+  // Wider than tall is the shape of a browser window and therefore the shape of
+  // this area, so a LANDSCAPE picture runs out of height before it runs out of
+  // width: bounded only by the area it fills the height completely and becomes
+  // the loudest thing on the screen. Held to 1.4 times the height it comes down
+  // to about four fifths of it, while a portrait, which is narrower than that
+  // anyway, is untouched and still fills the height.
+  const mediaMaxW = viewBox.h ? Math.min(viewBox.w, Math.round(viewBox.h * 1.4)) : undefined;
   const [overlays, setOverlays] = useState([]);     // [{ id, text, x, y, size, color, bold }] — x/y/size relative to image
   const [selOverlay, setSelOverlay] = useState(null);
   // Dictation for the caption, the same SpeechRecognition the notes and the
