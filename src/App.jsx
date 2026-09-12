@@ -29757,6 +29757,7 @@ function InstagramDirectPanel({ theme, darkMode, de, session, orgId, card, secLa
     </div>
   );
 
+  // Declared after `num` and `tile` on purpose: it uses both.
   const threadsBlock = thState && (
     <div style={{ marginTop: state ? 18 : 0, paddingTop: state ? 16 : 0,
       borderTop: state ? `1px solid ${theme.borderFaint}` : "none" }}>
@@ -29764,11 +29765,41 @@ function InstagramDirectPanel({ theme, darkMode, de, session, orgId, card, secLa
       {thState.error ? (
         <div style={{ fontSize: 12.5, fontFamily: FONT, color: "#E86767" }}>{thState.error}</div>
       ) : (<>
-        <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>
+        <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginBottom: 14 }}>
           @{thState.account?.username}
         </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+          {tile(de ? "Follower" : "Followers", num(thState.followers))}
+          {tile(de ? `Aufrufe, ${thState.days} Tage` : `Views, ${thState.days} days`, num(thState.metrics?.views))}
+          {tile(de ? `Likes, ${thState.days} Tage` : `Likes, ${thState.days} days`, num(thState.metrics?.likes))}
+          {tile(de ? `Antworten, ${thState.days} Tage` : `Replies, ${thState.days} days`, num(thState.metrics?.replies))}
+        </div>
+        {/* Where the followers are. Threads serves this only from a hundred
+            followers up, which is a state worth showing rather than an empty
+            row that looks broken. */}
+        {thState.demographics?.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6 }}>
+              {de ? "Follower nach Land" : "Followers by country"}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              {thState.demographics.map(d => (
+                <span key={d.key} style={{ fontSize: 11.5, fontFamily: FONT, color: theme.text,
+                  padding: "3px 9px", borderRadius: 999, border: `1px solid ${theme.borderFaint}` }}>
+                  {d.key} {num(d.value)}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {thState.demographics?.length === 0 && (
+          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 12 }}>
+            {de ? "Threads zeigt die Herkunft der Follower erst ab 100 Followern."
+                : "Threads only reports follower origins from 100 followers up."}
+          </div>
+        )}
         {thState.quota && (
-          <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 8 }}>
+          <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 14 }}>
             {de
               ? `${thState.quota.used} von ${thState.quota.total} Beiträgen in den letzten 24 Stunden veröffentlicht.`
               : `${thState.quota.used} of ${thState.quota.total} posts published in the last 24 hours.`}

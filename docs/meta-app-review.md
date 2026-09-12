@@ -11,7 +11,15 @@ Review.
 
 ## Was eingereicht wird
 
-Nur die Berechtigungen, die der Code tatsächlich anfragt. "Requesting future
+Nur die Berechtigungen, die der Code tatsächlich anfragt. **Sechs**, nicht fünf:
+`threads_manage_insights` kam dazu, als die Threads-Zahlen in Audience gebaut
+wurden.
+
+Ein Token behält die Berechtigungen, mit denen es ausgestellt wurde. Der Scope
+wurde erweitert, also muss jede **vor** dieser Änderung angelegte Threads-
+Verbindung einmal neu verbunden werden. Heute betrifft das nur @i7os.app; nach
+der Freigabe wäre es jeder Kunde, weshalb Erweiterungen vor die Einreichung
+gehören und nicht dahinter. "Requesting future
 permissions" ist ein benannter Ablehnungsgrund, und in der Konsole stehen bei
 Threads noch `threads_keyword_search` und `threads_manage_insights` herum, die
 wir nicht benutzen.
@@ -23,6 +31,7 @@ wir nicht benutzen.
 | `instagram_business_manage_insights` | Zahlen lesen | Analytics-Panel, Kennzahlen |
 | `threads_basic` | Konto lesen | Analytics-Panel, Profil |
 | `threads_content_publish` | veröffentlichen | Analytics-Panel, 24-h-Kontingent · Composer |
+| `threads_manage_insights` | Zahlen lesen | Analytics-Panel, Kennzahlen und Follower-Herkunft |
 
 ## Die sechs Schritte, in dieser Reihenfolge
 

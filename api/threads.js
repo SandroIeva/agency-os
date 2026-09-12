@@ -44,7 +44,7 @@ const GRAPH = `${GRAPH_ROOT}/${V}`;
 // absent: a token keeps the scopes it was issued with, so widening the list
 // later strands every connection made before the change, but asking for a
 // permission we do not use is the surest way to have a review rejected.
-const SCOPES = ["threads_basic", "threads_content_publish"].join(",");
+const SCOPES = ["threads_basic", "threads_content_publish", "threads_manage_insights"].join(",");
 
 // 60-day tokens with no refresh token: a live one is traded for a fresh one, so
 // it must happen before the old one lapses. Threads refuses to refresh a token
@@ -329,16 +329,62 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
   // threads_content_publish, so opening the panel is a real call on both rather
   // than something that has to be staged by hand.
   if (body.mode === "overview") {
+    const days = Math.min(90, Math.max(1, Number(body.days) || 28));
+    const until = Math.floor(Date.now() / 1000);
+    // Threads keeps no insight older than this; asking past it fails the call.
+    const since = Math.max(1712991600, until - days * 86400);
+
     const profile = await th(token, "/me", { fields: "id,username" });
     const quota = await th(token, `/${row.threads_user_id}/threads_publishing_limit`,
       { fields: "quota_usage,config" });
+
+    // Same narrowing as Instagram: one metric Threads does not serve takes the
+    // whole call down with it and names itself in the error, so the list is cut
+    // and retried until what is left works.
+    const wanted = ["views", "likes", "replies", "reposts", "quotes", "clicks", "followers_count"];
+    let metrics = [...wanted];
+    let insights = null;
+    const dropped = [];
+    for (let attempt = 0; attempt < wanted.length && metrics.length; attempt++) {
+      const r = await th(token, `/${row.threads_user_id}/threads_insights`,
+        { metric: metrics.join(","), since, until });
+      if (r.ok) { insights = r.body?.data || []; break; }
+      const msg = r.body?.error?.message || "";
+      const bad = metrics.find(m => msg.includes(m));
+      if (!bad) break;
+      dropped.push(bad);
+      metrics = metrics.filter(m => m !== bad);
+    }
+
+    // Where the followers are. Its own call because it takes a breakdown and
+    // refuses since/until, and because Threads serves it only from 100
+    // followers up - which is a state to show, not an error.
+    const demo = await th(token, `/${row.threads_user_id}/threads_insights`,
+      { metric: "follower_demographics", breakdown: body.breakdown || "country" });
+
     const q = quota.ok ? (quota.body?.data?.[0] || {}) : null;
+    // A metric is either a running total or a series; take whichever came back.
+    const value = (m) => m?.total_value?.value
+      ?? (Array.isArray(m?.values) ? m.values.reduce((sum, v) => sum + (v.value || 0), 0) : null);
     return json({
       account: { threadsUserId: row.threads_user_id, username: profile.body?.username || row.username },
+      days,
+      metrics: Object.fromEntries((insights || []).map(m => [m.name, value(m)])),
+      followers: value((insights || []).find(m => m.name === "followers_count")),
+      demographics: demo.ok
+        ? ((demo.body?.data?.[0]?.total_value?.breakdowns?.[0]?.results || [])
+            .map(r => ({ key: (r.dimension_values || [])[0], value: r.value }))
+            .sort((a, b) => b.value - a.value).slice(0, 6))
+        : null,
       quota: q ? { used: q.quota_usage ?? 0, total: q.config?.quota_total ?? 250 } : null,
-      // Named rather than swallowed: if one of the two fails, that is exactly
-      // the permission whose call count will stay at zero.
-      unavailable: [!profile.ok && "threads_basic", !quota.ok && "threads_content_publish"].filter(Boolean),
+      // Named rather than swallowed: whichever call failed is exactly the
+      // permission whose call count stays at zero in Meta's console.
+      unavailable: [
+        !profile.ok && "threads_basic",
+        !quota.ok && "threads_content_publish",
+        !insights && "threads_manage_insights",
+        ...dropped,
+      ].filter(Boolean),
       tokenExpiresAt: row.token_expires_at,
     });
   }
