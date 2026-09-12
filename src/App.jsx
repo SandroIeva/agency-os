@@ -30801,7 +30801,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const [extras, setExtras] = useState([]);        // [{ id, file, url }] — carousel slides 2..10
   const [reel, setReel] = useState(null);          // { file, url } — a video instead of a picture
   const extraRef = useRef(null);
-  const reelRef = useRef(null);
   // Only a workspace with the direct connection can use either, so the controls
   // are absent everywhere else instead of being offered and then refused.
   const hasDirectIg = (accounts || []).some(a => a.provider === "meta");
@@ -30999,9 +30998,15 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       .then(({ data }) => setBoards(data || []));
   }, [boardsOpen, orgId]); // eslint-disable-line
 
+  // One field takes both. A video IS the decision to post a reel, so there is
+  // no second control asking which kind of post this is: the file answers it.
   const onPickImage = (e) => {
     const f = e.target.files?.[0];
-    if (f && f.type.startsWith("image/")) {
+    if (f && f.type.startsWith("video/")) {
+      clearVisual();
+      setReel(r => { if (r) URL.revokeObjectURL(r.url); return { file: f, url: URL.createObjectURL(f) }; });
+    } else if (f && f.type.startsWith("image/")) {
+      dropReel();
       imageFileRef.current = f;
       const url = URL.createObjectURL(f);
       const img = new Image();
@@ -31069,12 +31074,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     }
     removeExtra(slides[slideIdx].key);
     setSlideIdx(i => Math.max(0, i - 1));
-  };
-  const onPickReel = (e) => {
-    const f = e.target.files?.[0];
-    e.target.value = "";
-    if (!f || !f.type.startsWith("video/")) return;
-    setReel(r => { if (r) URL.revokeObjectURL(r.url); return { file: f, url: URL.createObjectURL(f) }; });
   };
   const addOverlay = () => {
     const id = crypto.randomUUID();
@@ -31530,16 +31529,18 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     height that is left and the slides are paged through, so
                     every one of them is seen at the size it will be posted. */}
                 {stepIdx === S_VISUAL && (<>
-                  <input ref={fileRef} type="file" accept="image/*" onChange={onPickImage} style={{ display: "none" }} />
+                  <input ref={fileRef} type="file" accept={hasDirectIg ? "image/*,video/*" : "image/*"} onChange={onPickImage} style={{ display: "none" }} />
                   <input ref={extraRef} type="file" accept="image/*" multiple onChange={onPickExtras} style={{ display: "none" }} />
-                  <input ref={reelRef} type="file" accept="video/*" onChange={onPickReel} style={{ display: "none" }} />
 
                   {!visual && !reel ? (
                     <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center" }}>
-                      <div style={{ display: "grid", gridTemplateColumns: `repeat(${hasDirectIg ? 4 : 3}, 1fr)`, gap: 16, width: "100%" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, width: "100%" }}>
                         {[
-                          { key: "upload", label: de ? "Bild hochladen" : "Upload image",
-                            sub: de ? "PNG oder JPG von diesem Rechner" : "PNG or JPG from this machine",
+                          { key: "upload", label: de ? "Hochladen" : "Upload",
+                            // The formats say what is possible, so no fourth
+                            // card has to announce that a video is allowed. A
+                            // video IS the reel, and the file says so.
+                            sub: hasDirectIg ? "JPG, PNG, MP4, MOV" : "JPG, PNG",
                             icon: <><rect x="3" y="3" width="18" height="18" rx="3.5"/><circle cx="8.5" cy="8.5" r="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></>,
                             onClick: () => fileRef.current?.click() },
                           { key: "assets", label: de ? "Aus den Assets" : "From Assets",
@@ -31550,16 +31551,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                             sub: de ? "Was du in Creations gebaut hast" : "What you built in Creations",
                             icon: <><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></>,
                             onClick: () => setBoardsOpen(true) },
-                          // A reel is not another source of pictures, it is a
-                          // different KIND of post, and this is the screen where
-                          // that is decided. It used to be a pill lying on the
-                          // picture it would have replaced, which is why the
-                          // first question anybody asked about it was what it
-                          // did. Only where a reel can be sent.
-                          ...(hasDirectIg ? [{ key: "reel", label: "Reel",
-                            sub: de ? "Ein Video statt eines Bildes" : "A video instead of a picture",
-                            icon: <><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M10 9.5l5 2.5-5 2.5z"/></>,
-                            onClick: () => reelRef.current?.click() }] : []),
                         ].map(o => (
                           <motion.div key={o.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.99 }} onClick={o.onClick}
                             style={{ padding: "53px 22px", borderRadius: 18, border: `1.5px dashed ${theme.borderFaint}`, textAlign: "center", cursor: assetBusy ? "wait" : "pointer", opacity: assetBusy ? 0.6 : 1 }}>
