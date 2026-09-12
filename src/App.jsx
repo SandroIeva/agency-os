@@ -31393,36 +31393,47 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     // Bounded by the column it sits in. It used to be as tall as the picture
     // made it, which on a portrait ran past the bottom of the box.
     <div style={{ borderRadius: 18, background: theme.cardBg, border: `1px solid ${theme.border}`, overflow: "hidden",
-      alignSelf: "start", maxHeight: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "14px 16px 10px" }}>
-        <div style={{ width: 36, height: 36, borderRadius: "50%", background: darkMode ? "#f4f4f7" : "#15151c", color: darkMode ? "#15151c" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>
-          {(previewAccount?.displayName || brandName)[0]}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{previewAccount?.displayName || brandName}</div>
-          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{previewAccount?.username || "@…"} · {schedule ? (de ? "geplant" : "scheduled") : (de ? "Vorschau" : "preview")}</div>
-        </div>
-        {previewMeta && (
-          <div style={{ width: 22, height: 22, borderRadius: 7, background: previewMeta.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <svg width={tpGlyphSize(previewUiKey, 12)} height={tpGlyphSize(previewUiKey, 12)} viewBox="0 0 24 24">{touchpointGlyph(previewUiKey)}</svg>
-          </div>
-        )}
-      </div>
-      <div style={{ padding: "0 16px 12px", fontSize: 13, fontFamily: FONT, color: text ? theme.text : theme.textFaint, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-        {text || (de ? "Dein Text erscheint hier …" : "Your text will appear here …")}
-      </div>
+      alignSelf: "stretch", maxHeight: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
+      {/* The picture first and with the room, the way the Visual step shows
+          it. The profile bar that used to sit on top was a drawing of a header
+          nobody needed, and it pushed the picture out of a card that clips. */}
       {visual && (
         /* Mini composited preview — same relative overlay coordinates as the
            editor; cqw units (container query width) keep the text-to-image scale
            identical at this smaller size. */
-        <div style={{ position: "relative", width: "100%", containerType: "inline-size" }}>
-          <img src={visual.url} alt="" style={{ display: "block", width: "100%", maxHeight: "100%", objectFit: "contain", minHeight: 0 }} />
-          {overlays.map(o => (
+        <div style={{ position: "relative", flex: 1, minHeight: 0, width: "100%", containerType: "inline-size",
+          display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(0,0,0,0.18)" : "rgba(0,0,0,0.04)" }}>
+          <img src={slides[slideIdx]?.url || visual.url} alt=""
+            style={{ display: "block", maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto" }} />
+          {slideIdx === 0 && overlays.map(o => (
             <div key={o.id} style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500, fontSize: `${o.size * 100}cqw`, lineHeight: 1.22, whiteSpace: "pre", pointerEvents: "none" }}>{o.text}</div>
           ))}
+          {/* The same paging as the Visual step. A carousel previewed as its
+              first slide is a preview of a third of the post. */}
+          {slides.length > 1 && ([["prev", -1, "M15 18l-6-6 6-6", "left"], ["next", 1, "M9 6l6 6-6 6", "right"]]).map(([k, step, d, side]) => (
+            <motion.div key={k} whileTap={{ scale: 0.92 }}
+              onClick={() => setSlideIdx(i => (i + step + slides.length) % slides.length)}
+              style={{ position: "absolute", top: "50%", transform: "translateY(-50%)", [side]: 8,
+                width: 30, height: 30, borderRadius: 999, background: "rgba(21,21,28,0.66)", color: "#fff",
+                display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
+            </motion.div>
+          ))}
+          {slides.length > 1 && (
+            <div style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)",
+              padding: "4px 10px", borderRadius: 999, background: "rgba(21,21,28,0.66)", color: "#fff",
+              fontSize: 10.5, fontFamily: FONT, fontWeight: 600, backdropFilter: "blur(6px)" }}>
+              {slideIdx + 1} / {slides.length}
+            </div>
+          )}
         </div>
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: 20, padding: "10px 16px", borderTop: `1px solid ${theme.borderFaint}`, color: theme.textFaint }}>
+      <div style={{ padding: "12px 16px", fontSize: 13, fontFamily: FONT, color: text ? theme.text : theme.textFaint, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word", flexShrink: 0 }}>
+        <span style={{ fontWeight: 600, color: theme.text }}>{previewAccount?.username || previewAccount?.displayName || brandName}</span>
+        {"  "}
+        {text || (de ? "Dein Text erscheint hier …" : "Your text will appear here …")}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 20, padding: "10px 16px", borderTop: `1px solid ${theme.borderFaint}`, color: theme.textFaint, flexShrink: 0 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontFamily: FONT }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8l8.8 8.9 8.8-8.9a5.5 5.5 0 000-7.8z"/></svg>0</span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontFamily: FONT }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 11.5a8.4 8.4 0 01-9 8.4 8.6 8.6 0 01-3.9-.9L3 21l2-4.9a8.4 8.4 0 1116-4.6z"/></svg>0</span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontFamily: FONT }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>0</span>
@@ -31687,7 +31698,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     // The viewer claims what is left of the box. Everything it
                     // needs sits ON the picture, so nothing below it can push
                     // the picture smaller.
-                    <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                    <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       {/* The picture's own area, and the one thing measured.
                           The count sits under it as a caption, outside the
                           measurement, so it cannot be double counted. */}
@@ -31747,18 +31758,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
                       </div>
                       </div>
-                      {/* The count, and its line is reserved whether or not
-                          there is anything to count. Showing it only from the
-                          second slide made the first picture shrink the moment
-                          one was added, which is not what adding a slide means.
-                          Reserved, the picture is the same size throughout. */}
-                      {!reel && (
-                        <div style={{ paddingTop: 10, fontSize: 12, fontFamily: FONT, fontWeight: 600,
-                          color: theme.textDim, lineHeight: 1, flexShrink: 0,
-                          visibility: slides.length > 1 ? "visible" : "hidden" }}>
-                          {slideIdx + 1} / {Math.max(2, slides.length)}
-                        </div>
-                      )}
                     </div>
                   )}
                 </>)}
@@ -31875,6 +31874,14 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     background: "transparent", color: theme.text, cursor: "pointer" }}>
                   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
                 </motion.button>
+              )}
+              {/* Which slide, in the footer. Under the picture it took a line
+                  from the picture's own area, and the picture is meant to have
+                  all of it. Here it costs nothing and cannot shrink anything. */}
+              {stepIdx === S_VISUAL && !reel && slides.length > 1 && (
+                <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>
+                  {slideIdx + 1} / {slides.length}
+                </span>
               )}
               {canPublish && (
                 <motion.button ref={draftRef} whileTap={{ scale: 0.97 }} onClick={() => submit("draft")} disabled={Boolean(busy)}
