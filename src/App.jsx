@@ -31340,7 +31340,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
   // ── Live preview card (right column, constant across steps) ──
   const previewCard = (
-    <div style={{ borderRadius: 18, background: theme.cardBg, border: `1px solid ${theme.border}`, overflow: "hidden", alignSelf: "start" }}>
+    // Bounded by the column it sits in. It used to be as tall as the picture
+    // made it, which on a portrait ran past the bottom of the box.
+    <div style={{ borderRadius: 18, background: theme.cardBg, border: `1px solid ${theme.border}`, overflow: "hidden",
+      alignSelf: "start", maxHeight: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "14px 16px 10px" }}>
         <div style={{ width: 36, height: 36, borderRadius: "50%", background: darkMode ? "#f4f4f7" : "#15151c", color: darkMode ? "#15151c" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>
           {(previewAccount?.displayName || brandName)[0]}
@@ -31363,7 +31366,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
            editor; cqw units (container query width) keep the text-to-image scale
            identical at this smaller size. */
         <div style={{ position: "relative", width: "100%", containerType: "inline-size" }}>
-          <img src={visual.url} alt="" style={{ display: "block", width: "100%" }} />
+          <img src={visual.url} alt="" style={{ display: "block", width: "100%", maxHeight: "100%", objectFit: "contain", minHeight: 0 }} />
           {overlays.map(o => (
             <div key={o.id} style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500, fontSize: `${o.size * 100}cqw`, lineHeight: 1.22, whiteSpace: "pre", pointerEvents: "none" }}>{o.text}</div>
           ))}
@@ -31427,11 +31430,15 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 box so the caption field can grow into it. With alignItems
                 start the column stayed as tall as its content and the box
                 scrolled around a field that could have been taller. */}
-            {/* Scrollable, but with no scrollbar drawn. Setting overflow to
-                hidden instead would make anything that does not fit on a short
-                window unreachable, which is worse than a bar nobody wanted. */}
-            <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarWidth: "none", display: "grid", gap: 30, alignItems: "stretch",
-              gridTemplateColumns: canPublish ? "minmax(0, 1fr) minmax(0, 0.7fr)" : "minmax(0, 1fr)" }}>
+            {/* No scrolling at all. Hiding only the bar left the box scrolling
+                under it, and that was not just untidy: a column that may
+                overflow has no settled height, so the picture's measured cap
+                came out short and a portrait picture sat in the middle with a
+                gap under it. Nothing here is long enough to need a scrollbar.
+                Fifty-fifty, because the preview is the other half of this step
+                and not a footnote to it. */}
+            <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "grid", gap: 30, alignItems: "stretch",
+              gridTemplateColumns: canPublish ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)" }}>
               <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
 
                 {/* ── 03 Kanäle, and publishing ── */}
@@ -31516,6 +31523,13 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                                   <svg width={tpGlyphSize(k, 13)} height={tpGlyphSize(k, 13)} viewBox="0 0 24 24">{touchpointGlyph(k)}</svg>
                                 </div>
                                 <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.text }}>{m.label}</span>
+                                {/* The name alone does not say what clicking it
+                                    does, and what it does is send you to that
+                                    network's consent screen. */}
+                                <span style={{ marginLeft: "auto", paddingLeft: 14, fontSize: 11, fontFamily: FONT,
+                                  fontWeight: 600, color: theme.textDim, flexShrink: 0 }}>
+                                  {connectBusy === k ? "…" : (de ? "Verbinden" : "Connect")}
+                                </span>
                               </div>
                             );
                           })}
@@ -31641,6 +31655,11 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         <div ref={stageRef} onPointerDown={() => setSelOverlay(null)}
                           style={{ position: "relative", maxWidth: "100%", borderRadius: 16, overflow: "hidden", border: `1px solid ${theme.borderFaint}`, userSelect: "none", touchAction: "none", lineHeight: 0 }}>
                           <img src={slides[slideIdx]?.url || visual.url} alt="" draggable={false}
+                            // Measured again once the picture is actually in the
+                            // layout. Insurance: the observer covers a box that
+                            // changes size, and the first measurement is taken
+                            // before there is anything in it.
+                            onLoad={() => setViewH(viewRef.current?.clientHeight || 0)}
                             style={{ display: "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: mediaMaxH }} />
                           {slideIdx === 0 && overlays.map(o => (
                             <div key={o.id} onPointerDown={(e) => onOverlayDown(e, o)}
@@ -31743,15 +31762,31 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       <span onClick={() => setStepIdx(0)} style={{ textDecoration: "underline", cursor: "pointer" }}>{de ? "Kürzen" : "Shorten it"}</span>
                     </div>
                   )}
-                  <div style={{ height: 26 }} />
-                  <div style={label}>{de ? "Planen (optional)" : "Schedule (optional)"}</div>
-                  <input type="datetime-local" value={schedule} onChange={e => setSchedule(e.target.value)}
-                    style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.6)",
-                      color: schedule ? theme.text : theme.textDim, fontSize: 13, fontFamily: FONT, outline: "none", colorScheme: darkMode ? "dark" : "light", alignSelf: "flex-start" }} />
+                  <div style={{ height: 22 }} />
+                  {/* Two words instead of an empty date mask. `TT.MM.JJJJ --:--`
+                      is what the browser draws in an empty datetime field, and
+                      it looks like something already went wrong. The field
+                      appears once somebody has said they want a later time. */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 13, fontFamily: FONT }}>
+                    <span onClick={() => setSchedule("")}
+                      style={{ cursor: "pointer", fontWeight: schedule ? 500 : 600,
+                        color: schedule ? theme.textDim : theme.text }}>
+                      {de ? "Jetzt" : "Now"}
+                    </span>
+                    <span onClick={() => { if (!schedule) { const d = new Date(Date.now() + 3600000); d.setSeconds(0, 0); setSchedule(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)); } }}
+                      style={{ cursor: "pointer", fontWeight: schedule ? 600 : 500,
+                        color: schedule ? theme.text : theme.textDim }}>
+                      {de ? "Später" : "Later"}
+                    </span>
+                  </div>
                   {schedule && (
-                    <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3" strokeLinecap="round"/></svg>
-                      {de ? "Geplant für" : "Scheduled for"} {new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(schedule))}
+                    <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                      <input type="datetime-local" value={schedule} onChange={e => setSchedule(e.target.value)}
+                        style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.6)",
+                          color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none", colorScheme: darkMode ? "dark" : "light" }} />
+                      <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim }}>
+                        {new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "full", timeStyle: "short" }).format(new Date(schedule))}
+                      </span>
                     </div>
                   )}
                   {result && (
