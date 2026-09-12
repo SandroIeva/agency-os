@@ -141,10 +141,13 @@ export default async function handler(req) {
     !supaUrl && "SUPABASE_URL",
     !serviceKey && "SUPABASE_SERVICE_ROLE_KEY",
   ].filter(Boolean);
+  const commit = (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || null;
   if (missing.length) {
     // check=1 has to answer even when nothing is set up: that is the question it
-    // exists to answer.
-    if (check) return json({ configured: false, missing, redirect_uri: redirectUri }, 200);
+    // exists to answer. The commit belongs in THIS answer too - an unconfigured
+    // deployment is exactly the moment somebody needs to know which version is
+    // talking, and leaving it out made the deploy check wait forever.
+    if (check) return json({ configured: false, missing, redirect_uri: redirectUri, commit }, 200);
     return json({ error: "Instagram is not configured", code: "not_configured", missing }, 503);
   }
 
@@ -166,7 +169,7 @@ export default async function handler(req) {
       // which is the safe default while the app is in Development Mode.
       enabled_orgs: enabledOrgs().length,
       // Which commit is answering, so "is my fix live" stops being a guess.
-      commit: (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || null,
+      commit,
     });
   }
 
