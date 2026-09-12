@@ -29260,9 +29260,27 @@ function SocialBenchmarkPanel({ theme, darkMode, de, session, orgId, card, secLa
     if (!h || busy) return;
     setBusy(true); setError(null);
     try {
-      const r = await zernioRequest(session, { mode: "lookup", orgId, platform, handle: h });
+      // Threads goes to Meta first. It answers for free and needs nobody to
+      // have connected anything, which is the whole reason to prefer it:
+      // SocialCrawl bills per call. Everything else it cannot do, so the
+      // fallback is not a fallback for those, it is the only way.
+      let r = null;
+      if (platform === "threads") {
+        const res = await fetch("/api/threads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+          body: JSON.stringify({ mode: "discover", orgId, username: h }),
+        });
+        const j = await res.json().catch(() => null);
+        if (res.ok && j?.profile) r = j;
+        // A workspace with no Threads connection, or one not cleared for the
+        // direct path, falls through to the metered lookup rather than being
+        // told no.
+        else if (res.status === 404) { setError({ message: de ? "Kein Profil gefunden." : "No profile found." }); setBusy(false); return; }
+      }
+      if (!r) r = await zernioRequest(session, { mode: "lookup", orgId, platform, handle: h });
       if (r.profile) {
-        setRows(list => [{ ...r.profile, __platform: platform, __credits: r.credits },
+        setRows(list => [{ ...r.profile, __platform: platform, __credits: r.credits, __source: r.source || "socialcrawl" },
           ...list.filter(x => x.url !== r.profile.url)].slice(0, 6));
         setHandle("");
       } else setError({ message: de ? "Kein Profil gefunden." : "No profile found." });

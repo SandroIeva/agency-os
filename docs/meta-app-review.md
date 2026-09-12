@@ -11,9 +11,12 @@ Review.
 
 ## Was eingereicht wird
 
-Nur die Berechtigungen, die der Code tatsächlich anfragt. **Sechs**, nicht fünf:
+Nur die Berechtigungen, die der Code tatsächlich anfragt. **Sieben**, nicht fünf:
 `threads_manage_insights` kam dazu, als die Threads-Zahlen in Audience gebaut
-wurden.
+wurden, und `threads_profile_discovery`, als der Benchmark für Threads von
+SocialCrawl auf Meta umgestellt wurde. SocialCrawl rechnet pro Aufruf ab, Meta
+liefert öffentliche Threads-Profile kostenlos; für LinkedIn, TikTok, X,
+Pinterest und YouTube bleibt es bei SocialCrawl, weil Meta dazu nichts sagt.
 
 Ein Token behält die Berechtigungen, mit denen es ausgestellt wurde. Der Scope
 wurde erweitert, also muss jede **vor** dieser Änderung angelegte Threads-
@@ -32,6 +35,7 @@ wir nicht benutzen.
 | `threads_basic` | Konto lesen | Analytics-Panel, Profil |
 | `threads_content_publish` | veröffentlichen | Analytics-Panel, 24-h-Kontingent · Composer |
 | `threads_manage_insights` | Zahlen lesen | Analytics-Panel, Kennzahlen und Follower-Herkunft |
+| `threads_profile_discovery` | fremde öffentliche Profile | Audience → Benchmark, Plattform Threads |
 
 ## Die sechs Schritte, in dieser Reihenfolge
 
