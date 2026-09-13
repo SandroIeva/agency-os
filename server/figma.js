@@ -285,7 +285,50 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     }
     if (surface && (surface.type === "image" || surface.fill !== "transparent"
         || surface.bgBlur || surface.blur || surface.shadow || !outline)) items.push(surface);
-    children.forEach(child => walk(child, opacity));
+
+    // Masks. In Figma a mask is a CHILD that clips its siblings ABOVE it, up to
+    // the next mask, and children arrive bottom first. The artboard says the
+    // same thing the other way round: the mask carries `isMask` and everything
+    // it clips carries `maskId` pointing at it, with one group id over the lot.
+    //
+    // The clip is a shape, not a picture: a rectangle, an ellipse or a polygon.
+    // A mask drawn as a free path cannot be carried and is counted, because
+    // importing its CONTENT unclipped is the one outcome nobody wants - a
+    // photograph that was a circle arriving as a full-bleed square.
+    let maskId = null;
+    let maskGid = null;
+    for (const child of children) {
+      const before = items.length;
+      if (child && child.visible !== false && child.isMask) {
+        // A new mask ends the previous one's reach, which is Figma's rule too.
+        maskId = null; maskGid = null;
+        const cb = box(child);
+        const canClip = cb && ["RECTANGLE", "ELLIPSE", "POLYGON", "REGULAR_POLYGON", "STAR"].includes(child.type);
+        if (!canClip) { note("mask-shape"); continue; }
+        // Walked WITHOUT the flag: `walkNode` turns a masking node away at the
+        // door, which is right for one that reaches it with no container to
+        // wire it up, and wrong here where that wiring is exactly what follows.
+        walk({ ...child, isMask: undefined }, opacity);
+        const made = items.slice(before);
+        // A mask that produced more than one item is not one shape, so it
+        // cannot be the clip either.
+        if (made.length !== 1) { note("mask-shape"); continue; }
+        maskId = made[0].id;
+        // Mask and masked have to share a group, or dragging either pulls them
+        // apart. An id already given by an enclosing group is reused.
+        maskGid = made[0].groupId || newId();
+        made[0].isMask = true;
+        made[0].groupId = maskGid;
+        continue;
+      }
+      walk(child, opacity);
+      if (maskId) {
+        for (const made of items.slice(before)) {
+          made.maskId = maskId;
+          made.groupId = maskGid;
+        }
+      }
+    }
     if (outline) items.push(outline);
     if (node.layoutMode && node.layoutMode !== "NONE") convertedAutoLayouts++;
     if (node.type === "INSTANCE") note("component");
@@ -333,7 +376,10 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     const b = box(node);
     if (!b) { if (node.children) node.children.forEach(c => walk(c, opacity)); return; }
 
-    if (node.isMask) { note("mask"); return; }
+    // A mask is handled by the container that holds it, which is the only place
+    // that knows which siblings it clips. Reaching one here means it had no
+    // container, and a mask with nothing above it clips nothing.
+    if (node.isMask) return;
     if (node.type === "TEXT") { items.push(textItem(node, b, opacity)); return; }
 
     if (VECTORS.has(node.type)) {

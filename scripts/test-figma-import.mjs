@@ -195,3 +195,56 @@ assert.equal(fitText.runs.find(r => r.size != null).size, 20, 'the run halves wi
 assert.equal(fitText.runs.find(r => r.weight != null).weight, 700, 'a weight is not a length');
 
 console.log('Passed: mixed text styles from Figma arrive as runs, and scale with the board.');
+
+// ── Masks ──────────────────────────────────────────────────────────────────
+// In Figma a mask is a child that clips its siblings ABOVE it, and children
+// arrive bottom first. The artboard says it the other way round: the mask
+// carries isMask, everything it clips carries maskId, one group over the lot.
+const masked = {
+  type: 'FRAME', absoluteBoundingBox: { x: 0, y: 0, width: 400, height: 400 }, fills: [],
+  children: [
+    { type: 'ELLIPSE', isMask: true, absoluteBoundingBox: { x: 10, y: 10, width: 100, height: 100 },
+      fills: [{ type: 'SOLID', color: { r: 1, g: 1, b: 1, a: 1 } }] },
+    { type: 'RECTANGLE', absoluteBoundingBox: { x: 0, y: 0, width: 200, height: 200 },
+      fills: [{ type: 'SOLID', color: { r: 1, g: 0, b: 0, a: 1 } }] },
+    { type: 'RECTANGLE', absoluteBoundingBox: { x: 0, y: 0, width: 50, height: 50 },
+      fills: [{ type: 'SOLID', color: { r: 0, g: 1, b: 0, a: 1 } }] },
+  ],
+};
+vid = 0;
+const mOut = figmaToItems(masked, { newId: () => 'm' + (++vid) }).items;
+const theMask = mOut.find(i => i.isMask);
+assert.ok(theMask, 'the mask itself is imported, not dropped');
+assert.equal(theMask.type, 'ellipse');
+const clipped = mOut.filter(i => i.maskId);
+assert.equal(clipped.length, 2, 'both siblings above the mask are clipped by it');
+for (const c of clipped) {
+  assert.equal(c.maskId, theMask.id, 'they point at the mask');
+  assert.equal(c.groupId, theMask.groupId, 'mask and masked share one group');
+}
+
+// A second mask ends the first one's reach.
+const twoMasks = JSON.parse(JSON.stringify(masked));
+twoMasks.children.splice(2, 0, { type: 'RECTANGLE', isMask: true,
+  absoluteBoundingBox: { x: 0, y: 0, width: 30, height: 30 },
+  fills: [{ type: 'SOLID', color: { r: 1, g: 1, b: 1, a: 1 } }] });
+vid = 0;
+const twoMaskOut = figmaToItems(twoMasks, { newId: () => 't' + (++vid) }).items;
+const masks = twoMaskOut.filter(i => i.isMask);
+assert.equal(masks.length, 2);
+const byMask = twoMaskOut.filter(i => i.maskId).map(i => i.maskId);
+assert.equal(new Set(byMask).size, 2, 'each mask clips its own siblings, not the other one\'s');
+
+// A mask the artboard cannot clip with is counted rather than silently dropping
+// the clip and letting the content arrive full size.
+const freeform = JSON.parse(JSON.stringify(masked));
+freeform.children[0] = { type: 'VECTOR', isMask: true,
+  absoluteBoundingBox: { x: 0, y: 0, width: 80, height: 80 },
+  fillGeometry: [{ windingRule: 'NONZERO', path: 'M 0 0 L 80 0 L 40 80 Z' }],
+  fills: [{ type: 'SOLID', color: { r: 1, g: 1, b: 1, a: 1 } }] };
+vid = 0;
+const freeOut = figmaToItems(freeform, { newId: () => 'f' + (++vid) });
+assert.equal(freeOut.items.filter(i => i.maskId).length, 0, 'nothing claims to be clipped');
+assert.ok(freeOut.warnings.some(w => w.kind === 'mask-shape'), 'and it says so');
+
+console.log('Passed: masks arrive as a mask and its clipped siblings in one group, a second mask ends the first, and a shape we cannot clip with is reported.');

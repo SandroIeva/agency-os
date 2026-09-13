@@ -22563,14 +22563,21 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // spans both. One map per placement keeps each copy's groups its own,
     // while everything that was grouped over in Figma stays grouped here.
     const gidMap = new Map();
+    const idMap = new Map();
     const made = fitted.items.map(it => {
       const next = { ...it, id: crypto.randomUUID() };
+      idMap.set(it.id, next.id);
       if (it.groupId) {
         if (!gidMap.has(it.groupId)) gidMap.set(it.groupId, crypto.randomUUID());
         next.groupId = gidMap.get(it.groupId);
       }
       return next;
     });
+    // A masked item points at its mask BY ID, so the new ids have to be carried
+    // through the pointer as well. Left alone it would point at the copy placed
+    // the time before, and the second paste would be clipped by the first one's
+    // mask.
+    for (const it of made) if (it.maskId) it.maskId = idMap.get(it.maskId) || it.maskId;
     if (!made.length) {
       setErr(de ? "In diesem Frame war nichts, was hier ankommen kann." : "There was nothing in that frame this board can hold.");
       return;
@@ -22582,7 +22589,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setTool("select");
 
     const words = { vector: de ? "Vektor" : "vector", "auto-layout": "Auto-Layout",
-      component: de ? "Komponente" : "component", mask: de ? "Maske" : "mask",
+      component: de ? "Komponente" : "component",
+      // A mask the artboard can clip with is imported now. This is the one it
+      // cannot: a clip drawn as a free path rather than a rectangle, an ellipse
+      // or a polygon.
+      "mask-shape": de ? "Maskenform" : "mask shape",
       "gradient-diamond": de ? "Rauten-Verlauf" : "diamond gradient",
       "gradient-placement": de ? "Verlauf zentriert" : "gradient re-centred",
       "gradient-text": de ? "Textverlauf" : "gradient text",
