@@ -19027,6 +19027,116 @@ const canvasTextLines = (it) => {
   _wrapCache.set(key, out);
   return out;
 };
+// ── Colour on part of a text ────────────────────────────────────────────────
+//
+// A text element carries ONE set of properties, and `runs` is the exception:
+// a list of `{ from, to, color }` over character offsets, where anything not
+// covered takes the element's own colour.
+//
+// Colour ONLY, and that is a decision rather than a first step left unfinished.
+// Where a line breaks, how tall the box comes out and where a letter sits on a
+// ring are all decided by the font, the size and the letter spacing. Colour
+// changes none of them, so it can be carried into all three drawers without
+// the wrapper, the ring layout or the export measuring anything differently.
+// A font or a size on part of a text is a different job, because then every one
+// of those has to measure per run.
+//
+// Offsets are into the RAW text. The case setting is applied on the way out and
+// upper, lower and title all preserve length and position, so an offset means
+// the same thing on both sides of it.
+const canvasRunColor = (it, i) => {
+  const runs = it.runs;
+  if (!runs || !runs.length) return it.color;
+  for (const r of runs) if (i >= r.from && i < r.to && r.color) return r.color;
+  return it.color;
+};
+
+// Lay one colouring over whatever is already there. Ranges are cut where they
+// overlap rather than stacked, so the list stays flat and the last thing
+// somebody did is what they see.
+const canvasApplyRun = (runs, from, to, color) => {
+  if (to <= from) return runs || [];
+  const out = [];
+  for (const r of runs || []) {
+    if (r.to <= from || r.from >= to) { out.push(r); continue; }
+    if (r.from < from) out.push({ ...r, to: from });
+    if (r.to > to) out.push({ ...r, from: to });
+  }
+  // A colouring that matches the element's own colour is not a run, it is the
+  // absence of one. Kept out, or a text would slowly fill with runs that say
+  // nothing and survive every later change to the element colour.
+  if (color) out.push({ from, to, color });
+  return out.sort((a, b) => a.from - b.from);
+};
+
+// Runs after an edit. Offsets are positions in the text, so inserting a word in
+// front of a coloured phrase moves that phrase along and nothing else. Without
+// this the colour stays where it was and creeps across the words beside it,
+// which is the failure everybody notices immediately.
+//
+// The edit is found by comparing what came in with what was there: the common
+// start, the common end, and whatever lies between them is what changed. That
+// covers typing, pasting, deleting and replacing a selection alike, and it
+// needs no help from the caret.
+const canvasShiftRuns = (runs, before, after) => {
+  if (!runs || !runs.length) return runs;
+  let head = 0;
+  const max = Math.min(before.length, after.length);
+  while (head < max && before[head] === after[head]) head++;
+  let tail = 0;
+  while (tail < max - head
+    && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+  const removed = before.length - head - tail;
+  const added = after.length - head - tail;
+  if (removed === 0 && added === 0) return runs;
+  // The two edges of a run are NOT the same question, and treating them alike
+  // was wrong in the one case that matters most: typing immediately in front of
+  // a coloured phrase. Text inserted exactly at a run's START belongs before it
+  // and pushes it along; text inserted exactly at its END belongs after it and
+  // must not stretch it over the new words.
+  const move = (i, isStart) => {
+    if (isStart ? i < head : i <= head) return i;
+    if (i >= head + removed) return i - removed + added;
+    // Inside what was replaced: it collapses to the start of the change.
+    return head;
+  };
+  return runs
+    .map(r => ({ ...r, from: move(r.from, true), to: move(r.to, false) }))
+    .filter(r => r.to > r.from);
+};
+
+// Where each wrapped line sits in the source. The wrapper keeps every character
+// in order and only ever eats whitespace at a break, so walking the source with
+// a pointer finds each line without the wrapper having to hand out offsets and
+// without any risk of moving a break.
+const canvasLineSpans = (text, lines) => {
+  const spans = [];
+  let at = 0;
+  for (const line of lines) {
+    while (at < text.length && line && text[at] !== line[0] && /\s/.test(text[at])) at++;
+    spans.push({ start: at, end: at + line.length });
+    at += line.length;
+    // The break itself.
+    while (at < text.length && /\s/.test(text[at]) && text[at] !== "\n") at++;
+    if (text[at] === "\n") at++;
+  }
+  return spans;
+};
+
+// One line, cut into pieces of one colour each. The three drawers all take this
+// so none of them has to know how runs are stored.
+const canvasLinePieces = (it, line, start) => {
+  if (!it.runs || !it.runs.length) return [{ text: line, color: it.color }];
+  const out = [];
+  for (let i = 0; i < line.length; i++) {
+    const c = canvasRunColor(it, start + i);
+    const last = out[out.length - 1];
+    if (last && last.color === c) last.text += line[i];
+    else out.push({ text: line[i], color: c });
+  }
+  return out.length ? out : [{ text: line, color: it.color }];
+};
+
 // ── Text on a ring ─────────────────────────────────────────────────────────
 // Adobe calls it a text layout; it is one line bent onto a circle. The circle
 // IS the element's box, so the handles that already size a text box size the
@@ -19179,6 +19289,23 @@ const canvasArcLayout = (it) => {
 
 // The ring, as DOM. Font and colour are inherited from the box around it, the
 // same way the straight text is drawn, so nothing has to be passed twice.
+// Straight text with its colours, for the editor and the card. Both used to
+// render `lines.join("\n")`, and two places building the same spans by hand is
+// how they come to disagree.
+function CanvasRichText({ it }) {
+  const lines = canvasTextLines(it);
+  if (!it.runs || !it.runs.length) return lines.join("\n");
+  const spans = canvasLineSpans(canvasText(it), lines);
+  return lines.map((line, i) => (
+    <Fragment key={i}>
+      {i > 0 ? "\n" : null}
+      {canvasLinePieces(it, line, spans[i].start).map((p, j) => (
+        <span key={j} style={{ color: p.color }}>{p.text}</span>
+      ))}
+    </Fragment>
+  ));
+}
+
 function CanvasArcText({ it }) {
   const L = canvasArcLayout(it);
   if (!L) return null;
@@ -19186,6 +19313,10 @@ function CanvasArcText({ it }) {
     <div style={{ position: "absolute", inset: 0 }}>
       {L.chars.map((ch, i) => (ch.ch.trim() ? (
         <span key={i} style={{ position: "absolute", left: 0, top: 0,
+          // The layout replaces newlines with spaces and keeps every other
+          // character in place, so this index is the source index and a run
+          // can be looked up with it directly.
+          color: canvasRunColor(it, i),
           height: L.lh, lineHeight: `${L.lh}px`, letterSpacing: 0, whiteSpace: "pre",
           // The matrix maps the letter's own frame, so that frame has to start
           // at the corner the matrix was written for. The centring runs first,
@@ -19305,9 +19436,32 @@ const drawStraightText = (ctx, it) => {
     if (it.underline) ctx.fillRect(x0, y + it.size * 0.103 - thick / 2, w2, thick);
     if (it.strike) ctx.fillRect(x0, y - it.size * 0.335 - thick / 2, w2, thick);
   };
-  canvasTextLines(it).forEach((line, i) => {
+  const lines = canvasTextLines(it);
+  // Where each line begins in the source, so a colour put on part of the text
+  // can be found again after the wrapper has broken it.
+  const spans = it.runs?.length ? canvasLineSpans(canvasText(it), lines) : null;
+  lines.forEach((line, i) => {
     const y = it.y + i * L + base;
     rule(line, y);
+    // Coloured in parts, so walked character by character with the colour set
+    // per character. Slower than one fillText, and only ever taken by a text
+    // somebody has actually coloured in parts.
+    if (spans) {
+      const wLine = [...line].reduce((a2, ch) => a2 + ctx.measureText(ch).width + (canSpace ? 0 : ls), 0)
+        - (canSpace ? 0 : ls);
+      let x = it.align === "center" ? it.x + it.w / 2 - wLine / 2
+            : it.align === "right" ? it.x + it.w - wLine : it.x;
+      const prev = ctx.textAlign; ctx.textAlign = "left";
+      const start = spans[i].start;
+      [...line].forEach((ch, k) => {
+        ctx.fillStyle = canvasRunColor(it, start + k);
+        ctx.fillText(ch, x, y);
+        x += ctx.measureText(ch).width + (canSpace ? 0 : ls);
+      });
+      ctx.textAlign = prev;
+      ctx.fillStyle = it.color;
+      return;
+    }
     if (canSpace || !ls) { ctx.fillText(line, tx, y); return; }
     const wLine = [...line].reduce((a2, ch) => a2 + ctx.measureText(ch).width + ls, 0) - ls;
     let x = it.align === "center" ? it.x + it.w / 2 - wLine / 2
@@ -19741,7 +19895,7 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
                       ? `${it.bgStrokeW}px solid ${it.bgStroke}` : undefined }} />
                 ))}
                 {isText ? wrapBg(canvasTextBoxes(it), canvasArc(it) ? <CanvasArcText it={it} />
-                  : canvasTextLines(it).join("\n")) : null}
+                  : <CanvasRichText it={it} />) : null}
               </div>
             );
             return (
@@ -21082,6 +21236,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const openGroup = (gid, on = true) =>
     setOpenGroups(g => (on ? (g.includes(gid) ? g : [...g, gid]) : g.filter(x => x !== gid)));
   const [barPop, setBarPop] = useState(null);   // "color" | null
+  // What is selected INSIDE the text being edited, as character offsets. Kept
+  // here because the toolbar needs it and the textarea loses it the moment the
+  // toolbar takes focus: by the time a swatch is clicked the selection is gone
+  // from the DOM, so it has to have been written down while it still existed.
+  const [textSel, setTextSel] = useState(null);   // null | { id, from, to }
   const [frameTab, setFrameTab] = useState("design");   // "design" | "components"
   const [showGrid, setShowGrid] = useState(true);
   const [cam, setCam] = useState(null);
@@ -24178,9 +24337,24 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         // alone only puts a caret somewhere in the text, and
                         // everybody's second click was a select-all.
                         onFocus={selectOnFirstFocus}
-                        onChange={e => patch(it.id, { text: e.target.value })}
+                        // Written down on every change of the selection, and
+                        // deliberately NOT cleared on blur: clicking a swatch
+                        // blurs the field, and clearing here would throw the
+                        // selection away exactly when it is about to be used.
+                        onSelect={e => {
+                          const { selectionStart: a, selectionEnd: b } = e.target;
+                          setTextSel(b > a ? { id: it.id, from: a, to: b } : null);
+                        }}
+                        onChange={e => {
+                          setTextSel(null);
+                          const next = e.target.value;
+                          patch(it.id, {
+                            text: next,
+                            ...(it.runs?.length ? { runs: canvasShiftRuns(it.runs, it.text || "", next) } : {}),
+                          });
+                        }}
                         onBlur={() => setEditing(null)}
-                        onKeyDown={e => { if (e.key === "Escape") setEditing(null); }}
+                        onKeyDown={e => { if (e.key === "Escape") { setTextSel(null); setEditing(null); } }}
                         style={{ width: "100%", height: "100%", background: "transparent", border: "none",
                           outline: "none", resize: "none", font: "inherit", color: "inherit",
                           lineHeight: "inherit", padding: 0, margin: 0 }} />
@@ -24261,7 +24435,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                             transform: "translateY(-50%)", textAlign: "center" } : {}),
                           height: `${canvasTextH(flat)}px` }} />
                     ) : arc ? <CanvasArcText it={it} />
-                    : canvasTextLines(it).join("\n"))}
+                    : <CanvasRichText it={it} />)}
                     </div>
                     )}
                   </div>
@@ -24999,6 +25173,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   // brings a width with it. Same reasoning as the text
                   // highlight's outline directly above.
                   patch(selItem.id, { stroke: c, ...(selItem.strokeWidth ? {} : { strokeWidth: 2 }) });
+                } else if (barPop === "color" && isText
+                           && textSel && textSel.id === selItem.id && textSel.to > textSel.from) {
+                  // Part of the text, not the whole of it. The element's own
+                  // colour is left alone, so taking the run off again gives it
+                  // back rather than leaving the text some colour it was never
+                  // set to.
+                  patch(selItem.id, {
+                    runs: canvasApplyRun(selItem.runs, textSel.from, textSel.to, c),
+                  });
                 } else patch(selItem.id, { [key]: c });
                 setBarPop(null);
               };
@@ -30716,8 +30899,10 @@ async function renderPostArtboard(board, type = "image/png") {
             + mA.fontBoundingBoxAscent - L.lh / 2;
           ctx.textAlign = "center";
           ctx.textBaseline = "alphabetic";
-          for (const ch of L.chars) {
+          for (const [ci, ch] of L.chars.entries()) {
             if (!ch.ch.trim()) continue;
+            // Same index, same source position as on screen.
+            ctx.fillStyle = canvasRunColor(it, ci);
             ctx.save();
             ctx.translate(it.x, it.y);
             // The same matrix the screen used, handed to the canvas whole. A
