@@ -28127,10 +28127,12 @@ const metaMark = (key, fill) => (
   <g transform="scale(0.0375)"><path d={META_MARK[key]} fill={fill} /></g>
 );
 
-const TP_GLYPH_SCALE = { x: 0.72, tiktok: 1.3, facebook: 1.65, youtube: 1.12, instagram: 1.0, website: 1.0, pinterest: 1.2, linkedin: 1.3,
+const TP_GLYPH_SCALE = { x: 0.72, tiktok: 1.3, facebook: 1.65, youtube: 1.12, website: 1.0, pinterest: 1.2, linkedin: 1.3,
   // Both Meta marks are real drawings now rather than letters. They carry a
   // little more air inside their own box than the stroked glyph they replaced,
-  // so they take the same small correction as each other.
+  // so they take the same small correction as each other. `instagram` was left
+  // behind at 1.0 further up this literal: the later one won, so it looked
+  // right and read as a mistake, which is exactly the kind that survives.
   instagram: 1.15, threads: 1.15 };
 const tpGlyphSize = (key, base) => Math.round(base * (TP_GLYPH_SCALE[key] || 1));
 
