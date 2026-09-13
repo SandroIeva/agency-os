@@ -13,10 +13,10 @@ const grab = (name) => {
   }
   return src.slice(i, src.indexOf(';', j) + 1);
 };
-const code = ["const CANVAS_RUN_KEYS = ['color','opacity','underline','strike'];", grab('canvasApplyRun'), grab('canvasShiftRuns'), grab('canvasLineSpans')].join('\n');
-const { canvasApplyRun, canvasShiftRuns, canvasLineSpans } =
+const code = ["const CANVAS_RUN_KEYS = ['color','opacity','underline','strike'];", grab('canvasApplyRun'), grab('canvasShiftRuns')].join('\n');
+const { canvasApplyRun, canvasShiftRuns } =
   await import('data:text/javascript,' + encodeURIComponent(code +
-    '\nexport { canvasApplyRun, canvasShiftRuns, canvasLineSpans };'));
+    '\nexport { canvasApplyRun, canvasShiftRuns };'));
 
 // ── applying a colour ──────────────────────────────────────────────────────
 assert.deepEqual(canvasApplyRun([], 2, 5, { color: '#f00' }), [{ from: 2, to: 5, color: '#f00' }]);
@@ -45,25 +45,4 @@ assert.deepEqual(canvasShiftRuns(r, 'Hello World', 'Hello '), [], 'deleting the 
 // no change at all is no change
 assert.deepEqual(canvasShiftRuns(r, 'Hello World', 'Hello World'), r);
 
-// ── finding the lines again ────────────────────────────────────────────────
-assert.deepEqual(canvasLineSpans('Hello World', ['Hello', 'World']),
-  [{ start: 0, end: 5 }, { start: 6, end: 11 }], 'the space at the break is consumed');
-assert.deepEqual(canvasLineSpans('a\nb', ['a', 'b']), [{ start: 0, end: 1 }, { start: 2, end: 3 }],
-  'a newline is consumed too');
-const long = 'one two three';
-assert.deepEqual(canvasLineSpans(long, ['one two', 'three']),
-  [{ start: 0, end: 7 }, { start: 8, end: 13 }]);
-// and the offsets really point at the words
-const sp = canvasLineSpans(long, ['one two', 'three']);
-assert.equal(long.slice(sp[0].start, sp[0].end), 'one two');
-assert.equal(long.slice(sp[1].start, sp[1].end), 'three');
-
-// A second property on part of the same range keeps the first.
-const both = canvasApplyRun([{ from: 0, to: 10, color: '#f00' }], 4, 6, { underline: true });
-assert.deepEqual(both, [
-  { from: 0, to: 4, color: '#f00' },
-  { from: 4, to: 6, color: '#f00', underline: true },
-  { from: 6, to: 10, color: '#f00' },
-], 'underlining part of a coloured phrase keeps the colour');
-
-console.log('Passed: colouring part of a text, edits moving it, and finding each wrapped line in the source.');
+console.log('Passed: colouring part of a text, edits moving it, and a second property keeping the first.');

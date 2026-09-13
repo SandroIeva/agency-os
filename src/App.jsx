@@ -18939,6 +18939,11 @@ const CANVAS_FONT_STACK = "'Geist', -apple-system, sans-serif";
 // and the canvas `ctx.font` both take one, so the editor, the thumbnail, the
 // ring and the export all slant together without one of them being told twice.
 const canvasFont = (it) => `${it.italic ? "italic " : ""}${it.weight || 600} ${it.size}px ${it.font ? `'${it.font}', ` : ""}${CANVAS_FONT_STACK}`;
+// The font for ONE character. Same string, built from that character's style,
+// so a measurement and a drawing can never be made with different fonts.
+const canvasFontAt = (it, i) => canvasFont(canvasRunStyle(it, i));
+// Where a text has no runs at all, everything below can take the short road.
+const canvasPlain = (it) => !it.runs || !it.runs.length;
 // "Auto" is 1.2, the value the frame was built with. Letter spacing is a
 // percentage of the size, the way type tools express it, so it survives a
 // change of size.
@@ -18982,51 +18987,101 @@ const measureCtx = () => {
 // A cache keyed by everything that can move a break. Text is re-measured on
 // every render otherwise, and measureText is not free.
 const _wrapCache = new Map();
-const canvasTextLines = (it) => {
+
+// The lines, WHERE each one starts in the source, and how tall it is.
+//
+// Offsets come out of the wrapper rather than being reconstructed afterwards:
+// with a size or a font on part of the text there is no way to measure a line
+// without knowing which characters it holds, and guessing that from the strings
+// afterwards was only ever safe while every character was the same.
+//
+// A line is as tall as the tallest thing ON it. One size for the element made
+// that question moot; several do not, and a line with a big word in it has to
+// make room for it.
+const canvasTextLayout = (it) => {
   const text = canvasText(it);
   const width = Math.max(1, it.w || 0);
-  const key = `${text}\u0000${width}\u0000${canvasFont(it)}\u0000${canvasLS(it)}`;
+  const key = `${text}\u0000${width}\u0000${canvasFont(it)}\u0000${canvasLS(it)}`
+    + `\u0000${it.lh || ""}\u0000${it.runs ? JSON.stringify(it.runs) : ""}`;
   const hit = _wrapCache.get(key);
   if (hit) return hit;
 
   const ctx = measureCtx();
-  const paragraphs = text.split("\n");
-  let out;
+  const ls = canvasLS(it);
+  const lhMul = it.lh || CANVAS_LH;
+  const plain = canvasPlain(it);
+
+  // One character, measured with ITS OWN font. Plain text sets the font once
+  // and never touches it again, which is what keeps the common case as fast as
+  // it was.
+  let lastFont = null;
+  const widthAt = (i, ch) => {
+    if (!ctx) return 0;
+    const f = plain ? canvasFont(it) : canvasFontAt(it, i);
+    if (f !== lastFont) { ctx.font = f; lastFont = f; }
+    return ctx.measureText(ch).width + ls;
+  };
+  const sizeAt = (i) => (plain ? it.size : canvasRunStyle(it, i).size || it.size);
+
+  const lines = [];
+  // `trim` is for a line that ended because it ran out of room: the space it
+  // broke at is consumed by the break and does not belong to either line. A
+  // line that ended at a newline or at the end of the text keeps whatever the
+  // person typed, trailing spaces included.
+  const push = (start, end, trim) => {
+    let stop = end;
+    if (trim) while (stop > start && /\s/.test(text[stop - 1])) stop--;
+    let tall = it.size;
+    for (let i = start; i < stop; i++) tall = Math.max(tall, sizeAt(i));
+    lines.push({ text: text.slice(start, stop), start, end: stop, lh: tall * lhMul });
+  };
+
   if (!ctx) {
     // No DOM to measure with (a server render): break nothing rather than
     // guess, so the text is at worst unwrapped and never wrongly wrapped.
-    out = paragraphs;
+    let at = 0;
+    for (const para of text.split("\n")) { push(at, at + para.length); at += para.length + 1; }
   } else {
-    ctx.font = canvasFont(it);
-    const ls = canvasLS(it);
-    // Letter spacing adds one gap per character, and the browsers that do not
-    // support ctx.letterSpacing still have to be measured with it.
-    const widthOf = (str) => ctx.measureText(str).width + (ls ? ls * str.length : 0);
-    out = [];
-    for (const para of paragraphs) {
-      if (!para) { out.push(""); continue; }
-      // Split on spaces but KEEP them: a run of two spaces is somebody's
-      // layout, and collapsing it would rewrite their text.
-      const words = para.split(/(\s+)/).filter(x => x !== "");
-      let line = "";
-      for (const word of words) {
-        const next = line + word;
-        if (line && widthOf(next) > width) {
-          out.push(line.replace(/\s+$/, ""));
-          // A space that fell at the break is consumed by it.
-          line = /^\s+$/.test(word) ? "" : word;
+    // The old breaker's own shape, kept deliberately: paragraphs, then tokens
+    // that alternate between a run of non-space and a run of space, and a token
+    // that does not fit starts a new line. A run of spaces is a token in its
+    // own right there, so it can trigger a break, and matching that exactly is
+    // what keeps every artboard that already exists laid out as it was.
+    //
+    // What is new is only the measuring: a token's width is the sum of its
+    // characters, each with its own font.
+    let at = 0;
+    for (const para of text.split("\n")) {
+      const base = at;
+      at += para.length + 1;
+      if (!para) { push(base, base); continue; }
+      const tokens = [];
+      for (const m of para.matchAll(/\s+|\S+/g)) {
+        tokens.push({ from: base + m.index, to: base + m.index + m[0].length, space: /^\s/.test(m[0]) });
+      }
+      let lineStart = base, lineEnd = base, lineW = 0;
+      for (const t of tokens) {
+        let tw = 0;
+        for (let k = t.from; k < t.to; k++) tw += widthAt(k, text[k]);
+        if (lineEnd > lineStart && lineW + tw > width) {
+          push(lineStart, lineEnd, true);
+          if (t.space) { lineStart = t.to; lineEnd = t.to; lineW = 0; }
+          else { lineStart = t.from; lineEnd = t.to; lineW = tw; }
         } else {
-          line = next;
+          lineEnd = t.to; lineW += tw;
         }
       }
-      out.push(line);
+      push(lineStart, lineEnd);
     }
   }
+
+  const out = { lines, text };
   // Bounded, because every keystroke while typing makes a new key.
   if (_wrapCache.size > 4000) _wrapCache.clear();
   _wrapCache.set(key, out);
   return out;
 };
+const canvasTextLines = (it) => canvasTextLayout(it).lines.map(l => l.text);
 // ── Colour on part of a text ────────────────────────────────────────────────
 //
 // A text element carries ONE set of properties, and `runs` is the exception:
@@ -19047,12 +19102,17 @@ const canvasTextLines = (it) => {
 // Everything a run may carry. Named rather than left open: the list is short,
 // every entry has to be honoured by three drawers, and a key that only one of
 // them knows about is a difference between the screen and the export.
-const CANVAS_RUN_KEYS = ["color", "opacity", "underline", "strike"];
+// The ones after `strike` change how WIDE a letter is, which is why they came
+// later: the line breaker has to measure per run for them, and so does the
+// ring, and a line's height becomes the tallest thing on it rather than the
+// element's one size.
+const CANVAS_RUN_KEYS = ["color", "opacity", "underline", "strike", "font", "weight", "italic", "size"];
 
 // The style of one character: the element's own, with whatever runs cover it
 // laid over the top in order.
 const canvasRunStyle = (it, i) => {
-  const base = { color: it.color, opacity: 1, underline: !!it.underline, strike: !!it.strike };
+  const base = { color: it.color, opacity: 1, underline: !!it.underline, strike: !!it.strike,
+    font: it.font, weight: it.weight, italic: !!it.italic, size: it.size };
   if (!it.runs || !it.runs.length) return base;
   let out = base;
   for (const r of it.runs) {
@@ -19147,29 +19207,12 @@ const canvasShiftRuns = (runs, before, after) => {
     .filter(r => r.to > r.from);
 };
 
-// Where each wrapped line sits in the source. The wrapper keeps every character
-// in order and only ever eats whitespace at a break, so walking the source with
-// a pointer finds each line without the wrapper having to hand out offsets and
-// without any risk of moving a break.
-const canvasLineSpans = (text, lines) => {
-  const spans = [];
-  let at = 0;
-  for (const line of lines) {
-    while (at < text.length && line && text[at] !== line[0] && /\s/.test(text[at])) at++;
-    spans.push({ start: at, end: at + line.length });
-    at += line.length;
-    // The break itself.
-    while (at < text.length && /\s/.test(text[at]) && text[at] !== "\n") at++;
-    if (text[at] === "\n") at++;
-  }
-  return spans;
-};
-
 // One line, cut into pieces of one colour each. The three drawers all take this
 // so none of them has to know how runs are stored.
 const canvasSameStyle = (a, b) => CANVAS_RUN_KEYS.every(k => a[k] === b[k]);
 const canvasLinePieces = (it, line, start) => {
-  const plain = { color: it.color, opacity: 1, underline: !!it.underline, strike: !!it.strike };
+  const plain = { color: it.color, opacity: 1, underline: !!it.underline, strike: !!it.strike,
+    font: it.font, weight: it.weight, italic: !!it.italic, size: it.size };
   if (!it.runs || !it.runs.length) return [{ text: line, ...plain }];
   const out = [];
   for (let i = 0; i < line.length; i++) {
@@ -19213,6 +19256,7 @@ const canvasArcLayout = (it) => {
   // is: joined with spaces, a text ending in a number and a different width
   // can make the same key.
   const key = [canvasText(it), it.w, canvasFont(it), canvasLS(it), lh,
+    it.runs ? JSON.stringify(it.runs) : "",
     JSON.stringify(arc)].join("\u0000");
   const hit = _arcCache.get(key);
   if (hit) return hit;
@@ -19223,11 +19267,18 @@ const canvasArcLayout = (it) => {
   const ls = canvasLS(it);
   let widths;
   if (ctx) {
-    ctx.font = canvasFont(it);
+    // Each character with its own font, so a word set larger on a ring takes
+    // the share of the sweep its width has actually earned. Plain text sets the
+    // font once, which is what it always did.
+    let lastF = null;
     // Letter spacing widens each character's SHARE of the ring. It must not
     // also be handed to the renderer, which would push every glyph off its
     // own centre by half a gap.
-    widths = chars.map(ch => ctx.measureText(ch).width + ls);
+    widths = chars.map((ch, ci) => {
+      const f = canvasPlain(it) ? canvasFont(it) : canvasFontAt(it, ci);
+      if (f !== lastF) { ctx.font = f; lastF = f; }
+      return ctx.measureText(ch).width + ls;
+    });
   } else widths = chars.map(() => it.size * 0.6 + ls);
   const total = widths.reduce((a, b) => a + b, 0) || 1;
   const sweep = ((arc.sweep == null ? 360 : arc.sweep) * Math.PI) / 180;
@@ -19337,24 +19388,37 @@ const canvasArcLayout = (it) => {
 // render `lines.join("\n")`, and two places building the same spans by hand is
 // how they come to disagree.
 function CanvasRichText({ it, sel }) {
-  const lines = canvasTextLines(it);
+  const layout = canvasTextLayout(it);
+  const lines = layout.lines.map(l => l.text);
   const marked = sel && sel.to > sel.from ? sel : null;
-  if (!marked && (!it.runs || !it.runs.length)) return lines.join("\n");
-  const spans = canvasLineSpans(canvasText(it), lines);
+  if (!marked && canvasPlain(it)) return lines.join("\n");
+  const spans = layout.lines;
+  // A line is its own block once the sizes differ, because a line holding a
+  // bigger word has to be taller and a single inherited line-height cannot say
+  // that. Plain text keeps the old single run of text, so nothing about it
+  // moves by a pixel.
+  const perLine = !canvasPlain(it) && layout.lines.some(l => l.lh !== layout.lines[0].lh);
   // The selection is DRAWN rather than left to the browser. A textarea shows
   // its selection only while it has focus, and clicking anything in the panel
   // takes that focus away, so the words you are about to format stop being
   // visible at the exact moment you format them.
   const HL = "rgba(77,159,255,0.34)";
-  return lines.map((line, i) => (
-    <Fragment key={i}>
-      {i > 0 ? "\n" : null}
+  const body = (line, i) => (
+    <>
       {canvasLinePieces(it, line, spans[i].start).map((p, j, all) => {
         // Where this piece starts in the source, so the highlight can be cut to
         // the same characters the colour will be.
         const at = spans[i].start + all.slice(0, j).reduce((n, q) => n + q.text.length, 0);
         const st = {
           color: p.color,
+          // Only what DIFFERS from the element, so a plain piece inherits and a
+          // changed one overrides. Writing all of it every time would pin the
+          // element's own font into every span and a later change to it would
+          // stop reaching the text.
+          ...(p.font !== it.font ? { fontFamily: `'${p.font}', ${CANVAS_FONT_STACK}` } : {}),
+          ...(p.size !== it.size ? { fontSize: `${p.size}px` } : {}),
+          ...(p.weight !== it.weight ? { fontWeight: p.weight } : {}),
+          ...(!!p.italic !== !!it.italic ? { fontStyle: p.italic ? "italic" : "normal" } : {}),
           ...(p.opacity != null && p.opacity < 1 ? { opacity: p.opacity } : {}),
           // Both at once is a real combination, so they are joined rather than
           // one winning.
@@ -19375,7 +19439,11 @@ function CanvasRichText({ it, sel }) {
           </span>
         );
       })}
-    </Fragment>
+    </>
+  );
+  return lines.map((line, i) => (perLine
+    ? <div key={i} style={{ lineHeight: `${spans[i].lh}px` }}>{body(line, i) || "\u00a0"}</div>
+    : <Fragment key={i}>{i > 0 ? "\n" : null}{body(line, i)}</Fragment>
   ));
 }
 
@@ -19409,7 +19477,10 @@ function CanvasArcText({ it }) {
 const canvasTextH = (it) => {
   const L = canvasArcLayout(it);
   if (L) return Math.max(1, L.boxH);
-  return Math.max(1, canvasTextLines(it).length) * canvasLH(it);
+  const ls2 = canvasTextLayout(it).lines;
+  // Summed rather than counted: with a size on part of the text the lines are
+  // no longer all the same height.
+  return ls2.length ? ls2.reduce((n, l) => n + l.lh, 0) : canvasLH(it);
 };
 
 // The boxes behind the lines of a text element. One per line, each hugging the
@@ -19513,19 +19584,35 @@ const drawStraightText = (ctx, it) => {
     if (it.underline) ctx.fillRect(x0, y + it.size * 0.103 - thick / 2, w2, thick);
     if (it.strike) ctx.fillRect(x0, y - it.size * 0.335 - thick / 2, w2, thick);
   };
-  const lines = canvasTextLines(it);
-  // Where each line begins in the source, so a colour put on part of the text
-  // can be found again after the wrapper has broken it.
-  const spans = it.runs?.length ? canvasLineSpans(canvasText(it), lines) : null;
+  const layout = canvasTextLayout(it);
+  const lines = layout.lines.map(l => l.text);
+  // Where each line begins in the source, so a style put on part of the text
+  // can be found again after the wrapper has broken it. Straight from the
+  // wrapper, which is the only place that can know it once the sizes differ.
+  const spans = canvasPlain(it) ? null : layout.lines;
+  // Lines are no longer all the same height, so the next one starts where the
+  // last one ended rather than at a multiple of one number.
+  let top = it.y;
   lines.forEach((line, i) => {
-    const y = it.y + i * L + base;
+    const lineH = layout.lines[i].lh;
+    // The baseline sits the same way inside a taller line as inside a short
+    // one: the glyph box centred in the line box, which is the sum the screen
+    // makes too.
+    const y = spans
+      ? top + (lineH - (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent)) / 2 + m.fontBoundingBoxAscent
+      : it.y + i * L + base;
+    top += lineH;
     rule(line, y);
     // Coloured in parts, so walked character by character with the colour set
     // per character. Slower than one fillText, and only ever taken by a text
     // somebody has actually coloured in parts.
     if (spans) {
-      const wLine = [...line].reduce((a2, ch) => a2 + ctx.measureText(ch).width + (canSpace ? 0 : ls), 0)
-        - (canSpace ? 0 : ls);
+      const start0 = spans[i].start;
+      const wLine = [...line].reduce((a2, ch, k) => {
+        ctx.font = canvasFontAt(it, start0 + k);
+        return a2 + ctx.measureText(ch).width + (canSpace ? 0 : ls);
+      }, 0) - (canSpace ? 0 : ls);
+      ctx.font = canvasFont(it);
       let x = it.align === "center" ? it.x + it.w / 2 - wLine / 2
             : it.align === "right" ? it.x + it.w - wLine : it.x;
       const prev = ctx.textAlign; ctx.textAlign = "left";
@@ -19536,17 +19623,23 @@ const drawStraightText = (ctx, it) => {
       const placed = [];
       [...line].forEach((ch, k) => {
         const st = canvasRunStyle(it, start + k);
+        // The character's OWN font, set before it is measured, or a letter set
+        // larger would be drawn large and spaced as if it were small.
+        ctx.font = canvasFont(st);
         const w2 = ctx.measureText(ch).width;
         ctx.fillStyle = st.color;
         ctx.globalAlpha = st.opacity == null ? 1 : st.opacity;
+        // A bigger letter sits on the same baseline as its neighbours, which is
+        // what the screen does and what reads as one line of type.
         ctx.fillText(ch, x, y);
         placed.push({ x, w: w2, st });
         x += w2 + (canSpace ? 0 : ls);
       });
       ctx.globalAlpha = 1;
+      ctx.font = canvasFont(it);
       // One bar per unbroken stretch that carries the decoration, at the same
       // thickness and offset the whole-line version uses.
-      const thick = Math.max(1, it.size * 0.094);
+      const thickOf = (st) => Math.max(1, (st.size || it.size) * 0.094);
       for (const which of ["underline", "strike"]) {
         let from = null;
         const flush = (end) => {
@@ -19555,9 +19648,11 @@ const drawStraightText = (ctx, it) => {
           const x1 = placed[end].x + placed[end].w;
           ctx.fillStyle = placed[from].st.color;
           ctx.globalAlpha = placed[from].st.opacity == null ? 1 : placed[from].st.opacity;
+          const stq = placed[from].st;
+          const th2 = thickOf(stq), sz = stq.size || it.size;
           ctx.fillRect(x0, which === "underline"
-            ? y + it.size * 0.103 - thick / 2
-            : y - it.size * 0.335 - thick / 2, x1 - x0, thick);
+            ? y + sz * 0.103 - th2 / 2
+            : y - sz * 0.335 - th2 / 2, x1 - x0, th2);
           ctx.globalAlpha = 1;
           from = null;
         };
@@ -25086,8 +25181,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 {/* Type a size, or take one from the list beside it. */}
                 <div style={{ display: "flex", alignItems: "center", height: BAR_H, borderRadius: BAR_R,
                   background: "rgba(255,255,255,0.12)", paddingRight: 2 }}>
-                  <NumberField value={selItem.size} min={6}
-                    onCommit={v => patch(selItem.id, { size: v })}
+                  <NumberField value={canvasRunStyle(selItem, textSel?.id === selItem.id ? textSel.from : -1).size || selItem.size} min={6}
+                    onCommit={v => patch(selItem.id, textRunPatch(selItem, { size: v }))}
                     style={{ width: 46, height: BAR_H, border: "none", outline: "none",
                       background: "transparent", color: "#fff", fontFamily: FONT, fontSize: 12,
                       textAlign: "center" }} />
@@ -25100,12 +25195,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}><polyline points="6 9 12 15 18 9"/></svg>
                   </div>
                 </div>
-                <div onClick={() => patch(selItem.id, { weight: selItem.weight >= 700 ? 400 : 700 })} title="Bold"
+                <div onClick={() => patch(selItem.id, textRunPatch(selItem,
+                    { weight: canvasRunStyle(selItem, textSel?.id === selItem.id ? textSel.from : -1).weight >= 700 ? 400 : 700 }))} title="Bold"
                   style={{ ...iconBtn, fontFamily: FONT, fontWeight: 800, fontSize: 13,
-                    background: selItem.weight >= 700 ? "rgba(255,255,255,0.22)" : "transparent" }}>B</div>
-                <div onClick={() => patch(selItem.id, { italic: !selItem.italic })} title="Italic"
+                    background: canvasRunStyle(selItem, textSel?.id === selItem.id ? textSel.from : -1).weight >= 700
+                      ? "rgba(255,255,255,0.22)" : "transparent" }}>B</div>
+                <div onClick={() => patch(selItem.id, textRunPatch(selItem,
+                    { italic: !canvasRunStyle(selItem, textSel?.id === selItem.id ? textSel.from : -1).italic }))} title="Italic"
                   style={{ ...iconBtn, fontFamily: "Georgia, serif", fontStyle: "italic", fontSize: 14,
-                    background: selItem.italic ? "rgba(255,255,255,0.22)" : "transparent" }}>I</div>
+                    background: canvasRunStyle(selItem, textSel?.id === selItem.id ? textSel.from : -1).italic
+                      ? "rgba(255,255,255,0.22)" : "transparent" }}>I</div>
                 {/* On the marked words when there are some. What the button
                     shows as "on" follows the same reading: with a selection it
                     is the state of the first marked character, not the
