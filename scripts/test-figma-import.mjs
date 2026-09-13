@@ -147,3 +147,51 @@ assert.equal(twoOut.length, 2);
 assert.ok(twoOut[0].groupId && twoOut[0].groupId === twoOut[1].groupId);
 
 console.log('Passed: one fill is one path, holes ride in subs, winding rule named only when it differs, scaling and grouping.');
+
+// ── Text that is not all one style ─────────────────────────────────────────
+// Figma hands this over as one style id per CHARACTER into a table of partial
+// styles. The artboard holds exactly that shape, so it is a translation.
+const styled = {
+  type: 'FRAME', absoluteBoundingBox: { x: 0, y: 0, width: 800, height: 400 }, fills: [],
+  children: [{
+    type: 'TEXT',
+    absoluteBoundingBox: { x: 0, y: 0, width: 400, height: 60 },
+    characters: 'Hello brave World',
+    style: { fontSize: 20, fontWeight: 400, fontFamily: 'Geist', textAlignHorizontal: 'LEFT' },
+    fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0, a: 1 } }],
+    //        H e l l o _ b r a v e _ W o r l d
+    characterStyleOverrides: [0,0,0,0,0,0,1,1,1,1,1,0,2,2,2,2,2],
+    styleOverrideTable: {
+      1: { fontWeight: 700, fills: [{ type: 'SOLID', color: { r: 1, g: 0, b: 0, a: 1 } }] },
+      2: { fontSize: 40, textDecoration: 'UNDERLINE' },
+    },
+  }],
+};
+vid = 0;
+const styledOut = figmaToItems(styled, { newId: () => 'id' + (++vid) }).items.find(i => i.type === 'text');
+assert.equal(styledOut.text, 'Hello brave World');
+assert.equal(styledOut.size, 20);
+assert.deepEqual(styledOut.runs, [
+  { from: 6, to: 11, weight: 700, color: '#ff0000' },
+  { from: 12, to: 17, size: 40, underline: true },
+], 'each stretch of one style id becomes one run, carrying only what differs');
+
+// A run that repeats the element's own style is not a run at all.
+const sameAsBase = JSON.parse(JSON.stringify(styled));
+sameAsBase.children[0].styleOverrideTable = { 1: { fontWeight: 400 }, 2: { fontSize: 20 } };
+vid = 0;
+assert.equal(
+  figmaToItems(sameAsBase, { newId: () => 'id' + (++vid) }).items.find(i => i.type === 'text').runs,
+  undefined, 'an override that matches the element changes nothing');
+
+// Fitting the board down scales a size set on part of the text with the rest.
+const styledFit = fitItems(
+  figmaToItems(styled, { newId: () => 'x' + Math.random() }).items,
+  { w: 800, h: 400 }, { w: 400, h: 200 });
+const fitText = styledFit.items.find(i => i.type === 'text');
+assert.equal(styledFit.scale, 0.5);
+assert.equal(fitText.size, 10);
+assert.equal(fitText.runs.find(r => r.size != null).size, 20, 'the run halves with the element');
+assert.equal(fitText.runs.find(r => r.weight != null).weight, 700, 'a weight is not a length');
+
+console.log('Passed: mixed text styles from Figma arrive as runs, and scale with the board.');

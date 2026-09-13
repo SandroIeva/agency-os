@@ -490,14 +490,73 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     };
   };
 
+  // Text that is not all one style. Figma hands this over as one id per
+  // CHARACTER into a table of partial styles, so consecutive characters with
+  // the same id are one run. The artboard holds exactly this shape, so it is a
+  // translation rather than an approximation: the parts it cannot hold are
+  // still counted out loud.
+  //
+  // Anything that matches the element's own style is left out. A run that says
+  // what the element already says is one the element can no longer change.
+  const textRuns = (node, base, note2) => {
+    const ids = node.characterStyleOverrides;
+    const table = node.styleOverrideTable;
+    if (!Array.isArray(ids) || !ids.some(Boolean) || !table) return null;
+
+    const lost = new Set();
+    const styleFor = (id) => {
+      const o = table[id];
+      if (!o) return null;
+      const out = {};
+      if (o.fontSize != null && Math.round(o.fontSize) !== base.size) out.size = Math.round(o.fontSize);
+      if (o.fontWeight != null && o.fontWeight !== base.weight) out.weight = o.fontWeight;
+      if (o.fontFamily != null && o.fontFamily !== base.font) out.font = o.fontFamily;
+      if (o.italic != null && !!o.italic !== !!base.italic) out.italic = !!o.italic;
+      const dec = String(o.textDecoration || "");
+      if (dec === "UNDERLINE" && !base.underline) out.underline = true;
+      if (dec === "STRIKETHROUGH" && !base.strike) out.strike = true;
+      const f = (o.fills || []).find(x => x.visible !== false && x.type === "SOLID");
+      if (f) {
+        const c = hex(f.color);
+        if (c !== base.color) out.color = c;
+        const a = round2((f.opacity ?? 1) * (f.color?.a ?? 1));
+        if (a < 1) out.opacity = a;
+      }
+      // Per-run line height and letter spacing are element-wide on the
+      // artboard, so a run that sets one of them cannot be carried.
+      if (o.lineHeightPx != null || o.letterSpacing != null) lost.add("run-spacing");
+      return Object.keys(out).length ? out : null;
+    };
+
+    const runs = [];
+    const n = (node.characters || "").length;
+    let i = 0;
+    while (i < n) {
+      const id = ids[i] || 0;
+      let j = i + 1;
+      while (j < n && (ids[j] || 0) === id) j++;
+      const style = id ? styleFor(id) : null;
+      if (style) runs.push({ from: i, to: j, ...style });
+      i = j;
+    }
+    for (const k of lost) note2(k);
+    return runs.length ? runs : null;
+  };
+
   const textItem = (node, b, opacity) => {
     const st = node.style || {};
     const size = Math.round(st.fontSize || 16);
     const paint = solidFill(node);
     if (!paint && gradientFill(node)) note("gradient-text");
-    // A run with its own colour or size is a thing the artboard cannot hold: it
-    // has one style per text item.
-    if ((node.characterStyleOverrides || []).some(Boolean)) note("mixed-text-style");
+    // The base the runs are measured against, so a run only carries what
+    // actually differs from it.
+    const base = {
+      size, weight: st.fontWeight || 400, font: st.fontFamily,
+      italic: !!st.italic, color: paint?.color || "#15151c",
+      underline: String(st.textDecoration || "") === "UNDERLINE",
+      strike: String(st.textDecoration || "") === "STRIKETHROUGH",
+    };
+    const runs = textRuns(node, base, note);
     return {
       id: newId(), type: "text",
       ...(curGid ? { groupId: curGid } : {}),
@@ -513,6 +572,10 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
         ? "left" : (st.textAlignHorizontal || "LEFT").toLowerCase(),
       ...(st.fontFamily ? { font: st.fontFamily } : {}),
       ...(st.italic ? { italic: true } : {}),
+      ...(base.underline ? { underline: true } : {}),
+      ...(base.strike ? { strike: true } : {}),
+      // Part of the text styled differently, which the artboard holds as runs.
+      ...(runs ? { runs } : {}),
       // The artboard keeps line height as a MULTIPLE of the size and letter
       // spacing as a PERCENTAGE of it, so both survive a resize. Figma reports
       // both in pixels.
@@ -570,6 +633,11 @@ export function fitItems(items, from, to) {
       ...(it.x1 != null ? { x1: r(it.x1), y1: r(it.y1), x2: r(it.x2), y2: r(it.y2) } : {}),
       // Type scales with the layout or the design stops being the design.
       ...(it.size != null ? { size: Math.max(4, Math.round(it.size * k)) } : {}),
+      // Including a size set on PART of a text. Left behind it would keep its
+      // full size inside a text that shrank around it, which is a word four
+      // times too big rather than a slightly wrong one.
+      ...(Array.isArray(it.runs) ? { runs: it.runs.map(r =>
+        (r.size != null ? { ...r, size: Math.max(4, Math.round(r.size * k)) } : r)) } : {}),
       ...(it.radius != null ? { radius: r(it.radius) } : {}),
       ...(Array.isArray(it.radii) ? { radii: it.radii.map(r) } : {}),
       // A shadow that keeps its offset while the box halves is a shadow that

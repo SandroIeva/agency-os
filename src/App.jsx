@@ -22594,7 +22594,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       "background-blur-stack": de ? "gestapelte Hintergrund-Blurs" : "stacked background blurs",
       "background-blur-progressive": de ? "progressiver Hintergrund-Blur" : "progressive background blur",
       "inner-shadow": de ? "innerer Schatten" : "inner shadow",
-      "mixed-text-style": de ? "gemischter Textstil" : "mixed text style",
+      // Mixed text styles are IMPORTED now, so there is nothing to report about
+      // them. What still cannot be carried is a line height or a letter spacing
+      // set on part of a text: the artboard holds both per element.
+      "run-spacing": de ? "Zeilenabstand im Textteil" : "spacing inside a text",
       // Not a simplification but a loss, and it belongs in the same count: a
       // picture that did not upload is the one thing somebody will look for.
       "image-failed": de ? "Bild nicht geladen" : "image not loaded" };
@@ -23797,7 +23800,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       w: Math.max(1, Math.round((it.w || b.w) * sx)),
       h: it.h == null ? it.h : Math.max(1, Math.round(it.h * sy)),
       // Text has no height of its own — its size is what makes it bigger.
-      ...(it.type === "text" ? { size: Math.max(4, Math.round((it.size || 16) * s1)) } : {}) };
+      ...(it.type === "text" ? {
+        size: Math.max(4, Math.round((it.size || 16) * s1)),
+        // A size set on part of the text scales with the rest of it.
+        ...(Array.isArray(it.runs) ? { runs: it.runs.map(r =>
+          (r.size != null ? { ...r, size: Math.max(4, Math.round(r.size * s1)) } : r)) } : {}),
+      } : {}) };
   };
 
   const unionRotBox = (list) => {
