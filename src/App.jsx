@@ -19044,29 +19044,71 @@ const canvasTextLines = (it) => {
 // Offsets are into the RAW text. The case setting is applied on the way out and
 // upper, lower and title all preserve length and position, so an offset means
 // the same thing on both sides of it.
-const canvasRunColor = (it, i) => {
-  const runs = it.runs;
-  if (!runs || !runs.length) return it.color;
-  for (const r of runs) if (i >= r.from && i < r.to && r.color) return r.color;
-  return it.color;
+// Everything a run may carry. Named rather than left open: the list is short,
+// every entry has to be honoured by three drawers, and a key that only one of
+// them knows about is a difference between the screen and the export.
+const CANVAS_RUN_KEYS = ["color", "opacity", "underline", "strike"];
+
+// The style of one character: the element's own, with whatever runs cover it
+// laid over the top in order.
+const canvasRunStyle = (it, i) => {
+  const base = { color: it.color, opacity: 1, underline: !!it.underline, strike: !!it.strike };
+  if (!it.runs || !it.runs.length) return base;
+  let out = base;
+  for (const r of it.runs) {
+    if (i < r.from || i >= r.to) continue;
+    for (const k of CANVAS_RUN_KEYS) if (r[k] !== undefined) out = { ...out, [k]: r[k] };
+  }
+  return out;
 };
+const canvasRunColor = (it, i) => canvasRunStyle(it, i).color;
 
 // Lay one colouring over whatever is already there. Ranges are cut where they
 // overlap rather than stacked, so the list stays flat and the last thing
 // somebody did is what they see.
-const canvasApplyRun = (runs, from, to, color) => {
-  if (to <= from) return runs || [];
+const canvasApplyRun = (runs, from, to, patch) => {
+  if (to <= from || !patch) return runs || [];
   const out = [];
+  // The part of the range that already had a run keeps what it had and takes
+  // the new property on top. Colouring a phrase and then underlining half of it
+  // has to leave the colour alone on that half.
+  let covered = [];
   for (const r of runs || []) {
     if (r.to <= from || r.from >= to) { out.push(r); continue; }
     if (r.from < from) out.push({ ...r, to: from });
     if (r.to > to) out.push({ ...r, from: to });
+    covered.push({ from: Math.max(r.from, from), to: Math.min(r.to, to), keep: r });
   }
-  // A colouring that matches the element's own colour is not a run, it is the
-  // absence of one. Kept out, or a text would slowly fill with runs that say
-  // nothing and survive every later change to the element colour.
-  if (color) out.push({ from, to, color });
-  return out.sort((a, b) => a.from - b.from);
+  // Only the style, never the old range: taking `from` and `to` along with it
+  // is how a merged run ends up claiming characters it was never given.
+  const styleOf = (r) => {
+    const o = {};
+    for (const k of CANVAS_RUN_KEYS) if (r[k] !== undefined) o[k] = r[k];
+    return o;
+  };
+  covered.sort((a, b) => a.from - b.from);
+  let at = from;
+  for (const c of covered) {
+    if (c.from > at) out.push({ from: at, to: c.from, ...patch });
+    out.push({ from: c.from, to: c.to, ...styleOf(c.keep), ...patch });
+    at = Math.max(at, c.to);
+  }
+  if (at < to) out.push({ from: at, to, ...patch });
+  const kept = out
+    // A run that ended up carrying nothing is not a run.
+    .filter(r => r.to > r.from && CANVAS_RUN_KEYS.some(k => r[k] !== undefined))
+    .sort((a, b) => a.from - b.from);
+  // Neighbours that say the same thing become one. Cutting at an old boundary
+  // and leaving both halves is correct and untidy, and the list grows a little
+  // every time somebody changes their mind.
+  const same = (a, b) => CANVAS_RUN_KEYS.every(k => a[k] === b[k]);
+  const merged = [];
+  for (const r of kept) {
+    const last = merged[merged.length - 1];
+    if (last && last.to === r.from && same(last, r)) last.to = r.to;
+    else merged.push({ ...r });
+  }
+  return merged;
 };
 
 // Runs after an edit. Offsets are positions in the text, so inserting a word in
@@ -19125,16 +19167,18 @@ const canvasLineSpans = (text, lines) => {
 
 // One line, cut into pieces of one colour each. The three drawers all take this
 // so none of them has to know how runs are stored.
+const canvasSameStyle = (a, b) => CANVAS_RUN_KEYS.every(k => a[k] === b[k]);
 const canvasLinePieces = (it, line, start) => {
-  if (!it.runs || !it.runs.length) return [{ text: line, color: it.color }];
+  const plain = { color: it.color, opacity: 1, underline: !!it.underline, strike: !!it.strike };
+  if (!it.runs || !it.runs.length) return [{ text: line, ...plain }];
   const out = [];
   for (let i = 0; i < line.length; i++) {
-    const c = canvasRunColor(it, start + i);
+    const st = canvasRunStyle(it, start + i);
     const last = out[out.length - 1];
-    if (last && last.color === c) last.text += line[i];
-    else out.push({ text: line[i], color: c });
+    if (last && canvasSameStyle(last, st)) last.text += line[i];
+    else out.push({ text: line[i], ...st });
   }
-  return out.length ? out : [{ text: line, color: it.color }];
+  return out.length ? out : [{ text: line, ...plain }];
 };
 
 // ── Text on a ring ─────────────────────────────────────────────────────────
@@ -19309,10 +19353,19 @@ function CanvasRichText({ it, sel }) {
         // Where this piece starts in the source, so the highlight can be cut to
         // the same characters the colour will be.
         const at = spans[i].start + all.slice(0, j).reduce((n, q) => n + q.text.length, 0);
-        if (!marked) return <span key={j} style={{ color: p.color }}>{p.text}</span>;
+        const st = {
+          color: p.color,
+          ...(p.opacity != null && p.opacity < 1 ? { opacity: p.opacity } : {}),
+          // Both at once is a real combination, so they are joined rather than
+          // one winning.
+          ...(p.underline || p.strike
+            ? { textDecorationLine: [p.underline && "underline", p.strike && "line-through"].filter(Boolean).join(" ") }
+            : {}),
+        };
+        if (!marked) return <span key={j} style={st}>{p.text}</span>;
         const chars = [...p.text];
         return (
-          <span key={j} style={{ color: p.color }}>
+          <span key={j} style={st}>
             {chars.map((ch, k) => {
               const on = at + k >= marked.from && at + k < marked.to;
               return on
@@ -19438,6 +19491,10 @@ const drawStraightText = (ctx, it) => {
   // baseline, a strike crosses the middle of the lower-case letters. Both come
   // out of the size, so they follow it.
   const rule = (line, y) => {
+    // Not when the line is drawn character by character: that branch draws its
+    // own bars, cut to the characters that actually carry them, and both would
+    // put two on top of each other.
+    if (it.runs?.length) return;
     if ((!it.underline && !it.strike) || !line) return;
     const w2 = ctx.measureText(line).width + (ls && !canSpace ? ls * line.length : 0);
     const x0 = it.align === "center" ? it.x + it.w / 2 - w2 / 2
@@ -19473,11 +19530,43 @@ const drawStraightText = (ctx, it) => {
             : it.align === "right" ? it.x + it.w - wLine : it.x;
       const prev = ctx.textAlign; ctx.textAlign = "left";
       const start = spans[i].start;
+      // Walked once, and where each character landed is kept: a rule under part
+      // of a line has to be as wide as exactly those characters, and that is
+      // not known until they have been placed.
+      const placed = [];
       [...line].forEach((ch, k) => {
-        ctx.fillStyle = canvasRunColor(it, start + k);
+        const st = canvasRunStyle(it, start + k);
+        const w2 = ctx.measureText(ch).width;
+        ctx.fillStyle = st.color;
+        ctx.globalAlpha = st.opacity == null ? 1 : st.opacity;
         ctx.fillText(ch, x, y);
-        x += ctx.measureText(ch).width + (canSpace ? 0 : ls);
+        placed.push({ x, w: w2, st });
+        x += w2 + (canSpace ? 0 : ls);
       });
+      ctx.globalAlpha = 1;
+      // One bar per unbroken stretch that carries the decoration, at the same
+      // thickness and offset the whole-line version uses.
+      const thick = Math.max(1, it.size * 0.094);
+      for (const which of ["underline", "strike"]) {
+        let from = null;
+        const flush = (end) => {
+          if (from == null) return;
+          const x0 = placed[from].x;
+          const x1 = placed[end].x + placed[end].w;
+          ctx.fillStyle = placed[from].st.color;
+          ctx.globalAlpha = placed[from].st.opacity == null ? 1 : placed[from].st.opacity;
+          ctx.fillRect(x0, which === "underline"
+            ? y + it.size * 0.103 - thick / 2
+            : y - it.size * 0.335 - thick / 2, x1 - x0, thick);
+          ctx.globalAlpha = 1;
+          from = null;
+        };
+        placed.forEach((q, k) => {
+          if (q.st[which]) { if (from == null) from = k; }
+          else flush(k - 1);
+        });
+        flush(placed.length - 1);
+      }
       ctx.textAlign = prev;
       ctx.fillStyle = it.color;
       return;
@@ -21272,10 +21361,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   useEffect(() => { setTextSel(t => (t && t.id !== sel ? null : t)); }, [sel]);
 
   const textRunPatch = (item, o) => {
-    if (!item || item.type !== "text" || !o || o.color == null) return o;
+    if (!item || item.type !== "text" || !o) return o;
     if (!textSel || textSel.id !== item.id || textSel.to <= textSel.from) return o;
-    const { color, ...rest } = o;
-    return { ...rest, runs: canvasApplyRun(item.runs, textSel.from, textSel.to, color) };
+    // Whatever a run can carry goes into the run; anything else in the same
+    // write still belongs to the element. One rule for all of them, so adding a
+    // property to CANVAS_RUN_KEYS is the whole of adding it here.
+    const forRun = {}, rest = {};
+    for (const [k, v] of Object.entries(o)) {
+      if (CANVAS_RUN_KEYS.includes(k)) forRun[k] = v; else rest[k] = v;
+    }
+    if (!Object.keys(forRun).length) return o;
+    return { ...rest, runs: canvasApplyRun(item.runs, textSel.from, textSel.to, forRun) };
   };
   const [frameTab, setFrameTab] = useState("design");   // "design" | "components"
   const [showGrid, setShowGrid] = useState(true);
@@ -25010,11 +25106,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 <div onClick={() => patch(selItem.id, { italic: !selItem.italic })} title="Italic"
                   style={{ ...iconBtn, fontFamily: "Georgia, serif", fontStyle: "italic", fontSize: 14,
                     background: selItem.italic ? "rgba(255,255,255,0.22)" : "transparent" }}>I</div>
-                <div onClick={() => patch(selItem.id, { underline: !selItem.underline })}
+                {/* On the marked words when there are some. What the button
+                    shows as "on" follows the same reading: with a selection it
+                    is the state of the first marked character, not the
+                    element's. */}
+                <div onClick={() => patch(selItem.id, textRunPatch(selItem,
+                    { underline: !canvasRunStyle(selItem, textSel?.id === selItem.id ? textSel.from : -1).underline }))}
                   title={de ? "Unterstrichen" : "Underline"}
                   style={{ ...iconBtn, fontFamily: FONT, fontSize: 13,
                     textDecoration: "underline", textUnderlineOffset: 2,
-                    background: selItem.underline ? "rgba(255,255,255,0.22)" : "transparent" }}>U</div>
+                    background: canvasRunStyle(selItem, textSel?.id === selItem.id ? textSel.from : -1).underline
+                      ? "rgba(255,255,255,0.22)" : "transparent" }}>U</div>
                 {/* The letter wearing the thing it does, like the three beside
                     it: B is bold, I is italic, U is underlined, S is struck
                     through.
@@ -25023,11 +25125,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     attempt is gone: B is bold because bold is what it means, and
                     an S that heavy said the same thing about a strike. Size
                     carries it on its own. */}
-                <div onClick={() => patch(selItem.id, { strike: !selItem.strike })}
+                <div onClick={() => patch(selItem.id, textRunPatch(selItem,
+                    { strike: !canvasRunStyle(selItem, textSel?.id === selItem.id ? textSel.from : -1).strike }))}
                   title={de ? "Durchgestrichen" : "Strikethrough"}
                   style={{ ...iconBtn, fontFamily: FONT, fontSize: 15,
                     textDecoration: "line-through",
-                    background: selItem.strike ? "rgba(255,255,255,0.22)" : "transparent" }}>S</div>
+                    background: canvasRunStyle(selItem, textSel?.id === selItem.id ? textSel.from : -1).strike
+                      ? "rgba(255,255,255,0.22)" : "transparent" }}>S</div>
                 {/* Left, centre, right, round again. It toggled between two of
                     them, so right alignment could only be reached from the
                     sidebar — and the icon showed the state, not the ends. */}
@@ -25223,7 +25327,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   // back rather than leaving the text some colour it was never
                   // set to.
                   patch(selItem.id, {
-                    runs: canvasApplyRun(selItem.runs, textSel.from, textSel.to, c),
+                    runs: canvasApplyRun(selItem.runs, textSel.from, textSel.to, { color: c }),
                   });
                 } else patch(selItem.id, { [key]: c });
                 setBarPop(null);
@@ -30970,7 +31074,9 @@ async function renderPostArtboard(board, type = "image/png") {
           for (const [ci, ch] of L.chars.entries()) {
             if (!ch.ch.trim()) continue;
             // Same index, same source position as on screen.
-            ctx.fillStyle = canvasRunColor(it, ci);
+            const stA = canvasRunStyle(it, ci);
+            ctx.fillStyle = stA.color;
+            ctx.globalAlpha = stA.opacity == null ? 1 : stA.opacity;
             ctx.save();
             ctx.translate(it.x, it.y);
             // The same matrix the screen used, handed to the canvas whole. A
@@ -30980,6 +31086,7 @@ async function renderPostArtboard(board, type = "image/png") {
             ctx.transform(ch.m[0], ch.m[1], ch.m[2], ch.m[3], ch.m[4], ch.m[5]);
             ctx.fillText(ch.ch, 0, baseA);
             ctx.restore();
+            ctx.globalAlpha = 1;
           }
         } else if (it.type === "text") {
           drawStraightText(ctx, it);
