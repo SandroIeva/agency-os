@@ -24337,24 +24337,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         // alone only puts a caret somewhere in the text, and
                         // everybody's second click was a select-all.
                         onFocus={selectOnFirstFocus}
-                        // Written down on every change of the selection, and
-                        // deliberately NOT cleared on blur: clicking a swatch
-                        // blurs the field, and clearing here would throw the
-                        // selection away exactly when it is about to be used.
-                        onSelect={e => {
-                          const { selectionStart: a, selectionEnd: b } = e.target;
-                          setTextSel(b > a ? { id: it.id, from: a, to: b } : null);
-                        }}
-                        onChange={e => {
-                          setTextSel(null);
-                          const next = e.target.value;
-                          patch(it.id, {
-                            text: next,
-                            ...(it.runs?.length ? { runs: canvasShiftRuns(it.runs, it.text || "", next) } : {}),
-                          });
-                        }}
+                        onChange={e => patch(it.id, { text: e.target.value })}
                         onBlur={() => setEditing(null)}
-                        onKeyDown={e => { if (e.key === "Escape") { setTextSel(null); setEditing(null); } }}
+                        onKeyDown={e => { if (e.key === "Escape") setEditing(null); }}
                         style={{ width: "100%", height: "100%", background: "transparent", border: "none",
                           outline: "none", resize: "none", font: "inherit", color: "inherit",
                           lineHeight: "inherit", padding: 0, margin: 0 }} />
@@ -24412,9 +24397,28 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         rows={1}
                         onFocus={selectOnFirstFocus}
                         ref={el => fitTextArea(el, flat)}
-                        onChange={e => patch(it.id, { text: e.target.value })}
+                        // Which characters are selected, written down while the
+                        // selection still exists. Clicking anything in the panel
+                        // takes the focus off this field and the browser forgets
+                        // it, so by the time a colour is chosen it has to have
+                        // been remembered. Deliberately NOT cleared on blur, for
+                        // the same reason.
+                        onSelect={e => {
+                          const { selectionStart: a, selectionEnd: b } = e.target;
+                          setTextSel(b > a ? { id: it.id, from: a, to: b } : null);
+                        }}
+                        onChange={e => {
+                          setTextSel(null);
+                          const next = e.target.value;
+                          // Offsets are positions in the text, so an edit in
+                          // front of a coloured phrase has to move it along.
+                          patch(it.id, {
+                            text: next,
+                            ...(it.runs?.length ? { runs: canvasShiftRuns(it.runs, it.text || "", next) } : {}),
+                          });
+                        }}
                         onBlur={() => setEditing(null)}
-                        onKeyDown={e => { if (e.key === "Escape") setEditing(null); }}
+                        onKeyDown={e => { if (e.key === "Escape") { setTextSel(null); setEditing(null); } }}
                         onInput={e => fitTextArea(e.currentTarget, flat)}
                         style={{ width: "100%", background: "transparent", border: "none", outline: "none",
                           resize: "none", font: "inherit", color: "inherit", lineHeight: "inherit",
