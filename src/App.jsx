@@ -20088,13 +20088,16 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
               it.flipX ? "scaleX(-1)" : "", it.flipY ? "scaleY(-1)" : ""].filter(Boolean).join(" ");
             const inner = (
               <div style={{ position: "absolute", inset: 0,
-                clipPath: canvasMaskClip(it, items),
                 opacity: it.opacity == null ? 1 : it.opacity,
                 borderRadius: it.type === "ellipse" ? "50%"
                   : radiiOf(it).map(v => `${v}px`).join(" "),
-                clipPath: polyOf(it)
+                // A mask first, then the item's own shape. ONE property: written
+                // twice in the same object the second wins silently, and for
+                // anything that is not a polygon the second is undefined, so the
+                // mask was thrown away by the line under it.
+                clipPath: canvasMaskClip(it, items) || (polyOf(it)
                   ? `polygon(${polyOf(it).map(([fx, fy]) => `${fx * 100}% ${fy * 100}%`).join(", ")})`
-                  : undefined,
+                  : undefined),
                 boxSizing: "border-box",
                 ...(!isText && !polyOf(it) && it.strokeWidth > 0
                   ? { border: `${it.strokeWidth}px solid ${withAlpha(it.stroke || "#15151c", it.strokeAlpha)}` } : {}),
