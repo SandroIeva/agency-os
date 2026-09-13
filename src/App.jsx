@@ -27012,6 +27012,25 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 </div>
               );
               return (<>
+                {/* What a colour is about to hit. It says out loud that the
+                    swatch below will paint the marked words and not the whole
+                    element, which is otherwise invisible the moment the field
+                    loses focus and the highlight disappears with it. */}
+                {selItem.type === "text" && textSel && textSel.id === selItem.id
+                  && textSel.to > textSel.from && (
+                  <div style={{ marginTop: 6, padding: "7px 10px", borderRadius: 9,
+                    background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
+                    fontSize: 11.5, fontFamily: FONT, color: theme.textDim,
+                    display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ flex: 1, minWidth: 0, color: theme.text }}>
+                      {de ? `Markiert: „${String(selItem.text || "").slice(textSel.from, textSel.to).slice(0, 24)}"`
+                          : `Selected: "${String(selItem.text || "").slice(textSel.from, textSel.to).slice(0, 24)}"`}
+                    </span>
+                    <span onClick={() => setTextSel(null)} style={{ cursor: "pointer", flexShrink: 0 }}>
+                      {de ? "ganzer Text" : "whole text"}
+                    </span>
+                  </div>
+                )}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, padding: "8px 10px",
                   borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
                   {/* The swatch shows the colour AT its opacity, over a chequer —
