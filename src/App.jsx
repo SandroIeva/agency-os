@@ -24799,7 +24799,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           rich-text run model with per-word marks, links and mind-map branches;
           none of that exists on a canvas text field, and faking the buttons
           would be worse than not showing them. */}
-      {cam && selItem && sel !== "frame" && !editing && (() => {
+      {/* Hidden while editing, EXCEPT on a text: colouring part of a text means
+          having the swatch within reach while the words are still selected, and
+          there was no swatch on screen at all. */}
+      {cam && selItem && sel !== "frame" && (!editing || selItem.type === "text") && (() => {
         // Over the GROUP when a group is selected, not over whichever member was
         // clicked — the bar belongs to the thing with the frame around it.
         const gMembers = selGid ? items.filter(i => i.groupId === selGid && !i.hidden) : null;
