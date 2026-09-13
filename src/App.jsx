@@ -26328,12 +26328,27 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           const many = panelSel.length > 1 ? panelSel.map(i => i.id) : null;
           const isText = selItem.type === "text" || selItem.type === "sticky";
           // A field that reports on all of them also writes to all of them.
-          const set = (k, v) => (many ? patchMany(many, { [k]: v }) : patch(selItem.id, { [k]: v }));
+          // Every colour in this panel goes through one of the three setters
+          // below, so the "part of a text" rule belongs HERE and not on each
+          // control: the swatch, the hex field and the palette would otherwise
+          // each need their own copy and one of them would be forgotten.
+          //
+          // A colour set while words are selected inside THIS text paints those
+          // words. Everything else is unchanged, including the element's own
+          // colour, so removing the colouring gives the text back.
+          const forTextRun = (o) => {
+            if (many || !o || o.color == null) return o;
+            if (!selItem || selItem.type !== "text") return o;
+            if (!textSel || textSel.id !== selItem.id || textSel.to <= textSel.from) return o;
+            const { color, ...rest } = o;
+            return { ...rest, runs: canvasApplyRun(selItem.runs, textSel.from, textSel.to, color) };
+          };
+          const set = (k, v) => (many ? patchMany(many, { [k]: v }) : patch(selItem.id, forTextRun({ [k]: v })));
           // Several fields as ONE history step. Changing a font that also has
           // to move the weight is one action to the person doing it, so it is
           // one press of undo.
-          const setAll = (o) => (many ? patchMany(many, o) : patch(selItem.id, o));
-          const set2 = (o) => (many ? patchMany(many, o) : patch(selItem.id, o));
+          const setAll = (o) => (many ? patchMany(many, o) : patch(selItem.id, forTextRun(o)));
+          const set2 = (o) => (many ? patchMany(many, o) : patch(selItem.id, forTextRun(o)));
           // Effects only. A group selection means the group is the object, so a
           // shadow lands on every member and the renderer draws it once around
           // the lot. NOT set2's job: position and size through the same door
