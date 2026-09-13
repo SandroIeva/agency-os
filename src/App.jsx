@@ -19993,6 +19993,26 @@ const nextBoardX = (list) =>
 // It draws through the same fill, depth and repeat helpers the editor and the
 // export use. What it leaves out, it leaves out visibly: pen strokes, arrows
 // and comments are not in a thumbnail worth 200 pixels.
+// The clip a masked item takes, expressed in that item's OWN pixels, since a
+// CSS clip-path counts from the element's corner and not from the board's.
+//
+// Module scope because there are two drawers, not one: the editor and the card.
+// The card filtered masks out of what it drew and then never clipped anything
+// with them, so a photograph that is a circle in the editor was a full-bleed
+// rectangle in every preview of the same board.
+const canvasMaskClip = (it, all) => {
+  const m = it.maskId ? (all || []).find(o => o.id === it.maskId) : null;
+  if (!m) return undefined;
+  const b = canvasRenderBoxOf(m), dx = b.x - it.x, dy = b.y - it.y;
+  const poly = polyOf(m);
+  if (poly) return `polygon(${poly.map(([fx, fy]) =>
+    `${dx + fx * b.w}px ${dy + fy * b.h}px`).join(", ")})`;
+  if (m.type === "ellipse")
+    return `ellipse(${b.w / 2}px ${b.h / 2}px at ${dx + b.w / 2}px ${dy + b.h / 2}px)`;
+  const r = Math.min(...radiiOf(m), Math.min(b.w, b.h) / 2);
+  return `inset(${dy}px ${it.w - (dx + b.w)}px ${it.h - (dy + b.h)}px ${dx}px round ${r}px)`;
+};
+
 function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
   // A document may hold several artboards; the card shows the first. Older
   // documents are the board itself, which is why this reads either shape.
@@ -20068,6 +20088,7 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
               it.flipX ? "scaleX(-1)" : "", it.flipY ? "scaleY(-1)" : ""].filter(Boolean).join(" ");
             const inner = (
               <div style={{ position: "absolute", inset: 0,
+                clipPath: canvasMaskClip(it, items),
                 opacity: it.opacity == null ? 1 : it.opacity,
                 borderRadius: it.type === "ellipse" ? "50%"
                   : radiiOf(it).map(v => `${v}px`).join(" "),
@@ -22093,18 +22114,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   };
   // Expressed for CSS in the MASKED item's own pixels, since clip-path counts
   // from the element's own corner, not the artboard's.
-  const maskClip = (it) => {
-    const m = maskOf(it);
-    if (!m) return undefined;
-    const b = canvasRenderBoxOf(m), dx = b.x - it.x, dy = b.y - it.y;
-    const poly = polyOf(m);
-    if (poly) return `polygon(${poly.map(([fx, fy]) =>
-      `${dx + fx * b.w}px ${dy + fy * b.h}px`).join(", ")})`;
-    if (m.type === "ellipse")
-      return `ellipse(${b.w / 2}px ${b.h / 2}px at ${dx + b.w / 2}px ${dy + b.h / 2}px)`;
-    const r = Math.min(...radiiOf(m), Math.min(b.w, b.h) / 2);
-    return `inset(${dy}px ${it.w - (dx + b.w)}px ${it.h - (dy + b.h)}px ${dx}px round ${r}px)`;
-  };
+  const maskClip = (it) => canvasMaskClip(it, items);
 
 
   // Two ways to draw the same outline, because the shapes are drawn two ways.
