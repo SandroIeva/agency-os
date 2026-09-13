@@ -23819,8 +23819,32 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       } : {}) };
   };
 
+  // What a set of items actually SHOWS, which is not the same as where they
+  // are. A masked item is only visible inside its mask, so a frame drawn round
+  // a photograph three times the size of the circle it is clipped to sits far
+  // out in empty space and is useless to drag by. Figma draws the mask.
+  //
+  // The mask itself paints nothing, so it contributes only as the clip; a group
+  // that is nothing BUT a mask falls back to it, or the frame would collapse.
+  const visibleRotBoxes = (list) => {
+    const all = list || [];
+    const masks = new Map(all.filter(i => i.isMask).map(i => [i.id, rotBoxOf(i)]));
+    const out = [];
+    for (const it of all) {
+      if (it.isMask) continue;
+      const b = rotBoxOf(it);
+      const m = it.maskId ? masks.get(it.maskId) : null;
+      if (!m) { out.push(b); continue; }
+      const x = Math.max(b.x, m.x), y = Math.max(b.y, m.y);
+      const w = Math.min(b.x + b.w, m.x + m.w) - x;
+      const h = Math.min(b.y + b.h, m.y + m.h) - y;
+      // Clipped away entirely: it shows nothing and so bounds nothing.
+      if (w > 0 && h > 0) out.push({ x, y, w, h });
+    }
+    return out.length ? out : [...masks.values()];
+  };
   const unionRotBox = (list) => {
-    const bs = (list || []).map(rotBoxOf);
+    const bs = visibleRotBoxes(list);
     if (!bs.length) return { x: 0, y: 0, w: 0, h: 0 };
     const x = Math.min(...bs.map(b => b.x)), y = Math.min(...bs.map(b => b.y));
     return { x, y, w: Math.max(...bs.map(b => b.x + b.w)) - x,
