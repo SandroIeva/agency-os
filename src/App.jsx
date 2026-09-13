@@ -19292,16 +19292,36 @@ const canvasArcLayout = (it) => {
 // Straight text with its colours, for the editor and the card. Both used to
 // render `lines.join("\n")`, and two places building the same spans by hand is
 // how they come to disagree.
-function CanvasRichText({ it }) {
+function CanvasRichText({ it, sel }) {
   const lines = canvasTextLines(it);
-  if (!it.runs || !it.runs.length) return lines.join("\n");
+  const marked = sel && sel.to > sel.from ? sel : null;
+  if (!marked && (!it.runs || !it.runs.length)) return lines.join("\n");
   const spans = canvasLineSpans(canvasText(it), lines);
+  // The selection is DRAWN rather than left to the browser. A textarea shows
+  // its selection only while it has focus, and clicking anything in the panel
+  // takes that focus away, so the words you are about to format stop being
+  // visible at the exact moment you format them.
+  const HL = "rgba(77,159,255,0.34)";
   return lines.map((line, i) => (
     <Fragment key={i}>
       {i > 0 ? "\n" : null}
-      {canvasLinePieces(it, line, spans[i].start).map((p, j) => (
-        <span key={j} style={{ color: p.color }}>{p.text}</span>
-      ))}
+      {canvasLinePieces(it, line, spans[i].start).map((p, j, all) => {
+        // Where this piece starts in the source, so the highlight can be cut to
+        // the same characters the colour will be.
+        const at = spans[i].start + all.slice(0, j).reduce((n, q) => n + q.text.length, 0);
+        if (!marked) return <span key={j} style={{ color: p.color }}>{p.text}</span>;
+        const chars = [...p.text];
+        return (
+          <span key={j} style={{ color: p.color }}>
+            {chars.map((ch, k) => {
+              const on = at + k >= marked.from && at + k < marked.to;
+              return on
+                ? <span key={k} style={{ background: HL }}>{ch}</span>
+                : <Fragment key={k}>{ch}</Fragment>;
+            })}
+          </span>
+        );
+      })}
     </Fragment>
   ));
 }
@@ -21246,6 +21266,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // setters and the colour picker are two different closures, and the picker
   // writes straight through `patch`. A copy of this rule in each of them is how
   // one of them ends up without it, which is exactly what happened.
+  // The drawn selection belongs to one element. Selecting another, or nothing,
+  // takes it away; otherwise a highlight would sit on a text nobody is working
+  // on any more and the next colour would land on words chosen minutes ago.
+  useEffect(() => { setTextSel(t => (t && t.id !== sel ? null : t)); }, [sel]);
+
   const textRunPatch = (item, o) => {
     if (!item || item.type !== "text" || !o || o.color == null) return o;
     if (!textSel || textSel.id !== item.id || textSel.to <= textSel.from) return o;
@@ -24450,7 +24475,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                             transform: "translateY(-50%)", textAlign: "center" } : {}),
                           height: `${canvasTextH(flat)}px` }} />
                     ) : arc ? <CanvasArcText it={it} />
-                    : <CanvasRichText it={it} />)}
+                    : <CanvasRichText it={it} sel={textSel?.id === it.id ? textSel : null} />)}
                     </div>
                     )}
                   </div>
