@@ -12,5 +12,5 @@
 * [Plan and manage brands](plan-and-manage-brands.md)
 * [Connect AI Providers](connect-ai-providers.md)
 * [Create and collaborate](create-and-collaborate.md)
-* [Deleting and resetting data](deleting-data-and-resetting-settings.md)
+* [Deleting and resetting data](deleting-and-resetting-data.md)
 * [Billing and subscriptions](billing-and-subscriptions.md)
