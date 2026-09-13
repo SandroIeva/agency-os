@@ -24791,7 +24791,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               return (
                 <div key={it.id} onPointerDown={e => onItemDown(e, it)}
                   onDoubleClick={() => enterGroup(it)}
-                  style={{ ...common, width: it.w, height: it.h }}>
+                  // The mask clips the CLICKS too, and it has to sit on this
+                  // box rather than on the one inside it. A picture clipped to
+                  // a small circle keeps its own full size, so the box that
+                  // catches clicks covered the whole board: everything behind
+                  // it was unreachable, and clicking beside it selected it
+                  // instead of clearing the selection.
+                  //
+                  // A clip-path does this by itself - the browser hit-tests
+                  // against the clipped shape - but only for the element that
+                  // carries it, and it was carried one layer in.
+                  style={{ ...common, width: it.w, height: it.h,
+                    clipPath: canvasMaskClip(it, items) }}>
                   {/* One wrapper per placement, carrying the transform; the
                       picture and its outline sit inside so a copy is the whole
                       shape and not just its fill. inset:0 puts the transform
