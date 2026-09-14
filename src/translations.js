@@ -211,9 +211,20 @@ const translations = {
   // time to be talked at before you are allowed to say anything. It does not
   // announce that it is listening: the microphone opens the moment it stops,
   // and the sphere shows that by itself.
+  // {name} is the first name, or the same "du" / "there" the dashboard greeting
+  // falls back to when nobody has told us one.
+  //
+  // The owner wrote this copy. Two things were changed and both are housekeeping
+  // rather than editing: the dash in the third sentence became a comma, because
+  // no em dash in user-visible text is a house rule he set himself and it is
+  // inaudible either way, and an English version had to exist beside it.
+  //
+  // The blank lines stay in the string. The word splitter that drives the
+  // karaoke treats them as whitespace, and a speech engine reads them as a
+  // pause, which is where the pauses belong.
   "ai.intro": {
-    de: "Kurz vorweg. i7OS ist der Ort, an dem eine Marke gedacht, gemacht und geplant wird, statt in vier Werkzeugen verteilt zu liegen. Du hältst hier Strategie und Erscheinungsbild fest und baust daraus alles, was rausgeht. Ich kenne deine Marke und kann suchen, erklären oder etwas erledigen. Frag einfach, auch wenn du noch nicht weißt, wie es hier heißt.",
-    en: "Quickly, before you start. i7OS is where a brand gets thought through, made and planned, instead of living in four separate tools. You set the strategy and the look here, and build everything that goes out from it. I know your brand, and I can find things, explain them, or do them for you. Just ask, even if you do not know what it is called here.",
+    de: "Hallo {name}.\n\nKurz vorweg: i7OS ist der Ort, an dem deine Marke zusammenkommt.\n\nHier denkst du sie, entwickelst sie weiter und hältst fest, was sie ausmacht, statt Strategie, Design und Planung über vier verschiedene Tools zu verteilen. Aus diesem Fundament entsteht alles, was nach außen geht.\n\nIch kenne deine Marke und helfe dir, dich darin zu bewegen: Ich kann suchen, erklären, Zusammenhänge finden oder direkt etwas für dich erledigen.\n\nDu musst dafür weder wissen, wo etwas liegt, noch wie es hier heißt. Frag einfach.",
+    en: "Hello {name}.\n\nOne thing first: i7OS is where your brand comes together.\n\nThis is where you think it through, develop it further and set down what makes it what it is, instead of spreading strategy, design and planning across four separate tools. Everything that goes out is built on that foundation.\n\nI know your brand and I help you find your way around it: I can search, explain, join things up, or simply do something for you.\n\nYou do not need to know where anything sits, or what it is called here. Just ask.",
   },
 
   // ── Greetings ─────────────────────────────────

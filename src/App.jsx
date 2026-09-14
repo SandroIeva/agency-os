@@ -54142,7 +54142,11 @@ export default function CircularMenu() {
     setAiSpeaking(true);
     aiStoppedRef.current = false;
     setTranscript(""); transcriptRef.current = "";
-    const text = t("ai.intro");
+    // The first name, and the same fallback the dashboard's own greeting uses,
+    // so somebody who has never filled a name in is addressed the same way in
+    // both places rather than being greeted by a blank.
+    const first = (userName || "").trim().split(" ")[0] || t("greet.fallbackName");
+    const text = t("ai.intro").replace("{name}", first);
     // On screen as well as aloud: sound is off on plenty of machines, and if
     // the voice fails entirely the introduction still happened.
     setAiResponse(text);
