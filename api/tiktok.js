@@ -52,22 +52,25 @@ const API = "https://open.tiktokapis.com/v2";
 // follow. video.publish is the direct post; video.upload would only reach the
 // creator's drafts, which is not what a composer means by "post".
 //
-// Just the one for now, and that is a diagnosis rather than a decision.
+// What the app actually does, and nothing beyond it. Asking for a permission we
+// do not use is a named reason to fail a review, the same rule the Meta scopes
+// follow. video.publish is the direct post; video.upload would only reach the
+// creator's drafts, which is not what a composer means by "post".
 //
-// TikTok refused the whole consent screen naming "scope" and nothing else. The
-// probe below established that it does not validate scopes BEFORE the login,
-// so the refusal happens afterwards, against what this particular app has
-// actually been granted. That leaves exactly one way to tell a granted scope
-// from an ungranted one: ask for the smallest set that is certainly there and
-// see whether the connection completes.
+// The history is worth keeping, because it cost a round trip. The consent
+// screen first refused everything naming "scope" and nothing else, and the
+// probe below showed why that was so hard to place: TikTok does not validate
+// scopes BEFORE the login, so the refusal lands afterwards, against what the
+// app has actually been granted. Narrowing to user.info.basic alone connected
+// on the first try, which proved the whole pipe and pinned the refusal on
+// publishing. video.publish is granted by the Direct Post switch on the
+// Content Posting API product, not by anything in the scope list, and it was
+// off.
 //
-// user.info.basic is the one the owner confirmed comes with Login Kit. If this
-// connects, the whole pipe works and the refusal is specifically about
-// publishing. If it still refuses, the problem is not the scope list at all.
-//
-// A token keeps the scopes it was issued with, so widening this later means
-// reconnecting once. That is cheap. Guessing in the dark is not.
-const SCOPES = ["user.info.basic"].join(",");
+// user.info.profile is still absent. It carries the @handle, basic already
+// carries the display name and the ids, and an unnecessary scope is a
+// rejection waiting to happen.
+const SCOPES = ["user.info.basic", "video.publish"].join(",");
 
 // A token good for another hour is good enough for the call about to be made.
 // Below that it is renewed, because a request that starts valid and expires
