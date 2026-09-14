@@ -114,7 +114,12 @@ TikTok noch nicht freigegeben hat.
 
 ## Die Reihenfolge von hier
 
-1. App für die Prüfung einreichen, damit `video.publish` freigegeben wird.
-2. Composer bauen, samt der Anzeige aus `creator_info`.
-3. Nach der Freigabe `SCOPES` um `video.publish` erweitern und einmal neu
-   verbinden. Ein Token behält die Scopes, mit denen es ausgestellt wurde.
+1. App für die Prüfung einreichen, damit `video.publish` freigegeben wird. Das
+   ist der einzige Blocker, und er liegt nicht im Code.
+2. Nach der Freigabe `SCOPES` um `video.publish` erweitern und einmal neu
+   verbinden. Ein Token behält die Scopes, mit denen es ausgestellt wurde, also
+   reicht das Erweitern der Liste allein nicht.
+3. Dann erst kann das Posten überhaupt zum ersten Mal gegen die echte
+   Schnittstelle laufen. Bis dahin ist keine einzige Zeile davon erprobt, und
+   das gehört zur Erwartung: Video-Upload, Foto-Karussell und die Abfrage der
+   Sichtbarkeiten sind nach der Dokumentation gebaut, nicht nach einem Lauf.
