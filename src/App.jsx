@@ -32386,10 +32386,11 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
       body: JSON.stringify({ mode: "status", orgId }),
     }).then(r => r.ok ? r.json() : null).catch(() => null);
-    const [zern, meta, thr] = await Promise.all([
+    const [zern, meta, thr, tt] = await Promise.all([
       zernioRequest(session, { mode: "status", orgId }).catch(e => { setError(e); return null; }),
       askDirect("instagram"),
       askDirect("threads"),
+      askDirect("tiktok"),
     ]);
     const direct = (meta?.enabled ? meta.accounts || [] : []).map(a => ({
       // Prefixed, so an id can never collide with a Zernio one and so the
@@ -32416,7 +32417,20 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       profileUrl: a.username ? `https://www.threads.net/@${a.username}` : null,
       isActive: !a.needsReconnect,
     }));
-    setAccounts([...(zern?.accounts || []), ...direct, ...threads]);
+    // TikTok, the third direct provider and the one with the most rules of its
+    // own: what it accepts is decided per CREATOR, not per app, so the composer
+    // has to ask before it offers anything. See the tiktok block in submit.
+    const tiktok = (tt?.enabled ? tt.accounts || [] : []).map(a => ({
+      id: `tiktok:${a.openId}`,
+      provider: "tiktok",
+      openId: a.openId,
+      platform: "tiktok",
+      username: a.username || "",
+      displayName: a.displayName || a.username || "TikTok",
+      profileUrl: a.username ? `https://www.tiktok.com/@${a.username}` : null,
+      isActive: !a.needsReconnect,
+    }));
+    setAccounts([...(zern?.accounts || []), ...direct, ...threads, ...tiktok]);
   }, [orgId, session?.access_token]); // eslint-disable-line
 
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
@@ -32432,6 +32446,51 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   }, [visual, stepIdx, !!reel]);
 
   const selected = (accounts || []).filter(a => selectedIds.includes(a.id));
+
+  // ── TikTok's own rules ─────────────────────────────────────────────────────
+  // TikTok decides per CREATOR what may be posted: which privacy levels that
+  // account is allowed to choose, and whether comments, duets and stitches are
+  // even available on it. Their terms require the composer to ASK and to SHOW
+  // the answer, and it is checked at review. So nothing here is guessed: until
+  // creator_info has answered, TikTok cannot be posted to.
+  const ttPicked = selected.find(a => a.provider === "tiktok") || null;
+  const [ttCreator, setTtCreator] = useState(null);   // null | {loading} | payload | {error}
+  const [ttPrivacy, setTtPrivacy] = useState("");
+  const [ttNoComment, setTtNoComment] = useState(false);
+  const [ttNoDuet, setTtNoDuet] = useState(false);
+  const [ttNoStitch, setTtNoStitch] = useState(false);
+  const ttOpenId = ttPicked?.openId || null;
+  useEffect(() => {
+    if (!ttOpenId || !orgId) { setTtCreator(null); return; }
+    let on = true;
+    setTtCreator({ loading: true });
+    (async () => {
+      try {
+        const r = await fetch("/api/tiktok", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+          body: JSON.stringify({ mode: "creator", orgId, openId: ttOpenId }),
+        });
+        const j = await r.json().catch(() => null);
+        if (!on) return;
+        if (!r.ok) { setTtCreator({ error: j?.error || `HTTP ${r.status}` }); return; }
+        setTtCreator(j);
+        // The first ALLOWED option, never a favourite of ours. Offering a level
+        // this account may not use is how a post fails at the last step.
+        setTtPrivacy(p => ((j.privacyOptions || []).includes(p) ? p : (j.privacyOptions || [])[0] || ""));
+      } catch (e) { if (on) setTtCreator({ error: String(e?.message || e) }); }
+    })();
+    return () => { on = false; };
+  }, [ttOpenId, orgId, session?.access_token]);
+  // Ready to post to TikTok only when the creator answered AND a level this
+  // account may actually use has been chosen.
+  const ttReadyToPost = !!(ttCreator && !ttCreator.error && !ttCreator.loading && ttPrivacy);
+  const TT_PRIVACY_LABEL = {
+    PUBLIC_TO_EVERYONE: { de: "Öffentlich", en: "Public" },
+    MUTUAL_FOLLOW_FRIENDS: { de: "Freunde", en: "Friends" },
+    FOLLOWER_OF_CREATOR: { de: "Follower", en: "Followers" },
+    SELF_ONLY: { de: "Nur ich", en: "Only me" },
+  };
   // What there is still to connect. Read once here rather than filtered in two
   // places that would drift: the plus hides itself when the list is empty.
   const unconnectedHere = ZERNIO_UI_PLATFORMS.filter(k => !(accounts || []).some(a => uiKeyFor(a.platform) === k));
@@ -32756,6 +32815,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     // queue nobody can see inside is worse than saying so.
     const metaSel = selected.filter(a => a.provider === "meta");
     const thrSel = selected.filter(a => a.provider === "threads");
+    const ttSel = selected.filter(a => a.provider === "tiktok");
     const zernSel = selected.filter(a => !a.provider);
     if ((metaSel.length || thrSel.length) && (isDraft || schedule)) {
       setError(new Error(de
@@ -32941,6 +33001,96 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         }
         parts.push({ platform: "threads", status: res.ok ? "published" : "failed",
           url: j?.url || null, error: res.ok ? null : await readFail(res, j, "Threads") });
+      }
+
+      // ── TikTok ──────────────────────────────────────────────────────────────
+      // Two shapes, and they run in opposite directions. A VIDEO is uploaded:
+      // TikTok hands back an address and the browser puts the bytes there
+      // itself, because a video through an Edge function is a timeout waiting
+      // to happen. PHOTOS are pulled: TikTok fetches them, and only from a
+      // domain verified in its portal, so they go over as img-proxy urls on
+      // app.i7os.com, which is one. Supabase storage is not.
+      for (const a of ttSel) {
+        const send = (payload) => fetch("/api/tiktok", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+          body: JSON.stringify({ orgId, openId: a.openId, ...payload }),
+        });
+        // Refused here rather than at TikTok. Their terms say the privacy level
+        // has to be one this creator may actually use, and until creator_info
+        // has answered we do not know which those are. Guessing one would post
+        // under a setting somebody never chose.
+        if (!ttReadyToPost) {
+          parts.push({ platform: "tiktok", status: "failed", url: null,
+            error: de
+              ? "TikTok hat das Veröffentlichen für diese App noch nicht freigegeben."
+              : "TikTok has not cleared this app for publishing yet." });
+          continue;
+        }
+        const common = {
+          privacy: ttPrivacy,
+          disableComment: ttNoComment, disableDuet: ttNoDuet, disableStitch: ttNoStitch,
+          caption: text.trim() || undefined,
+        };
+        let init;
+        if (metaReel) {
+          init = await send({ mode: "publish-init", kind: "video", size: reel.file.size, ...common });
+        } else {
+          // Every picture through the proxy on the verified domain, in the
+          // order they are shown, cover first.
+          const proxied = [metaMedia, ...metaExtras].filter(Boolean)
+            .map(m => `${window.location.origin}/api/img-proxy?url=${encodeURIComponent(m.url)}`);
+          if (!proxied.length) {
+            parts.push({ platform: "tiktok", status: "failed", url: null,
+              error: de ? "TikTok braucht ein Video oder mindestens ein Bild."
+                        : "TikTok needs a video or at least one picture." });
+            continue;
+          }
+          init = await send({ mode: "publish-init", kind: "photo", images: proxied, coverIndex: 0, ...common });
+        }
+        const ij = await init.json().catch(() => null);
+        if (!init.ok || !ij?.publishId) {
+          parts.push({ platform: "tiktok", status: "failed", url: null,
+            error: await readFail(init, ij, "TikTok") });
+          continue;
+        }
+        // The upload, straight from here to TikTok. Photos skip this: `pulls`
+        // says TikTok is fetching them itself.
+        if (!ij.pulls && ij.uploadUrl) {
+          const put = await fetch(ij.uploadUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type": reel.file.type || "video/mp4",
+              "Content-Range": `bytes 0-${reel.file.size - 1}/${reel.file.size}`,
+            },
+            body: reel.file,
+          });
+          if (!put.ok) {
+            parts.push({ platform: "tiktok", status: "failed", url: null,
+              error: de ? "Das Video konnte nicht zu TikTok hochgeladen werden."
+                        : "The video could not be uploaded to TikTok." });
+            continue;
+          }
+        }
+        // TikTok processes after the bytes land, so nothing is finished at the
+        // moment the upload returns.
+        let done = null;
+        for (let tries = 0; tries < 24; tries++) {
+          await new Promise(w => setTimeout(w, 5000));
+          const st = await send({ mode: "publish-status", publishId: ij.publishId });
+          const sj = await st.json().catch(() => null);
+          if (!st.ok) { done = { status: "failed", error: await readFail(st, sj, "TikTok") }; break; }
+          if (sj?.status === "PUBLISH_COMPLETE") { done = { status: "published" }; break; }
+          if (sj?.status === "FAILED") {
+            done = { status: "failed", error: sj.failReason || (de ? "TikTok hat den Beitrag abgelehnt." : "TikTok refused the post.") };
+            break;
+          }
+        }
+        parts.push(done
+          ? { platform: "tiktok", url: null, ...done }
+          : { platform: "tiktok", status: "pending", url: null,
+              error: de ? "TikTok verarbeitet den Beitrag noch. Schau gleich noch mal nach."
+                        : "TikTok is still processing the post. Check again shortly." });
       }
 
       const failedAll = parts.length > 0 && parts.every(p => p.status === "failed");
@@ -33288,6 +33438,81 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       })}
                     </div>
                   </>)}
+
+                  {/* TikTok asks for more than the others, and it is not
+                      optional: their terms require the person posting to see
+                      which privacy levels THIS account may use and whether
+                      comments, duets and stitches are available on it, and that
+                      is checked at review. Nothing here is a default of ours. */}
+                  {ttPicked && (
+                    <div style={{ marginTop: 14, padding: "14px 16px", borderRadius: 14,
+                      border: `1px solid ${theme.borderFaint}`,
+                      background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
+                          {metaMark("tiktok", theme.text)}
+                        </svg>
+                        <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                          {de ? "TikTok-Einstellungen" : "TikTok settings"}
+                        </span>
+                      </div>
+
+                      {ttCreator?.loading ? (
+                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
+                          {de ? "Fragt TikTok, was dieses Konto darf …" : "Asking TikTok what this account may do …"}
+                        </div>
+                      ) : ttCreator?.error ? (
+                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
+                          {de
+                            ? "TikTok hat das Veröffentlichen für diese App noch nicht freigegeben, deshalb lässt sich hier noch nichts einstellen. Das Verbinden funktioniert bereits."
+                            : "TikTok has not cleared this app for publishing yet, so there is nothing to set here. Connecting already works."}
+                          <div style={{ marginTop: 6, color: theme.textFaint, fontSize: 11 }}>{ttCreator.error}</div>
+                        </div>
+                      ) : ttCreator ? (<>
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6 }}>
+                          {de ? "Wer den Beitrag sehen darf" : "Who may see the post"}
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {(ttCreator.privacyOptions || []).map(opt => {
+                            const on = ttPrivacy === opt;
+                            const lbl = TT_PRIVACY_LABEL[opt];
+                            return (
+                              <motion.div key={opt} whileTap={{ scale: 0.97 }} onClick={() => setTtPrivacy(opt)}
+                                style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer",
+                                  fontSize: 12, fontFamily: FONT, fontWeight: on ? 600 : 500,
+                                  border: `1px solid ${on ? "transparent" : theme.borderFaint}`,
+                                  background: on ? "#15151c" : "transparent",
+                                  color: on ? "#fff" : theme.textDim }}>
+                                {lbl ? (de ? lbl.de : lbl.en) : opt}
+                              </motion.div>
+                            );
+                          })}
+                        </div>
+                        {/* Only what this account actually offers. A switch for
+                            something TikTok has turned off would be a lie with
+                            a checkbox on it. */}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 12 }}>
+                          {[
+                            ["comment", de ? "Kommentare aus" : "Comments off", ttNoComment, setTtNoComment, ttCreator.commentDisabled],
+                            ["duet", de ? "Duette aus" : "Duets off", ttNoDuet, setTtNoDuet, ttCreator.duetDisabled],
+                            ["stitch", de ? "Stitches aus" : "Stitches off", ttNoStitch, setTtNoStitch, ttCreator.stitchDisabled],
+                          ].filter(([, , , , gone]) => !gone).map(([key, label, val, set]) => (
+                            <label key={key} style={{ display: "inline-flex", alignItems: "center", gap: 6,
+                              fontSize: 12, fontFamily: FONT, color: theme.textDim, cursor: "pointer" }}>
+                              <input type="checkbox" checked={val} onChange={e => set(e.target.checked)} />
+                              {label}
+                            </label>
+                          ))}
+                        </div>
+                        {ttCreator.maxVideoSeconds ? (
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 10 }}>
+                            {de ? `Videos bis ${ttCreator.maxVideoSeconds} Sekunden.`
+                                : `Videos up to ${ttCreator.maxVideoSeconds} seconds.`}
+                          </div>
+                        ) : null}
+                      </>) : null}
+                    </div>
+                  )}
                 </>)}
 
                 {/* ── 02 Visual — one picture at a time, as large as the box
