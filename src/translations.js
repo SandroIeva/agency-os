@@ -198,6 +198,23 @@ const translations = {
   "ai.rateLimited": { de: "Rate Limit erreicht. Bitte warte einen Moment.", en: "Rate limit reached. Please wait a moment and try again." },
   "ai.error": { de: "Verbindungsproblem. Bitte nochmal versuchen.", en: "I'm having trouble connecting. Try again in a moment." },
   "ai.fallback": { de: "Ich bin bereit zu helfen.", en: "I'm here to help with your creative projects." },
+  // Said ONCE, the first time somebody opens the assistant, before it starts
+  // listening. Written out rather than generated: systemPrompt.js records what
+  // happened the last time a finished sentence about the product sat in the
+  // model's context, which is that the model recited it as a brochure whenever
+  // anybody asked what the app is. A fixed line cannot drift into a feature
+  // that does not exist, and it costs no model call.
+  //
+  // Written for the ear, in the voice the prompt describes: a creative director
+  // who knows the software, not a welcome screen. Four short sentences, about
+  // twenty seconds spoken. The first draft ran to thirty-five, which is a long
+  // time to be talked at before you are allowed to say anything. It does not
+  // announce that it is listening: the microphone opens the moment it stops,
+  // and the sphere shows that by itself.
+  "ai.intro": {
+    de: "Kurz vorweg. i7OS ist der Ort, an dem eine Marke gedacht, gemacht und geplant wird, statt in vier Werkzeugen verteilt zu liegen. Du hältst hier Strategie und Erscheinungsbild fest und baust daraus alles, was rausgeht. Ich kenne deine Marke und kann suchen, erklären oder etwas erledigen. Frag einfach, auch wenn du noch nicht weißt, wie es hier heißt.",
+    en: "Quickly, before you start. i7OS is where a brand gets thought through, made and planned, instead of living in four separate tools. You set the strategy and the look here, and build everything that goes out from it. I know your brand, and I can find things, explain them, or do them for you. Just ask, even if you do not know what it is called here.",
+  },
 
   // ── Greetings ─────────────────────────────────
   "greet.stillUp": { de: "Noch wach", en: "Still up" },

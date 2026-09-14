@@ -53217,7 +53217,11 @@ export default function CircularMenu() {
   // synthesis when that is unavailable, which is what happens locally where
   // there is no FISH_API_KEY. Never rejects: a question that cannot be spoken
   // still has to be listened for.
-  const speakLine = (text) => new Promise((resolve) => {
+  // onDuration, when given, is handed the audio's real length as soon as it is
+  // known. The karaoke highlight needs it, and only the caller that draws the
+  // words on screen cares: askDrop's questions are drawn elsewhere and pass
+  // nothing.
+  const speakLine = (text, onDuration = null) => new Promise((resolve) => {
     if (!text) { resolve(); return; }
     let done = false;
     const finish = () => { if (done) return; done = true; resolve(); };
@@ -53232,6 +53236,9 @@ export default function CircularMenu() {
           const audio = new Audio(url);
           audio.crossOrigin = "anonymous";
           audioRef.current = audio;
+          audio.onloadedmetadata = () => {
+            if (onDuration && audio.duration && isFinite(audio.duration)) onDuration(audio.duration);
+          };
           audio.onended = () => {
             teardownAudioAnalyser(); URL.revokeObjectURL(url); audioRef.current = null; finish();
           };
@@ -54106,13 +54113,65 @@ export default function CircularMenu() {
     }
   };
 
+  // The first time somebody opens the assistant it says who it is before the
+  // microphone opens. Somebody arriving new has no idea this app HAS a brand
+  // section, a canvas, a composer and a set of numbers, and the orb answering a
+  // silence with a silence teaches them none of it.
+  //
+  // Once per browser, not once per session: it is an introduction, and being
+  // introduced twice is worse than not at all. localStorage is the right depth
+  // for that. A cleared browser hears it again, which is the failure worth
+  // having, and a throw is read as "already seen" so a locked-down browser
+  // never gets stuck repeating it.
+  const INTRO_KEY = "i7os-assistant-intro";
+  const introDone = () => { try { return !!localStorage.getItem(INTRO_KEY); } catch (_) { return true; } };
+
+  // Speak, THEN listen. Never both: the microphone would otherwise hear the
+  // introduction and answer it. The same order askDrop uses for its questions,
+  // through the same speakLine, so the sphere moves with the voice.
+  const introduceAssistant = async () => {
+    // Written before a word is spoken. Closing it halfway through still counts
+    // as having been introduced, and hearing it again on the next click would
+    // read as the app being stuck.
+    try { localStorage.setItem(INTRO_KEY, "1"); } catch (_) {}
+    setMenuOpen(false); setSubOpen(false);
+    if (panelOpen) setPanelOpen(false);
+    if (tasksOpen) setTasksOpen(false);
+    setVoiceOverView(currentView !== "dashboard" ? currentView : null);
+    setVoiceMode(true);
+    setAiSpeaking(true);
+    aiStoppedRef.current = false;
+    setTranscript(""); transcriptRef.current = "";
+    const text = t("ai.intro");
+    // On screen as well as aloud: sound is off on plenty of machines, and if
+    // the voice fails entirely the introduction still happened.
+    setAiResponse(text);
+    setAiStatus("speaking");
+    // ⚠ Without this the whole introduction is drawn at 21% opacity and is
+    // barely readable: the renderer dims every word whose index is past
+    // highlightWordIndex, and that sits at -1 until somebody starts the
+    // highlight. Started on an estimate so the first words are lit before the
+    // audio has even loaded, then re-timed against the real length the moment
+    // it is known. Re-timing restarts from the first word, which this early
+    // costs one word at most.
+    const wordCount = text.split(/\s+/).filter(Boolean).length;
+    startKaraokeHighlight(text, Math.max(3, (wordCount / 150) * 60));
+    await speakLine(text, (d) => startKaraokeHighlight(text, d));
+    stopKaraokeHighlight();
+    // Closed while it was talking. stopAssistant has already cleared the
+    // screen, and opening the microphone now would be listening into a room
+    // nobody is standing in.
+    if (aiStoppedRef.current) return;
+    startVoice();
+  };
+
   // Clicking the corner orb and swiping up are the same thing, so they are one
   // function. The orb falls out of the corner first and the voice UI comes up
   // as it lands; 380ms is the drop.
   const launchVoice = () => {
     if (!requireAiProvider()) return;
     setOrbLeaving(true);
-    setTimeout(startVoice, 380);
+    setTimeout(introDone() ? startVoice : introduceAssistant, 380);
   };
   // The wheel handler is a useCallback whose dependency list does not include
   // everything startVoice reads (appLanguage, for one, decides which language
