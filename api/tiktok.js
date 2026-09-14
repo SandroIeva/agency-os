@@ -52,25 +52,34 @@ const API = "https://open.tiktokapis.com/v2";
 // follow. video.publish is the direct post; video.upload would only reach the
 // creator's drafts, which is not what a composer means by "post".
 //
-// What the app actually does, and nothing beyond it. Asking for a permission we
-// do not use is a named reason to fail a review, the same rule the Meta scopes
-// follow. video.publish is the direct post; video.upload would only reach the
-// creator's drafts, which is not what a composer means by "post".
+// video.UPLOAD, not video.publish, and that is the sandbox talking rather than
+// a choice.
 //
-// The history is worth keeping, because it cost a round trip. The consent
-// screen first refused everything naming "scope" and nothing else, and the
-// probe below showed why that was so hard to place: TikTok does not validate
-// scopes BEFORE the login, so the refusal lands afterwards, against what the
-// app has actually been granted. Narrowing to user.info.basic alone connected
-// on the first try, which proved the whole pipe and pinned the refusal on
-// publishing. video.publish is granted by the Direct Post switch on the
-// Content Posting API product, not by anything in the scope list, and it was
-// off.
+// What was measured, in order, because it cost three round trips and the next
+// person should not repeat them:
+//   1. basic + publish  → refused, naming only "scope".
+//   2. The probe below  → TikTok does not check scopes BEFORE the login. Every
+//      candidate got the same 302 to /login, so the refusal lands afterwards,
+//      against what the app has actually been granted. That is why the error
+//      says so little and arrives so late.
+//   3. basic alone      → connected first time. So the whole pipe works and the
+//      refusal was specifically about publishing.
+//   4. Direct Post switched ON at the product, then basic + publish again
+//      → still refused. The switch is not what gates it here.
 //
-// user.info.profile is still absent. It carries the @handle, basic already
-// carries the display name and the ids, and an unnecessary scope is a
-// rejection waiting to happen.
-const SCOPES = ["user.info.basic", "video.publish"].join(",");
+// So video.publish is not grantable to this app while it is in Sandbox, which
+// is the same shape as Meta's Advanced Access: build it now, get it at review.
+// The difference it makes is real and belongs in the composer's wording: an
+// uploaded post lands in the creator's TikTok drafts and somebody taps Post in
+// the app. It does not go straight to the feed.
+//
+// Switching back is this one line, plus a reconnect, because a token keeps the
+// scopes it was issued with.
+//
+// user.info.profile stays absent. It carries the @handle, basic already carries
+// the display name and the ids, and an unnecessary scope is a rejection waiting
+// to happen.
+const SCOPES = ["user.info.basic", "video.upload"].join(",");
 
 // A token good for another hour is good enough for the call about to be made.
 // Below that it is renewed, because a request that starts valid and expires
