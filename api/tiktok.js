@@ -18,9 +18,14 @@
 //    already taught that lesson: a carousel built in one request hit the limit
 //    and came back as a platform error page rather than JSON.
 //
-//    PULL_FROM_URL would avoid the upload entirely, but TikTok only fetches
-//    from a domain verified in their portal, and our media sits on Supabase
-//    storage, not on i7os.com. So: FILE_UPLOAD, driven from the browser.
+//    PHOTOS are the other way round: TikTok PULLS them, and only from a domain
+//    verified in its portal. Supabase storage is not one, so the images go over
+//    as img-proxy urls on app.i7os.com, which is. Photos on TikTok are always
+//    the carousel container, up to 35, never a single still in the feed.
+//
+// The word "video" is all over TikTok's own documentation because that is what
+// the platform used to be. The product is the Content Posting API and it does
+// both.
 //
 // Verbs. The first needs no secret and answers for itself:
 //   GET  ?check=1                     → is it configured, and which commit is live
@@ -29,7 +34,8 @@
 //   POST { mode: "status",      orgId } → which accounts are connected
 //   POST { mode: "disconnect",  orgId, openId } → forget one account
 //   POST { mode: "creator",     orgId } → what this creator is allowed to post
-//   POST { mode: "publish-init", orgId, … } → reserve a post, get the upload url
+//   POST { mode: "publish-init", orgId, kind: "video", … } → reserve, get upload url
+//   POST { mode: "publish-init", orgId, kind: "photo", images: [url] } → carousel
 //   POST { mode: "publish-status", orgId, publishId } → how far along it is
 import { createClient } from "@supabase/supabase-js";
 
@@ -332,9 +338,56 @@ export default async function handler(req) {
     });
   }
 
-  // ── publish-init — reserve the post, hand back where to put the bytes ─────
-  // The browser uploads to upload_url itself. Nothing large passes through
-  // here, which is the whole reason this is two calls and not one.
+  // ── publish-init — reserve the post ───────────────────────────────────────
+  // Two shapes behind one verb, because TikTok has two and they differ in more
+  // than a field name.
+  //
+  // A PHOTO post is a carousel, up to 35 of them, and TikTok PULLS the images
+  // rather than taking an upload. It only pulls from a domain verified in its
+  // own portal, and our media sits on Supabase storage, which is not one. The
+  // way through is img-proxy: it already lives on app.i7os.com, which IS
+  // verified, so a signed storage url handed to it comes back out under a host
+  // TikTok will fetch. That is what the verification file bought.
+  //
+  // A single still is not a post here. TikTok has no such thing in the feed;
+  // it is always the photo container, so one image is a carousel of one.
+  if (body.mode === "publish-init" && String(body.kind || "video") === "photo") {
+    const privacy = String(body.privacy || "");
+    if (!privacy) return json({ error: "privacy is required", code: "no_privacy" }, 400);
+    const images = (Array.isArray(body.images) ? body.images : []).filter(Boolean).slice(0, 35);
+    if (!images.length) return json({ error: "images are required", code: "no_images" }, 400);
+
+    const r = await tk(token, "/post/publish/content/init/", {
+      method: "POST",
+      body: {
+        media_type: "PHOTO",
+        post_mode: "DIRECT_POST",
+        post_info: {
+          title: String(body.title || "").slice(0, 90),
+          description: String(body.caption || "").slice(0, 4000),
+          privacy_level: privacy,
+          disable_comment: !!body.disableComment,
+          // A photo carousel on TikTok normally carries a track. Off by
+          // request, on by default, because silent is the unusual one here.
+          auto_add_music: body.autoAddMusic !== false,
+        },
+        source_info: {
+          source: "PULL_FROM_URL",
+          photo_cover_index: Math.min(Math.max(0, Number(body.coverIndex) || 0), images.length - 1),
+          photo_images: images,
+        },
+      },
+    });
+    if (!r.ok) return json({ error: r.message || "init_failed", code: r.errCode || "failed" }, 502);
+    const d = r.body?.data || {};
+    // No upload url: TikTok fetches the images itself, so the browser has
+    // nothing to do but ask how it went.
+    return json({ publishId: d.publish_id || null, uploadUrl: null, pulls: true });
+  }
+
+  // A VIDEO is uploaded, not pulled. The browser puts the bytes at upload_url
+  // itself; nothing large passes through here, which is the whole reason this
+  // is two calls and not one.
   if (body.mode === "publish-init") {
     const size = Number(body.size) || 0;
     if (!size) return json({ error: "size is required", code: "no_size" }, 400);
