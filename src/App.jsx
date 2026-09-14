@@ -7366,7 +7366,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
   lineTools = ["arrow", "line", "pen"], mediaFlyout = null, theme, darkMode, de }) {
 
   const vertical = orientation === "vertical";
-  const sw = 1.9;
+  const sw = 1.8;
   const skip = (k) => hide.includes(k);
 
   const toolBtn = (id, title, icon) => {
@@ -7375,7 +7375,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
       <motion.div key={id} whileTap={{ scale: 0.9 }}
         onClick={() => { closeFlyouts(null); setTool(id); setEditing?.(null); }} title={title}
         style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-          background: on ? "#15151c" : "transparent", color: on ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
+          background: on ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: on ? (darkMode ? "#202023" : "#fff") : theme.textDim, transition: "background 0.15s ease" }}>
         {icon}
       </motion.div>
     );
@@ -7463,7 +7463,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
 
   return (
     <div style={{ display: "flex", flexDirection: vertical ? "column" : "row", alignItems: "center", gap: 4, padding: 6, borderRadius: 16,
-      background: darkMode ? "rgba(22,22,30,0.9)" : "rgba(255,255,255,0.95)", border: `1px solid ${theme.borderFaint}`,
+      background: darkMode ? "rgba(28,28,31,0.96)" : "rgba(255,255,255,0.95)", border: `1px solid ${theme.borderFaint}`,
       // Subtle, short shadow on purpose: the old 14/40px one reached past the
       // container's bottom edge and got visibly clipped by overflow:hidden.
       boxShadow: "0 5px 16px rgba(0,0,0,0.10)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
@@ -7477,8 +7477,8 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
       <div style={{ position: "relative" }}>
         <motion.div whileTap={{ scale: 0.9 }}
           onClick={() => { closeFlyouts("shapes"); setShapesOpen(o => !o); }} title={de ? "Formen" : "Shapes"}
-          style={{ ...dropBtn, background: shapes.includes(tool) ? "#15151c" : "transparent",
-            color: shapes.includes(tool) ? "#fff" : theme.text }}>
+          style={{ ...dropBtn, background: shapes.includes(tool) ? (darkMode ? "#EEEEF0" : "#202023") : "transparent",
+            color: shapes.includes(tool) ? (darkMode ? "#202023" : "#fff") : theme.textDim }}>
           {shapeIcon(lastShape)}{chev}
         </motion.div>
         <AnimatePresence>
@@ -7499,7 +7499,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
                     onClick={() => { setTool(st); setLastShape(st); setShapesOpen(false); setEditing?.(null); }}
                     title={st === "rect" ? (de ? "Rechteck" : "Rectangle") : st === "ellipse" ? (de ? "Kreis" : "Circle") : st === "diamond" ? (de ? "Raute" : "Diamond") : st === "star" ? (de ? "Stern" : "Star") : (de ? "Dreieck" : "Triangle")}
                     style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-                      background: tool === st ? "#15151c" : "transparent", color: tool === st ? "#fff" : theme.text }}>
+                      background: tool === st ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: tool === st ? (darkMode ? "#202023" : "#fff") : theme.textDim }}>
                     {shapeIcon(st)}
                   </motion.div>
                 ))}
@@ -7513,7 +7513,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
       <div style={{ position: "relative" }}>
         <motion.div whileTap={{ scale: 0.9 }}
           onClick={() => { closeFlyouts("line"); setLineToolOpen(o => !o); }} title={de ? "Pfeil / Linie / Freihand" : "Arrow / line / free-hand"}
-          style={{ ...dropBtn, background: lineActive ? "#15151c" : "transparent", color: lineActive ? "#fff" : theme.text }}>
+          style={{ ...dropBtn, background: lineActive ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: lineActive ? (darkMode ? "#202023" : "#fff") : theme.textDim }}>
           {lineIcon(lastLineTool)}{chev}
         </motion.div>
         <AnimatePresence>
@@ -7532,7 +7532,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
                     onClick={() => { setTool(k); setLastLineTool(k); setLineToolOpen(false); setEditing?.(null); }}
                     title={lineTitle(k)}
                     style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-                      background: tool === k ? "#15151c" : "transparent", color: tool === k ? "#fff" : theme.text }}>
+                      background: tool === k ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: tool === k ? (darkMode ? "#202023" : "#fff") : theme.textDim }}>
                     {lineIcon(k)}
                   </motion.div>
                 ))}
@@ -7554,7 +7554,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
         <div style={{ position: "relative" }}>
           <motion.div ref={mediaBtnRef} whileTap={{ scale: 0.9 }}
             onClick={() => { closeFlyouts("media"); setMediaOpen(o => !o); }} title={de ? "Emoji / Sticker" : "Emoji / sticker"}
-            style={{ ...dropBtn, background: mediaOpen ? "#15151c" : "transparent", color: mediaOpen ? "#fff" : theme.text }}>
+            style={{ ...dropBtn, background: mediaOpen ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: mediaOpen ? (darkMode ? "#202023" : "#fff") : theme.textDim }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><line x1="9" y1="9.5" x2="9.01" y2="9.5"/><line x1="15" y1="9.5" x2="15.01" y2="9.5"/></svg>
             {chev}
           </motion.div>
@@ -7564,7 +7564,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
       <motion.div ref={imgBtnRef} whileTap={{ scale: 0.9 }}
         onClick={() => { closeFlyouts("img"); setImgMenuOpen(o => !o); }} title={de ? "Bild einfügen" : "Insert image"}
         style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-          background: imgMenuOpen ? "#15151c" : "transparent", color: imgMenuOpen ? "#fff" : theme.text, transition: "background 0.15s ease" }}>
+          background: imgMenuOpen ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: imgMenuOpen ? (darkMode ? "#202023" : "#fff") : theme.textDim, transition: "background 0.15s ease" }}>
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
       </motion.div>
       {fileRef && (
@@ -19739,7 +19739,6 @@ const polyClip = (it) => {
 // moment it lands.
 const CANVAS_COMPONENT_GROUPS = [
   ["basics", { de: "Basis", en: "Basics" }],
-  ["text",   { de: "Text", en: "Text" }],
 ];
 const CANVAS_COMPONENTS = [
   { key: "button", group: "basics", label: { de: "Button", en: "Button" },
@@ -19752,21 +19751,6 @@ const CANVAS_COMPONENTS = [
           text: "Jetzt starten", size, weight: 600, color: "#FFFFFF", align: "center" },
       ];
     } },
-  { key: "badge", group: "basics", label: { de: "Badge", en: "Badge" },
-    build: (W, H, pal) => {
-      const w = Math.round(W * 0.22), h = Math.round(w * 0.34), x = Math.round((W - w) / 2), y = Math.round(H * 0.3);
-      const size = Math.max(10, Math.round(h * 0.4));
-      return [
-        { id: crypto.randomUUID(), type: "rect", x, y, w, h, fill: pal[1] || pal[0], radius: Math.round(h / 2) },
-        { id: crypto.randomUUID(), type: "text", x, y: Math.round(y + (h - size * CANVAS_LH) / 2), w,
-          text: "Neu", size, weight: 600, color: pal[0], align: "center" },
-      ];
-    } },
-  { key: "divider", group: "basics", label: { de: "Trenner", en: "Divider" },
-    build: (W, H, pal) => [
-      { id: crypto.randomUUID(), type: "rect", x: Math.round(W * 0.15), y: Math.round(H / 2),
-        w: Math.round(W * 0.7), h: Math.max(2, Math.round(W * 0.004)), fill: pal[0], radius: 999 },
-    ] },
   { key: "card", group: "basics", label: { de: "Karte", en: "Card" },
     build: (W, H, pal) => {
       const w = Math.round(W * 0.6), h = Math.round(w * 0.72);
@@ -19781,30 +19765,7 @@ const CANVAS_COMPONENTS = [
           w: w - pad * 2, text: "Titel", size, weight: 600, color: pal[0], align: "left" },
       ];
     } },
-  { key: "headline", group: "text", label: { de: "Überschrift", en: "Headline" },
-    build: (W, H, pal) => {
-      const size = Math.round(W * 0.09);
-      return [{ id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.1), y: Math.round(H * 0.42),
-        w: Math.round(W * 0.8), text: "Eine klare Aussage", size, weight: 700, color: pal[0], align: "left" }];
-    } },
-  { key: "body", group: "text", label: { de: "Fließtext", en: "Body" },
-    build: (W, H, pal) => {
-      const size = Math.round(W * 0.038);
-      return [{ id: crypto.randomUUID(), type: "text", x: Math.round(W * 0.1), y: Math.round(H * 0.5),
-        w: Math.round(W * 0.8),
-        text: "Zwei Zeilen, die den Gedanken\nzu Ende bringen.", size, weight: 400, color: pal[0], align: "left" }];
-    } },
-  { key: "quote", group: "text", label: { de: "Zitat", en: "Quote" },
-    build: (W, H, pal) => {
-      const size = Math.round(W * 0.062);
-      const x = Math.round(W * 0.14), y = Math.round(H * 0.4);
-      return [
-        { id: crypto.randomUUID(), type: "rect", x: Math.round(W * 0.1), y,
-          w: Math.max(3, Math.round(W * 0.008)), h: Math.round(size * CANVAS_LH * 2), fill: pal[1] || pal[0], radius: 999 },
-        { id: crypto.randomUUID(), type: "text", x, y, w: Math.round(W * 0.74),
-          text: "\u201EDer Satz, den man\nbeh\u00E4lt.\u201C", size, weight: 500, color: pal[0], align: "left" },
-      ];
-    } },
+
 ];
 
 
@@ -19814,49 +19775,53 @@ const CANVAS_COMPONENTS = [
 // never what it sets or what it currently reads — both of which you want while
 // dragging, not after.
 function SliderField({ label, value, min = 0, max = 100, step = 1, suffix = "",
-                       height = 34, radius = 999, onChange, onCommit, editMax,
+                       height = 34, radius = 8, onChange, onCommit, editMax, editMin = min,
                        theme, darkMode }) {
   const ref = useRef(null);
   const pct = Math.max(0, Math.min(1, (value - min) / (max - min || 1)));
-  const setFromX = (clientX) => {
+  const clamp = v => Math.min(max, Math.max(min, v));
+  const setFromX = clientX => {
     const r = ref.current?.getBoundingClientRect();
-    if (!r || !r.width) return;
-    const t = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
-    const raw = min + t * (max - min);
-    onChange(Math.round(raw / step) * step);
+    if (!r?.width) return;
+    const raw = min + Math.min(1, Math.max(0, (clientX - r.left) / r.width)) * (max - min);
+    onChange(clamp(Number((min + Math.round((raw - min) / step) * step).toFixed(6))));
   };
   return (
-    <div ref={ref}
-      onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); setFromX(e.clientX); }}
-      onPointerMove={(e) => { if (e.buttons) setFromX(e.clientX); }}
-      style={{ position: "relative", height, borderRadius: radius, overflow: "hidden",
-        cursor: "ew-resize", userSelect: "none", display: "flex", alignItems: "center",
-        padding: "0 14px", background: darkMode ? "rgba(255,255,255,0.07)" : "#F1F1F4" }}>
-      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct * 100}%`,
-        background: darkMode ? "rgba(255,255,255,0.13)" : "#E2E2E7", pointerEvents: "none" }} />
-      <span style={{ position: "relative", fontFamily: FONT, fontSize: 12.5, color: theme.textDim,
-        pointerEvents: "none" }}>{label}</span>
-      <div style={{ flex: 1 }} />
-      {/* With onCommit the number is typable as well as draggable, so a value
-          past the end of the track is still reachable — the track covers the
-          useful range, not the possible one. The field swallows the pointer or
-          clicking into it would start a drag, and it re-enables selection,
-          which the track turns off so dragging does not highlight the label. */}
-      {onCommit ? (
-        <div onPointerDown={(e) => e.stopPropagation()}
-          style={{ position: "relative", display: "flex", alignItems: "center", gap: 1,
-            cursor: "text", userSelect: "text" }}>
-          <NumberField value={value} min={min} max={editMax} onCommit={onCommit}
-            style={{ width: 44, border: "none", outline: "none", background: "transparent",
-              color: theme.text, fontFamily: FONT, fontSize: 12.5, fontWeight: 500,
-              textAlign: "right" }} />
-          {suffix && <span style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 500,
-            color: theme.text }}>{suffix}</span>}
+    <div style={{ display: "flex", alignItems: "center", minWidth: 0 }}>
+      <div ref={ref} style={{ position: "relative", flex: 1, minWidth: 0, height,
+        borderRadius: radius, overflow: "hidden", background: darkMode ? "#29292D" : "#F0F0F1" }}>
+        <div style={{ position: "absolute", inset: 0, width: `${pct * 100}%`,
+          background: darkMode ? "#3B3B40" : "#E2E2E4", pointerEvents: "none" }} />
+        <span style={{ position: "absolute", left: 12, top: 0, height: "100%",
+          display: "flex", alignItems: "center", maxWidth: "calc(100% - 78px)",
+          fontFamily: FONT, fontSize: 12, color: theme.textDim, pointerEvents: "none",
+          whiteSpace: "nowrap", overflow: "hidden" }}>{label}</span>
+        <div role="slider" tabIndex={0} aria-label={label} aria-valuemin={Math.min(min, value)}
+          aria-valuemax={Math.max(max, value)} aria-valuenow={value} aria-valuetext={`${value}${suffix}`}
+          onPointerDown={e => { if (e.button !== 0) return; e.currentTarget.focus(); e.currentTarget.setPointerCapture(e.pointerId); setFromX(e.clientX); }}
+          onPointerMove={e => { if (e.currentTarget.hasPointerCapture(e.pointerId)) setFromX(e.clientX); }}
+          onKeyDown={e => {
+            const delta = e.shiftKey ? step * 10 : step;
+            const next = { ArrowRight: value + delta, ArrowUp: value + delta,
+              ArrowLeft: value - delta, ArrowDown: value - delta, Home: min, End: max }[e.key];
+            if (next === undefined) return;
+            e.preventDefault(); e.stopPropagation(); onChange(clamp(Number(next.toFixed(6))));
+          }}
+          style={{ position: "absolute", inset: 0, cursor: "ew-resize", touchAction: "none",
+            userSelect: "none", borderRadius: radius, outlineOffset: -2 }} />
+        <div style={{ position: "absolute", left: `clamp(3px, ${pct * 100}%, calc(100% - 3px))`,
+          top: "50%", transform: "translate(-50%, -50%)", width: 2, height: 10,
+          borderRadius: 1, background: theme.textDim, opacity: 0.35, pointerEvents: "none" }} />
+        <div style={{ position: "absolute", right: 9, top: 0, height: "100%", display: "flex",
+          alignItems: "center", gap: 1, pointerEvents: onCommit ? "auto" : "none",
+          fontFamily: FONT, fontSize: 12, fontWeight: 500, color: theme.text, fontVariantNumeric: "tabular-nums" }}>
+          {onCommit ? <NumberField value={value} min={editMin} max={editMax} step={step}
+            aria-label={label} onCommit={onCommit}
+            style={{ width: 42, border: "none", outline: "none", background: "transparent",
+              color: theme.text, fontFamily: FONT, fontSize: 12, fontWeight: 500, textAlign: "right" }} /> : value}
+          {suffix}
         </div>
-      ) : (
-        <span style={{ position: "relative", fontFamily: FONT, fontSize: 12.5, fontWeight: 500,
-          color: theme.text, pointerEvents: "none" }}>{value}{suffix}</span>
-      )}
+      </div>
     </div>
   );
 }
@@ -20094,23 +20059,9 @@ const scaleItemInBox = (it, g, sx, sy, nx, ny) => {
 // Editing works on the UNRESOLVED list, where an instance is one object you can
 // move, rotate and delete.
 const CANVAS_INSTANCE_DEPTH = 8;
-// An instance is selected in teal, not in the blue every other object uses, so
-// one glance says this is a component and not a rectangle that happens to look
-// like one. Figma says the same thing in purple; purple is out here by house
-// rule, and teal is the nearest colour that still reads as "a different kind of
-// thing" rather than as a warning, which orange and red would.
-//
-// Measured rather than picked by eye. Against the blue it is 101 apart in Lab,
-// where anything over 10 already reads as a different colour. It carries white
-// text at 5.0:1, which the size badge under a selection and the Edit button
-// both need, and it holds 4.5:1 on the light stage and 3.8:1 on the dark one.
-// A lighter tone was tried first and left white text at 3.4:1, under the 4.5
-// small text wants.
-const CANVAS_COMPONENT_ACCENT = "#0B7D72";
-// The same colour cannot also be TEXT on a dark panel: there it falls to
-// 3.4:1. This one is 8.1:1 on the panel's own dark, and is used for nothing but
-// type.
-const CANVAS_COMPONENT_ACCENT_DARK = "#39C8B6";
+// Components use violet; the lighter tone keeps labels readable on dark panels.
+const CANVAS_COMPONENT_ACCENT = "#8050D8";
+const CANVAS_COMPONENT_ACCENT_DARK = "#B99AF4";
 const canvasExpand = (items, components) => {
   const list = Array.isArray(items) ? items : [];
   const defs = components || null;
@@ -20150,6 +20101,37 @@ const canvasExpand = (items, components) => {
         if (ov) {
           if (ov.text !== undefined && o.type === "text") o = { ...o, text: ov.text };
           if (ov.src !== undefined && o.type === "image") o = { ...o, src: ov.src };
+        }
+        // Rotate every part around the instance centre, not its own centre.
+        // Baking this into the expanded items also keeps previews and exports aligned.
+        if (it.rot) {
+          const angle = it.rot * Math.PI / 180, c = Math.cos(angle), sn = Math.sin(angle);
+          const cx = (it.x || 0) + (Number(it.w) || dw) / 2;
+          const cy = (it.y || 0) + (Number(it.h) || dh) / 2;
+          const point = (x, y) => ({ x: cx + (x - cx) * c - (y - cy) * sn,
+            y: cy + (x - cx) * sn + (y - cy) * c });
+          if (o.type === "line" || o.type === "arrow") {
+            const a = point(o.x1, o.y1), b = point(o.x2, o.y2);
+            o = { ...o, x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+          } else if (o.type === "draw") {
+            o = { ...o, ox: 0, oy: 0, pts: (o.pts || []).map(([x, y]) => {
+              const p = point(x + (o.ox || 0), y + (o.oy || 0)); return [p.x, p.y];
+            }) };
+          } else if (o.type === "path") {
+            const nodes = list => (list || []).map(n => {
+              const p = { ...n, ...point(n.x + (o.ox || 0), n.y + (o.oy || 0)) };
+              for (const h of ["h1", "h2"]) if (n[h + "x"] != null) {
+                const q = point(n[h + "x"] + (o.ox || 0), n[h + "y"] + (o.oy || 0));
+                p[h + "x"] = q.x; p[h + "y"] = q.y;
+              }
+              return p;
+            });
+            o = { ...o, ox: 0, oy: 0, nodes: nodes(o.nodes),
+              ...(o.subs ? { subs: o.subs.map(sp => ({ ...sp, nodes: nodes(sp.nodes) })) } : {}) };
+          } else {
+            const b = canvasRenderBoxOf(o), p = point(b.x + b.w / 2, b.y + b.h / 2);
+            o = { ...o, x: p.x - b.w / 2, y: p.y - b.h / 2, rot: (o.rot || 0) + it.rot };
+          }
         }
         // Where the click goes back to, and what the instance's own opacity
         // does to its parts. The outermost instance wins: a part already
@@ -20212,7 +20194,7 @@ const canvasAssembleDoc = ({ boards, active, live, components, focus, items, sta
     : components) || undefined,
 });
 
-function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
+function CanvasThumb({ doc, w, h, theme, radius = 0, style, transparentSurface = false }) {
   // A document may hold several artboards; the card shows the first. Older
   // documents are the board itself, which is why this reads either shape.
   const bd = (Array.isArray(doc?.boards) && doc.boards[0]) || doc || null;
@@ -20244,7 +20226,7 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
     <div ref={boxRef} style={{ position: "relative", width: "100%", aspectRatio: `${W} / ${H}`,
       maxHeight: "100%", borderRadius: radius, overflow: bd?.clip === false ? "visible" : "hidden",
       ...style,
-      ...(bg && bg !== "transparent"
+      ...(transparentSurface ? { background: "transparent" } : bg && bg !== "transparent"
         ? { background: paintCss(bg, 100) }
         : { backgroundColor: "#fff", backgroundImage: chequer, backgroundSize: "10px 10px" }) }}>
       {/* One square viewport, then everything inside it in the canvas's own
@@ -21629,6 +21611,70 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // none, so a document that has never seen a component is saved exactly as
   // before.
   const [components, setComponents] = useState(() => doc?.components || null);
+  const [libraryRows, setLibraryRows] = useState([]);
+  const [libraryLoaded, setLibraryLoaded] = useState(false);
+  const librarySaveQueue = useRef(Promise.resolve());
+  const [libraryError, setLibraryError] = useState("");
+  const [libraryBusy, setLibraryBusy] = useState(null);
+  const loadLibrary = async () => {
+    if (!orgId) return;
+    const { data, error } = await supabase.from("artwork_components")
+      .select("id,definition,deleted_at").eq("org_id", orgId);
+    if (error) { setLibraryError(de ? "Library konnte nicht geladen werden." : "Could not load library."); return; }
+    setLibraryRows(data || []); setLibraryError("");
+  };
+  useEffect(() => {
+    let alive = true;
+    setLibraryRows([]); setLibraryLoaded(false);
+    const load = async () => {
+      if (!orgId) return;
+      const { data, error } = await supabase.from("artwork_components")
+        .select("id,definition,deleted_at").eq("org_id", orgId);
+      if (!alive) return;
+      if (error) setLibraryError(de ? "Library konnte nicht geladen werden." : "Could not load library.");
+      else { setLibraryRows(data || []); setLibraryError(""); setLibraryLoaded(true); }
+    };
+    load(); window.addEventListener("focus", load);
+    return () => { alive = false; window.removeEventListener("focus", load); };
+  }, [orgId, de]);
+  const saveLibraryComponent = (cid, def) => {
+    if (!orgId) return Promise.resolve();
+    const definition = structuredClone({ ...def, id: cid, items: canvasExpand(def.items, components) });
+    setLibraryBusy(cid);
+    librarySaveQueue.current = librarySaveQueue.current.then(async () => {
+      setLibraryError("");
+      try {
+        const { error } = await supabase.from("artwork_components").upsert(
+          { org_id: orgId, id: cid, definition, deleted_at: null }, { onConflict: "org_id,id" });
+        if (error) throw error;
+        await loadLibrary();
+      } catch { setLibraryError(de ? "Komponente konnte nicht gespeichert werden." : "Could not save component."); }
+      finally { setLibraryBusy(null); }
+    });
+    return librarySaveQueue.current;
+  };
+  useEffect(() => {
+    if (!libraryLoaded || libraryBusy || libraryError || !orgId) return;
+    const missing = Object.entries(components || {}).find(([cid]) => !libraryRows.some(r => r.id === cid));
+    if (missing) saveLibraryComponent(...missing);
+  }, [components, libraryRows, libraryLoaded, libraryBusy, libraryError, orgId]);
+  const removeLibraryComponent = async (cid, def) => {
+    if (!orgId || libraryBusy) return;
+    setLibraryBusy(cid); setLibraryError("");
+    try {
+      const { error } = await supabase.from("artwork_components").upsert({ org_id: orgId, id: cid,
+        definition: def, deleted_at: new Date().toISOString() }, { onConflict: "org_id,id" });
+      if (error) throw error;
+      await loadLibrary();
+    } catch { setLibraryError(de ? "Komponente konnte nicht entfernt werden." : "Could not remove component."); }
+    finally { setLibraryBusy(null); }
+  };
+  // Tombstones hide library entries without removing definitions used by artworks.
+  const libraryEntries = new Map(Object.entries(components || {}));
+  for (const row of libraryRows) {
+    if (row.deleted_at) libraryEntries.delete(row.id);
+    else libraryEntries.set(row.id, row.definition);
+  }
   // Inside a component. While this is set, `items` holds the COMPONENT's parts
   // and the board's own parts are parked here, because every edit in the editor
   // writes to `items` and rewiring all of them would be a hundred chances to
@@ -22707,7 +22753,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       const k = e.key.toLowerCase();
       if (k === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); }
       if (k === "y") { e.preventDefault(); redo(); }
-      if (k === "c" && sel) { e.preventDefault(); copySel(); }
+      // Copy and cut are handled by native clipboard events below.
       if (k === "d" && sel) { e.preventDefault(); duplicateSel(); }
       // No ⌘V here. Both kinds of paste are decided in the paste event below,
       // which is the only place the system clipboard can actually be read.
@@ -22773,8 +22819,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   });
   const cloneOf = (it, dx = 0, dy = 0) => ({ ...it, id: crypto.randomUUID(), ...movedBy(it, dx, dy) });
   const copySel = (id = sel) => {
-    const it = items.find(i => i.id === id);
-    if (it) clipRef.current = [it];
+    const ids = selectionIds(id);
+    if (ids.size) clipRef.current = structuredClone(items.filter(i => ids.has(i.id)));
   };
   // The other half of a ring, made to match. A band that wraps a subject is
   // two elements: the back of the ring under the picture and the front of it
@@ -23073,12 +23119,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   const pasteClip = (at) => {
     if (!clipRef.current.length) return;
-    const made = clipRef.current.map(it => {
-      if (!at) return cloneOf(it, 20, 20);
-      const b = canvasRenderBoxOf(it);
-      return cloneOf(it, Math.round(at.x - b.x), Math.round(at.y - b.y));
-    });
+    const source = clipRef.current;
+    const idMap = new Map(source.map(it => [it.id, crypto.randomUUID()]));
+    const groupMap = new Map(source.filter(it => it.groupId).map(it => [it.groupId, crypto.randomUUID()]));
+    const bounds = source.map(canvasRenderBoxOf);
+    const dx = at ? Math.round(at.x - Math.min(...bounds.map(b => b.x))) : 0;
+    const dy = at ? Math.round(at.y - Math.min(...bounds.map(b => b.y))) : 0;
+    const made = source.map(it => ({ ...structuredClone(it), ...movedBy(it, dx, dy), id: idMap.get(it.id),
+      ...(it.groupId ? { groupId: groupMap.get(it.groupId) } : {}),
+      ...(it.maskId ? { maskId: idMap.get(it.maskId) } : {}) }));
+    markChange();
     setItems(list => [...list, ...made]);
+    setPick(made.length > 1 ? made.map(it => it.id) : []);
     setSel(made[made.length - 1].id);
   };
   pasteClipRef.current = pasteClip;
@@ -23094,6 +23146,21 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setItems(list => list.filter(i => !ids.has(i.id)));
     setSel(null); setPick([]);
   };
+
+  useEffect(() => {
+    const transfer = (e) => {
+      if (editing || /^(INPUT|TEXTAREA)$/.test(e.target?.tagName || "") || e.target?.isContentEditable) return;
+      const ids = selectionIds();
+      if (!ids.size || !e.clipboardData) return;
+      e.preventDefault();
+      copySel();
+      e.clipboardData.setData("text/plain", "i7OS artwork selection");
+      if (e.type === "cut") deleteSel();
+    };
+    window.addEventListener("copy", transfer);
+    window.addEventListener("cut", transfer);
+    return () => { window.removeEventListener("copy", transfer); window.removeEventListener("cut", transfer); };
+  }, [items, sel, pick, editing, enteredGroup]);
 
   // Topmost first, so a right-click hits what the eye sees on top.
   const itemAt = (pt) => {
@@ -23884,6 +23951,41 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     if (!cid || !v || !(components || {})[cid] || components[cid].name === v) return;
     markChange();
     setComponents(c => ({ ...(c || {}), [cid]: { ...(c || {})[cid], name: v } }));
+    if (!libraryRows.some(r => r.id === cid && r.deleted_at)) saveLibraryComponent(cid, { ...components[cid], name: v });
+  };
+  const libraryDrag = useRef(null);
+  const basicDefinition = comp => {
+    const made = comp.build(W, H, palette, brand), box = componentBox(made);
+    return { id: crypto.randomUUID(), name: de ? comp.label.de : comp.label.en,
+      w: box.w, h: box.h, items: made.map(it => scaleItemInBox(it, box, 1, 1, 0, 0)) };
+  };
+  const dragComponent = (e, def) => {
+    libraryDrag.current = def;
+    e.dataTransfer.setData("application/x-i7os-component", def.id);
+    e.dataTransfer.effectAllowed = "copy";
+  };
+  const editLibraryComponent = def => {
+    if (focus) return;
+    setComponents(c => ({ ...(c || {}), [def.id]: structuredClone(def) }));
+    setFocus({ cid: def.id, instanceId: null, parked: items, cam });
+    setItems(structuredClone(def.items || [])); setSel(null); setPick([]); setEnteredGroup(null); setEditing(null);
+    flyTo(camForBox({ x: 0, y: 0, w: def.w || 1, h: def.h || 1 }));
+  };
+  const dropLibraryComponent = e => {
+    const def = libraryDrag.current;
+    if (!def || !cam || focus) return;
+    e.preventDefault(); libraryDrag.current = null;
+    const p = toArt(e), wx = p.x + originX, wy = p.y + originY;
+    const next = boardsNow();
+    const target = next.findLastIndex(b => wx >= (b.x || 0) && wy >= (b.y || 0)
+      && wx <= (b.x || 0) + b.w && wy <= (b.y || 0) + b.h);
+    if (target < 0) return;
+    const b = next[target];
+    const inst = { id: crypto.randomUUID(), type: "instance", componentId: def.id,
+      x: Math.round(wx - (b.x || 0) - def.w / 2), y: Math.round(wy - (b.y || 0) - def.h / 2), w: def.w, h: def.h };
+    markChange(); setComponents(c => ({ ...(c || {}), [def.id]: structuredClone(def) }));
+    if (target !== active) { setBoards(next); setActive(target); loadBoard(b); }
+    setItems([...(b.items || []), inst]); setSel(inst.id); setPick([]);
   };
   const enterComponent = (inst) => {
     const def = (components || {})[inst.componentId];
@@ -23897,6 +23999,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     if (!focus) return;
     const { cid, instanceId, parked, cam: back } = focus;
     setComponents(c => ({ ...(c || {}), [cid]: { ...(c || {})[cid], items } }));
+    if (!libraryRows.some(r => r.id === cid && r.deleted_at)) saveLibraryComponent(cid, { ...components[cid], items });
     setItems(parked);
     setFocus(null);
     setSel(instanceId); setPick([]); setEnteredGroup(null); setEditing(null);
@@ -24491,29 +24594,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     )}
   </>);
 
-  // The alignment marks. The edge you align TO is a hairline; what MOVES
-  // against it are two bars, much heavier and standing CLEAR of the line
-  // rather than growing out of it. The gap is what makes them read as objects
-  // beside an edge instead of one bracket-shaped glyph.
-  //
-  // The two centre marks are the exception: there the bars cross the line,
-  // because that is what centring on it looks like.
-  const alignMark = (guide, long, short) => (
-    <>
-      <path d={guide} strokeWidth="1.5" />
-      <path d={long} strokeWidth="3.5" />
-      <path d={short} strokeWidth="3.5" />
-    </>
+  // Small rounded objects show the resulting alignment without guide lines.
+  const alignMark = (x1, y1, w1, h1, x2, y2, w2, h2) => (
+    <><rect x={x1} y={y1} width={w1} height={h1} rx="1.5" fill="currentColor" stroke="none" />
+      <rect x={x2} y={y2} width={w2} height={h2} rx="1.5" fill="currentColor" stroke="none" opacity="0.5" /></>
   );
   const ALIGN_DEFS = [
-    ["l",  alignMark("M5 3.5V20.5", "M9.5 8.75H18.5", "M9.5 15.25H15"), "Links", "Left"],
-    ["cx", alignMark("M12 3V21", "M6 8.75H18", "M8.25 15.25H15.75"),
-     "Horizontal zentrieren", "Centre horizontally"],
-    ["r",  alignMark("M19 3.5V20.5", "M5.5 8.75H14.5", "M9 15.25H14.5"), "Rechts", "Right"],
-    ["t",  alignMark("M3.5 5H20.5", "M8.75 9.5V18.5", "M15.25 9.5V15"), "Oben", "Top"],
-    ["cy", alignMark("M3 12H21", "M8.75 6V18", "M15.25 8.25V15.75"),
-     "Vertikal zentrieren", "Centre vertically"],
-    ["b",  alignMark("M3.5 19H20.5", "M8.75 5.5V14.5", "M15.25 9V14.5"), "Unten", "Bottom"],
+    ["l", alignMark(4,5,16,5,4,14,10,5), "Links", "Left"],
+    ["cx", alignMark(4,5,16,5,7,14,10,5), "Horizontal zentrieren", "Centre horizontally"],
+    ["r", alignMark(4,5,16,5,10,14,10,5), "Rechts", "Right"],
+    ["t", alignMark(5,4,5,16,14,4,5,10), "Oben", "Top"],
+    ["cy", alignMark(5,4,5,16,14,7,5,10), "Vertikal zentrieren", "Centre vertically"],
+    ["b", alignMark(5,4,5,16,14,10,5,10), "Unten", "Bottom"],
   ];
   const alignBtn = (k, act) => {
     const [, glyph, dde, een] = ALIGN_DEFS.find(d => d[0] === k);
@@ -24522,8 +24614,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
           justifyContent: "center", cursor: "pointer", color: theme.text,
           background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
-        {/* No strokeWidth here: each mark sets its own, which is what keeps
-            the guide thin and the bars heavy. */}
+
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           strokeLinecap="round">{glyph}</svg>
       </div>
@@ -24582,7 +24673,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         );
         const dropdown = (value, options, onChange) => (
           <div style={{ position: "relative", display: "flex", alignItems: "center",
-            padding: "8px 10px", borderRadius: 9,
+            padding: "8px 12px", borderRadius: 8,
             background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
             <select value={value} onChange={e => onChange(e.target.value)}
               style={{ width: "100%", border: "none", outline: "none", background: "transparent",
@@ -24599,8 +24690,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 : <option key={v + oi} value={v}>{l}</option>)}
             </select>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.textFaint}
-              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-              <polyline points="6 9 12 15 18 9"/></svg>
+              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/></svg>
           </div>
         );
         const segment = (value, options, onChange) => (
@@ -24609,7 +24700,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               <div key={v} title={title} onClick={() => onChange(v)}
                 style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
                   justifyContent: "center", cursor: "pointer", color: theme.text,
-                  border: `1px solid ${value === v ? "#15151c" : "transparent"}`,
+                  border: `1px solid ${value === v ? (darkMode ? "#A9A9AE" : "#BFC0C4") : "transparent"}`,
                   background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
                 {typeof glyph === "string" ? (
                   // Letters, for the rows where the setting IS a letterform.
@@ -24618,7 +24709,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   </span>
                 ) : (
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="2" strokeLinecap="round">{glyph}</svg>
+                    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{glyph}</svg>
                 )}
               </div>
             ))}
@@ -24628,7 +24719,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   // ── chrome ────────────────────────────────────────────────────────────────
 
-  const panel = darkMode ? "#16161e" : "#fff";
+  const panel = darkMode ? "#1C1C1F" : "#FCFCFC";
   const line = theme.borderFaint;
 
   const swatch = (value, onPick) => (
@@ -24650,8 +24741,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   );
 
   const label = (s) => (
-    <div style={{ fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.6, textTransform: "uppercase",
-      color: theme.textFaint, margin: "18px 0 2px" }}>{s}</div>
+    <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600,
+      color: theme.textDim, margin: "12px 0 6px" }}>{s}</div>
   );
 
   // Handed to the toolbar, which hangs it off the media button through the
@@ -24745,10 +24836,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       <div ref={stageRef}
         // preventDefault on dragover is what makes this a drop target at all;
         // without it the browser navigates to the file and the editor is gone.
-        onDragOver={(e) => { if (!dtHasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
+        onDragOver={(e) => { if (!dtHasFiles(e) && !libraryDrag.current) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
         onDragEnter={(e) => { if (!dtHasFiles(e)) return; e.preventDefault(); dropDepth.current += 1; setDropOver(true); }}
         onDragLeave={(e) => { if (!dtHasFiles(e)) return; dropDepth.current = Math.max(0, dropDepth.current - 1); if (!dropDepth.current) setDropOver(false); }}
         onDrop={(e) => {
+          if (libraryDrag.current) { dropLibraryComponent(e); return; }
           if (!dtHasFiles(e)) return;
           e.preventDefault(); dropDepth.current = 0; setDropOver(false);
           if (cam) placeDroppedImages(e.dataTransfer.files, toArt(e));
@@ -24790,7 +24882,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               // Each board carries its own answer, so a row of them need not agree.
               boxShadow: b.shadow === false ? "none" : "0 18px 60px rgba(0,0,0,0.28)",
               borderRadius: `${Math.max(0, Number(b.radius) || 0)}px` }}>
-            <CanvasThumb doc={b} theme={theme} />
+            <CanvasThumb doc={{ ...b, components }} theme={theme} />
             {/* pointerEvents back on, for this label only: the board behind it
                 still switches on a single click, and the label needs a
                 double-click of its own. stopPropagation keeps the two apart. */}
@@ -26634,7 +26726,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   ) : (
                     <span onDoubleClick={(e) => { e.stopPropagation(); setRenameId(it.id); }}
                       style={{ flex: 1, minWidth: 0, fontFamily: FONT, fontSize: 12,
-                        // A component reads teal in the list too, the same colour
+                        // A component uses its accent in the list too, the same colour
                         // its frame takes on the board, so the list and the canvas
                         // say the same thing about the same object.
                         color: it.type === "instance"
@@ -26674,7 +26766,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       </div>
 
       {/* right panel */}
-      <div style={{ position: "absolute", right: 0, top: 52, bottom: 0, width: PANEL_W, padding: "4px 16px 20px",
+      <div className="artwork-inspector" style={{ position: "absolute", right: 0, top: 52, bottom: 0, width: PANEL_W, padding: "8px 18px 24px",
         background: panel, borderLeft: `1px solid ${line}`, overflowY: "auto" }}>
         {/* Several selected: the panel's first job is what you can only do to
             several things at once. Aligning here is to EACH OTHER — the box they
@@ -26923,23 +27015,26 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             {compGroup === gk && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, paddingBottom: 4 }}>
                 {CANVAS_COMPONENTS.filter(c => c.group === gk).map(comp => {
-                  const made = comp.build(W, H, palette, brand);
+                  const def = basicDefinition(comp);
                   return (
                     <div key={comp.key}
                       // Added, not applied: a component joins what is there,
                       // where a template replaces it. Selected after landing,
                       // because the next thing you do is move it.
-                      onClick={() => { markChange();
-                        setItems(list => [...list, ...made]);
-                        setPick(made.map(o => o.id)); setSel(made[made.length - 1].id); }}
-                      style={{ cursor: "pointer" }}>
-                      <div style={{ position: "relative", width: "100%", aspectRatio: String(W / H),
-                        borderRadius: 7, overflow: "hidden", border: `1px solid ${line}`,
-                        background: darkMode ? "rgba(255,255,255,0.04)" : "#F7F7F9" }}>
+                      draggable onDragStart={e => dragComponent(e, def)} onDragEnd={() => { libraryDrag.current = null; }}
+                      onDoubleClick={() => editLibraryComponent(def)}
+                      title={de ? "Auf ein Artboard ziehen · Doppelklick zum Bearbeiten" : "Drag onto an artboard · Double-click to edit"}
+                      style={{ cursor: "grab" }}>
+                      <div style={{ position: "relative", width: "100%", aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", padding: 8,
+                        borderRadius: 8, overflow: "hidden",
+                        backgroundColor: darkMode ? "#252528" : "#EEEEF0",
+                        backgroundImage: `radial-gradient(${darkMode ? "rgba(255,255,255,0.13)" : "rgba(0,0,0,0.12)"} 0.7px, transparent 0.7px)`,
+                        backgroundSize: "12px 12px" }}>
                         {/* The component itself, at card size — the same
                             drawing the canvas will show, not an icon of it. */}
-                        <CanvasThumb doc={{ w: W, h: H, items: made, bg: "transparent", clip: true }}
-                          theme={theme} />
+                        <div style={{ width: `${Math.min(1, def.w / def.h) * 100}%` }}>
+                        <CanvasThumb transparentSurface doc={{ w: def.w, h: def.h, items: def.items, bg: "transparent", clip: true }} theme={theme} />
+                        </div>
                       </div>
                       <div style={{ fontSize: 11, color: theme.textDim, marginTop: 4 }}>
                         {de ? comp.label.de : comp.label.en}
@@ -26951,6 +27046,50 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             )}
           </div>
         ))}
+
+        {sel === "frame" && !selItem && frameTab === "components" && (
+          <div style={{ marginTop: 4 }}>
+            <button type="button" onClick={() => { setCompGroup(g => g === "custom" ? null : "custom"); loadLibrary(); }}
+              style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", border: "none",
+                background: "transparent", color: theme.text, padding: "9px 0", cursor: "pointer",
+                fontFamily: FONT, fontSize: 12.5, fontWeight: 600 }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                style={{ transform: compGroup === "custom" ? "rotate(90deg)" : "none" }}><path d="m9 6 6 6-6 6"/></svg>
+              {de ? "Workspace Library" : "Workspace library"}
+            </button>
+            {libraryError && <div role="alert" style={{ color: theme.textDim, fontSize: 12 }}>{libraryError}</div>}
+            {compGroup === "custom" && <>
+              {!libraryEntries.size && <div style={{ fontSize: 12, color: theme.textDim, padding: "6px 0", lineHeight: 1.5 }}>
+                {de ? "Deine erstellten Komponenten erscheinen hier." : "Components you create appear here."}
+              </div>}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {[...libraryEntries].map(([cid, def]) => (
+                  <div key={cid} style={{ minWidth: 0, position: "relative" }}>
+                  <button type="button" draggable onDragStart={e => dragComponent(e, { ...def, id: cid })}
+                    onDragEnd={() => { libraryDrag.current = null; }} onDoubleClick={() => editLibraryComponent({ ...def, id: cid })}
+                    title={de ? "Auf ein Artboard ziehen · Doppelklick zum Bearbeiten" : "Drag onto an artboard · Double-click to edit"} style={{ width: "100%", minWidth: 0, padding: 0, border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}>
+                    <div style={{ aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", padding: 8,
+                      borderRadius: 8, backgroundColor: darkMode ? "#252528" : "#EEEEF0",
+                      backgroundImage: `radial-gradient(${darkMode ? "rgba(255,255,255,0.13)" : "rgba(0,0,0,0.12)"} 0.7px, transparent 0.7px)`,
+                      backgroundSize: "12px 12px" }}>
+                      <div style={{ width: `${Math.min(1, def.w / def.h) * 100}%` }}><CanvasThumb transparentSurface doc={{ w: def.w, h: def.h, items: def.items, components, bg: "transparent" }} theme={theme}/></div>
+                    </div>
+                    <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textDim, marginTop: 4,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{def.name}</div>
+                  </button>
+                    <button type="button" disabled={!!libraryBusy || !orgId}
+                      onClick={() => removeLibraryComponent(cid, def)}
+                      title={de ? "Aus Library entfernen; Artworks bleiben erhalten" : "Remove from library; artworks are preserved"}
+                      aria-label={de ? "Komponente entfernen" : "Remove component"}
+                      style={{ position: "absolute", top: 6, right: 6, width: 25, height: 25, display: "grid", placeItems: "center", border: `1px solid ${line}`, borderRadius: 7, background: darkMode ? "#252529" : "#FFFFFF", color: theme.textDim, cursor: "pointer" }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13M10 10v7m4-7v7"/></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>}
+          </div>
+        )}
 
         {sel === "frame" && !selItem && frameTab === "design" && (
           <>
@@ -27121,6 +27260,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   </svg>
                   {de ? "Komponente" : "Component"}
                 </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 6,
+                  borderRadius: 8, padding: "2px 4px 2px 10px",
+                  background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
                 <input
                   // Focused only right after one is made. Later it is an
                   // ordinary field, so clicking an instance does not steal the
@@ -27137,30 +27279,30 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     // Escape puts the name it had back, then leaves the field.
                     if (e.key === "Escape") { e.currentTarget.value = def?.name || ""; e.currentTarget.blur(); }
                   }}
-                  style={{ width: "100%", boxSizing: "border-box", marginTop: 8,
-                    padding: "8px 10px", borderRadius: 9, border: `1px solid ${line}`,
-                    background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
+                  aria-label={de ? "Name der Komponente" : "Component name"}
+                  style={{ flex: 1, minWidth: 0, boxSizing: "border-box",
+                    padding: "6px 0", border: "none", background: "transparent",
                     color: theme.text, fontFamily: FONT, fontSize: 12.5, outline: "none" }} />
-                <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 7 }}>
-                  {de
-                    ? `Wird an ${instanceCount(cid)} Stelle${instanceCount(cid) === 1 ? "" : "n"} verwendet · ${def?.w || 0} × ${def?.h || 0}`
-                    : `Used in ${instanceCount(cid)} place${instanceCount(cid) === 1 ? "" : "s"} · ${def?.w || 0} × ${def?.h || 0}`}
+                <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                  <button type="button" onClick={() => enterComponent(selItem)}
+                    aria-label={de ? "Komponente bearbeiten" : "Edit component"}
+                    title={de ? "Komponente bearbeiten" : "Edit component"}
+                    style={{ width: 30, height: 32, display: "grid", placeItems: "center",
+                      border: "none", borderRadius: 7, background: "transparent", cursor: "pointer", color: theme.textDim }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m15 5 4 4M4 20l4-1 12-12a2.8 2.8 0 0 0-4-4L4 15z" />
+                    </svg>
+                  </button>
+                  <button type="button" onClick={() => detachInstance(selItem.id)}
+                    aria-label={de ? "Instanz lösen" : "Detach instance"}
+                    title={de ? "Instanz lösen" : "Detach instance"}
+                    style={{ width: 30, height: 32, display: "grid", placeItems: "center",
+                      border: "none", borderRadius: 7, background: "transparent", cursor: "pointer", color: theme.textDim }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m9 15-2 2a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0m2 8a3.5 3.5 0 0 0 5 0l4-4a3.5 3.5 0 0 0-5-5l-2 2M9 3v2m10 14v2" />
+                    </svg>
+                  </button>
                 </div>
-                <div style={{ display: "flex", gap: 6, marginTop: 9 }}>
-                  <div onClick={() => enterComponent(selItem)}
-                    style={{ flex: 1, textAlign: "center", padding: "8px 10px", borderRadius: 9,
-                      cursor: "pointer", fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
-                      background: CANVAS_COMPONENT_ACCENT, color: "#fff" }}>
-                    {de ? "Bearbeiten" : "Edit"}
-                  </div>
-                  <div onClick={() => detachInstance(selItem.id)}
-                    title={de ? "Die Instanz wird zu ihren Einzelteilen"
-                             : "The instance becomes its separate parts"}
-                    style={{ flex: 1, textAlign: "center", padding: "8px 10px", borderRadius: 9,
-                      cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
-                      border: `1px solid ${line}`, color: theme.textDim }}>
-                    {de ? "Lösen" : "Detach"}
-                  </div>
                 </div>
               </>);
             })()}
@@ -27219,20 +27361,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               </>)}
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-              <div style={{ flex: 1 }}>
-                {num(selItem.rot || 0, v => set2({ rot: Number(v) || 0 }),
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20.5 12a8.5 8.5 0 11-2.6-6.1" /><path d="M20.5 4.5V10h-5.5" />
-                  </svg>, "°")}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <SliderField label={de ? "Drehung" : "Rotation"} value={selItem.rot || 0}
+                  min={-180} max={180} editMin={-Infinity} suffix="°" onChange={v => set2({ rot: v })}
+                  onCommit={v => set2({ rot: Number(v) || 0 })} theme={theme} darkMode={darkMode} />
               </div>
-              {[["flipX", <><path d="M12 4v16"/><path d="M9 8L4 12l5 4z"/><path d="M15 8l5 4-5 4z"/></>, de ? "Horizontal spiegeln" : "Flip horizontal"],
-                ["flipY", <><path d="M4 12h16"/><path d="M8 9l4-5 4 5z"/><path d="M8 15l4 5 4-5z"/></>, de ? "Vertikal spiegeln" : "Flip vertical"],
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 6 }}>
+              {[["flipX", <><path d="m1 12 9-7v14zm22 0-9-7v14z" fill="currentColor" stroke="none"/></>, de ? "Horizontal spiegeln" : "Flip horizontal"],
+                ["flipY", <><path d="m12 1-7 9h14zm0 22-7-9h14z" fill="currentColor" stroke="none"/></>, de ? "Vertikal spiegeln" : "Flip vertical"],
               ].map(([k, glyph, title]) => (
                 <div key={k} title={title} onClick={() => set2({ [k]: !selItem[k] })}
-                  style={{ width: 40, height: 34, borderRadius: 8, display: "flex", alignItems: "center",
+                  style={{ flex: 1, height: 30, borderRadius: 8, display: "flex", alignItems: "center",
                     justifyContent: "center", cursor: "pointer", color: theme.text,
-                    border: `1px solid ${selItem[k] ? "#15151c" : "transparent"}`,
+                    border: `1px solid ${selItem[k] ? (darkMode ? "#A9A9AE" : "#BFC0C4") : "transparent"}`,
                     background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{glyph}</svg>
@@ -27337,11 +27479,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             </>)}
 
             {label(de ? "Darstellung" : "Appearance")}
-            <div style={two}>
-              {num(Math.round((selItem.opacity == null ? 1 : selItem.opacity) * 100),
-                v => set("opacity", Math.min(100, Math.max(0, Number(v) || 0)) / 100), "◍", "%")}
-              {/* Beside opacity, since both answer "how does this sit on what is
-                  under it". Available on everything — text, emoji, shapes alike. */}
+            <SliderField label={de ? "Deckkraft" : "Opacity"}
+              value={Math.round((selItem.opacity == null ? 1 : selItem.opacity) * 100)}
+              min={0} max={100} editMax={100} suffix="%"
+              onChange={v => set("opacity", v / 100)}
+              onCommit={v => set("opacity", v / 100)} theme={theme} darkMode={darkMode} />
+            <div style={{ marginTop: 8 }}>
               {dropdown(selItem.blend || "normal", BLEND_MODES, v => set("blend", v))}
             </div>
             {canRepeat(selItem) && selItem.repeat && (() => {
@@ -27605,10 +27748,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 };
                 const tile = (active, onClick, glyph, caption) => (
                   <div onClick={onClick}
-                    style={{ flex: 1, padding: "10px 0 8px", borderRadius: 10, cursor: "pointer",
+                    style={{ flex: 1, padding: "8px 0 6px", borderRadius: 8, cursor: "pointer",
                       display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
                       background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
-                      border: `1px solid ${active ? "#15151c" : "transparent"}` }}>
+                      border: `1px solid ${active ? (darkMode ? "#929299" : "#BFC0C4") : "transparent"}` }}>
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                       strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
                       style={{ color: active ? theme.text : theme.textDim }}>
@@ -27629,15 +27772,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       de ? "Standard" : "Straight")}
                     {tile(on && !cyl,
                       () => set("arc", { sweep: 360, inside: false, ...arc, on: true, mode: undefined }),
-                      <><path d="M3.6 13.6a8.4 8.4 0 0 1 16.8 0" /><path d="M12 6.4V4.2" />
-                        <path d="M6.9 8.3L5.6 6.6" /><path d="M17.1 8.3l1.3-1.7" /></>,
+                      <><path d="M4 17a8 8 0 0 1 16 0" opacity="0.4"/>
+                        <path d="M9 6h6M12 6v8"/><circle cx="4" cy="17" r="1.5" fill="currentColor" stroke="none"/><circle cx="20" cy="17" r="1.5" fill="currentColor" stroke="none"/></>,
                       de ? "Radial" : "Radial")}
                     {/* An ellipse is a circle lying down, and the ticks are
                         letters standing on it. */}
                     {tile(on && cyl,
                       () => set("arc", { sweep: 360, ...arc, on: true, mode: "cyl" }),
-                      <><ellipse cx="12" cy="13" rx="8.6" ry="4" /><path d="M6.6 15.4v2.6" />
-                        <path d="M12 17v2.6" /><path d="M17.4 15.4v2.6" /></>,
+                      <><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 4 14 4 14 0V6"/>
+                        <path d="M9 11h6M12 11v6" opacity="0.55"/></>,
                       "3D")}
                   </div>
                   {on && (<>

@@ -174,3 +174,61 @@ const ids = (l) => l.map(o => o.id);
 }
 
 console.log('Passed: an instance resolves into ordinary items, once, for all three drawers.');
+
+// The inactive-artboard preview must receive the shared definitions too. Use
+// its actual doc expression: expansion alone passes even when this wiring is missing.
+{
+  const { parse } = await import('@babel/parser');
+  const ast = parse(src, { sourceType: 'module', plugins: ['jsx'] });
+  const editor = ast.program.body.find(n => n.type === 'FunctionDeclaration' && n.id.name === 'CanvasEditor');
+  let docExpression;
+  const visit = n => {
+    if (!n || typeof n !== 'object') return;
+    if (n.type === 'JSXOpeningElement' && n.name?.name === 'CanvasThumb') {
+      const attr = n.attributes.find(a => a.name?.name === 'doc');
+      const expression = attr?.value?.expression;
+      if (expression && /\bb\b/.test(src.slice(expression.start, expression.end))) docExpression = expression;
+    }
+    for (const value of Object.values(n)) {
+      if (Array.isArray(value)) value.forEach(visit);
+      else if (value && typeof value === 'object') visit(value);
+    }
+  };
+  visit(editor);
+  assert.ok(docExpression, 'inactive artboard preview found');
+  const previewDoc = new Function('b', 'components', `return (${src.slice(docExpression.start, docExpression.end)});`);
+  const components = { c: { w: 10, h: 10, items: [box('part')] } };
+  const boards = [0, 1].map(i => ({ id: `board-${i}`, items: [box(`plain-${i}`),
+    { id: `instance-${i}`, type: 'instance', componentId: 'c', x: 20, y: 30, w: 10, h: 10 }] }));
+  for (const active of [0, 1, 0]) {
+    const inactive = boards[1 - active];
+    const doc = previewDoc(inactive, components);
+    const rendered = canvasExpand(doc.items, doc.components);
+    assert.equal(rendered.length, 2);
+    assert.ok(rendered.some(it => it.id === `instance-${1-active}:part` && it.type === 'rect'),
+      'component stays visible when its board becomes inactive');
+  }
+  console.log('Passed: inactive artboards retain component contents across board switches.');
+}
+
+// Off-centre parts must orbit the instance centre as well as turn themselves.
+{
+  const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
+  const components = { c: { w: 100, h: 100, items: [
+    box('rect', { x: 10, y: 20, w: 20, h: 10, rot: 15 }),
+    { id: 'line', type: 'line', x1: 0, y1: 0, x2: 100, y2: 0 },
+    { id: 'path', type: 'path', nodes: [{ x: 10, y: 20, h1x: 5, h1y: 20 }],
+      subs: [{ nodes: [{ x: 20, y: 30 }] }] },
+  ] } };
+  const instance = { id: 'i', type: 'instance', componentId: 'c', x: 200, y: 300, w: 100, h: 100, rot: 90 };
+  const [rect, line, path] = canvasExpand([instance], components);
+  near(rect.x, 265); near(rect.y, 315); near(rect.rot, 105);
+  near(line.x1, 300); near(line.y1, 300); near(line.x2, 300); near(line.y2, 400);
+  near(path.nodes[0].x, 280); near(path.nodes[0].y, 310);
+  near(path.nodes[0].h1x, 280); near(path.nodes[0].h1y, 305);
+  near(path.subs[0].nodes[0].x, 270); near(path.subs[0].nodes[0].y, 320);
+  assert.equal(components.c.items[0].rot, 15, 'definition remains unchanged');
+  const [unchanged] = canvasExpand([{ ...instance, rot: 0 }], components);
+  near(unchanged.x, 210); near(unchanged.y, 320); near(unchanged.rot, 15);
+  console.log('Passed: component rotation moves contents around its centre, including paths and handles.');
+}

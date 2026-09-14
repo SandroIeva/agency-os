@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {parse} from '@babel/parser';
+const src=fs.readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8');
+const ast=parse(src,{sourceType:'module',plugins:['jsx']});
+const editor=ast.program.body.find(n=>n.type==='FunctionDeclaration'&&n.id.name==='CanvasEditor');
+const n=editor.body.body.flatMap(n=>n.declarations||[]).find(n=>n.id.name==='dropLibraryComponent');
+const run=new Function('assert',`
+const def={id:'c',w:100,h:40,items:[]};
+const libraryDrag={current:def}, cam={s:0.5}, focus=null, originX=0,originY=0;
+let active=0,items=[],components={},pick=[],selected=null,changes=0;
+const boards=[{id:'a',x:0,y:0,w:400,h:400,items:[]},{id:'b',x:500,y:0,w:400,h:400,items:[{id:'existing'}]}];
+const boardsNow=()=>boards;
+const toArt=e=>({x:e.clientX/cam.s,y:e.clientY/cam.s});
+const setComponents=f=>components=f(components), setItems=x=>items=x, setSel=x=>selected=x,setPick=x=>pick=x;
+const setBoards=()=>{},setActive=x=>active=x,loadBoard=()=>{},markChange=()=>changes++;
+const drop=${src.slice(n.init.start,n.init.end)};
+drop({clientX:300,clientY:50,preventDefault(){}});
+assert.equal(active,1);assert.equal(items.length,2);assert.equal(items[1].x,50);assert.equal(items[1].y,80);
+assert.equal(items[1].componentId,'c');assert.equal(selected,items[1].id);assert.equal(changes,1);
+assert.deepEqual(components.c,def);assert.notEqual(components.c,def);
+libraryDrag.current=def;drop({clientX:999,clientY:999,preventDefault(){}});assert.equal(changes,1);
+`);run(assert);console.log('Passed: component drop targets another artboard at zoom and ignores empty workspace.');
