@@ -59466,6 +59466,43 @@ export default function CircularMenu() {
                     theme={theme} darkMode={darkMode} align="right" minWidth={190}
                   />
                 </div>
+
+                {/* The introduction runs by itself the first time somebody opens
+                    the sphere, and then never again, which left no way to hear
+                    it a second time short of clearing a browser key by hand.
+                    Nobody should have to open a console to use their own app.
+                    Calling it straight from here skips the once-only gate on
+                    purpose: the gate belongs to the orb, not to a deliberate
+                    press of "play it again". */}
+                <div style={{ marginTop: 12, borderRadius: 20, background: theme.cardBg,
+                  border: `1px solid ${theme.border}`, padding: "14px 18px",
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
+                      {appLanguage === "de" ? "Vorstellung" : "Introduction"}
+                    </div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
+                      {appLanguage === "de"
+                        ? "Was i7OS ist, gesprochen. Läuft beim allerersten Öffnen der Sphere von selbst."
+                        : "What i7OS is, spoken. It runs by itself the first time the sphere is opened."}
+                    </div>
+                  </div>
+                  <motion.button whileTap={{ scale: 0.97 }}
+                    onClick={() => {
+                      // Home first: the sphere owns the dashboard and draws
+                      // itself as a corner panel over anything else, and the
+                      // settings page is the one screen it must not sit on.
+                      setCurrentView("dashboard");
+                      // One frame for the dashboard to be there before the orb
+                      // drops out of its corner.
+                      setTimeout(introduceAssistant, 60);
+                    }}
+                    style={{ padding: "9px 18px", borderRadius: 999, cursor: "pointer", flexShrink: 0,
+                      border: `1px solid ${theme.border}`, background: "transparent",
+                      color: theme.text, fontFamily: FONT, fontSize: 13, fontWeight: 500 }}>
+                    {appLanguage === "de" ? "Nochmal anhören" : "Play again"}
+                  </motion.button>
+                </div>
               </motion.div>
               )}
 
