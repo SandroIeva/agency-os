@@ -52,34 +52,34 @@ const API = "https://open.tiktokapis.com/v2";
 // follow. video.publish is the direct post; video.upload would only reach the
 // creator's drafts, which is not what a composer means by "post".
 //
-// video.UPLOAD, not video.publish, and that is the sandbox talking rather than
-// a choice.
+// What the app actually does, and nothing beyond it. Asking for a permission we
+// do not use is a named reason to fail a review, the same rule the Meta scopes
+// follow. video.publish is the direct post; video.upload would only reach the
+// creator's drafts, which is not what a composer means by "post".
 //
-// What was measured, in order, because it cost three round trips and the next
-// person should not repeat them:
-//   1. basic + publish  → refused, naming only "scope".
-//   2. The probe below  → TikTok does not check scopes BEFORE the login. Every
-//      candidate got the same 302 to /login, so the refusal lands afterwards,
-//      against what the app has actually been granted. That is why the error
-//      says so little and arrives so late.
-//   3. basic alone      → connected first time. So the whole pipe works and the
-//      refusal was specifically about publishing.
-//   4. Direct Post switched ON at the product, then basic + publish again
-//      → still refused. The switch is not what gates it here.
+// ── The three rounds this cost, and the thing that was staring at us ────────
 //
-// So video.publish is not grantable to this app while it is in Sandbox, which
-// is the same shape as Meta's Advanced Access: build it now, get it at review.
-// The difference it makes is real and belongs in the composer's wording: an
-// uploaded post lands in the creator's TikTok drafts and somebody taps Post in
-// the app. It does not go straight to the feed.
+// The consent screen kept refusing and naming only "scope". Measured, in order:
+//   1. basic + publish → refused.
+//   2. The probe below → TikTok does not check scopes BEFORE the login, so the
+//      refusal lands after it, which is why the message is so thin and so late.
+//   3. basic alone     → connected first time.
+//   4. Direct Post switched on, basic + publish → refused again.
+//   5. basic + upload  → refused.
 //
-// Switching back is this one line, plus a reconnect, because a token keeps the
-// scopes it was issued with.
+// Read as a list it says something none of the individual attempts did: ONE
+// scope always worked and any TWO always failed, whichever two. The variable
+// was never which scopes. It was the comma between them, which URLSearchParams
+// percent-encodes to %2C and TikTok does not decode before splitting. It was
+// seeing a single scope with a comma in its name.
+//
+// The authorize url is therefore assembled by hand further down. And publish is
+// back, because it may never have been refused on its own merits.
 //
 // user.info.profile stays absent. It carries the @handle, basic already carries
 // the display name and the ids, and an unnecessary scope is a rejection waiting
 // to happen.
-const SCOPES = ["user.info.basic", "video.upload"].join(",");
+const SCOPES = ["user.info.basic", "video.publish"].join(",");
 
 // A token good for another hour is good enough for the call about to be made.
 // Below that it is renewed, because a request that starts valid and expires
@@ -245,13 +245,25 @@ export default async function handler(req) {
   if (mode === "install") {
     const state = url.searchParams.get("state") || "";
     if (!state) return json({ error: "Missing state" }, 400);
-    const authorize = new URL(`${AUTH_HOST}/v2/auth/authorize/`);
-    authorize.searchParams.set("client_key", clientKey);
-    authorize.searchParams.set("redirect_uri", redirectUri);
-    authorize.searchParams.set("response_type", "code");
-    authorize.searchParams.set("scope", SCOPES);
-    authorize.searchParams.set("state", state);
-    return Response.redirect(authorize.toString(), 302);
+    // ⚠ The comma in `scope` is written LITERALLY, which is why this query
+    // string is assembled by hand instead of through URLSearchParams.
+    //
+    // URLSearchParams percent-encodes a comma to %2C, and TikTok does not
+    // decode it before splitting: it sees one scope named
+    // "user.info.basic,video.upload", which it has never heard of, and refuses
+    // the whole request naming "scope".
+    //
+    // That is exactly what the evidence said and nobody read properly for three
+    // rounds: ONE scope always worked, any TWO always failed. The difference
+    // between them was never which scopes they were. It was the comma.
+    const q = [
+      `client_key=${encodeURIComponent(clientKey)}`,
+      `redirect_uri=${encodeURIComponent(redirectUri)}`,
+      "response_type=code",
+      `scope=${SCOPES.split(",").map(encodeURIComponent).join(",")}`,
+      `state=${encodeURIComponent(state)}`,
+    ].join("&");
+    return Response.redirect(`${AUTH_HOST}/v2/auth/authorize/?${q}`, 302);
   }
 
   // ── TikTok sends them back ────────────────────────────────────────────────
