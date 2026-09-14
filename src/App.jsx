@@ -22839,11 +22839,23 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   };
 
   // Everything inside a board is written in that board's own coordinates, so a
-  // pointer has to have the board's position taken off it. This is the only
-  // place the layout of the boards touches the drawing code at all.
+  // pointer has to have the board's position taken off it.
   const toArt = (e) => (cam
     ? { x: (e.clientX - cam.x) / cam.s - (board.x || 0),
         y: (e.clientY - cam.y) / cam.s - (board.y || 0) }
+    : { x: 0, y: 0 });
+
+  // And the way back, for the few things that are placed by hand OUTSIDE the
+  // zoomed layer: the bar over a selection, the comment card, the pivot a
+  // rotation turns around. Everything else is a child of the board's own
+  // element and is carried by its transform, which is why this was missed —
+  // with one board at the origin the offset is zero and the arithmetic looks
+  // right. On the second board the bar sat a whole board and a gap to the left.
+  // These two functions are the only place the layout of the boards touches the
+  // drawing code, and they must stay each other's inverse.
+  const toScreen = (x, y) => (cam
+    ? { x: cam.x + ((board.x || 0) + x) * cam.s,
+        y: cam.y + ((board.y || 0) + y) * cam.s }
     : { x: 0, y: 0 });
 
   const onStageDown = (e) => {
@@ -23921,7 +23933,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // corner stays under the finger instead of the shape lagging behind it.
   const onRotateDown = (e, it) => {
     e.stopPropagation();
-    const cx = cam.x + (it.x + it.w / 2) * cam.s, cy = cam.y + (it.y + (it.h || 0) / 2) * cam.s;
+    const { x: cx, y: cy } = toScreen(it.x + it.w / 2, it.y + (it.h || 0) / 2);
     pushUndo(takeSnap());
     dragRef.current = { mode: "rotate", id: it.id, cx, cy, rot0: it.rot || 0,
       a0: Math.atan2(e.clientY - cy, e.clientX - cx) };
@@ -25105,8 +25117,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         // clicked — the bar belongs to the thing with the frame around it.
         const gMembers = selGid ? items.filter(i => i.groupId === selGid && !i.hidden) : null;
         const b = (gMembers && gMembers.length > 1) ? unionRotBox(gMembers) : canvasRenderBoxOf(selItem);
-        const left = cam.x + (b.x + b.w / 2) * cam.s;
-        const top = cam.y + b.y * cam.s - 46;
+        const anchor = toScreen(b.x + b.w / 2, b.y);
+        const left = anchor.x;
+        const top = anchor.y - 46;
         const isText = selItem.type === "text" || selItem.type === "sticky";
         const isStroke = selItem.type === "draw" || selItem.type === "arrow" || selItem.type === "line" || selItem.type === "path";
         const colourKey = isStroke ? "color" : selItem.type === "sticky" ? "fill" : isText ? "color" : "fill";
@@ -25586,8 +25599,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       {cam && (() => {
         const c = items.find(i => i.id === commentOpenId && i.type === "comment");
         if (!c) return null;
-        const left = Math.min(cam.x + c.x * cam.s + 44, window.innerWidth - PANEL_W - 290);
-        const top = Math.max(62, cam.y + c.y * cam.s - 12);
+        const at = toScreen(c.x, c.y);
+        const left = Math.min(at.x + 44, window.innerWidth - PANEL_W - 290);
+        const top = Math.max(62, at.y - 12);
         return (
           <>
             <div onPointerDown={(e) => { e.stopPropagation(); setCommentOpenId(null); }}
