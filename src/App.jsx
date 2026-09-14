@@ -54138,7 +54138,13 @@ export default function CircularMenu() {
     if (panelOpen) setPanelOpen(false);
     if (tasksOpen) setTasksOpen(false);
     setVoiceOverView(currentView !== "dashboard" ? currentView : null);
-    setVoiceMode(true);
+    // ⚠ These two are ALTERNATIVES, never both. voiceMode draws the listening
+    // surface with its "click to send", aiSpeaking draws the speaking one with
+    // the response under the orb. Setting both put one on top of the other and
+    // the introduction was read through a second panel's labels. The answer
+    // path has always done it this way: setVoiceMode(false) immediately before
+    // submitVoiceMessage, which then sets aiSpeaking.
+    setVoiceMode(false);
     setAiSpeaking(true);
     aiStoppedRef.current = false;
     setTranscript(""); transcriptRef.current = "";
@@ -54151,16 +54157,44 @@ export default function CircularMenu() {
     // the voice fails entirely the introduction still happened.
     setAiResponse(text);
     setAiStatus("speaking");
-    // ⚠ Without this the whole introduction is drawn at 21% opacity and is
-    // barely readable: the renderer dims every word whose index is past
-    // highlightWordIndex, and that sits at -1 until somebody starts the
-    // highlight. Started on an estimate so the first words are lit before the
-    // audio has even loaded, then re-timed against the real length the moment
-    // it is known. Re-timing restarts from the first word, which this early
-    // costs one word at most.
-    const wordCount = text.split(/\s+/).filter(Boolean).length;
-    startKaraokeHighlight(text, Math.max(3, (wordCount / 150) * 60));
-    await speakLine(text, (d) => startKaraokeHighlight(text, d));
+    // One sentence per request. A whole paragraph handed over at once comes
+    // back read as a single breath: the voice does not fall at a full stop, it
+    // carries straight on into the next clause. Each request now ends with the
+    // punctuation it belongs to, so each gets a proper close, and the gap
+    // between two requests is the pause the full stop was asking for.
+    //
+    // It costs the same money: Fish bills per character and the characters are
+    // the same ones.
+    const sentences = (text.match(/[^.!?]+[.!?]+|\S[^.!?]*$/g) || [text])
+      .map(x => x.trim()).filter(Boolean);
+    // ⚠ The highlight has to run, or the introduction is drawn at 21% opacity
+    // and is barely readable: the renderer dims every word past
+    // highlightWordIndex, and that sits at -1 until somebody starts it. The
+    // offset is how a sentence knows where it begins in the whole text, since
+    // the words on screen are counted from the first one.
+    let spokenWords = 0;
+    for (const sentence of sentences) {
+      if (aiStoppedRef.current) return;
+      const n = sentence.split(/\s+/).filter(Boolean).length;
+      // An estimate first so the words light before the audio has loaded, then
+      // re-timed against the real length the moment it is known.
+      startKaraokeHighlight(sentence, Math.max(1.2, (n / 150) * 60), spokenWords);
+      // Raced against the close, because stopAssistant silences the audio by
+      // clearing its onended handler, so the promise speakLine returns never
+      // resolves. One await could afford to hang; seven of them in a loop is a
+      // closure that sits there for the life of the tab.
+      let poll = null;
+      const stopped = new Promise((res) => {
+        poll = setInterval(() => { if (aiStoppedRef.current) res(); }, 120);
+      });
+      try {
+        await Promise.race([
+          speakLine(sentence, (dur) => startKaraokeHighlight(sentence, dur, spokenWords)),
+          stopped,
+        ]);
+      } finally { clearInterval(poll); }
+      spokenWords += n;
+    }
     stopKaraokeHighlight();
     // Closed while it was talking. stopAssistant has already cleared the
     // screen, and opening the microphone now would be listening into a room
@@ -55010,9 +55044,13 @@ export default function CircularMenu() {
   const voiceNavActiveRef = useRef(false);
 
   // Karaoke highlight: progressively reveal words synced to audio duration
-  const startKaraokeHighlight = useCallback((text, audioDuration) => {
+  // `offset` is how many words of the surrounding text come BEFORE this one.
+  // Zero for an answer, which is spoken in a single piece; the introduction is
+  // spoken a sentence at a time and each sentence has to light its own words
+  // rather than the first ones over again.
+  const startKaraokeHighlight = useCallback((text, audioDuration, offset = 0) => {
     if (highlightTimerRef.current) clearInterval(highlightTimerRef.current);
-    setHighlightWordIndex(0);
+    setHighlightWordIndex(offset);
     const words = text.split(/\s+/).filter(Boolean);
     if (words.length === 0) return;
     // Estimate: distribute audio duration evenly across words, with slight leading offset
@@ -55023,10 +55061,10 @@ export default function CircularMenu() {
       if (currentIdx >= words.length) {
         clearInterval(highlightTimerRef.current);
         highlightTimerRef.current = null;
-        setHighlightWordIndex(words.length);
+        setHighlightWordIndex(offset + words.length);
         return;
       }
-      setHighlightWordIndex(currentIdx);
+      setHighlightWordIndex(offset + currentIdx);
     }, msPerWord);
   }, []);
 
