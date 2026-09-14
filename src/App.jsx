@@ -26816,11 +26816,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             )}
           </div>
           {/* The size stays reachable here — it is the one thing about the
-              canvas you want to know without selecting it. */}
+              canvas you want to know without selecting it. Inside a component
+              there is no canvas, so it names the component instead: saying
+              "Canvas 1080 x 1350" while a 200px logo is on screen is simply
+              the wrong answer. */}
           <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 12 }}>
-            {de ? "Canvas" : "Canvas"} · {W} × {H}
+            {focus
+              ? `${(components || {})[focus.cid]?.name || (de ? "Komponente" : "Component")} · ${stageW} × ${stageH}`
+              : `${de ? "Canvas" : "Canvas"} · ${W} × ${H}`}
           </div>
-          {label(de ? "Vorlagen" : "Templates")}
+          {/* Templates belong to an artboard, not to a component. */}
+          {!focus && label(de ? "Vorlagen" : "Templates")}
         </>)}
 
         {/* The three groups of ready-made templates that used to live here
@@ -26831,7 +26837,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             offering to list them, because that is where they are: this panel
             does not read them, and a line that says otherwise is a promise the
             panel does not keep. */}
-        {!selItem && sel !== "frame" && (
+        {!selItem && sel !== "frame" && !focus && (
           <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5,
             marginTop: 6, paddingBottom: 8, borderBottom: `1px solid ${line}` }}>
             {de ? "Noch keine Vorlagen. Ein Artboard, das als Vorlage markiert ist, findest du unter Artboards."
