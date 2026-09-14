@@ -44,6 +44,10 @@
       "destination": "/api/threads?mode=callback"
     },
     {
+      "source": "/tiktok/callback",
+      "destination": "/api/tiktok?mode=callback"
+    },
+    {
       "source": "/threads/deauthorize",
       "destination": "/api/threads?mode=deauthorize"
     },

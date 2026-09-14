@@ -18873,7 +18873,10 @@ const RESERVED_SLUGS = new Set([
   "api", "i", "s", "slack", "pinterest", "assets", "src", "admin",
   // Every one of these owns a real callback path in vercel.json. `figma` was
   // missed when that route was added and is caught up here; nobody had taken it.
-  "figma", "instagram", "threads",
+  // Added BEFORE /tiktok/callback shipped, which is the order that matters:
+  // once a workspace owns the name, taking it back means renaming somebody's
+  // workspace.
+  "figma", "instagram", "threads", "tiktok",
   // Kept free for pages this domain may want later. A workspace called `login`
   // is only a problem on the day somebody builds /login, and by then it is
   // somebody's workspace and cannot be taken away.
