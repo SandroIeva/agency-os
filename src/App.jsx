@@ -30908,51 +30908,14 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
 //
 // It renders nothing at all when this workspace has no direct connection, so
 // every other workspace is unaffected.
-function InstagramDirectPanel({ theme, darkMode, de, session, orgId, card, secLabel,
-                               igAccount = null, thAccount = null }) {
-  const [state, setState] = useState(null);   // null | { loading } | payload | { error }
-  const [thState, setThState] = useState(null);
-
-  // Threads, beside the Instagram numbers rather than in a panel of its own:
-  // there are two of them and they answer the same question. It also gives both
-  // Threads permissions a real API call, which Meta requires before either can
-  // be submitted for review.
-  useEffect(() => {
-    if (!orgId || !session?.access_token || !thAccount) { setThState(null); return; }
-    let on = true;
-    (async () => {
-      try {
-        const ask = (payload) => fetch("/api/threads", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ orgId, ...payload }),
-        });
-        const r = await ask({ mode: "overview", threadsUserId: thAccount.threadsUserId });
-        const j = await r.json().catch(() => null);
-        if (on) setThState(r.ok ? j : { error: j?.error || (de ? "Threads hat nicht geantwortet." : "Threads did not answer.") });
-      } catch { if (on) setThState({ error: de ? "Threads hat nicht geantwortet." : "Threads did not answer." }); }
-    })();
-    return () => { on = false; };
-  }, [orgId, session?.access_token, de, thAccount?.threadsUserId]);
-
-  useEffect(() => {
-    if (!orgId || !session?.access_token || !igAccount) { setState(null); return; }
-    let on = true;
-    setState({ loading: true });
-    (async () => {
-      try {
-        const r = await fetch("/api/instagram", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ mode: "overview", orgId, igUserId: igAccount.igUserId, days: 28 }),
-        });
-        const j = await r.json().catch(() => null);
-        if (!on) return;
-        setState(r.ok ? j : { error: j?.error || (de ? "Instagram hat nicht geantwortet." : "Instagram did not answer.") });
-      } catch { if (on) setState({ error: de ? "Instagram hat nicht geantwortet." : "Instagram did not answer." }); }
-    })();
-    return () => { on = false; };
-  }, [orgId, session?.access_token, de, igAccount?.igUserId]);
+function InstagramDirectPanel({ theme, darkMode, de, card, secLabel, ig = null, th = null }) {
+  // A renderer and nothing else now. It used to fetch its own numbers, which
+  // meant the same overview call went out twice on every visit, once for this
+  // panel and once for the tiles and the Top Posts list above. Two fetchers for
+  // one answer is two chances to disagree about it, and one of them was money
+  // spent twice on the same question.
+  const state = ig;
+  const thState = th;
 
   if (!state && !thState) return null;
 
@@ -31026,9 +30989,7 @@ function InstagramDirectPanel({ theme, darkMode, de, session, orgId, card, secLa
   return (
     <div style={card}>
       <div style={secLabel}>{de ? "Instagram direkt" : "Instagram direct"}</div>
-      {state.loading ? (
-        <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>{de ? "Wird geladen …" : "Loading …"}</div>
-      ) : state.error ? (
+      {state.error ? (
         <div style={{ fontSize: 12.5, fontFamily: FONT, color: "#E86767" }}>{state.error}</div>
       ) : (<>
         <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginBottom: 14 }}>
@@ -31036,7 +30997,8 @@ function InstagramDirectPanel({ theme, darkMode, de, session, orgId, card, secLa
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
           {tile(de ? "Follower" : "Followers", num(state.account?.followers))}
-          {tile(de ? "Beiträge" : "Posts", num(state.account?.posts))}
+          {tile(de ? `Beiträge, ${state.days} Tage` : `Posts, ${state.days} days`,
+            num(state.postCount ?? null))}
           {tile(de ? `Reichweite, ${state.days} Tage` : `Reach, ${state.days} days`, num(state.metrics?.reach))}
           {tile(de ? `Interaktionen, ${state.days} Tage` : `Interactions, ${state.days} days`, num(state.metrics?.total_interactions))}
         </div>
@@ -31107,6 +31069,68 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   }, [orgId, session?.access_token]);
   const hasDirect = !!(direct?.ig || direct?.th);
 
+  // The numbers behind those accounts: the account totals AND the posts. Asked
+  // here and handed down, rather than each consumer asking for itself. The
+  // panel below wants the totals, the filter pills want to know the platforms
+  // exist, and Top Posts wants the posts, and three fetchers for one answer is
+  // three chances to disagree about it.
+  const [directStats, setDirectStats] = useState(null);   // null = still asking
+  const igId = direct?.ig?.igUserId || null;
+  const thId = direct?.th?.threadsUserId || null;
+  useEffect(() => {
+    if (!orgId || !session?.access_token || direct == null) { setDirectStats(null); return; }
+    if (!igId && !thId) { setDirectStats({ ig: null, th: null }); return; }
+    let on = true;
+    setDirectStats(null);
+    const ask = (path, payload) => fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ orgId, ...payload }),
+    }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+    (async () => {
+      // In parallel. Four sequential round trips is most of a second of staring
+      // at a half-drawn dashboard, and none of them depends on another.
+      const [igOv, igPosts, thOv, thPosts] = await Promise.all([
+        igId ? ask("/api/instagram", { mode: "overview", igUserId: igId, days: 28 }) : null,
+        igId ? ask("/api/instagram", { mode: "posts", igUserId: igId, days: 28 }) : null,
+        thId ? ask("/api/threads", { mode: "overview", threadsUserId: thId }) : null,
+        thId ? ask("/api/threads", { mode: "posts", threadsUserId: thId, days: 28 }) : null,
+      ]);
+      if (!on) return;
+      // A connected account whose numbers did not come back says so. Handing
+      // down a plain null would draw nothing at all, and a panel that vanishes
+      // looks exactly like an account that was never connected.
+      const failed = (what) => ({ error: de
+        ? `${what} hat nicht geantwortet.` : `${what} did not answer.` });
+      setDirectStats({
+        ig: igOv ? { ...igOv, posts: igPosts?.posts || [], postCount: igPosts?.postCount ?? null }
+          : (igId ? failed("Instagram") : null),
+        th: thOv ? { ...thOv, posts: thPosts?.posts || [], postCount: thPosts?.postCount ?? null }
+          : (thId ? failed("Threads") : null),
+      });
+    })();
+    return () => { on = false; };
+    // The IDS, not the object: `direct` is rebuilt on every render and would
+    // restart this for ever.
+  }, [orgId, session?.access_token, igId, thId, direct == null]);
+
+  // Meta's posts in the shape the rest of this view already speaks, so they
+  // stand in the same list as everything else instead of in a panel of their
+  // own. A reply on Threads counts where a comment counts, a repost where a
+  // share counts: the same act under two names.
+  const metaPosts = [
+    ...((directStats?.ig?.posts) || []).map(p => ({
+      _id: "ig:" + p.id, platform: "instagram", content: p.text,
+      platformPostUrl: p.url, publishedAt: p.publishedAt,
+      analytics: { likes: p.likes || 0, comments: p.comments || 0, shares: 0, impressions: p.reach || 0 },
+    })),
+    ...((directStats?.th?.posts) || []).map(p => ({
+      _id: "th:" + p.id, platform: "threads", content: p.text,
+      platformPostUrl: p.url, publishedAt: p.publishedAt,
+      analytics: { likes: p.likes || 0, comments: p.replies || 0, shares: p.reposts || 0, impressions: p.views || 0 },
+    })),
+  ];
+
   // Latest wins, and the workspace has to still be the one that was asked
   // about. A slow answer for workspace A used to land after a quick one for B
   // and put A's connected accounts on screen under B. The analytics request
@@ -31170,7 +31194,15 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
       setReactors(m => ({ ...m, [url]: { list: r.reactors || [], total: r.total } }));
     } catch (e) { setReactors(m => ({ ...m, [url]: { error: e } })); }
   };
-  const connectedUiKeys = [...new Set((accounts || []).map(a => uiKeyFor(a.platform)))];
+  // Zernio's accounts AND the ones connected straight through Meta. The pills
+  // were built from Zernio's list alone, so a workspace that had moved
+  // Instagram and Threads off it saw a filter offering LinkedIn and nothing
+  // else, on a page that was showing Instagram numbers further down.
+  const connectedUiKeys = [...new Set([
+    ...(accounts || []).map(a => uiKeyFor(a.platform)),
+    ...(direct?.ig ? ["instagram"] : []),
+    ...(direct?.th ? ["threads"] : []),
+  ])];
   const unconnected = ZERNIO_UI_PLATFORMS.filter(k => !connectedUiKeys.includes(k));
 
   // ── Derived dashboard numbers (defensive — every part can be missing) ──
@@ -31230,14 +31262,50 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
     return out;
   })();
   const maxWeek = Math.max(1, ...weekly);
-  const topPosts = topOk ? (data.top.posts || []).slice(0, 5) : [];
+  // One list, both sources. Zernio's arrive already filtered by the pill, since
+  // the request carries it; Meta's are held here and so have to be filtered
+  // here. Ranked by what somebody DID with the post, which is the only measure
+  // the two providers can be compared on: impressions are counted differently
+  // by every platform, interactions are interactions.
+  const engagementOf = (p) =>
+    (p.analytics?.likes || 0) + (p.analytics?.comments || 0) + (p.analytics?.shares || 0);
+  const topPosts = [
+    ...(topOk ? (data.top.posts || []) : []),
+    ...metaPosts.filter(p => platform === "all" || p.platform === platform),
+  ].sort((x, y) => engagementOf(y) - engagementOf(x)).slice(0, 5);
   const addonMissing = data && ((data.followers?.__unavailable && [402, 403].includes(data.followers.status)) || (data.daily?.__unavailable && [402, 403].includes(data.daily.status)));
 
+  // Meta's share of the tiles, obeying the same pill. The four numbers were
+  // Zernio's alone, so on a workspace whose channels are all direct they read
+  // as dashes above a page full of real numbers.
+  const wants = (k) => platform === "all" || platform === k;
+  // An account whose call failed carries an error and no numbers. Counted in,
+  // it would turn every tile from "–" into a confident "0", which is a
+  // different and wrong statement.
+  const usable = (x) => (x && !x.error ? x : null);
+  const igOn = wants("instagram") ? usable(directStats?.ig) : null;
+  const thOn = wants("threads") ? usable(directStats?.th) : null;
+  const directFollowers = (igOn?.account?.followers || 0) + (thOn?.followers || 0);
+  // Reach on Instagram, views on Threads. Neither is an "impression" in the
+  // sense Zernio means, and adding them anyway would be a number with no
+  // definition, so they are counted as what this tile is really asking: how
+  // many times was it in front of somebody.
+  const directImpressions = (igOn?.metrics?.reach || 0) + (thOn?.metrics?.views || 0);
+  const directInteractions = (igOn?.metrics?.total_interactions || 0)
+    + (thOn?.metrics?.likes || 0) + (thOn?.metrics?.replies || 0);
+  const anyDirect = !!(igOn || thOn);
+  const totalFollowers = (followersOk ? followerTotal : 0) + directFollowers;
+  const totalImpressions = (dailyOk ? impressions : 0) + directImpressions;
+  const totalInteractions = (dailyOk ? interactions : 0) + directInteractions;
+  const totalRate = totalImpressions ? (totalInteractions / totalImpressions) * 100 : 0;
+  const haveFollowers = followersOk || anyDirect;
+  const haveCounts = dailyOk || anyDirect;
+
   const kpis = [
-    { label: "Follower", value: followersOk ? fmtMetric(followerTotal, de) : "–", delta: followersOk && followerGrowth ? followerGrowth : null },
-    { label: de ? "Impressionen" : "Impressions", value: dailyOk ? fmtMetric(impressions, de) : "–", delta: null },
-    { label: de ? "Interaktionen" : "Interactions", value: dailyOk ? fmtMetric(interactions, de) : "–", delta: null },
-    { label: "Engagement-Rate", value: dailyOk && impressions ? ((de ? engagementRate.toFixed(1).replace(".", ",") : engagementRate.toFixed(1)) + " %") : "–", delta: null },
+    { label: "Follower", value: haveFollowers ? fmtMetric(totalFollowers, de) : "–", delta: followersOk && followerGrowth ? followerGrowth : null },
+    { label: de ? "Impressionen" : "Impressions", value: haveCounts ? fmtMetric(totalImpressions, de) : "–", delta: null },
+    { label: de ? "Interaktionen" : "Interactions", value: haveCounts ? fmtMetric(totalInteractions, de) : "–", delta: null },
+    { label: "Engagement-Rate", value: haveCounts && totalImpressions ? ((de ? totalRate.toFixed(1).replace(".", ",") : totalRate.toFixed(1)) + " %") : "–", delta: null },
   ];
 
   const errorText = zernioErrorText(error, de);
@@ -31337,7 +31405,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
               in that case, so the tiles sat at "…" for ever. A workspace whose
               channels are all straight from Meta now simply does not see this
               half. */}
-          {accounts.length > 0 && (<>
+          {(accounts.length > 0 || hasDirect) && (<>
           {/* Platform filter pills + live badge */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
             {["all", ...connectedUiKeys].map(key => {
@@ -31393,8 +31461,8 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
               Instagram and Threads these are not a footnote to Zernio's
               numbers, they are the numbers. */}
           <InstagramDirectPanel theme={theme} darkMode={darkMode} de={de}
-            session={session} orgId={orgId} card={card} secLabel={secLabel}
-            igAccount={direct?.ig || null} thAccount={direct?.th || null} />
+            card={card} secLabel={secLabel}
+            ig={directStats?.ig || null} th={directStats?.th || null} />
 
           {/* Impressions trend — weekly buckets from the daily series */}
           {dailyOk && weekly.length > 1 && (
@@ -31421,8 +31489,9 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
           {/* Top posts + connected accounts. One column instead of two when
               there are no Zernio posts to put in the wide one. */}
           <div style={{ display: "grid", alignItems: "start", gap: 14,
-            gridTemplateColumns: accounts.length > 0 ? "minmax(0, 1.6fr) minmax(0, 1fr)" : "minmax(0, 1fr)" }}>
-            {accounts.length > 0 && (
+            gridTemplateColumns: (accounts.length > 0 || topPosts.length > 0)
+              ? "minmax(0, 1.6fr) minmax(0, 1fr)" : "minmax(0, 1fr)" }}>
+            {(accounts.length > 0 || topPosts.length > 0) && (
             <div style={card}>
               <div style={secLabel}>{de ? "Top 5 Posts (Engagement)" : "Top 5 posts (engagement)"}</div>
               {data == null ? (

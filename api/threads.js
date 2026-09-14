@@ -400,6 +400,56 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
   // Nobody has to connect anything for this. It is what SocialCrawl was being
   // paid for on Threads, and Meta serves it at no cost, so the benchmark asks
   // here first and falls back to SocialCrawl only for the other networks.
+  // The posts themselves, so Threads can stand in the same Top Posts list as
+  // everything else. Unlike Instagram's media edge, the list carries no counts
+  // at all, so every post needs its own insights call and the cap is what keeps
+  // this inside the Edge time limit: the most recent handful, ranked after the
+  // numbers are in rather than before.
+  if (body.mode === "posts") {
+    const days = Math.min(90, Math.max(1, Number(body.days) || 28));
+    const limit = Math.min(10, Math.max(1, Number(body.limit) || 5));
+    const since = Math.floor(Date.now() / 1000) - days * 86400;
+
+    const list = await th(token, `/${row.threads_user_id}/threads`, {
+      fields: "id,text,permalink,timestamp,media_type",
+      limit: 25,
+    });
+    if (!list.ok) return json({ error: list.body?.error?.message || "threads_failed" }, 502);
+
+    const cutoff = since * 1000;
+    const recent = (list.body?.data || [])
+      // A reply is not a post of yours in the sense this list means.
+      .filter(m => m.media_type !== "REPOST_FACADE")
+      .filter(m => !m.timestamp || new Date(m.timestamp).getTime() >= cutoff);
+
+    const heads = recent.slice(0, 12);
+    const stats = await Promise.all(heads.map(m =>
+      th(token, `/${m.id}/insights`, { metric: "views,likes,replies,reposts,quotes" })
+        .then(r => {
+          if (!r.ok) return {};
+          const out = {};
+          for (const d of (r.body?.data || [])) {
+            out[d.name] = d.values?.[0]?.value ?? d.total_value?.value ?? 0;
+          }
+          return out;
+        })
+        .catch(() => ({}))));
+
+    const posts = heads.map((m, i) => ({
+      id: m.id,
+      text: m.text || "",
+      url: m.permalink || null,
+      publishedAt: m.timestamp || null,
+      views: stats[i].views ?? null,
+      likes: stats[i].likes ?? 0,
+      replies: stats[i].replies ?? 0,
+      reposts: (stats[i].reposts ?? 0) + (stats[i].quotes ?? 0),
+    }));
+    posts.sort((x, y) => (y.likes + y.replies + y.reposts) - (x.likes + x.replies + x.reposts));
+
+    return json({ days, postCount: recent.length, posts: posts.slice(0, limit) });
+  }
+
   if (body.mode === "discover") {
     const username = String(body.username || "").trim().replace(/^@/, "");
     if (!/^[\w.]{1,60}$/.test(username)) return json({ error: "A username is required", code: "invalid_username" }, 400);

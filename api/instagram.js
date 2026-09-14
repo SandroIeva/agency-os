@@ -435,6 +435,56 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     });
   }
 
+  // The posts themselves, so Instagram can stand in the same Top Posts list as
+  // everything else rather than in a panel of its own. Three steps and a cap on
+  // each, because this runs on the Edge and has a time limit:
+  //   1. the media list, which already carries likes and comments per post,
+  //   2. rank by those, which costs nothing,
+  //   3. reach for the best few only, one call each, in parallel.
+  // Asking reach for every post of the last month would be dozens of calls for
+  // numbers nobody is going to look at.
+  if (body.mode === "posts") {
+    const days = Math.min(90, Math.max(1, Number(body.days) || 28));
+    const limit = Math.min(10, Math.max(1, Number(body.limit) || 5));
+    const since = Math.floor(Date.now() / 1000) - days * 86400;
+
+    const list = await ig(token, `/${row.ig_user_id}/media`, {
+      fields: "id,caption,media_type,permalink,timestamp,like_count,comments_count",
+      limit: 50,
+    });
+    if (!list.ok) return json({ error: list.body?.error?.message || "media_failed" }, 502);
+
+    const cutoff = since * 1000;
+    const recent = (list.body?.data || [])
+      .filter(m => !m.timestamp || new Date(m.timestamp).getTime() >= cutoff)
+      .map(m => ({
+        id: m.id,
+        text: m.caption || "",
+        url: m.permalink || null,
+        publishedAt: m.timestamp || null,
+        mediaType: m.media_type || null,
+        likes: m.like_count ?? 0,
+        comments: m.comments_count ?? 0,
+      }));
+    recent.sort((a2, b2) => (b2.likes + b2.comments) - (a2.likes + a2.comments));
+    const best = recent.slice(0, limit);
+
+    // Reach per post. A story or an older post can refuse it, and one refusal
+    // must not empty the whole list, so each answer is taken on its own.
+    const reaches = await Promise.all(best.map(m =>
+      ig(token, `/${m.id}/insights`, { metric: "reach" })
+        .then(r => (r.ok ? (r.body?.data?.[0]?.values?.[0]?.value ?? r.body?.data?.[0]?.value ?? null) : null))
+        .catch(() => null)));
+
+    return json({
+      days,
+      // How many posts went out in the window, which is a real number and not
+      // the account's lifetime media_count.
+      postCount: recent.length,
+      posts: best.map((m, i) => ({ ...m, reach: reaches[i] })),
+    });
+  }
+
   if (body.mode === "insights") {
     const metric = String(body.metric || "reach,views,total_interactions,likes,comments,shares,saves");
     const r = await ig(token, `/${row.ig_user_id}/insights`, {
