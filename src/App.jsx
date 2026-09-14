@@ -20169,6 +20169,32 @@ const reId = (it, prefix) => ({ ...it, id: prefix + it.id,
   ...(it.maskId ? { maskId: prefix + it.maskId } : {}) });
 const stripPrefix = (id, prefix) => (String(id).startsWith(prefix) ? String(id).slice(prefix.length) : id);
 
+// The editor's whole document, assembled from what it is holding. Four callers
+// read it — the autosave mirror, the explicit save, the hand-off on close, and
+// the export — and a disagreement between them about what is live is a lost
+// board rather than a wrong pixel.
+//
+// ⚠ This is the reason it is one function and not four inline object literals.
+// While somebody is standing INSIDE a component, the editor's `items` holds
+// that component's parts, because every edit in the editor writes to `items`
+// and rewiring all of them would be a hundred chances to miss one. Filing those
+// parts as the active board's is how a board disappears: silently, a second
+// later, when the autosave runs by itself. `focus.parked` is the board.
+//
+// scripts/test-canvas-doc.mjs holds it to that.
+const canvasAssembleDoc = ({ boards, active, live, components, focus, items, stage }) => ({
+  boards: (boards || []).map((b, k) => (k === active
+    ? { ...b, ...live, items: focus ? focus.parked : items }
+    : b)),
+  stage: stage || undefined,
+  // The mirror of the same rule: inside a component the live edits are in
+  // `items` and have to be folded back into the definition, or every save would
+  // rewrite the version it had when it was opened.
+  components: (focus && components
+    ? { ...components, [focus.cid]: { ...components[focus.cid], items } }
+    : components) || undefined,
+});
+
 function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
   // A document may hold several artboards; the card shows the first. Older
   // documents are the board itself, which is why this reads either shape.
@@ -21586,10 +21612,23 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // none, so a document that has never seen a component is saved exactly as
   // before.
   const [components, setComponents] = useState(() => doc?.components || null);
+  // Inside a component. While this is set, `items` holds the COMPONENT's parts
+  // and the board's own parts are parked here, because every edit in the editor
+  // writes to `items` and rewiring all of them would be a hundred chances to
+  // miss one. Switching boards already does this dance; this is the same one.
+  //   { cid, instanceId, parked: <the board's items>, cam: <where to fly back to> }
+  const [focus, setFocus] = useState(null);
   // What gets DRAWN. Identical to `items` until an instance is on the board, and
   // then it is the same array, so this costs nothing on a document that has no
   // components in it.
   const drawItems = useMemo(() => canvasExpand(items, components), [items, components]);
+  // A component belongs to no board, so inside one the drawing sits at the
+  // stage's own origin and takes no board's offset.
+  const originX = focus ? 0 : (board.x || 0);
+  const originY = focus ? 0 : (board.y || 0);
+  // The box the screen is showing: the board, or the component's own bounds.
+  const stageW = focus ? (components?.[focus.cid]?.w || W) : W;
+  const stageH = focus ? (components?.[focus.cid]?.h || H) : H;
   const [sel, setSel] = useState(null);
   const [tool, setTool] = useState("select");
   // The same state the shared toolbar drives in Brainstorm, under the same names.
@@ -21731,9 +21770,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     w: W, h: H, bg, radius: frameRadius,
     // Still written, so a stored board says what it is rather than relying on
     // whoever reads it next to know the rule.
-    radii: frameRadii || undefined, clip: true, shadow: frameShadow, items,
+    radii: frameRadii || undefined, clip: true, shadow: frameShadow,
   });
-  const boardsNow = () => boards.map((b, k) => (k === active ? { ...b, ...liveBoard() } : b));
+  // Everything the editor holds, as one document. Four callers read it and they
+  // must not disagree about what "live" means, which is why it is one function
+  // and why it is at module scope with a test on it.
+  const docNow = () => canvasAssembleDoc({ boards, active, live: liveBoard(),
+    components, focus, items, stage: stageBg });
+  const boardsNow = () => docNow().boards;
   const loadBoard = (b) => {
     setFrame({ w: b.w, h: b.h });
     // Or switching boards would carry the last one's answer onto this one.
@@ -21915,8 +21959,22 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const list = Array.isArray(d.boards) && d.boards.length ? d.boards : bootRef.current;
     setBoards(list);
     setStageBg(d.stage || null);
+    setComponents(d.components || null);
     const k = Math.max(0, Math.min(active, list.length - 1));
     setActive(k);
+    // Undo inside a component puts the COMPONENT back, not the board. Feeding
+    // the board's items to the screen here would look like the component had
+    // been replaced by the artboard.
+    const def = focus ? d.components?.[focus.cid] : null;
+    if (focus && def) {
+      setFocus(f => ({ ...f, parked: list[k]?.items || [] }));
+      setItems(Array.isArray(def.items) ? def.items : []);
+      setSel(null); setPick([]); setEnteredGroup(null); setEditing(null);
+      return;
+    }
+    // Undone far enough back that the component does not exist any more: the
+    // only honest thing is to come out to the board.
+    if (focus) setFocus(null);
     loadBoard(list[k]);
   };
   const undo = () => {
@@ -21947,7 +22005,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [saveState, setSaveState] = useState("");     // "" | "saving" | "saved"
   const baselineRef = useRef(JSON.stringify({ boards: bootRef.current, stage: doc?.stage || undefined }));
   const latestRef = useRef({ boards: bootRef.current, stage: doc?.stage || undefined });
-  latestRef.current = { boards: boardsNow(), stage: stageBg || undefined, components: components || undefined };
+  latestRef.current = docNow();
   const saveTimer = useRef(null);
 
   const flush = async (payload) => {
@@ -21965,7 +22023,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   useEffect(() => {
     if (!onAutoSave) return;
-    const payload = { boards: boardsNow(), stage: stageBg || undefined, components: components || undefined };
+    const payload = docNow();
     if (JSON.stringify(payload) === baselineRef.current) return;
     setSaveState("saving");
     clearTimeout(saveTimer.current);
@@ -22594,7 +22652,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         return;
       }
       if (editing) return;
-      if (e.key === "Escape") { sel ? setSel(null) : leave(); }
+      // Escape peels one layer at a time: the selection, then the component you
+      // are standing in, and only then the editor. Closing the whole thing from
+      // inside a component would be two steps in one.
+      if (e.key === "Escape") { sel ? setSel(null) : focus ? leaveComponent() : leave(); }
       // Was guarded on `sel` alone, so a marquee or a group — which leave
       // several picked and no single selection — could not be deleted at all.
       if ((e.key === "Backspace" || e.key === "Delete") && (sel || pick.length)) deleteSel();
@@ -22635,6 +22696,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         if (e.shiftKey) ungroupSel(selGid || groupOf(sel) || groupOf(pick[0]));
         else if (!selGid) groupSel();
       }
+      // The same key Figma uses, so the finger that already knows it is right.
+      if (k === "k" && e.altKey && !focus && (sel || pick.length)) {
+        e.preventDefault();
+        makeComponent();
+      }
       if (e.key === "]" && sel) { e.preventDefault(); restack("front"); }
       if (e.key === "[" && sel) { e.preventDefault(); restack("back"); }
     };
@@ -22643,7 +22709,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // `pick` belongs here: a marquee selects several and leaves sel null, so
     // without it the handler kept a closure from before the selection existed —
     // ⌘G would group nothing, and Delete already had the same hole.
-  }, [sel, pick, items, editing, onClose]);
+    //
+    // `focus` and `components` for the same reason: without them Escape would
+    // still be the one from before you stepped into a component, and would
+    // close the editor instead of coming out of it.
+  }, [sel, pick, items, editing, onClose, focus, components]);
 
   // Zoom about the middle of the working area, so the frame does not slide off
   // when the percentage is set from the menu rather than the wheel.
@@ -23013,8 +23083,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // Everything inside a board is written in that board's own coordinates, so a
   // pointer has to have the board's position taken off it.
   const toArt = (e) => (cam
-    ? { x: (e.clientX - cam.x) / cam.s - (board.x || 0),
-        y: (e.clientY - cam.y) / cam.s - (board.y || 0) }
+    ? { x: (e.clientX - cam.x) / cam.s - originX,
+        y: (e.clientY - cam.y) / cam.s - originY }
     : { x: 0, y: 0 });
 
   // And the way back, for the few things that are placed by hand OUTSIDE the
@@ -23026,8 +23096,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // These two functions are the only place the layout of the boards touches the
   // drawing code, and they must stay each other's inverse.
   const toScreen = (x, y) => (cam
-    ? { x: cam.x + ((board.x || 0) + x) * cam.s,
-        y: cam.y + ((board.y || 0) + y) * cam.s }
+    ? { x: cam.x + (originX + x) * cam.s,
+        y: cam.y + (originY + y) * cam.s }
     : { x: 0, y: 0 });
 
   const onStageDown = (e) => {
@@ -23702,6 +23772,124 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // "Maske lösen", which undoes both halves of the relationship.
   const groupOf = (id) => items.find(i => i.id === id)?.groupId || null;
   const canUngroup = (gid) => !!gid && !items.some(i => i.groupId === gid && (i.isMask || i.maskId));
+
+  // ── Components ─────────────────────────────────────────────────────────────
+  // Making one must move nothing on screen. The selection's own bounding box
+  // becomes the component, its parts keep their arrangement inside that box,
+  // and the instance goes back at the same place at the same size — so the
+  // expansion puts every part back exactly where it was. Proven against a real
+  // artboard in scripts/test-canvas-expand.mjs.
+  const componentBox = (list) => {
+    const bs = list.map(canvasRenderBoxOf);
+    const x = Math.min(...bs.map(b => b.x)), y = Math.min(...bs.map(b => b.y));
+    return { x, y,
+      w: Math.max(1, Math.max(...bs.map(b => b.x + b.w)) - x),
+      h: Math.max(1, Math.max(...bs.map(b => b.y + b.h)) - y) };
+  };
+  const makeComponent = (ids2) => {
+    const from = ids2 && ids2.length ? ids2 : [...pick, ...(sel && sel !== "frame" ? [sel] : [])];
+    const ids = [...new Set(from)].filter(id => items.some(i => i.id === id));
+    if (!ids.length) return;
+    // Stacking order is array order, so the parts have to keep the order they
+    // had on the board or a component would come out with its background on top.
+    const members = items.filter(i => ids.includes(i.id));
+    const bx = componentBox(members);
+    const cid = crypto.randomUUID();
+    const shift = (it) => scaleItemInBox(it, bx, 1, 1, 0, 0);
+    const def = { id: cid,
+      name: `${de ? "Komponente" : "Component"} ${Object.keys(components || {}).length + 1}`,
+      w: bx.w, h: bx.h, items: members.map(shift) };
+    const inst = { id: crypto.randomUUID(), type: "instance", componentId: cid,
+      x: bx.x, y: bx.y, w: bx.w, h: bx.h };
+    markChange();
+    setComponents(c => ({ ...(c || {}), [cid]: def }));
+    // In the place the FIRST member held, so a component made out of the
+    // background does not jump in front of everything else.
+    const at = items.findIndex(i => i.id === members[0].id);
+    setItems(list => {
+      const rest = list.filter(i => !ids.includes(i.id));
+      return [...rest.slice(0, at), inst, ...rest.slice(at)];
+    });
+    setPick([]); setEnteredGroup(null); setSel(inst.id);
+  };
+
+  // Fitting a box on the stage. Unlike fitCam this one MAGNIFIES: a component
+  // is usually small, and the whole point of opening it on its own is to see it.
+  const camForBox = (bx) => {
+    const padL = RAIL_W, padR = PANEL_W + 16, padT = 62, padB = 26;
+    const aw = Math.max(120, window.innerWidth - padL - padR);
+    const ah = Math.max(120, window.innerHeight - padT - padB);
+    const s = Math.min(4, Math.min(aw / bx.w, ah / bx.h) * 0.86);
+    return { s, x: padL + (aw - bx.w * s) / 2 - bx.x * s,
+      y: padT + (ah - bx.h * s) / 2 - bx.y * s };
+  };
+  // A flight of the same length the editor uses when it opens, so arriving in a
+  // component and arriving in the editor feel like the same movement.
+  const flyTo = (target) => {
+    setFlying(true);
+    setCam(target);
+    setTimeout(() => setFlying(false), 640);
+  };
+  const enterComponent = (inst) => {
+    const def = (components || {})[inst.componentId];
+    if (!def || focus) return;
+    setFocus({ cid: inst.componentId, instanceId: inst.id, parked: items, cam });
+    setItems(Array.isArray(def.items) ? def.items : []);
+    setSel(null); setPick([]); setEnteredGroup(null); setEditing(null);
+    flyTo(camForBox({ x: 0, y: 0, w: def.w || 1, h: def.h || 1 }));
+  };
+  const leaveComponent = () => {
+    if (!focus) return;
+    const { cid, instanceId, parked, cam: back } = focus;
+    setComponents(c => ({ ...(c || {}), [cid]: { ...(c || {})[cid], items } }));
+    setItems(parked);
+    setFocus(null);
+    setSel(instanceId); setPick([]); setEnteredGroup(null); setEditing(null);
+    if (back) flyTo(back);
+  };
+  // Lösen: the instance becomes the parts it was showing, with ids of their own.
+  // The expansion already does the whole job, so this only has to rename what
+  // comes out of it and drop the marker that says where it came from.
+  const detachInstance = (id) => {
+    const inst = items.find(i => i.id === id && i.type === "instance");
+    if (!inst) return;
+    const made = canvasExpand([inst], components);
+    if (!made.length) return;
+    const idMap = new Map();
+    for (const o of made) idMap.set(o.id, crypto.randomUUID());
+    const gidMap = new Map();
+    const out = made.map(o => {
+      const next = { ...o, id: idMap.get(o.id), fromInstance: undefined };
+      if (o.groupId) {
+        if (!gidMap.has(o.groupId)) gidMap.set(o.groupId, crypto.randomUUID());
+        next.groupId = gidMap.get(o.groupId);
+      }
+      // The same pointer that has to follow new ids everywhere else.
+      if (o.maskId) next.maskId = idMap.get(o.maskId) || undefined;
+      return next;
+    });
+    markChange();
+    const at = items.findIndex(i => i.id === id);
+    setItems(list => [...list.slice(0, at), ...out, ...list.slice(at + 1)]);
+    setSel(null); setPick(out.map(o => o.id));
+  };
+
+  // The board draws the RESOLVED list, so a pointer lands on a part of an
+  // instance rather than on the instance. The part is not a thing anybody can
+  // move: it belongs to the component. Fold the click back onto the instance
+  // that is actually on the board, which is the OUTERMOST one — a part deeper
+  // in belongs to a definition and is reached by stepping in, not by clicking.
+  const ownerOf = (it) => {
+    if (!it || !it.fromInstance) return it;
+    const rootId = String(it.id).split(":")[0];
+    return items.find(i => i.id === rootId) || it;
+  };
+  // Double-click steps INTO whatever was clicked: a group, or a component.
+  const stepInto = (it) => {
+    const o = ownerOf(it);
+    if (o.type === "instance") enterComponent(o);
+    else enterGroup(o);
+  };
   // The selection as everything else should read it: until a group has been
   // stepped into, picking any of its members IS picking the group. Without this
   // the layers list highlighted the one part that happened to be clicked — on a
@@ -24071,7 +24259,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
 
   const exportBlob = (type = "image/png") =>
-    renderPostArtboard({ w: W, h: H, bg, items, components, radius: frameRadius, radii: frameRadii }, type);
+    renderPostArtboard({ w: W, h: H, bg, items: focus ? focus.parked : items,
+      components: docNow().components, radius: frameRadius, radii: frameRadii }, type);
 
   // The frame at its true pixel size, handed to the browser as a file. Not a
   // screenshot of the view — the export redraws, so a 2480x3508 A4 comes out at
@@ -24169,7 +24358,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         { type: "image/png" });
       const url = await onUpload(file);
       if (!url) throw new Error("upload");
-      onDone(url, { boards: boardsNow(), stage: stageBg || undefined, components: components || undefined });
+      onDone(url, docNow());
     } catch (e) {
       // A tainted canvas and a failed upload look identical to the user unless
       // they are told apart, and both end with nothing saved.
@@ -24535,7 +24724,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             a click makes one active. Only the active board is interactive —
             two live editors on one screen would need every drag, every
             shortcut and every selection to know which board it belongs to. */}
-        {cam && boards.map((b, i) => (i === active ? null : (
+        {/* Gone entirely while inside a component. A component belongs to no
+            board, and leaving the row of them standing would say it does. */}
+        {cam && !focus && boards.map((b, i) => (i === active ? null : (
           <div key={b.id} onPointerDown={(e) => { e.stopPropagation(); switchBoard(i); }}
             style={{ position: "absolute", left: 0, top: 0, width: b.w, height: b.h,
               transformOrigin: "0 0", cursor: "pointer",
@@ -24560,8 +24751,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         )))}
 
         {cam && (
-          <div style={{ position: "absolute", left: 0, top: 0, width: W, height: H,
-            ...(bg === "transparent"
+          <div style={{ position: "absolute", left: 0, top: 0,
+            width: stageW, height: stageH,
+            // Inside a component there is no canvas: no colour, no chequerboard,
+            // no paper. Just the grey stage it is standing on, so nothing around
+            // the thing being edited claims to be part of it.
+            ...(focus ? { background: "transparent" }
+              : bg === "transparent"
               ? { backgroundColor: "#fff",
                   backgroundImage: "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)",
                   backgroundSize: "18px 18px" }
@@ -24571,11 +24767,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             // it scales with the zoom. As left/top it would be screen pixels
             // applied before the camera, and the boards would drift apart as you
             // zoomed out.
-            transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s}) translate(${board.x || 0}px, ${board.y || 0}px)`,
+            transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s}) translate(${originX}px, ${originY}px)`,
             transition: flying ? "transform 620ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
             // Selected frames say so. Without this the sidebar changed and
             // nothing on the canvas did, which reads as nothing having happened.
-            borderRadius: frameCorners().map(v => `${v}px`).join(" "),
+            borderRadius: focus ? 0 : frameCorners().map(v => `${v}px`).join(" "),
             // The clip moved one layer in, onto the drawing alone. On the frame
             // it also cut the selection's own frame, so a shape pulled past the
             // edge could no longer be grabbed.
@@ -24583,13 +24779,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             // Anthracite at two thirds rather than flat #15151c. Solid, it read
             // as a black keyline drawn ON the design rather than a selection
             // around it, and a selection is a state, not part of the artwork.
-            outline: sel === "frame" ? `${Math.max(1, 2 / cam.s)}px solid rgba(21,21,28,0.62)` : "none",
+            // Inside a component the outline is not a selection, it is the
+            // component's bounds. Faint, and it cuts nothing: a part may hang
+            // over the edge while it is being built.
+            outline: focus ? `${Math.max(1, 1 / cam.s)}px dashed ${theme.textFaint}`
+              : sel === "frame" ? `${Math.max(1, 2 / cam.s)}px solid rgba(21,21,28,0.62)` : "none",
             outlineOffset: 0,
-            boxShadow: frameShadow ? "0 18px 60px rgba(0,0,0,0.28)" : "none" }}>
+            boxShadow: focus ? "none" : frameShadow ? "0 18px 60px rgba(0,0,0,0.28)" : "none" }}>
             {/* The board's name above it, and the plus that adds the next one.
                 Both are held at a constant SCREEN size, like the handles: a
-                label that grows with the zoom stops being a label. */}
-            {(() => {
+                label that grows with the zoom stops being a label.
+                Neither belongs to a component: its name is in the path at the
+                top, and a plus here would add an artboard from inside a thing
+                that is not one. */}
+            {!focus && (() => {
               const k = 1 / cam.s;
               return (<>
                 <div style={{ position: "absolute", left: 0, bottom: "100%", marginBottom: 8 * k,
@@ -24705,8 +24908,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 // — it is an annotation about the design, not part of it.
                 const k = 1 / cam.s, size = 34 * k;
                 return (
-                  <div key={it.id} onPointerDown={e => onItemDown(e, it)}
-                    onClick={(e) => { e.stopPropagation(); setSel(it.id); setCommentOpenId(it.id); }}
+                  <div key={it.id} onPointerDown={e => onItemDown(e, ownerOf(it))}
+                    onClick={(e) => { e.stopPropagation(); setSel(ownerOf(it).id); setCommentOpenId(it.id); }}
                     style={{ position: "absolute", left: it.x, top: it.y, width: size, height: size,
                       borderRadius: "50% 50% 50% 3px", background: "#15151c", color: "#fff",
                       display: "flex", alignItems: "center", justifyContent: "center",
@@ -24724,8 +24927,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               }
               if (it.type === "sticky") {
                 return (
-                  <div key={it.id} onPointerDown={e => onItemDown(e, it)}
-                    onDoubleClick={() => beginEdit(it.id)}
+                  <div key={it.id} onPointerDown={e => onItemDown(e, ownerOf(it))}
+                    onDoubleClick={() => (it.fromInstance ? stepInto(it) : beginEdit(it.id))}
                     style={{ ...common, width: it.w, height: it.h }}>
                     {depthWrap(it,
                     /* Through fillOf like every other shape: inside a call the
@@ -24778,8 +24981,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     pointerEvents: "none" }} />
                 ));
                 return (
-                  <div key={it.id} onPointerDown={e => onItemDown(e, it)}
-                    onDoubleClick={() => beginEdit(it.id)}
+                  <div key={it.id} onPointerDown={e => onItemDown(e, ownerOf(it))}
+                    onDoubleClick={() => (it.fromInstance ? stepInto(it) : beginEdit(it.id))}
                     style={{ ...common, width: it.w }}>
                     {depthWrap(it,
                     <div style={{ clipPath: maskClip(it), font: canvasFont(it), color: it.color,
@@ -24882,7 +25085,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         <path d={pathFullD(it)} fillRule={pathFillRule(it)}
                           fill={typeof it.fill === "string" ? it.fill : "none"} stroke={it.color} strokeWidth={it.width}
                           strokeLinecap={capOf(it)} strokeLinejoin={joinOf(it)}
-                          onPointerDown={e => onItemDown(e, it)}
+                          onPointerDown={e => onItemDown(e, ownerOf(it))}
                           // A filled path is clickable on its surface; an unfilled
                           // one only on its line, or its empty inside would swallow
                           // clicks meant for whatever sits behind it.
@@ -24897,10 +25100,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     ) : it.type === "draw" ? (
                       <polyline points={pts} fill="none" stroke={it.color} strokeWidth={it.width}
                         strokeLinecap={capOf(it)} strokeLinejoin={joinOf(it)}
-                        onPointerDown={e => onItemDown(e, it)}
+                        onPointerDown={e => onItemDown(e, ownerOf(it))}
                         style={{ pointerEvents: tool === "select" ? "stroke" : "none", cursor: "move" }} />
                     ) : (
-                      <g onPointerDown={e => onItemDown(e, it)}
+                      <g onPointerDown={e => onItemDown(e, ownerOf(it))}
                         stroke={it.color} strokeWidth={it.width} strokeLinecap={capOf(it)}
                         strokeLinejoin={joinOf(it)} fill="none"
                         style={{ pointerEvents: tool === "select" ? "stroke" : "none", cursor: "move" }}>
@@ -24917,8 +25120,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               // PICTURE and not the selection frame, the handles or the size
               // badge — those are chrome, not part of the design.
               return (
-                <div key={it.id} onPointerDown={e => onItemDown(e, it)}
-                  onDoubleClick={() => enterGroup(it)}
+                <div key={it.id} onPointerDown={e => onItemDown(e, ownerOf(it))}
+                  onDoubleClick={() => stepInto(it)}
                   // The mask clips the CLICKS too, and it has to sit on this
                   // box rather than on the one inside it. A picture clipped to
                   // a small circle keeps its own full size, so the box that
@@ -25448,7 +25651,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   chevron beside two rounded squares with a slash — which is
                   what made one row of settings look like three unrelated
                   buttons. */}
-              {barSwatch("color", selItem[colourKey], de ? "Farbe" : "Colour")}
+              {/* Not on an instance. Its colours are the component's, and a
+                  swatch here would write a fill onto the instance that the
+                  expansion never reads: a control that looks like it works and
+                  does nothing. Changing them means stepping in. */}
+              {selItem.type !== "instance"
+                && barSwatch("color", selItem[colourKey], de ? "Farbe" : "Colour")}
               {/* A shape's outline, the way a text's highlight outline already
                   works: the same swatch, drawn as a ring so it reads as an
                   edge rather than a fill. Guarded by canStroke, which is the
@@ -25837,6 +26045,18 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           rows.push(row(de ? "Gruppierung aufheben" : "Ungroup", `${mod}⇧G`,
             () => ungroupSel(clicked.groupId)));
         }
+        // Making a component out of a selection, and the two things you can do
+        // to one. Not offered inside a component: one level is what the rest of
+        // the editor has, and nesting by accident is worse than not nesting.
+        if (!focus && (pick.length || (clicked && clicked.type !== "instance"))) {
+          rows.push(row(de ? "Komponente erstellen" : "Create component", `${mod}⌥K`,
+            () => makeComponent(pick.length ? pick : [clicked.id])));
+        }
+        if (clicked?.type === "instance") {
+          rows.push(row(de ? "Komponente bearbeiten" : "Edit component", "", () => enterComponent(clicked)));
+          rows.push(row(de ? "Instanz lösen" : "Detach instance", "", () => detachInstance(clicked.id)));
+        }
+        if ((!focus && (pick.length || clicked)) || clicked?.type === "instance") rows.push(sep("s0d"));
         if ((pick.length > 1 && !selGid) || canUngroup(clicked?.groupId)) rows.push(sep("s0c"));
         if (clicked?.maskId) {
           rows.push(row(de ? "Maske lösen" : "Release mask", "", () => unmask(clicked.id)));
@@ -25908,7 +26128,25 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             {title}
           </div>
         )}
-        <div style={{ fontSize: 11.5, color: theme.textDim }}>{W} × {H} px</div>
+        {/* Where you are. Inside a component the artboard is not on screen at
+            all, so without this there is nothing saying which one you came from
+            or how to get back. The name of the component is the last step and
+            is not a link, because you are already standing on it. */}
+        {focus && (
+          <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontFamily: FONT }}>
+            <span onClick={leaveComponent}
+              style={{ color: theme.textDim, cursor: "pointer" }}>{board.name}</span>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.textFaint}
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 6 15 12 9 18" /></svg>
+            <span style={{ color: theme.text, fontWeight: 600 }}>
+              {(components || {})[focus.cid]?.name || (de ? "Komponente" : "Component")}
+            </span>
+          </div>
+        )}
+        <div style={{ fontSize: 11.5, color: theme.textDim }}>
+          {focus ? `${stageW} × ${stageH} px` : `${W} × ${H} px`}
+        </div>
         <div style={{ flex: 1 }} />
         {err && <div style={{ fontSize: 11.5, color: "#D9342B" }}>{err}</div>}
         {figNote && <div style={{ fontSize: 11.5, color: theme.textDim }}>{figNote}</div>}

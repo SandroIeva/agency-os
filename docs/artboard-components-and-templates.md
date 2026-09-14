@@ -1,8 +1,9 @@
 # Komponenten, Vorlagen und Brand-Anwendung auf Artboards
 
-Stand: 2026-09-14 · Schritt 1 der Reihenfolge steht (`canvasExpand` und die drei
-Zeichner), alles darüber ist noch Planung. Es gibt noch keine Oberfläche, mit
-der man eine Komponente anlegen könnte.
+Stand: 2026-09-14 · Schritte 1 und 2 der Reihenfolge stehen: die Auflösung
+(`canvasExpand`), das Anlegen aus einer Auswahl, das Hineingehen auf die Bühne,
+das Lösen. Overrides, Bibliothek, Brand-Tokens, Vorlagen und Sets sind noch
+Planung.
 
 Das Ziel in einem Satz: fertige Vorlagen anbieten, die jemand auf die eigene
 Brand umstellen kann, aus Bausteinen, die man selbst anlegt und wiederverwendet.
