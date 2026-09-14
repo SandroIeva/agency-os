@@ -52390,6 +52390,97 @@ export default function CircularMenu() {
     setThBusy(false);
   };
 
+  // ── TikTok, directly ───────────────────────────────────────────────────────
+  // The same five pieces every direct channel here has: what the endpoint says,
+  // a reader, a starter, a stopper, and the handler for coming back from the
+  // consent screen. Modelled on Threads line for line rather than invented
+  // again, because four of these that drift apart is four bugs.
+  const [ttReady, setTtReady] = useState(false);
+  const [ttConn, setTtConn] = useState(null);
+  const [ttBusy, setTtBusy] = useState(false);
+  const [ttErr, setTtErr] = useState("");
+
+  const readTikTok = useCallback(async () => {
+    if (!userOrg?.id || !session?.access_token) return null;
+    try {
+      const r = await fetch("/api/tiktok", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ mode: "status", orgId: userOrg.id }),
+      });
+      if (!r.ok) return null;
+      return await r.json().catch(() => null);
+    } catch { return null; }
+  }, [userOrg?.id, session?.access_token]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const st = await readTikTok();
+      if (!alive) return;
+      setTtReady(!!st?.enabled);
+      setTtConn(st?.enabled ? st : null);
+    })();
+    return () => { alive = false; };
+  }, [readTikTok]);
+
+  const startTikTokConnect = async () => {
+    setTtBusy(true); setTtErr("");
+    try {
+      const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
+        p_org: userOrg?.id || null, p_kind: "tiktok", p_lang: appLanguage === "en" ? "en" : "de",
+      });
+      if (error || !token) throw error || new Error("token");
+      window.location.href = `/api/tiktok?mode=install&state=${encodeURIComponent(token)}`;
+    } catch (e) {
+      setTtErr(appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection.");
+      setTtBusy(false);
+    }
+  };
+
+  const disconnectTikTok = async (openId) => {
+    if (!userOrg?.id) return;
+    setTtBusy(true); setTtErr("");
+    try {
+      await fetch("/api/tiktok", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ mode: "disconnect", orgId: userOrg.id, openId }),
+      });
+      setTtConn(await readTikTok());
+    } catch (e) {
+      setTtErr(appLanguage === "de" ? "Trennen hat nicht funktioniert." : "Disconnecting did not work.");
+    }
+    setTtBusy(false);
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("tiktok");
+    if (!status) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("tiktok");
+    window.history.replaceState({}, "", url.pathname + (url.search || ""));
+    if (status === "connected") {
+      readTikTok().then(st => { setTtReady(!!st?.enabled); setTtConn(st?.enabled ? st : null); });
+      setSettingsTab("account");
+      setCurrentView("settings");
+    } else if (status !== "cancelled") {
+      setTtErr(
+        status === "not_enabled"
+          ? (appLanguage === "de"
+              ? "Dieser Workspace ist für die direkte TikTok-Verbindung noch nicht freigeschaltet."
+              : "This workspace is not cleared for the direct TikTok connection yet.")
+        : status === "forbidden"
+          ? (appLanguage === "de"
+              ? "Du gehörst nicht mehr zu diesem Workspace, deshalb wurde die Verbindung nicht hergestellt."
+              : "You are no longer a member of that workspace, so the connection was not made.")
+          : (appLanguage === "de"
+              ? "Die Verbindung zu TikTok ist nicht zustande gekommen. Versuch es noch einmal."
+              : "The TikTok connection did not go through. Try again."));
+    }
+  }, []); // eslint-disable-line
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const status = params.get("threads");
@@ -60168,6 +60259,61 @@ export default function CircularMenu() {
                   )}
                   {thErr && (
                     <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{thErr}</div>
+                  )}
+                  {/* TikTok. Its own client, its own review, its own row, for
+                      the same reason Instagram and Threads have three. */}
+                  {ttReady && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px", borderTop: `1px solid ${theme.borderFaint}`,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      {/* The same path the channel chips draw, in the theme's own
+                          ink rather than the white those use on a coloured tile. */}
+                      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={theme.text}
+                        strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <g transform="translate(1.8, 1.1)">
+                          <path d="M9 9.5a3.5 3.5 0 103.5 3.5V4.5c.6 1.8 2 3 4 3.2" />
+                        </g>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>TikTok</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {ttConn?.accounts?.length
+                          ? (ttConn.accounts[0].needsReconnect
+                              ? (appLanguage === "de"
+                                  ? "Die Verbindung ist abgelaufen. Einmal neu verbinden."
+                                  : "The connection expired. Connect again.")
+                              : (appLanguage === "de"
+                                  ? `Verbunden${ttConn.accounts[0].displayName ? ` als ${ttConn.accounts[0].displayName}` : ""}. Gilt für diesen Workspace.`
+                                  : `Connected${ttConn.accounts[0].displayName ? ` as ${ttConn.accounts[0].displayName}` : ""}. Applies to this workspace.`))
+                          : (appLanguage === "de"
+                              ? "Videos direkt aus i7OS auf TikTok veröffentlichen."
+                              : "Publish videos to TikTok straight from i7OS.")}
+                      </div>
+                    </div>
+                    <motion.button whileTap={{ scale: 0.97 }}
+                      onClick={ttBusy ? undefined : (ttConn?.accounts?.length
+                        ? () => disconnectTikTok(ttConn.accounts[0].openId)
+                        : startTikTokConnect)}
+                      style={{ padding: "8px 14px", borderRadius: 10, cursor: ttBusy ? "wait" : "pointer",
+                        border: `1px solid ${ttConn?.accounts?.length ? theme.borderFaint : "transparent"}`,
+                        background: ttConn?.accounts?.length ? "transparent" : "#15151c",
+                        color: ttConn?.accounts?.length ? theme.text : "#fff",
+                        fontFamily: FONT, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0,
+                        opacity: ttBusy ? 0.6 : 1 }}>
+                      {ttConn?.accounts?.length ? (appLanguage === "de" ? "Trennen" : "Disconnect")
+                        : (appLanguage === "de" ? "Verbinden" : "Connect")}
+                    </motion.button>
+                  </div>
+                  )}
+                  {ttErr && (
+                    <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{ttErr}</div>
                   )}
                   {/* Figma. Like Pinterest, this belongs to the workspace and
                       not to the person signed in, so it says whose account it

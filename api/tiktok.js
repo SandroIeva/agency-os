@@ -45,7 +45,14 @@ const API = "https://open.tiktokapis.com/v2";
 // do not use is a named reason to fail a review, the same rule the Meta scopes
 // follow. video.publish is the direct post; video.upload would only reach the
 // creator's drafts, which is not what a composer means by "post".
-const SCOPES = ["user.info.basic", "user.info.profile", "video.publish"].join(",");
+//
+// user.info.profile is deliberately NOT here. It is what carries the @handle,
+// and basic already carries the display name, the avatar and the ids, which is
+// enough to tell one connected account from another. A scope that is not
+// switched on for the app makes the consent screen refuse the whole request,
+// so asking for one nobody confirmed is a broken Connect button in exchange
+// for a nicer label. It can be added the day the handle is worth it.
+const SCOPES = ["user.info.basic", "video.publish"].join(",");
 
 // A token good for another hour is good enough for the call about to be made.
 // Below that it is renewed, because a request that starts valid and expires
@@ -216,8 +223,11 @@ export default async function handler(req) {
     // Who it is. Not decorative: the Settings row and the composer both name
     // the account, and "connected" with no name beside it is a connection
     // nobody can tell apart from somebody else's.
+    // Only the fields user.info.basic actually grants. Asking for username here
+    // without the profile scope makes the whole call fail, and then a
+    // connection that worked would be saved with no name on it.
     const me = await tk(t.access_token, "/user/info/", {
-      query: { fields: "open_id,union_id,avatar_url,display_name,username" },
+      query: { fields: "open_id,union_id,avatar_url,display_name" },
     });
     const u = me.body?.data?.user || {};
 
