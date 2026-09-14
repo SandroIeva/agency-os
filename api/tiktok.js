@@ -47,39 +47,38 @@ const json = (obj, status = 200) =>
 const AUTH_HOST = "https://www.tiktok.com";
 const API = "https://open.tiktokapis.com/v2";
 
-// What the app actually does, and nothing beyond it. Asking for a permission we
-// do not use is a named reason to fail a review, the same rule the Meta scopes
-// follow. video.publish is the direct post; video.upload would only reach the
-// creator's drafts, which is not what a composer means by "post".
+// user.info.basic alone, and NOT because that is what the app wants. It is what
+// a Sandbox can give.
 //
-// What the app actually does, and nothing beyond it. Asking for a permission we
-// do not use is a named reason to fail a review, the same rule the Meta scopes
-// follow. video.publish is the direct post; video.upload would only reach the
-// creator's drafts, which is not what a composer means by "post".
+// TikTok's own "Add a Sandbox" page settles it: "Sandbox mode does not offer
+// access to Content Posting API for public videos or Data Portability API."
+// And "Content Posting API Get Started" says the scope needs app-level
+// approval on top of a user's consent: "Your app must be approved for the
+// video.publish scope."
 //
-// ── The three rounds this cost, and the thing that was staring at us ────────
+// So posting cannot be tried out before the review. Same shape as Meta's
+// Advanced Access, and the same consequence: build it now, switch it on then.
 //
-// The consent screen kept refusing and naming only "scope". Measured, in order:
-//   1. basic + publish → refused.
-//   2. The probe below → TikTok does not check scopes BEFORE the login, so the
-//      refusal lands after it, which is why the message is so thin and so late.
-//   3. basic alone     → connected first time.
-//   4. Direct Post switched on, basic + publish → refused again.
-//   5. basic + upload  → refused.
+// ── The five rounds this cost, so nobody repeats them ──────────────────────
+//   1. basic + publish → refused, naming only "scope".
+//   2. A probe of the authorize url → useless: TikTok sends every request to
+//      the login first and checks the scope only afterwards, which is why the
+//      message says so little and arrives so late. The probe is still below,
+//      labelled with what it cannot do.
+//   3. basic alone → connected first time. The pipe works.
+//   4. Direct Post switched on at the product, basic + publish → refused again.
+//      So that switch is not the gate.
+//   5. basic + upload, and again with a literal comma instead of %2C →
+//      refused. The comma was a theory built on "one scope works, two do not",
+//      and it was wrong. The real variable was the video scope all along.
 //
-// Read as a list it says something none of the individual attempts did: ONE
-// scope always worked and any TWO always failed, whichever two. The variable
-// was never which scopes. It was the comma between them, which URLSearchParams
-// percent-encodes to %2C and TikTok does not decode before splitting. It was
-// seeing a single scope with a comma in its name.
+// The lesson is not the comma. It is that step 4 already carried the answer,
+// and three more attempts went out on a hunch instead of into the documentation
+// the owner then had to hand over himself.
 //
-// The authorize url is therefore assembled by hand further down. And publish is
-// back, because it may never have been refused on its own merits.
-//
-// user.info.profile stays absent. It carries the @handle, basic already carries
-// the display name and the ids, and an unnecessary scope is a rejection waiting
-// to happen.
-const SCOPES = ["user.info.basic", "video.publish"].join(",");
+// Adding video.publish back is this one line plus one reconnect, because a
+// token keeps the scopes it was issued with.
+const SCOPES = ["user.info.basic"].join(",");
 
 // A token good for another hour is good enough for the call about to be made.
 // Below that it is renewed, because a request that starts valid and expires
