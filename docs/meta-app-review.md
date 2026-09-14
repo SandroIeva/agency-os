@@ -72,12 +72,35 @@ innerhalb von 30 Tagen vor der Einreichung**. Die Spalte in der Konsole wird
 täglich zusammengerechnet, ein frischer Aufruf taucht also erst am nächsten Tag
 auf.
 
-Das ist der Grund, warum das Analytics-Panel alle fünf Berechtigungen berührt:
-einmal **Audience → Analytics** öffnen erzeugt je einen echten Aufruf. Die
-Einstellungen-Seite tut das ausdrücklich **nicht**, sie liest nur unsere eigene
-Datenbank.
+**Audience → Analytics** einmal zu öffnen erzeugt **sechs** der sieben Aufrufe.
+Nachgelesen im Code, nicht angenommen:
 
-Also: kurz vor der Einreichung einmal öffnen, nicht Wochen vorher.
+| Aufruf beim Öffnen von Analytics | deckt ab |
+|---|---|
+| `/{ig-id}` mit Profilfeldern | `instagram_business_basic` |
+| `/{ig-id}/insights` | `instagram_business_manage_insights` |
+| `/{ig-id}/content_publishing_limit` | `instagram_business_content_publish` |
+| `/me` mit id, username | `threads_basic` |
+| `/{th-id}/threads_insights` (Kennzahlen und Herkunft) | `threads_manage_insights` |
+| `/{th-id}/threads_publishing_limit` | `threads_content_publish` |
+
+⚠ **Die siebte fehlt dort.** `threads_profile_discovery` wird nur von
+**Audience → Benchmark** ausgelöst, und nur wenn dort die Plattform Threads
+gewählt und ein fremder Account nachgeschlagen wird. Ohne diesen zweiten Klick
+hat die Berechtigung keinen Aufruf, und eine Berechtigung ohne Aufruf ist ein
+benannter Ablehnungsgrund.
+
+Die Einstellungen-Seite tut das ausdrücklich **nicht**, sie liest nur unsere
+eigene Datenbank.
+
+Also kurz vor der Einreichung: Analytics öffnen **und** im Benchmark einen
+Threads-Account nachschlagen. Nicht Wochen vorher.
+
+⚠ Und die Voraussetzung dafür, dass Analytics überhaupt etwas aufruft: der
+Bereich zeigte bis zum 14.09.2026 die Seite "Verbinde deine Kanäle", sobald
+**Zernio** keinen Account hatte, und das Meta-Panel lag in dem Zweig, der dann
+nicht gezeichnet wurde. Ein Workspace, der Instagram und Threads von Zernio
+weggeholt hat, löste damit gar keinen Aufruf aus.
 
 ## User data deletion
 

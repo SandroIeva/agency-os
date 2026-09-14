@@ -30753,7 +30753,8 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
 //
 // It renders nothing at all when this workspace has no direct connection, so
 // every other workspace is unaffected.
-function InstagramDirectPanel({ theme, darkMode, de, session, orgId, card, secLabel }) {
+function InstagramDirectPanel({ theme, darkMode, de, session, orgId, card, secLabel,
+                               igAccount = null, thAccount = null }) {
   const [state, setState] = useState(null);   // null | { loading } | payload | { error }
   const [thState, setThState] = useState(null);
 
@@ -30762,7 +30763,7 @@ function InstagramDirectPanel({ theme, darkMode, de, session, orgId, card, secLa
   // Threads permissions a real API call, which Meta requires before either can
   // be submitted for review.
   useEffect(() => {
-    if (!orgId || !session?.access_token) return;
+    if (!orgId || !session?.access_token || !thAccount) { setThState(null); return; }
     let on = true;
     (async () => {
       try {
@@ -30771,34 +30772,24 @@ function InstagramDirectPanel({ theme, darkMode, de, session, orgId, card, secLa
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
           body: JSON.stringify({ orgId, ...payload }),
         });
-        const st = await ask({ mode: "status" }).then(r => r.ok ? r.json() : null);
-        const first = st?.enabled ? (st.accounts || [])[0] : null;
-        if (!first) { if (on) setThState(null); return; }
-        const r = await ask({ mode: "overview", threadsUserId: first.threadsUserId });
+        const r = await ask({ mode: "overview", threadsUserId: thAccount.threadsUserId });
         const j = await r.json().catch(() => null);
         if (on) setThState(r.ok ? j : { error: j?.error || (de ? "Threads hat nicht geantwortet." : "Threads did not answer.") });
       } catch { if (on) setThState({ error: de ? "Threads hat nicht geantwortet." : "Threads did not answer." }); }
     })();
     return () => { on = false; };
-  }, [orgId, session?.access_token, de]);
+  }, [orgId, session?.access_token, de, thAccount?.threadsUserId]);
 
   useEffect(() => {
-    if (!orgId || !session?.access_token) return;
+    if (!orgId || !session?.access_token || !igAccount) { setState(null); return; }
     let on = true;
     setState({ loading: true });
     (async () => {
       try {
-        const st = await fetch("/api/instagram", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ mode: "status", orgId }),
-        }).then(r => r.ok ? r.json() : null);
-        const first = st?.enabled ? (st.accounts || [])[0] : null;
-        if (!first) { if (on) setState(null); return; }
         const r = await fetch("/api/instagram", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ mode: "overview", orgId, igUserId: first.igUserId, days: 28 }),
+          body: JSON.stringify({ mode: "overview", orgId, igUserId: igAccount.igUserId, days: 28 }),
         });
         const j = await r.json().catch(() => null);
         if (!on) return;
@@ -30806,7 +30797,7 @@ function InstagramDirectPanel({ theme, darkMode, de, session, orgId, card, secLa
       } catch { if (on) setState({ error: de ? "Instagram hat nicht geantwortet." : "Instagram did not answer." }); }
     })();
     return () => { on = false; };
-  }, [orgId, session?.access_token, de]);
+  }, [orgId, session?.access_token, de, igAccount?.igUserId]);
 
   if (!state && !thState) return null;
 
@@ -30932,6 +30923,34 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   const [error, setError] = useState(null);
   const [busyKey, setBusyKey] = useState(null);     // platform being connected / account being removed
   const orgId = userOrg?.id;
+
+  // The accounts this workspace holds straight from Meta, beside whatever
+  // Zernio has. Asked HERE rather than inside the panel that shows the numbers,
+  // because this view decides between "connect your channels" and the whole
+  // dashboard, and it decided on Zernio's answer alone. A workspace that had
+  // moved Instagram and Threads off Zernio therefore landed on the empty state
+  // and the Meta numbers, and the API calls Meta wants to see before an app
+  // review, never happened at all.
+  const [direct, setDirect] = useState(null);       // null = still asking
+  useEffect(() => {
+    if (!orgId || !session?.access_token) { setDirect(null); return; }
+    let on = true;
+    const ask = (path) => fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ mode: "status", orgId }),
+    }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+    (async () => {
+      const [ig, th] = await Promise.all([ask("/api/instagram"), ask("/api/threads")]);
+      if (!on) return;
+      setDirect({
+        ig: ig?.enabled ? (ig.accounts || [])[0] || null : null,
+        th: th?.enabled ? (th.accounts || [])[0] || null : null,
+      });
+    })();
+    return () => { on = false; };
+  }, [orgId, session?.access_token]);
+  const hasDirect = !!(direct?.ig || direct?.th);
 
   // Latest wins, and the workspace has to still be the one that was asked
   // about. A slow answer for workspace A used to land after a quick one for B
@@ -31143,9 +31162,9 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
         </div>
       )}
 
-      {accounts == null ? (
+      {accounts == null || direct == null ? (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{de ? "Lädt…" : "Loading…"}</div>
-      ) : accounts.length === 0 ? (
+      ) : (accounts.length === 0 && !hasDirect) ? (
         /* ── Empty state: connect the first account ── */
         <div style={{ maxWidth: 560, margin: "40px auto 0", textAlign: "center" }}>
           <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{de ? "Verbinde deine Kanäle" : "Connect your channels"}</div>
@@ -31158,6 +31177,12 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
         </div>
       ) : (
         <>
+          {/* Everything from here to the trend is Zernio's, and it has nothing
+              to say when Zernio holds no account: `data` is never even fetched
+              in that case, so the tiles sat at "…" for ever. A workspace whose
+              channels are all straight from Meta now simply does not see this
+              half. */}
+          {accounts.length > 0 && (<>
           {/* Platform filter pills + live badge */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
             {["all", ...connectedUiKeys].map(key => {
@@ -31208,6 +31233,14 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
             ))}
           </div>
 
+          {/* Straight from Meta, directly under the tiles rather than at the
+              bottom of the right-hand column where it used to sit. For
+              Instagram and Threads these are not a footnote to Zernio's
+              numbers, they are the numbers. */}
+          <InstagramDirectPanel theme={theme} darkMode={darkMode} de={de}
+            session={session} orgId={orgId} card={card} secLabel={secLabel}
+            igAccount={direct?.ig || null} thAccount={direct?.th || null} />
+
           {/* Impressions trend — weekly buckets from the daily series */}
           {dailyOk && weekly.length > 1 && (
             <div style={{ ...card, marginBottom: 22 }}>
@@ -31228,8 +31261,13 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
             </div>
           )}
 
-          {/* Top posts + connected accounts */}
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(0, 1fr)", gap: 14, alignItems: "start" }}>
+          </>)}
+
+          {/* Top posts + connected accounts. One column instead of two when
+              there are no Zernio posts to put in the wide one. */}
+          <div style={{ display: "grid", alignItems: "start", gap: 14,
+            gridTemplateColumns: accounts.length > 0 ? "minmax(0, 1.6fr) minmax(0, 1fr)" : "minmax(0, 1fr)" }}>
+            {accounts.length > 0 && (
             <div style={card}>
               <div style={secLabel}>{de ? "Top 5 Posts (Engagement)" : "Top 5 posts (engagement)"}</div>
               {data == null ? (
@@ -31325,8 +31363,10 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
                 );
               })}
             </div>
+            )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {accounts.length > 0 && (
               <div style={card}>
                 <div style={secLabel}>{de ? "Verbundene Accounts" : "Connected accounts"}</div>
                 {accounts.map((a, i) => {
@@ -31350,8 +31390,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
                   );
                 })}
               </div>
-              <InstagramDirectPanel theme={theme} darkMode={darkMode} de={de}
-                session={session} orgId={orgId} card={card} secLabel={secLabel} />
+              )}
               {unconnected.length > 0 && (
                 <div style={card}>
                   <div style={secLabel}>{de ? "Weitere verbinden" : "Connect more"}</div>
