@@ -1849,16 +1849,28 @@ function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de
 // 2.0; anything past these reads as a machine rather than as somebody talking,
 // so the list stops well inside the range it is allowed.
 //
-// The scale is centred on 1.15, not on Fish's own 1.0. The owner listened to
-// both and called 1.15 normal, so that is what the word means here: a rate is
-// named for how it sounds against the one people actually want, not for how
-// far it sits from the API's default. Fish's 1.0 keeps a place as "Langsam"
-// rather than being dropped, so nobody who deliberately chose it gets moved.
-const DEFAULT_VOICE_SPEED = 1.15;
+// The scale is centred on 1.1, not on Fish's own 1.0. The owner listened to
+// both and named the middle one himself, so that is what the word means here:
+// a rate is named for how it sounds against the one people actually want, not
+// for how far it sits from the API's default. Fish's 1.0 keeps a place as
+// "Langsam" rather than being dropped, so nobody who deliberately chose it
+// gets moved.
+//
+// It was 1.15 until the introduction was read aloud. Speaking fast flattens
+// the melody of a sentence, and a flat sentence is most of what makes a
+// synthetic voice sound synthetic.
+//
+// Dropping 1.15 from the list is what MOVES people, and deliberately: an
+// effect writes the rate to storage on load, so everybody is holding the old
+// default whether they ever chose it or not, and a value that is no longer
+// offered falls back to the new default by the guard that is already there.
+// The same mechanism retired two voices. Anybody who really wanted it faster
+// picked 1.3, and that is untouched.
+const DEFAULT_VOICE_SPEED = 1.1;
 const VOICE_SPEEDS = [
   { value: 0.9,  de: "Sehr langsam", en: "Very slow" },
   { value: 1,    de: "Langsam",      en: "Slow" },
-  { value: 1.15, de: "Normal",       en: "Normal" },
+  { value: 1.1,  de: "Normal",       en: "Normal" },
   { value: 1.3,  de: "Schnell",      en: "Fast" },
   { value: 1.5,  de: "Sehr schnell", en: "Very fast" },
 ];

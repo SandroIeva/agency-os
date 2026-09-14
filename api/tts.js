@@ -57,10 +57,12 @@ export default async function handler(req, res) {
         // clamped here rather than trusted: this endpoint spends money, and a
         // rejected call is a call we still made.
         //
-        // The fallback is 1.15 rather than Fish's own 1.0, so a caller that
+        // The fallback is 1.1 rather than Fish's own 1.0, so a caller that
         // sends no rate gets what the app calls normal instead of something
-        // slower than every user of it has chosen.
-        prosody: { speed: Math.min(2, Math.max(0.5, Number(speed) || 1.15)) },
+        // slower than every user of it has chosen. Keep it in step with
+        // DEFAULT_VOICE_SPEED in App.jsx: two defaults that disagree mean the
+        // voice changes pace depending on which path asked for it.
+        prosody: { speed: Math.min(2, Math.max(0.5, Number(speed) || 1.1)) },
       }),
     });
 
