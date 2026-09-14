@@ -57310,10 +57310,12 @@ export default function CircularMenu() {
                   // labels stood at 1.16:1, which is not legible at all.
                   //
                   // These two are chosen against the worst case rather than the
-                  // pretty one. Light over black artwork 9.3:1, dark over white
-                  // artwork 8.3:1, both far past the 4.5 small text needs, and
-                  // still transparent enough that the picture moves behind it.
-                  background: darkMode ? "rgba(22,22,26,0.86)" : "rgba(252,252,253,0.82)",
+                  // pretty one, and then walked back one step: the owner wants
+                  // the glass, so the question is how much can be given back
+                  // before the words go again. Light over black artwork 7.6:1,
+                  // dark over white artwork 6.0:1, both still well past the 4.5
+                  // small text needs, with the picture clearly moving behind.
+                  background: darkMode ? "rgba(22,22,26,0.76)" : "rgba(252,252,253,0.72)",
                   backdropFilter: "blur(40px) saturate(150%)",
                   WebkitBackdropFilter: "blur(40px) saturate(150%)",
                   // A white rim is invisible on a near-white card, so the light
