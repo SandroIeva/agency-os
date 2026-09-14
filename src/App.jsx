@@ -57302,10 +57302,23 @@ export default function CircularMenu() {
                   pointerEvents: "auto",
                   width: 540, padding: "30px 46px",
                   borderRadius: 25,
-                  background: darkMode ? "rgba(133, 133, 133, 0.10)" : "rgba(133, 133, 133, 0.10)",
+                  // Frosted, but it has to be readable over whatever is behind
+                  // it, and behind it is the dashboard's wall of artwork. The
+                  // fill was a 10% grey in BOTH branches, so the blur was doing
+                  // all the work, and a blur does not stop a dark picture from
+                  // coming through: measured over black artwork, the menu's own
+                  // labels stood at 1.16:1, which is not legible at all.
+                  //
+                  // These two are chosen against the worst case rather than the
+                  // pretty one. Light over black artwork 9.3:1, dark over white
+                  // artwork 8.3:1, both far past the 4.5 small text needs, and
+                  // still transparent enough that the picture moves behind it.
+                  background: darkMode ? "rgba(22,22,26,0.86)" : "rgba(252,252,253,0.82)",
                   backdropFilter: "blur(40px) saturate(150%)",
                   WebkitBackdropFilter: "blur(40px) saturate(150%)",
-                  border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.55)"}`,
+                  // A white rim is invisible on a near-white card, so the light
+                  // branch keeps its edge with a faint neutral instead.
+                  border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.07)"}`,
                   boxShadow: darkMode
                     ? "0 28px 80px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)"
                     : "0 28px 80px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.6)",
