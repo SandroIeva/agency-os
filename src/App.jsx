@@ -53217,53 +53217,101 @@ export default function CircularMenu() {
   // synthesis when that is unavailable, which is what happens locally where
   // there is no FISH_API_KEY. Never rejects: a question that cannot be spoken
   // still has to be listened for.
-  // onDuration, when given, is handed the audio's real length as soon as it is
-  // known. The karaoke highlight needs it, and only the caller that draws the
-  // words on screen cares: askDrop's questions are drawn elsewhere and pass
-  // nothing.
-  const speakLine = (text, onDuration = null) => new Promise((resolve) => {
+  // Split into a FETCH and a PLAY, because the sentence after this one can be
+  // on its way while this one is still being said. Spoken in one piece the
+  // voice ran the full stops together; spoken a sentence at a time it stopped
+  // properly but left a whole round trip of silence at every one. Prefetching
+  // is what buys both.
+  //
+  // Resolves to an object url, or null when Fish is unavailable and the
+  // browser's own voice has to say it instead.
+  const fetchLine = async (text) => {
+    if (!text) return null;
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({ text, voiceId: selectedVoice, speed: voiceSpeed }),
+      });
+      if (res.ok) return URL.createObjectURL(await res.blob());
+    } catch (_) { /* fall through to the browser */ }
+    return null;
+  };
+
+  // onAudio is handed the element at the moment playback actually STARTS. That
+  // moment is the whole point: a highlight started any earlier is running
+  // against a guess while the audio is still loading, and the correction when
+  // the real timing arrives throws the words backwards.
+  // Never rejects: a line that cannot be spoken still has to be listened for.
+  const playLine = (url, text, onAudio = null) => new Promise((resolve) => {
     if (!text) { resolve(); return; }
     let done = false;
     const finish = () => { if (done) return; done = true; resolve(); };
-    (async () => {
-      try {
-        const res = await fetch("/api/tts", {
-          method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-          body: JSON.stringify({ text, voiceId: selectedVoice, speed: voiceSpeed }),
-        });
-        if (res.ok) {
-          const url = URL.createObjectURL(await res.blob());
-          const audio = new Audio(url);
-          audio.crossOrigin = "anonymous";
-          audioRef.current = audio;
-          audio.onloadedmetadata = () => {
-            if (onDuration && audio.duration && isFinite(audio.duration)) onDuration(audio.duration);
-          };
-          audio.onended = () => {
-            teardownAudioAnalyser(); URL.revokeObjectURL(url); audioRef.current = null; finish();
-          };
-          audio.onerror = () => { URL.revokeObjectURL(url); finish(); };
-          // The same analyser the assistant's own answers use, so the sphere
-          // moves with the question instead of sitting still through it.
-          setupAudioAnalyser(audio);
-          audio.play().catch(finish);
-          return;
-        }
-      } catch (_) { /* fall through to the browser */ }
-      try {
-        if (window.speechSynthesis) {
-          window.speechSynthesis.cancel();
-          const u = new SpeechSynthesisUtterance(text);
-          u.lang = appLanguage === "de" ? "de-DE" : "en-US";
-          u.rate = 1.0; u.volume = 0.9;
-          u.onend = finish; u.onerror = finish;
-          window.speechSynthesis.speak(u);
-          return;
-        }
-      } catch (_) { /* no voice at all */ }
-      finish();
-    })();
+    if (url) {
+      const audio = new Audio(url);
+      audio.crossOrigin = "anonymous";
+      audioRef.current = audio;
+      audio.onended = () => {
+        teardownAudioAnalyser(); URL.revokeObjectURL(url); audioRef.current = null; finish();
+      };
+      audio.onerror = () => { URL.revokeObjectURL(url); finish(); };
+      // The same analyser the assistant's own answers use, so the sphere moves
+      // with the voice instead of sitting still through it.
+      setupAudioAnalyser(audio);
+      audio.play().then(() => { if (onAudio) onAudio(audio); }).catch(finish);
+      return;
+    }
+    try {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = appLanguage === "de" ? "de-DE" : "en-US";
+        u.rate = 1.0; u.volume = 0.9;
+        u.onend = finish; u.onerror = finish;
+        window.speechSynthesis.speak(u);
+        return;
+      }
+    } catch (_) { /* no voice at all */ }
+    finish();
   });
+
+  // Say one line and resolve when it has finished saying it. The pair above,
+  // in the order anybody who does not need to prefetch wants them.
+  const speakLine = async (text) => { await playLine(await fetchLine(text), text); };
+
+  // The highlight, driven by the audio's OWN clock rather than by a timer set
+  // to an estimate. An estimate starts when the request is sent and the sound
+  // starts when it arrives, so the words ran ahead and then snapped back when
+  // the real length was known. currentTime only ever moves forward, so this
+  // cannot.
+  //
+  // Within a sentence a word's share is its LENGTH, not one slot each:
+  // "Zusammenhänge" is held longer than "und", which is what stops the drift
+  // building up across a long sentence.
+  const trackKaraoke = (audio, text, offset) => {
+    const words = text.split(/\s+/).filter(Boolean);
+    if (!words.length) return;
+    const lens = words.map(w => w.length + 1);
+    const total = lens.reduce((a, b) => a + b, 0);
+    const ends = [];
+    let run = 0;
+    for (const l of lens) { run += l; ends.push(run / total); }
+    const step = () => {
+      if (aiStoppedRef.current) return;
+      // Ended FIRST, then the duration. The other way round, an audio whose
+      // length never resolves and which also never ends leaves this asking
+      // again every frame for the life of the tab.
+      if (audio.ended || audio.paused) { setHighlightWordIndex(offset + words.length); return; }
+      const dur = audio.duration;
+      if (!dur || !isFinite(dur)) { requestAnimationFrame(step); return; }
+      const p = Math.min(1, audio.currentTime / dur);
+      let i = ends.findIndex(e => p < e);
+      if (i < 0) i = words.length - 1;
+      setHighlightWordIndex(offset + i);
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+
   // Ask, then listen. In that order and never at once: the microphone would
   // otherwise hear the question and answer it with itself.
   const askDrop = async (next) => {
@@ -54157,39 +54205,40 @@ export default function CircularMenu() {
     // the voice fails entirely the introduction still happened.
     setAiResponse(text);
     setAiStatus("speaking");
-    // One sentence per request. A whole paragraph handed over at once comes
-    // back read as a single breath: the voice does not fall at a full stop, it
-    // carries straight on into the next clause. Each request now ends with the
-    // punctuation it belongs to, so each gets a proper close, and the gap
-    // between two requests is the pause the full stop was asking for.
+    // One sentence per request, and the NEXT one already on its way while this
+    // one is being said. A whole paragraph handed over at once comes back read
+    // as a single breath, the voice never falling at a full stop. A sentence at
+    // a time fixed that and put a whole round trip of silence in its place.
+    // Prefetching is what buys the stop without the wait.
     //
-    // It costs the same money: Fish bills per character and the characters are
-    // the same ones.
+    // It costs the same money either way: Fish bills per character and the
+    // characters are the same ones.
     const sentences = (text.match(/[^.!?]+[.!?]+|\S[^.!?]*$/g) || [text])
       .map(x => x.trim()).filter(Boolean);
-    // ⚠ The highlight has to run, or the introduction is drawn at 21% opacity
-    // and is barely readable: the renderer dims every word past
-    // highlightWordIndex, and that sits at -1 until somebody starts it. The
-    // offset is how a sentence knows where it begins in the whole text, since
-    // the words on screen are counted from the first one.
     let spokenWords = 0;
-    for (const sentence of sentences) {
+    let pending = fetchLine(sentences[0]);
+    for (let k = 0; k < sentences.length; k++) {
       if (aiStoppedRef.current) return;
+      const sentence = sentences[k];
       const n = sentence.split(/\s+/).filter(Boolean).length;
-      // An estimate first so the words light before the audio has loaded, then
-      // re-timed against the real length the moment it is known.
-      startKaraokeHighlight(sentence, Math.max(1.2, (n / 150) * 60), spokenWords);
-      // Raced against the close, because stopAssistant silences the audio by
-      // clearing its onended handler, so the promise speakLine returns never
-      // resolves. One await could afford to hang; seven of them in a loop is a
-      // closure that sits there for the life of the tab.
+      const url = await pending;
+      // Started BEFORE this sentence is played, so the fetch overlaps the
+      // speaking rather than following it.
+      pending = k + 1 < sentences.length ? fetchLine(sentences[k + 1]) : Promise.resolve(null);
+      if (aiStoppedRef.current) return;
+      // No audio to read a clock from means the browser is speaking, and then
+      // the only honest thing is to light the sentence rather than leave it at
+      // 21% opacity for the whole of it.
+      if (!url) setHighlightWordIndex(spokenWords + n);
+      // Raced against the close: stopAssistant silences the audio by clearing
+      // its onended handler, so the promise would never resolve on its own.
       let poll = null;
       const stopped = new Promise((res) => {
         poll = setInterval(() => { if (aiStoppedRef.current) res(); }, 120);
       });
       try {
         await Promise.race([
-          speakLine(sentence, (dur) => startKaraokeHighlight(sentence, dur, spokenWords)),
+          playLine(url, sentence, (audio) => trackKaraoke(audio, sentence, spokenWords)),
           stopped,
         ]);
       } finally { clearInterval(poll); }
