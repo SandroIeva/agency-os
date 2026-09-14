@@ -110,25 +110,43 @@ Auswahl, dann "Komponente erstellen" im selben Kontextmenü, in dem Gruppieren
 und Maskieren schon stehen. Die Auswahl wird an Ort und Stelle durch die Instanz
 ersetzt, auf dem Bildschirm bewegt sich nichts.
 
-### Bearbeiten: hineingehen, nicht woanders öffnen
+### Bearbeiten: allein auf der Bühne
 
-Doppelklick geht in die Komponente hinein, genau die Geste, mit der man heute in
-eine Gruppe hineingeht. Der Rest des Boards wird abgedunkelt und nimmt keine
-Klicks mehr an. Oben steht ein Pfad, `Artboard 1 / Logo-Lockup`, und der erste
-Teil führt zurück. Escape ebenso. Beim Verlassen zeichnen sich alle anderen
-Instanzen neu.
+Doppelklick geht in die Komponente hinein. Board, Nachbarboards, Rahmen und
+Beschriftungen verschwinden, stehen bleibt die graue Bühne mit ihrem Punktraster.
+Die Komponente sitzt in der Mitte, eingepasst, und die Ebenenliste zeigt ihre
+Teile. Oben steht ein Pfad, `Artboard 1 / Logo-Lockup`, und der erste Teil führt
+zurück. Escape ebenso. Die Kamera fliegt hin und wieder zurück, mit dem
+`flying`-Übergang, den der Editor beim Öffnen schon benutzt.
 
-Zustand dafür: `editingComponent = { cid, instanceId }`. Solange gesetzt,
-schreiben Änderungen nach `doc.components[cid].items` statt ins Board.
+Zuerst war hier vorgesehen, das Board stehen zu lassen und abzudunkeln. Das ist
+verworfen, und zwar nicht aus Geschmack:
 
-Eine Vereinfachung, die das Ganze erst handhabbar macht: **wer drin ist, sieht
-die Komponente unskaliert und ungedreht.** Sonst müsste jede Bearbeitung durch
-die Transformation der Instanz zurückgerechnet werden, und das Ergebnis ist bei
-Drehung nicht eindeutig.
+- **Eine Komponente hat kein Artboard.** Sie wird auf vielen benutzt, in
+  verschiedenen Formaten. Sie auf genau einem davon zu bearbeiten zeigt sie in
+  einem Zusammenhang, der nur einer von vielen ist, und die Kanten und der
+  Hintergrund dieses Boards sehen dann aus, als gehörten sie dazu.
+- **Eine Sonderregel fällt weg.** Solange man auf dem Board steht, muss man
+  festlegen, was mit einer skalierten oder gedrehten Instanz passiert. Auf der
+  Bühne stellt sich die Frage nicht: die Komponente wird in ihrer eigenen Größe
+  gezeigt, fertig. Weniger Regeln ist hier das Zeichen, dass es das richtige
+  Modell ist.
+- **Kein Beschnitt.** Ein Board schneidet ab, was über seinen Rand hängt. Auf
+  der Bühne kann beim Bauen etwas hinausragen, ohne zu verschwinden.
 
-Kein zweites Artboard, kein zweites Fenster. Ein neues Artboard würde die
-Umgebung wegnehmen, für die man die Komponente überhaupt baut: Format,
-Hintergrund und das, was rundherum liegt.
+Es ist trotzdem kein zweites Artboard: kein Format, kein Hintergrund, kein
+Rahmen. Nur die Teile und ein dünner Umriss, der die Grenzen der Komponente
+zeigt und nichts abschneidet.
+
+Die Seitenspalte wechselt mit: statt Format, Hintergrund und Ecken der Leinwand
+stehen dort Name und Größe der Komponente und darunter die Ebenen.
+
+### Die Grenzen der Komponente
+
+`w/h` werden beim Anlegen aus der Auswahl gesetzt und bleiben dann stehen, bis
+jemand sie absichtlich ändert. Nicht die laufend neu gerechnete Hülle der Teile,
+denn an `w/h` hängt die Skalierung jeder Instanz, und eine Hülle, die sich beim
+Bearbeiten mitbewegt, würde vorhandene Instanzen verschieben.
 
 ### Overrides: zuerst nur Text und Bild
 
@@ -142,6 +160,24 @@ unbenutzbar werden.
 
 "Instanz lösen" ersetzt die Instanz durch ihre aufgelösten Items mit frischen
 ids. Mit `canvasExpand` ist das eine Zeile.
+
+### Der Zustand, und die Falle darin
+
+Hineingehen heißt: den Stand des Boards wegparken, `items` mit den Teilen der
+Komponente belegen, `focus = { cid, instanceId, cam }` setzen. Hinausgehen
+schreibt `items` nach `doc.components[cid].items` zurück und holt das Board
+wieder. Genau diesen Tausch macht `switchBoard` mit `loadBoard` schon, also gibt
+es das Muster im Haus.
+
+⚠ **Und hier liegt die Falle.** Der Autosave baut sein Dokument aus
+`boardsNow()`, und `boardsNow()` nimmt für das aktive Board den **laufenden**
+Stand, also `items`. Steht man in einer Komponente, sind das deren Teile. Ein
+Autosave in diesem Moment schreibt die Komponente an die Stelle des Boards und
+das Board ist weg. Das ist derselbe Unfall wie die Live-Synchronisierung, die
+schon einmal Artboards geleert hat.
+
+Also: `boardsNow()` muss `focus` kennen und für das aktive Board die geparkte
+Kopie nehmen. Das gehört in einen Test, nicht in einen Kommentar.
 
 ### Leicht zu übersehen
 
