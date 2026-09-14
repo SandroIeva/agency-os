@@ -15,6 +15,7 @@ einer vorhandenen Datei.
 | `/tiktok/callback` | in `vercel.json`, und `tiktok` steht in `RESERVED_SLUGS` |
 | Verbinden und Trennen | in den Einstellungen, neben Instagram und Threads |
 | Domainbestätigung | `app.i7os.com` und `i7os.com`, je Umgebung ein eigener Schlüssel |
+| Composer | TikTok steht als Kanal drin, mit den Einstellungen, die TikTok vorschreibt |
 | Posten | gebaut, aber nicht benutzbar, siehe unten |
 
 Umgebungsvariablen: `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`. Die Freigabeliste
@@ -87,13 +88,29 @@ Ein einzelnes Standbild gibt es im Feed nicht. Es ist immer der Foto-Container,
 bis zu 35 Bilder, also ist ein Bild ein Karussell aus einem. Musik kommt per
 Vorgabe dazu, weil still auf TikTok der Ausnahmefall ist.
 
-## Was vor dem Posten noch gebaut werden muss
+## Der Composer
+
+Steht. TikTok ist der dritte direkte Anbieter neben Instagram und Threads, und
+der Ablauf läuft sichtbar durch: verbinden, Medium wählen, einstellen,
+veröffentlichen.
 
 TikTok verlangt, dass der Composer vor jedem Beitrag `creator_info` abfragt und
 das Ergebnis auch anzeigt: die für dieses Konto erlaubten Sichtbarkeiten, und
 ob Kommentare, Duette und Stitches zugelassen sind. Das ist keine Kür, es wird
-in der Prüfung kontrolliert. Der Modus `creator` liefert die Werte bereits, die
-Oberfläche dazu fehlt.
+in der Prüfung kontrolliert. Der Composer zeigt genau die Antwort und nichts
+sonst: ein Schalter für etwas, das TikTok abgeschaltet hat, wäre eine Lüge mit
+einem Kästchen dran.
+
+Solange `creator_info` nicht geantwortet hat, wird die Anfrage **hier**
+abgelehnt statt bei TikTok. Eine geratene Sichtbarkeit wäre ein Beitrag unter
+einer Einstellung, die niemand gewählt hat.
+
+**Kein Mock.** Der Vorschlag lag auf dem Tisch, den Publish-Aufruf im
+Entwicklungsmodus mit einer Erfolgsantwort abzufangen. Eine Attrappe, die
+Erfolg meldet, ist genau die Art Code, die versehentlich in Produktion landet
+und dann einen Beitrag als veröffentlicht meldet, den es nie gab. Der Ablauf
+ist stattdessen bis zum letzten Klick sichtbar, und dort steht ehrlich, dass
+TikTok noch nicht freigegeben hat.
 
 ## Die Reihenfolge von hier
 

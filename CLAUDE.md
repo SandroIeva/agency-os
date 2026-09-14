@@ -28,6 +28,11 @@ Multi-tenant workspace OS for creative agencies. React 19 + Vite SPA, Supabase (
    exempt — nobody reads those in the product.
 6. **Design system:**
    - No purple/lilac accents. Active/selected states use anthracite **`#15151c`** (dark pill, white text). Exception: in dark mode the main nav menu's selected pill is *inverted* (light bg `rgba(244,244,247,0.95)`, text `#15151c`).
+     **Second exception, and it is deliberate: the artboard COMPONENT accent is
+     violet** (`CANVAS_COMPONENT_ACCENT`). The owner chose it himself on
+     2026-09-15 and confirmed it should stay, because Figma says "component" in
+     violet and the muscle memory is worth more here than the house rule. It was
+     briefly a measured teal and that was reverted. Do not "fix" it back.
    - Use the shared **`<Dropdown>`** component in App.jsx for any select/menu. Never a native `<select>`, never a one-off menu.
    - Primary action buttons belong in the **top-right header slot** of a view (some views expose a `headerSlotRef` portal target for embedded tabs).
    - Controls must never sit flush against a container edge — keep inner padding (esp. select chevrons).
