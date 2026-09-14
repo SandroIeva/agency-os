@@ -1,6 +1,8 @@
 # Komponenten, Vorlagen und Brand-Anwendung auf Artboards
 
-Stand: 2026-09-14 · Planung, noch nichts davon gebaut
+Stand: 2026-09-14 · Schritt 1 der Reihenfolge steht (`canvasExpand` und die drei
+Zeichner), alles darüber ist noch Planung. Es gibt noch keine Oberfläche, mit
+der man eine Komponente anlegen könnte.
 
 Das Ziel in einem Satz: fertige Vorlagen anbieten, die jemand auf die eigene
 Brand umstellen kann, aus Bausteinen, die man selbst anlegt und wiederverwendet.

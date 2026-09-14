@@ -20013,6 +20013,162 @@ const canvasMaskClip = (it, all) => {
   return `inset(${dy}px ${it.w - (dx + b.w)}px ${it.h - (dy + b.h)}px ${dx}px round ${r}px)`;
 };
 
+// Module scope, not inside the editor: the group resize is no longer the
+// only caller. Expanding a component instance scales its parts into the
+// instance's box with exactly this mapping, and a second scaler written for
+// that would disagree with this one the first time either is touched.
+// One member of a group, remapped into the box its group is being resized to.
+// Affine and per axis: a point keeps its position RELATIVE to the group, so
+// everything inside stays in the arrangement it was put in.
+//
+// Every geometry the editor has, because a group holds whatever was grouped:
+// boxes carry a width and a height, strokes and paths carry lists of points,
+// a line carries two ends. A scaler that only knew about w and h would leave
+// the drawings behind while the rest moved.
+const scaleItemInBox = (it, g, sx, sy, nx, ny) => {
+  const mx = (x) => nx + (x - g.x) * sx;
+  const my = (y) => ny + (y - g.y) * sy;
+  const s1 = (sx + sy) / 2;                       // for things with no axis
+  const sh = (v) => (v ? { ...v, x: (v.x || 0) * sx, y: (v.y || 0) * sy, blur: (v.blur || 0) * s1 } : v);
+  const common = {
+    strokeWidth: it.strokeWidth == null ? it.strokeWidth : it.strokeWidth * s1,
+    radius: it.radius == null ? it.radius : it.radius * s1,
+    radii: Array.isArray(it.radii) ? it.radii.map(v => v * s1) : it.radii,
+    blur: it.blur == null ? it.blur : it.blur * s1,
+    bgBlur: it.bgBlur == null ? it.bgBlur : it.bgBlur * s1,
+    shadow: sh(it.shadow), innerShadow: sh(it.innerShadow),
+  };
+  if (it.type === "arrow" || it.type === "line") {
+    return { ...it, ...common, width: (it.width || 1) * s1,
+      x1: Math.round(mx(it.x1)), y1: Math.round(my(it.y1)),
+      x2: Math.round(mx(it.x2)), y2: Math.round(my(it.y2)) };
+  }
+  if (it.type === "draw") {
+    // Points are stored behind an offset; mapping folds that offset in, so it
+    // starts again at zero rather than being scaled twice.
+    const ox = it.ox || 0, oy = it.oy || 0;
+    return { ...it, ...common, ox: 0, oy: 0, width: (it.width || 1) * s1,
+      pts: (it.pts || []).map(([x, y]) => [Math.round(mx(x + ox)), Math.round(my(y + oy))]) };
+  }
+  if (it.type === "path") {
+    const ox = it.ox || 0, oy = it.oy || 0;
+    // The offset is folded in here, so the subpaths that make the holes have
+    // to go through the very same mapping. Left as they were they would sit
+    // in the old coordinates with nothing to place them.
+    const mapNodes = (list) => (list || []).map(n => {
+      const o = { ...n, x: Math.round(mx(n.x + ox)), y: Math.round(my(n.y + oy)) };
+      if (n.h1x != null) { o.h1x = Math.round(mx(n.h1x + ox)); o.h1y = Math.round(my(n.h1y + oy)); }
+      if (n.h2x != null) { o.h2x = Math.round(mx(n.h2x + ox)); o.h2y = Math.round(my(n.h2y + oy)); }
+      return o;
+    });
+    return { ...it, ...common, ox: 0, oy: 0, width: (it.width || 0) * s1,
+      nodes: mapNodes(it.nodes),
+      ...(Array.isArray(it.subs) ? { subs: it.subs.map(sp => ({ ...sp, nodes: mapNodes(sp.nodes) })) } : {}) };
+  }
+  const b = canvasRenderBoxOf(it);
+  return { ...it, ...common,
+    x: Math.round(mx(b.x)), y: Math.round(my(b.y)),
+    w: Math.max(1, Math.round((it.w || b.w) * sx)),
+    h: it.h == null ? it.h : Math.max(1, Math.round(it.h * sy)),
+    // Text has no height of its own — its size is what makes it bigger.
+    ...(it.type === "text" ? {
+      size: Math.max(4, Math.round((it.size || 16) * s1)),
+      // A size set on part of the text scales with the rest of it.
+      ...(Array.isArray(it.runs) ? { runs: it.runs.map(r =>
+        (r.size != null ? { ...r, size: Math.max(4, Math.round(r.size * s1)) } : r)) } : {}),
+    } : {}) };
+};
+
+// ── Components ───────────────────────────────────────────────────────────────
+// A component is a named set of items kept once in the document
+// (`doc.components[cid]`), and an instance is an ordinary item that points at
+// it. An instance is NOT a new kind of thing to draw: it is resolved into
+// ordinary items before anything draws, by this one function.
+//
+// That is the whole design. A board's items are drawn in three places — the
+// editor, CanvasThumb, and renderPostArtboard for the PNG and the PDF — and all
+// three are handed a list of items. Resolving here means none of them learns a
+// new type, and there is no fourth drawer to fall out of step, which is the
+// trap that ring text and masks each fell into once already.
+//
+// Editing works on the UNRESOLVED list, where an instance is one object you can
+// move, rotate and delete.
+const CANVAS_INSTANCE_DEPTH = 8;
+const canvasExpand = (items, components) => {
+  const list = Array.isArray(items) ? items : [];
+  const defs = components || null;
+  // The common case, and it must stay free: no components in the document, or
+  // none of these items is an instance. The SAME array comes back, not a copy,
+  // so nothing downstream that compares by identity starts doing extra work.
+  if (!defs || !list.some(it => it && it.type === "instance")) return list;
+
+  // `seen` is the chain of components we are already inside, which is what
+  // stops a component that contains itself from expanding for ever. The depth
+  // cap is the second belt: a chain can be legal at every step and still be
+  // deeper than anything worth drawing.
+  const walk = (src, prefix, seen, depth) => {
+    const out = [];
+    for (const it of src) {
+      if (!it || it.type !== "instance") { out.push(prefix ? reId(it, prefix) : it); continue; }
+      const def = defs[it.componentId];
+      if (!def || seen.includes(it.componentId) || depth >= CANVAS_INSTANCE_DEPTH) continue;
+
+      // The instance's own id inside THIS expansion. An instance nested in a
+      // component is reached through its parent, so its name carries the
+      // parent's; using the raw id here pointed every level's parts at a name
+      // that exists nowhere in the list being drawn.
+      const iid = prefix + it.id;
+      const dw = Math.max(1, Number(def.w) || 1), dh = Math.max(1, Number(def.h) || 1);
+      const sx = (Number(it.w) || dw) / dw, sy = (Number(it.h) || dh) / dh;
+      const inner = walk(Array.isArray(def.items) ? def.items : [],
+        `${iid}:`, [...seen, it.componentId], depth + 1);
+
+      for (const part of inner) {
+        // Scaled out of the definition's own box and into the instance's, by
+        // the same mapping a group resize uses.
+        let o = scaleItemInBox(part, { x: 0, y: 0, w: dw, h: dh }, sx, sy, it.x || 0, it.y || 0);
+        // Only text and a picture may differ per instance. Everything else
+        // follows the definition, which is what keeps a component a component.
+        const ov = it.overrides && it.overrides[stripPrefix(part.id, iid + ":")];
+        if (ov) {
+          if (ov.text !== undefined && o.type === "text") o = { ...o, text: ov.text };
+          if (ov.src !== undefined && o.type === "image") o = { ...o, src: ov.src };
+        }
+        // Where the click goes back to, and what the instance's own opacity
+        // does to its parts. The outermost instance wins: a part already
+        // claimed by a nested one keeps pointing at the nested instance, so
+        // stepping in goes one level at a time.
+        out.push({ ...o,
+          fromInstance: o.fromInstance || iid,
+          // 0 to 1, the scale every drawer already reads, and the two multiply:
+          // a half-transparent part inside a half-transparent instance is a
+          // quarter, which is what putting one over the other actually looks like.
+          ...(it.opacity != null
+            ? { opacity: (o.opacity == null ? 1 : o.opacity) * it.opacity }
+            : {}),
+          ...(it.hidden ? { hidden: true } : {}) });
+      }
+    }
+    return out;
+  };
+
+  const made = walk(list, "", [], 0);
+  // A mask points at its shape BY ID, so the ids handed out above have to be
+  // carried through the pointer as well. Left alone, the second instance of a
+  // component would be clipped by the FIRST one's mask — the same trap that is
+  // commented in placeFigmaItems, and it is silent: both look masked.
+  const has = new Set(made.map(o => o.id));
+  return made.map(o => (o.maskId && !has.has(o.maskId) ? { ...o, maskId: undefined } : o));
+};
+// A part's id inside an instance is the instance's id and its own, so two
+// instances of one component never collide and React keeps its keys across a
+// re-render. groupId travels the same way or the parts of two instances would
+// fuse into one group.
+const reId = (it, prefix) => ({ ...it, id: prefix + it.id,
+  ...(it.groupId ? { groupId: prefix + it.groupId } : {}),
+  ...(it.maskId ? { maskId: prefix + it.maskId } : {}) });
+const stripPrefix = (id, prefix) => (String(id).startsWith(prefix) ? String(id).slice(prefix.length) : id);
+
 function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
   // A document may hold several artboards; the card shows the first. Older
   // documents are the board itself, which is why this reads either shape.
@@ -20034,7 +20190,11 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, [W]);
-  const items = Array.isArray(bd?.items) ? bd.items : [];
+  // Instances resolved here too, and not only in the editor: a card that drew
+  // the instance itself would show a blank where the component is. The
+  // definitions sit on the DOCUMENT, beside the boards, because every board in
+  // it may use them.
+  const items = canvasExpand(Array.isArray(bd?.items) ? bd.items : [], doc?.components);
   const bg = bd?.bg;
   const chequer = "conic-gradient(#DCDCE2 0 25%, #fff 0 50%, #DCDCE2 0 75%, #fff 0)";
   return (
@@ -21420,6 +21580,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // back over the real thing. boardsFromDoc has already folded the legacy shape
   // into board 0, so this one source covers both.
   const [items, setItems] = useState(() => bootRef.current[0].items);
+  // The component definitions belong to the DOCUMENT, not to a board: one
+  // component is used on several boards, and a definition parked on board 0
+  // would vanish the moment somebody deleted that board. Null while there are
+  // none, so a document that has never seen a component is saved exactly as
+  // before.
+  const [components, setComponents] = useState(() => doc?.components || null);
+  // What gets DRAWN. Identical to `items` until an instance is on the board, and
+  // then it is the same array, so this costs nothing on a document that has no
+  // components in it.
+  const drawItems = useMemo(() => canvasExpand(items, components), [items, components]);
   const [sel, setSel] = useState(null);
   const [tool, setTool] = useState("select");
   // The same state the shared toolbar drives in Brainstorm, under the same names.
@@ -21777,7 +21947,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [saveState, setSaveState] = useState("");     // "" | "saving" | "saved"
   const baselineRef = useRef(JSON.stringify({ boards: bootRef.current, stage: doc?.stage || undefined }));
   const latestRef = useRef({ boards: bootRef.current, stage: doc?.stage || undefined });
-  latestRef.current = { boards: boardsNow(), stage: stageBg || undefined };
+  latestRef.current = { boards: boardsNow(), stage: stageBg || undefined, components: components || undefined };
   const saveTimer = useRef(null);
 
   const flush = async (payload) => {
@@ -21795,7 +21965,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   useEffect(() => {
     if (!onAutoSave) return;
-    const payload = { boards: boardsNow(), stage: stageBg || undefined };
+    const payload = { boards: boardsNow(), stage: stageBg || undefined, components: components || undefined };
     if (JSON.stringify(payload) === baselineRef.current) return;
     setSaveState("saving");
     clearTimeout(saveTimer.current);
@@ -22117,7 +22287,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   };
   // Expressed for CSS in the MASKED item's own pixels, since clip-path counts
   // from the element's own corner, not the artboard's.
-  const maskClip = (it) => canvasMaskClip(it, items);
+  // Against the RESOLVED list: a masked item inside a component points at a
+  // mask that only exists once the instance has been expanded.
+  const maskClip = (it) => canvasMaskClip(it, drawItems);
 
 
   // Two ways to draw the same outline, because the shapes are drawn two ways.
@@ -23782,67 +23954,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const w = b.w * c + b.h * s2, h = b.w * s2 + b.h * c;
     return { x: b.x + (b.w - w) / 2, y: b.y + (b.h - h) / 2, w, h };
   };
-  // One member of a group, remapped into the box its group is being resized to.
-  // Affine and per axis: a point keeps its position RELATIVE to the group, so
-  // everything inside stays in the arrangement it was put in.
-  //
-  // Every geometry the editor has, because a group holds whatever was grouped:
-  // boxes carry a width and a height, strokes and paths carry lists of points,
-  // a line carries two ends. A scaler that only knew about w and h would leave
-  // the drawings behind while the rest moved.
-  const scaleItemInBox = (it, g, sx, sy, nx, ny) => {
-    const mx = (x) => nx + (x - g.x) * sx;
-    const my = (y) => ny + (y - g.y) * sy;
-    const s1 = (sx + sy) / 2;                       // for things with no axis
-    const sh = (v) => (v ? { ...v, x: (v.x || 0) * sx, y: (v.y || 0) * sy, blur: (v.blur || 0) * s1 } : v);
-    const common = {
-      strokeWidth: it.strokeWidth == null ? it.strokeWidth : it.strokeWidth * s1,
-      radius: it.radius == null ? it.radius : it.radius * s1,
-      radii: Array.isArray(it.radii) ? it.radii.map(v => v * s1) : it.radii,
-      blur: it.blur == null ? it.blur : it.blur * s1,
-      bgBlur: it.bgBlur == null ? it.bgBlur : it.bgBlur * s1,
-      shadow: sh(it.shadow), innerShadow: sh(it.innerShadow),
-    };
-    if (it.type === "arrow" || it.type === "line") {
-      return { ...it, ...common, width: (it.width || 1) * s1,
-        x1: Math.round(mx(it.x1)), y1: Math.round(my(it.y1)),
-        x2: Math.round(mx(it.x2)), y2: Math.round(my(it.y2)) };
-    }
-    if (it.type === "draw") {
-      // Points are stored behind an offset; mapping folds that offset in, so it
-      // starts again at zero rather than being scaled twice.
-      const ox = it.ox || 0, oy = it.oy || 0;
-      return { ...it, ...common, ox: 0, oy: 0, width: (it.width || 1) * s1,
-        pts: (it.pts || []).map(([x, y]) => [Math.round(mx(x + ox)), Math.round(my(y + oy))]) };
-    }
-    if (it.type === "path") {
-      const ox = it.ox || 0, oy = it.oy || 0;
-      // The offset is folded in here, so the subpaths that make the holes have
-      // to go through the very same mapping. Left as they were they would sit
-      // in the old coordinates with nothing to place them.
-      const mapNodes = (list) => (list || []).map(n => {
-        const o = { ...n, x: Math.round(mx(n.x + ox)), y: Math.round(my(n.y + oy)) };
-        if (n.h1x != null) { o.h1x = Math.round(mx(n.h1x + ox)); o.h1y = Math.round(my(n.h1y + oy)); }
-        if (n.h2x != null) { o.h2x = Math.round(mx(n.h2x + ox)); o.h2y = Math.round(my(n.h2y + oy)); }
-        return o;
-      });
-      return { ...it, ...common, ox: 0, oy: 0, width: (it.width || 0) * s1,
-        nodes: mapNodes(it.nodes),
-        ...(Array.isArray(it.subs) ? { subs: it.subs.map(sp => ({ ...sp, nodes: mapNodes(sp.nodes) })) } : {}) };
-    }
-    const b = canvasRenderBoxOf(it);
-    return { ...it, ...common,
-      x: Math.round(mx(b.x)), y: Math.round(my(b.y)),
-      w: Math.max(1, Math.round((it.w || b.w) * sx)),
-      h: it.h == null ? it.h : Math.max(1, Math.round(it.h * sy)),
-      // Text has no height of its own — its size is what makes it bigger.
-      ...(it.type === "text" ? {
-        size: Math.max(4, Math.round((it.size || 16) * s1)),
-        // A size set on part of the text scales with the rest of it.
-        ...(Array.isArray(it.runs) ? { runs: it.runs.map(r =>
-          (r.size != null ? { ...r, size: Math.max(4, Math.round(r.size * s1)) } : r)) } : {}),
-      } : {}) };
-  };
 
   // What a set of items actually SHOWS, which is not the same as where they
   // are. A masked item is only visible inside its mask, so a frame drawn round
@@ -23959,7 +24070,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
 
 
-  const exportBlob = (type = "image/png") => renderPostArtboard({ w: W, h: H, bg, items, radius: frameRadius, radii: frameRadii }, type);
+  const exportBlob = (type = "image/png") =>
+    renderPostArtboard({ w: W, h: H, bg, items, components, radius: frameRadius, radii: frameRadii }, type);
 
   // The frame at its true pixel size, handed to the browser as a file. Not a
   // screenshot of the view — the export redraws, so a 2480x3508 A4 comes out at
@@ -24057,7 +24169,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         { type: "image/png" });
       const url = await onUpload(file);
       if (!url) throw new Error("upload");
-      onDone(url, { boards: boardsNow(), stage: stageBg || undefined });
+      onDone(url, { boards: boardsNow(), stage: stageBg || undefined, components: components || undefined });
     } catch (e) {
       // A tainted canvas and a failed upload look identical to the user unless
       // they are told apart, and both end with nothing saved.
@@ -24556,7 +24668,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             {/* The drawing, and only the drawing, is cut at the canvas edge. */}
             <div style={{ position: "absolute", inset: 0, borderRadius: "inherit",
               overflow: "hidden" }}>
-            {groupShadowWrap(items.filter(it => !it.isMask && !it.hidden), (it) => {
+            {/* Drawn from the RESOLVED list: an instance is not a shape, it is
+                the parts of its component standing in its place. Everything
+                below that selects, drags or measures keeps reading `items`,
+                where an instance is one object. */}
+            {groupShadowWrap(drawItems.filter(it => !it.isMask && !it.hidden), (it) => {
               // Not while a GROUP is selected: the group's own frame says what is
               // selected, and a line around each member says the opposite.
               const on = (it.id === sel || pick.includes(it.id)) && !selGid;
@@ -24814,7 +24930,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   // against the clipped shape - but only for the element that
                   // carries it, and it was carried one layer in.
                   style={{ ...common, width: it.w, height: it.h,
-                    clipPath: canvasMaskClip(it, items) }}>
+                    clipPath: canvasMaskClip(it, drawItems) }}>
                   {/* One wrapper per placement, carrying the transform; the
                       picture and its outline sit inside so a copy is the whole
                       shape and not just its fill. inset:0 puts the transform
@@ -31045,7 +31161,11 @@ const canvasRenderApplySpin = (ctx, it) => {
     ctx.translate(-cx, -cy);
   };
 async function renderPostArtboard(board, type = "image/png") {
-  const { w: W, h: H, items = [], bg = "#FFFFFF" } = board;
+  // The third drawer, and it resolves instances like the other two. An export
+  // that skipped this would be the one place a component is missing, found by
+  // somebody downloading the file rather than by anyone looking at the screen.
+  const { w: W, h: H, bg = "#FFFFFF" } = board;
+  const items = canvasExpand(board.items || [], board.components);
   const frameCorners = () => radiiOf(board).map(v => Math.min(Math.min(W, H) / 2, v));
   const maskOf = it => it.maskId ? items.find(o => o.id === it.maskId) : null;
 
@@ -31813,7 +31933,11 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       for (const row of chosen) {
         if (!row.doc) { files.push(await fileFromAsset(row.export_url || row.thumb_url)); continue; }
         for (const board of boardsFromDoc(row.doc, [row.w, row.h], de)) {
-          const blob = await renderPostArtboard({ ...board, bg: board.bg ?? "#FFFFFF" });
+          // The definitions sit on the document, one level above the board, so
+          // they have to be handed down or an artboard adopted into the composer
+          // arrives with holes where its components are.
+          const blob = await renderPostArtboard({ ...board, bg: board.bg ?? "#FFFFFF",
+            components: row.doc?.components });
           files.push(new File([blob], `${row.name || "Artboard"}-${board.name}.png`, { type: "image/png" }));
         }
       }

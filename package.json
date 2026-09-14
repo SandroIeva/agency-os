@@ -12,7 +12,8 @@
     "check:writes": "node scripts/check-unsent-writes.cjs src/App.jsx src/DesktopView.jsx src/PublicBrandLanding.jsx src/main.jsx api/*.js server/*.js",
     "check": "npm run check:unbound && npm run check:writes && npm run check:tdz && npm run check:dupkeys",
     "check:tdz": "node scripts/check-tdz-deps.cjs src/App.jsx src/DesktopView.jsx src/PublicBrandLanding.jsx src/main.jsx src/BillingSettings.jsx src/AdminView.jsx",
-    "check:dupkeys": "node scripts/check-dup-keys.cjs src/App.jsx src/DesktopView.jsx src/PublicBrandLanding.jsx src/main.jsx src/BillingSettings.jsx src/AdminView.jsx"
+    "check:dupkeys": "node scripts/check-dup-keys.cjs src/App.jsx src/DesktopView.jsx src/PublicBrandLanding.jsx src/main.jsx src/BillingSettings.jsx src/AdminView.jsx",
+    "test:canvas": "node scripts/test-canvas-expand.mjs && node scripts/test-canvas-mask-box.mjs && node scripts/test-canvas-text-runs.mjs && node scripts/test-canvas-wrap.mjs"
   },
   "dependencies": {
     "@blocknote/core": "^0.51.4",
