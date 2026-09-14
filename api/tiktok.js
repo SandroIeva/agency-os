@@ -176,6 +176,45 @@ export default async function handler(req) {
     });
   }
 
+  // ── Which scopes does TikTok actually accept for this app? ────────────────
+  // The consent screen refused the whole request and named "scope", without
+  // saying WHICH one. Guessing costs a round trip through a human every time,
+  // so this asks TikTok directly: build the same authorize url per candidate
+  // and read what comes back. A rejected scope sends the browser to an error
+  // page instead of the login, and that is visible without signing in.
+  //
+  // Needs no secret from anybody. The client key never leaves this function.
+  if (url.searchParams.get("probe")) {
+    const sets = [
+      "user.info.basic",
+      "video.publish",
+      "video.upload",
+      "user.info.basic,video.publish",
+      "user.info.basic,video.upload",
+      "user.info.profile",
+    ];
+    const out = [];
+    for (const scope of sets) {
+      const a2 = new URL(`${AUTH_HOST}/v2/auth/authorize/`);
+      a2.searchParams.set("client_key", clientKey);
+      a2.searchParams.set("redirect_uri", redirectUri);
+      a2.searchParams.set("response_type", "code");
+      a2.searchParams.set("scope", scope);
+      a2.searchParams.set("state", "probe");
+      try {
+        const r = await fetch(a2.toString(), { redirect: "manual" });
+        const loc = r.headers.get("location") || "";
+        // An accepted request goes to the login or consent page. A refused one
+        // lands on an error page, and TikTok puts the reason in the url.
+        const refused = /error/i.test(loc) || /errCode|error_code/i.test(loc);
+        out.push({ scope, status: r.status, refused, location: loc.slice(0, 160) });
+      } catch (e) {
+        out.push({ scope, error: String(e).slice(0, 120) });
+      }
+    }
+    return json({ probe: out, commit });
+  }
+
   // ── Send somebody to TikTok's consent screen ──────────────────────────────
   // state is the same one-time token Telegram, Slack, Pinterest, Figma,
   // Instagram and Threads use, minted by create_messenger_link_token for the
