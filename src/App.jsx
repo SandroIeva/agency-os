@@ -20094,6 +20094,23 @@ const scaleItemInBox = (it, g, sx, sy, nx, ny) => {
 // Editing works on the UNRESOLVED list, where an instance is one object you can
 // move, rotate and delete.
 const CANVAS_INSTANCE_DEPTH = 8;
+// An instance is selected in teal, not in the blue every other object uses, so
+// one glance says this is a component and not a rectangle that happens to look
+// like one. Figma says the same thing in purple; purple is out here by house
+// rule, and teal is the nearest colour that still reads as "a different kind of
+// thing" rather than as a warning, which orange and red would.
+//
+// Measured rather than picked by eye. Against the blue it is 101 apart in Lab,
+// where anything over 10 already reads as a different colour. It carries white
+// text at 5.0:1, which the size badge under a selection and the Edit button
+// both need, and it holds 4.5:1 on the light stage and 3.8:1 on the dark one.
+// A lighter tone was tried first and left white text at 3.4:1, under the 4.5
+// small text wants.
+const CANVAS_COMPONENT_ACCENT = "#0B7D72";
+// The same colour cannot also be TEXT on a dark panel: there it falls to
+// 3.4:1. This one is 8.1:1 on the panel's own dark, and is used for nothing but
+// type.
+const CANVAS_COMPONENT_ACCENT_DARK = "#39C8B6";
 const canvasExpand = (items, components) => {
   const list = Array.isArray(items) ? items : [];
   const defs = components || null;
@@ -21618,6 +21635,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // miss one. Switching boards already does this dance; this is the same one.
   //   { cid, instanceId, parked: <the board's items>, cam: <where to fly back to> }
   const [focus, setFocus] = useState(null);
+  // The component whose name field should take the cursor: set the moment one
+  // is made, cleared as soon as the name is committed.
+  const [namingComp, setNamingComp] = useState(null);
   // What gets DRAWN. Identical to `items` until an instance is on the board, and
   // then it is the same array, so this costs nothing on a document that has no
   // components in it.
@@ -22289,7 +22309,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   // A name somebody typed wins; otherwise something readable from the item.
   const layerName = (it) => it.name || (
-    it.isMask ? (de ? "Maske" : "Mask")
+    // A component is known by its own name, not by the word "instance", which
+    // is a word about the model and not about the thing on the board.
+    it.type === "instance"
+      ? ((components || {})[it.componentId]?.name || (de ? "Komponente" : "Component"))
+    : it.isMask ? (de ? "Maske" : "Mask")
     : it.type === "text" || it.type === "sticky" || it.type === "comment"
       ? (String(it.text || "").split("\n")[0].slice(0, 22) || it.type)
     : it.type === "path" ? (de ? "Pfad" : "Path")
@@ -23630,16 +23654,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // of a selection and covered it completely. Beside the box nothing else sits
   // — the resize handle is ON the edge, the rotate zones are at the corners,
   // the size badge is below.
-  const orbitGrip = (it, k) => (
+  const orbitGrip = (it, k, ac = "#2F6BFF") => (
     <div key="orbit" onPointerDown={e2 => onOrbitDown(e2, it)}
       title={de ? "3D drehen — in alle Richtungen ziehen" : "Orbit in 3D — drag any direction"}
       style={{ position: "absolute", left: "100%", marginLeft: 15 * k, top: "50%",
         transform: "translateY(-50%)", width: 19 * k, height: 19 * k, borderRadius: "50%",
-        background: "#fff", border: `${1.6 * k}px solid #2F6BFF`, cursor: "all-scroll",
+        background: "#fff", border: `${1.6 * k}px solid ${ac}`, cursor: "all-scroll",
         boxShadow: `0 ${1 * k}px ${3 * k}px rgba(0,0,0,0.18)`,
         display: "flex", alignItems: "center", justifyContent: "center", zIndex: 4,
         pointerEvents: "auto" }}>
-      <svg width={11 * k} height={11 * k} viewBox="0 0 24 24" fill="none" stroke="#2F6BFF"
+      <svg width={11 * k} height={11 * k} viewBox="0 0 24 24" fill="none" stroke={ac}
         strokeWidth="2.6">
         <circle cx="12" cy="12" r="8.5" />
         <ellipse cx="12" cy="12" rx="8.5" ry="3.4" />
@@ -23654,6 +23678,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // it must not be, or a shape pulled past the edge can no longer be grabbed.
   const selectionChrome = (it) => {
                       const k = 1 / cam.s, hs = 9 * k, rs = 15 * k, bw = 1.6 * k;
+                      // Teal for a component, blue for everything else. The
+                      // frame is the only thing on screen that can say which
+                      // kind of object is selected.
+                      const ac = it.type === "instance" ? CANVAS_COMPONENT_ACCENT : "#2F6BFF";
                       const bh = it.h || canvasTextH(it);
                       // Text used to have only the two side grips. Corners
                       // scale it the way a type tool does, so both are drawn and
@@ -23662,16 +23690,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       return (
                         <>
                           <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
-                            outline: `${bw}px solid #2F6BFF`, outlineOffset: 0 }} />
+                            outline: `${bw}px solid ${ac}`, outlineOffset: 0 }} />
                           {HANDLES.filter(([hd]) => !edgeOnly || hd === "e" || hd === "w").map(([hd, fx, fy]) => (
                             <div key={hd} onPointerDown={e2 => onHandleDown(e2, it, hd)}
                               style={{ position: "absolute", left: `calc(${fx * 100}% - ${hs / 2}px)`,
                                 top: `calc(${fy * 100}% - ${hs / 2}px)`, width: hs, height: hs,
                                 borderRadius: 1.5 * k, background: "#fff",
-                                border: `${bw}px solid #2F6BFF`, cursor: CURSORS[hd], zIndex: 2,
+                                border: `${bw}px solid ${ac}`, cursor: CURSORS[hd], zIndex: 2,
                                 pointerEvents: "auto" }} />
                           ))}
-                          {orbitGrip(it, k)}
+                          {orbitGrip(it, k, ac)}
                           {!edgeOnly && [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => (
                             <div key={"r" + hd} onPointerDown={e2 => onRotateDown(e2, it)}
                               title={de ? "Drehen" : "Rotate"}
@@ -23701,7 +23729,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                                     top: fy ? undefined : off, bottom: fy ? off : undefined,
                                     transform: `translate(${fx ? 50 : -50}%, ${fy ? 50 : -50}%)`,
                                     width: 8 * k, height: 8 * k, borderRadius: "50%",
-                                    background: "#fff", border: `${1.6 * k}px solid #2F6BFF`,
+                                    background: "#fff", border: `${1.6 * k}px solid ${ac}`,
                                     cursor: "nwse-resize", zIndex: 3, pointerEvents: "auto" }} />
                               );
                             });
@@ -23710,7 +23738,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                               to leave room for it. */}
                           <div style={{ position: "absolute", left: "50%", top: `calc(100% + ${9 * k}px)`,
                             transform: "translateX(-50%)", padding: `${3 * k}px ${7 * k}px`,
-                            borderRadius: 4 * k, background: "#2F6BFF", color: "#fff",
+                            borderRadius: 4 * k, background: ac, color: "#fff",
                             fontFamily: FONT, fontSize: 11 * k, fontWeight: 600, whiteSpace: "nowrap",
                             pointerEvents: "none" }}>
                             {Math.round(it.w)} × {Math.round(bh)}
@@ -23811,6 +23839,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       return [...rest.slice(0, at), inst, ...rest.slice(at)];
     });
     setPick([]); setEnteredGroup(null); setSel(inst.id);
+    // Straight into the name field in the panel. "Komponente 3" is a placeholder,
+    // and a placeholder nobody is asked about is the name it keeps.
+    setNamingComp(cid);
   };
 
   // Fitting a box on the stage. Unlike fitCam this one MAGNIFIES: a component
@@ -23829,6 +23860,30 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setFlying(true);
     setCam(target);
     setTimeout(() => setFlying(false), 640);
+  };
+  // How many places use it, across EVERY board and inside other definitions.
+  // A component belongs to the document, so "used once" counted on the board in
+  // front of you is the wrong number to show somebody a moment before they
+  // change it. Read off docNow so the answer includes the edits made since the
+  // component was opened.
+  const instanceCount = (cid) => {
+    const d = docNow();
+    let n = 0;
+    const walk = (list) => (list || []).forEach(i => {
+      if (i && i.type === "instance" && i.componentId === cid) n += 1;
+    });
+    (d.boards || []).forEach(b => walk(b.items));
+    Object.values(d.components || {}).forEach(x => walk(x.items));
+    return n;
+  };
+  // Renaming reaches every instance at once, because they all read the one
+  // definition. That is the point of a name: it is the component's, not this
+  // copy's.
+  const renameComponent = (cid, name) => {
+    const v = String(name || "").trim();
+    if (!cid || !v || !(components || {})[cid] || components[cid].name === v) return;
+    markChange();
+    setComponents(c => ({ ...(c || {}), [cid]: { ...(c || {})[cid], name: v } }));
   };
   const enterComponent = (inst) => {
     const def = (components || {})[inst.componentId];
@@ -26578,7 +26633,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         borderBottom: `1.5px solid ${theme.borderFaint}` }} />
                   ) : (
                     <span onDoubleClick={(e) => { e.stopPropagation(); setRenameId(it.id); }}
-                      style={{ flex: 1, minWidth: 0, fontFamily: FONT, fontSize: 12, color: theme.text,
+                      style={{ flex: 1, minWidth: 0, fontFamily: FONT, fontSize: 12,
+                        // A component reads teal in the list too, the same colour
+                        // its frame takes on the board, so the list and the canvas
+                        // say the same thing about the same object.
+                        color: it.type === "instance"
+                          ? (darkMode ? CANVAS_COMPONENT_ACCENT_DARK : CANVAS_COMPONENT_ACCENT)
+                          : theme.text,
+                        fontWeight: it.type === "instance" ? 600 : 400,
                         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                         opacity: it.hidden ? 0.4 : 1 }}>
                       {m ? `↳ ${layerName(it)}` : layerName(it)}
@@ -27037,6 +27099,71 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
           return (
           <>
+            {/* First in the panel, because it is the thing that changes what
+                everything below it means. Without it the panel looked exactly
+                like a rectangle's and there was nothing on screen saying a
+                component had been made at all. */}
+            {selItem.type === "instance" && (() => {
+              const cid = selItem.componentId;
+              const def = (components || {})[cid];
+              return (<>
+                <div style={{ display: "flex", alignItems: "center", gap: 7,
+                  margin: "4px 0 2px", fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.6,
+                  textTransform: "uppercase", fontWeight: 600,
+                  color: darkMode ? CANVAS_COMPONENT_ACCENT_DARK : CANVAS_COMPONENT_ACCENT }}>
+                  {/* Four parts around a centre: the drawn mark this app uses
+                      for a component, in the same line weight as every other
+                      icon here. */}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2.5l4 4-4 4-4-4z" /><path d="M12 13.5l4 4-4 4-4-4z" />
+                    <path d="M17.5 8l4 4-4 4-4-4z" /><path d="M6.5 8l4 4-4 4-4-4z" />
+                  </svg>
+                  {de ? "Komponente" : "Component"}
+                </div>
+                <input
+                  // Focused only right after one is made. Later it is an
+                  // ordinary field, so clicking an instance does not steal the
+                  // cursor from whatever somebody was typing.
+                  autoFocus={namingComp === cid}
+                  key={cid + (namingComp === cid ? "-new" : "")}
+                  defaultValue={def?.name || ""}
+                  placeholder={de ? "Name der Komponente" : "Component name"}
+                  onFocus={(e) => { if (namingComp === cid) e.target.select(); }}
+                  onBlur={(e) => { renameComponent(cid, e.target.value); setNamingComp(null); }}
+                  onKeyDown={(e) => {
+                    if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
+                    if (e.key === "Enter") e.currentTarget.blur();
+                    // Escape puts the name it had back, then leaves the field.
+                    if (e.key === "Escape") { e.currentTarget.value = def?.name || ""; e.currentTarget.blur(); }
+                  }}
+                  style={{ width: "100%", boxSizing: "border-box", marginTop: 8,
+                    padding: "8px 10px", borderRadius: 9, border: `1px solid ${line}`,
+                    background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
+                    color: theme.text, fontFamily: FONT, fontSize: 12.5, outline: "none" }} />
+                <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 7 }}>
+                  {de
+                    ? `Wird an ${instanceCount(cid)} Stelle${instanceCount(cid) === 1 ? "" : "n"} verwendet · ${def?.w || 0} × ${def?.h || 0}`
+                    : `Used in ${instanceCount(cid)} place${instanceCount(cid) === 1 ? "" : "s"} · ${def?.w || 0} × ${def?.h || 0}`}
+                </div>
+                <div style={{ display: "flex", gap: 6, marginTop: 9 }}>
+                  <div onClick={() => enterComponent(selItem)}
+                    style={{ flex: 1, textAlign: "center", padding: "8px 10px", borderRadius: 9,
+                      cursor: "pointer", fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
+                      background: CANVAS_COMPONENT_ACCENT, color: "#fff" }}>
+                    {de ? "Bearbeiten" : "Edit"}
+                  </div>
+                  <div onClick={() => detachInstance(selItem.id)}
+                    title={de ? "Die Instanz wird zu ihren Einzelteilen"
+                             : "The instance becomes its separate parts"}
+                    style={{ flex: 1, textAlign: "center", padding: "8px 10px", borderRadius: 9,
+                      cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
+                      border: `1px solid ${line}`, color: theme.textDim }}>
+                    {de ? "Lösen" : "Detach"}
+                  </div>
+                </div>
+              </>);
+            })()}
             {/* Aligning is always against the FRAME here. On an unbounded board
                 there is nothing to align to; on a fixed banner the frame is the
                 only thing worth aligning to, and it is what people reach for. */}
