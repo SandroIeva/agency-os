@@ -124,7 +124,11 @@ export default async function handler(req) {
   const clientKey = process.env.TIKTOK_CLIENT_KEY;
   const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
   const supaUrl = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Both names, because the variable actually set in Vercel is the second one
+  // and every other function here already reads the pair. Only this file knew
+  // the first name, so it reported itself unconfigured while Instagram and
+  // Threads ran on the very same key.
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
   const appUrl = (process.env.PUBLIC_APP_URL || "https://app.i7os.com").replace(/\/$/, "");
   const redirectUri = `${appUrl}/tiktok/callback`;
 
@@ -133,7 +137,7 @@ export default async function handler(req) {
     !clientKey && "TIKTOK_CLIENT_KEY",
     !clientSecret && "TIKTOK_CLIENT_SECRET",
     !supaUrl && "SUPABASE_URL",
-    !serviceKey && "SUPABASE_SERVICE_ROLE_KEY",
+    !serviceKey && "SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SECRET_KEY",
   ].filter(Boolean);
   const commit = (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || null;
   if (missing.length) {
