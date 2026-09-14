@@ -52,13 +52,22 @@ const API = "https://open.tiktokapis.com/v2";
 // follow. video.publish is the direct post; video.upload would only reach the
 // creator's drafts, which is not what a composer means by "post".
 //
-// user.info.profile is deliberately NOT here. It is what carries the @handle,
-// and basic already carries the display name, the avatar and the ids, which is
-// enough to tell one connected account from another. A scope that is not
-// switched on for the app makes the consent screen refuse the whole request,
-// so asking for one nobody confirmed is a broken Connect button in exchange
-// for a nicer label. It can be added the day the handle is worth it.
-const SCOPES = ["user.info.basic", "video.publish"].join(",");
+// Just the one for now, and that is a diagnosis rather than a decision.
+//
+// TikTok refused the whole consent screen naming "scope" and nothing else. The
+// probe below established that it does not validate scopes BEFORE the login,
+// so the refusal happens afterwards, against what this particular app has
+// actually been granted. That leaves exactly one way to tell a granted scope
+// from an ungranted one: ask for the smallest set that is certainly there and
+// see whether the connection completes.
+//
+// user.info.basic is the one the owner confirmed comes with Login Kit. If this
+// connects, the whole pipe works and the refusal is specifically about
+// publishing. If it still refuses, the problem is not the scope list at all.
+//
+// A token keeps the scopes it was issued with, so widening this later means
+// reconnecting once. That is cheap. Guessing in the dark is not.
+const SCOPES = ["user.info.basic"].join(",");
 
 // A token good for another hour is good enough for the call about to be made.
 // Below that it is renewed, because a request that starts valid and expires
@@ -177,13 +186,15 @@ export default async function handler(req) {
   }
 
   // ── Which scopes does TikTok actually accept for this app? ────────────────
-  // The consent screen refused the whole request and named "scope", without
-  // saying WHICH one. Guessing costs a round trip through a human every time,
-  // so this asks TikTok directly: build the same authorize url per candidate
-  // and read what comes back. A rejected scope sends the browser to an error
-  // page instead of the login, and that is visible without signing in.
+  // ⚠ This CANNOT answer that, and the answer is worth keeping so nobody
+  // builds it again: TikTok sends every authorize request to the login page
+  // first, whatever the scope, and only checks the scope against the app's
+  // grants after somebody has signed in. All six candidates below came back
+  // with the same 302 to /login.
   //
-  // Needs no secret from anybody. The client key never leaves this function.
+  // Kept because it still proves the request is well formed and the client key
+  // is accepted, which is worth one call when a connection fails. It needs no
+  // secret from anybody: the client key never leaves this function.
   if (url.searchParams.get("probe")) {
     const sets = [
       "user.info.basic",
