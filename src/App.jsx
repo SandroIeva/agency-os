@@ -31146,18 +31146,33 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   // and the Meta numbers, and the API calls Meta wants to see before an app
   // review, never happened at all.
   const [direct, setDirect] = useState(null);       // null = still asking
+  // ⚠ This must ALWAYS settle to an object. The view treats `direct === null`
+  // as "still asking" and shows nothing but "Lädt …" while it is, so a path
+  // that leaves it null leaves the whole of Analytics on a loading line for
+  // ever. Not a hypothetical: without a workspace or a session there is nobody
+  // to ask, and the early return used to park it at null.
+  const NOTHING_DIRECT = { ig: null, th: null, tt: null };
   useEffect(() => {
-    if (!orgId || !session?.access_token) { setDirect(null); return; }
+    if (!orgId || !session?.access_token) { setDirect(NOTHING_DIRECT); return; }
     let on = true;
-    const ask = (path) => fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ mode: "status", orgId }),
-    }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+    // And a request that never answers must not hold the page either. Ten
+    // seconds, then treat it as "nothing connected" rather than as "still
+    // loading": the rest of the dashboard does not depend on this answer.
+    const ask = (path) => Promise.race([
+      fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ mode: "status", orgId }),
+      }).then(r => (r.ok ? r.json() : null)).catch(() => null),
+      new Promise(res => setTimeout(() => res(null), 10000)),
+    ]);
     (async () => {
-      const [ig, th, tt] = await Promise.all([
-        ask("/api/instagram"), ask("/api/threads"), ask("/api/tiktok"),
-      ]);
+      let ig = null, th = null, tt = null;
+      try {
+        [ig, th, tt] = await Promise.all([
+          ask("/api/instagram"), ask("/api/threads"), ask("/api/tiktok"),
+        ]);
+      } catch (_) { /* answered as nothing, below */ }
       if (!on) return;
       setDirect({
         ig: ig?.enabled ? (ig.accounts || [])[0] || null : null,
