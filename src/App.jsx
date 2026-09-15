@@ -31002,21 +31002,25 @@ function InstagramDirectPanel({ theme, darkMode, de, card, secLabel, ig = null, 
         <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginBottom: 14 }}>
           {tt.account?.displayName || "TikTok"}
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-          {tile(de ? "Follower" : "Followers", num(tt.account?.followers))}
-          {tile(de ? "Beiträge" : "Posts", num(tt.account?.posts))}
-          {tile(de ? "Likes gesamt" : "Likes total", num(tt.account?.likes))}
-          {tile(de ? "Aufrufe, letzte Beiträge" : "Views, recent posts",
-            num((tt.posts || []).length ? (tt.posts || []).reduce((n, p) => n + (p.views || 0), 0) : null))}
-        </div>
-        {/* Said rather than left as four dashes. A tile showing nothing because
-            TikTok has not approved the app looks exactly like a tile showing
-            nothing because the account is new. */}
-        {tt.limited && (
-          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 12, lineHeight: 1.5 }}>
+        {/* The tiles are drawn only when there are numbers to put in them.
+            Four dashes under a sentence explaining them still reads as a
+            failure: the owner asked three times in a row why no data was
+            arriving, with that exact explanation already on screen under the
+            dashes. An empty frame argues with its own caption, so while TikTok
+            withholds the figures there is no frame. */}
+        {tt.limited ? (
+          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
             {de
-              ? "Die Zahlen kommen erst, wenn TikTok die App freigegeben hat. Die Verbindung selbst steht."
-              : "The numbers arrive once TikTok has approved the app. The connection itself is fine."}
+              ? "Follower, Beiträge und Aufrufe gibt TikTok erst heraus, wenn die App freigegeben ist. Die Verbindung steht, Posten und Zahlen kommen mit der Freigabe."
+              : "TikTok only releases followers, posts and views once the app is approved. The connection is fine; posting and the numbers arrive with the approval."}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+            {tile(de ? "Follower" : "Followers", num(tt.account?.followers))}
+            {tile(de ? "Beiträge" : "Posts", num(tt.account?.posts))}
+            {tile(de ? "Likes gesamt" : "Likes total", num(tt.account?.likes))}
+            {tile(de ? "Aufrufe, letzte Beiträge" : "Views, recent posts",
+              num((tt.posts || []).length ? (tt.posts || []).reduce((n, p) => n + (p.views || 0), 0) : null))}
           </div>
         )}
       </>)}
