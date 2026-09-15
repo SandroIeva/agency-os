@@ -12,7 +12,7 @@ const from = src.indexOf('const scaleItemInBox = (it, g, sx, sy, nx, ny) => {');
 const to = src.indexOf('function CanvasThumb(');
 assert.ok(from > 0, 'scaleItemInBox not found');
 assert.ok(to > from, 'CanvasThumb not found after it');
-const block = src.slice(from, to);
+const block = src.slice(from, to) + src.slice(src.indexOf('const REPEAT_MAX ='), src.indexOf('const repeatCss ='));
 assert.ok(block.includes('const canvasExpand'), 'canvasExpand is not in the slice');
 
 // The three things the block reaches for that live elsewhere in App.jsx. A box
@@ -231,4 +231,23 @@ console.log('Passed: an instance resolves into ordinary items, once, for all thr
   const [unchanged] = canvasExpand([{ ...instance, rot: 0 }], components);
   near(unchanged.x, 210); near(unchanged.y, 320); near(unchanged.rot, 15);
   console.log('Passed: component rotation moves contents around its centre, including paths and handles.');
+}
+
+// Repeating a component repeats its complete contents about one shared pivot.
+{
+  const defs = { c: { w: 100, h: 100, items: [box('left', {x:10,y:20,w:20,h:10}), box('right', {x:60,y:20,w:20,h:10})] } };
+  const inst = {id:'repeat',type:'instance',componentId:'c',x:0,y:0,w:100,h:100,
+    repeat:{mode:'linear',count:3,dx:150,dy:0}};
+  const row = canvasExpand([inst],defs);
+  assert.equal(row.length,6);
+  assert.deepEqual(row.map(it=>it.x),[10,60,160,210,310,360]);
+  assert.equal(new Set(row.map(it=>it.id)).size,6);
+  assert.ok(row.every(it=>it.fromInstance==='repeat'));
+  const radial=canvasExpand([{...inst,repeat:{mode:'radial',count:2,radius:100,spread:180,follow:true}}],defs);
+  assert.equal(radial.length,4);
+  assert.ok(Math.abs(radial[2].x-70)<1e-8);
+  assert.ok(Math.abs(radial[2].y-270)<1e-8);
+  assert.equal(radial[2].rot,180);
+  assert.ok(src.includes('["color", "stroke", "bg", "bgStroke"].includes(barPop)'), 'colour popup only accepts colour controls');
+  console.log('Passed: row and radial repeats preserve complete component contents.');
 }

@@ -7389,6 +7389,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
 
   const vertical = orientation === "vertical";
   const sw = 1.8;
+  const toolColor = darkMode ? "#B8B8C2" : theme.textDim;
   const skip = (k) => hide.includes(k);
 
   const toolBtn = (id, title, icon) => {
@@ -7397,7 +7398,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
       <motion.div key={id} whileTap={{ scale: 0.9 }}
         onClick={() => { closeFlyouts(null); setTool(id); setEditing?.(null); }} title={title}
         style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-          background: on ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: on ? (darkMode ? "#202023" : "#fff") : theme.textDim, transition: "background 0.15s ease" }}>
+          background: on ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: on ? (darkMode ? "#202023" : "#fff") : toolColor, transition: "background 0.15s ease" }}>
         {icon}
       </motion.div>
     );
@@ -7452,7 +7453,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
   // thing the eye catches.
   const chev = vertical ? (
     <svg width="7" height="7" viewBox="0 0 24 24" fill="currentColor"
-      style={{ position: "absolute", right: 3, bottom: 3, opacity: 0.55 }}>
+      style={{ position: "absolute", right: 3, bottom: 3, opacity: darkMode ? 0.8 : 0.55 }}>
       <path d="M24 24H8L24 8z" />
     </svg>
   ) : (
@@ -7500,7 +7501,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
         <motion.div whileTap={{ scale: 0.9 }}
           onClick={() => { closeFlyouts("shapes"); setShapesOpen(o => !o); }} title={de ? "Formen" : "Shapes"}
           style={{ ...dropBtn, background: shapes.includes(tool) ? (darkMode ? "#EEEEF0" : "#202023") : "transparent",
-            color: shapes.includes(tool) ? (darkMode ? "#202023" : "#fff") : theme.textDim }}>
+            color: shapes.includes(tool) ? (darkMode ? "#202023" : "#fff") : toolColor }}>
           {shapeIcon(lastShape)}{chev}
         </motion.div>
         <AnimatePresence>
@@ -7521,7 +7522,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
                     onClick={() => { setTool(st); setLastShape(st); setShapesOpen(false); setEditing?.(null); }}
                     title={st === "rect" ? (de ? "Rechteck" : "Rectangle") : st === "ellipse" ? (de ? "Kreis" : "Circle") : st === "diamond" ? (de ? "Raute" : "Diamond") : st === "star" ? (de ? "Stern" : "Star") : (de ? "Dreieck" : "Triangle")}
                     style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-                      background: tool === st ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: tool === st ? (darkMode ? "#202023" : "#fff") : theme.textDim }}>
+                      background: tool === st ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: tool === st ? (darkMode ? "#202023" : "#fff") : toolColor }}>
                     {shapeIcon(st)}
                   </motion.div>
                 ))}
@@ -7535,7 +7536,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
       <div style={{ position: "relative" }}>
         <motion.div whileTap={{ scale: 0.9 }}
           onClick={() => { closeFlyouts("line"); setLineToolOpen(o => !o); }} title={de ? "Pfeil / Linie / Freihand" : "Arrow / line / free-hand"}
-          style={{ ...dropBtn, background: lineActive ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: lineActive ? (darkMode ? "#202023" : "#fff") : theme.textDim }}>
+          style={{ ...dropBtn, background: lineActive ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: lineActive ? (darkMode ? "#202023" : "#fff") : toolColor }}>
           {lineIcon(lastLineTool)}{chev}
         </motion.div>
         <AnimatePresence>
@@ -7554,7 +7555,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
                     onClick={() => { setTool(k); setLastLineTool(k); setLineToolOpen(false); setEditing?.(null); }}
                     title={lineTitle(k)}
                     style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-                      background: tool === k ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: tool === k ? (darkMode ? "#202023" : "#fff") : theme.textDim }}>
+                      background: tool === k ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: tool === k ? (darkMode ? "#202023" : "#fff") : toolColor }}>
                     {lineIcon(k)}
                   </motion.div>
                 ))}
@@ -7576,7 +7577,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
         <div style={{ position: "relative" }}>
           <motion.div ref={mediaBtnRef} whileTap={{ scale: 0.9 }}
             onClick={() => { closeFlyouts("media"); setMediaOpen(o => !o); }} title={de ? "Emoji / Sticker" : "Emoji / sticker"}
-            style={{ ...dropBtn, background: mediaOpen ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: mediaOpen ? (darkMode ? "#202023" : "#fff") : theme.textDim }}>
+            style={{ ...dropBtn, background: mediaOpen ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: mediaOpen ? (darkMode ? "#202023" : "#fff") : toolColor }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><line x1="9" y1="9.5" x2="9.01" y2="9.5"/><line x1="15" y1="9.5" x2="15.01" y2="9.5"/></svg>
             {chev}
           </motion.div>
@@ -7586,7 +7587,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
       <motion.div ref={imgBtnRef} whileTap={{ scale: 0.9 }}
         onClick={() => { closeFlyouts("img"); setImgMenuOpen(o => !o); }} title={de ? "Bild einfügen" : "Insert image"}
         style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-          background: imgMenuOpen ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: imgMenuOpen ? (darkMode ? "#202023" : "#fff") : theme.textDim, transition: "background 0.15s ease" }}>
+          background: imgMenuOpen ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: imgMenuOpen ? (darkMode ? "#202023" : "#fff") : toolColor, transition: "background 0.15s ease" }}>
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
       </motion.div>
       {fileRef && (
@@ -20105,6 +20106,22 @@ const canvasExpand = (items, components) => {
       if (!it || it.type !== "instance") { out.push(prefix ? reId(it, prefix) : it); continue; }
       const def = defs[it.componentId];
       if (!def || seen.includes(it.componentId) || depth >= CANVAS_INSTANCE_DEPTH) continue;
+      if (it.repeat) {
+        const w = Number(it.w) || def.w || 1, h = Number(it.h) || def.h || 1;
+        const angle = (it.rot || 0) * Math.PI / 180;
+        const copies = repeatPlacements(it.repeat).filter(pl => pl.s > 0).map((pl, index) => {
+          const dx = pl.x * Math.cos(angle) - pl.y * Math.sin(angle);
+          const dy = pl.x * Math.sin(angle) + pl.y * Math.cos(angle);
+          return { ...it, id: index ? `${it.id}:repeat${index}` : it.id, repeat: undefined,
+            x: (it.x || 0) + dx + w * (1 - pl.s) / 2,
+            y: (it.y || 0) + dy + h * (1 - pl.s) / 2,
+            w: w * pl.s, h: h * pl.s, rot: (it.rot || 0) + pl.rot };
+        });
+        // Expand whole copies so all parts share the component's repeat pivot.
+        // Keep each copy's mask IDs distinct, while clicks select the source instance.
+        out.push(...walk(copies, prefix, seen, depth).map(o => ({ ...o, fromInstance: prefix + it.id })));
+        continue;
+      }
 
       // The instance's own id inside THIS expansion. An instance nested in a
       // component is reached through its parent, so its name carries the
@@ -20516,7 +20533,7 @@ const REPEAT_MODES = [
 // Shapes and images. A line, a pen stroke or a text box is drawn from something
 // other than a box, and repeating those means answering a different question
 // for each — not worth guessing at before anyone asks.
-const REPEATABLE = ["rect", "ellipse", "triangle", "diamond", "star", "image"];
+const REPEATABLE = ["rect", "ellipse", "triangle", "diamond", "star", "image", "instance"];
 const canRepeat = (it) => !!it && REPEATABLE.includes(it.type);
 const isRepeating = (it) => !!it?.repeat && (it.repeat.count || 0) > 1;
 const defaultRepeat = (mode, it) => mode === "radial"
@@ -22747,6 +22764,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         return;
       }
       if (editing) return;
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing && (e.key === "+" || e.key === "-")) {
+        e.preventDefault();
+        zoomStep(e.key === "+" ? 1 : -1);
+        return;
+      }
+
       // Escape peels one layer at a time: the selection, then the component you
       // are standing in, and only then the editor. Closing the whole thing from
       // inside a component would be two steps in one.
@@ -22818,7 +22841,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const k = s2 / c.s;
     return { s: s2, x: cx - (cx - c.x) * k, y: cy - (cy - c.y) * k };
   });
-  const zoomStep = (dir) => setCam(c => (c ? (zoomTo(Math.min(8, Math.max(0.02, c.s * (dir > 0 ? 1.2 : 1 / 1.2)))), c) : c));
+  const zoomStep = (dir) => setCam(c => {
+    if (!c) return c;
+    const s = Math.min(8, Math.max(0.02, c.s * (dir > 0 ? 1.2 : 1 / 1.2)));
+    const cx = (window.innerWidth - (PANEL_W + 16) + RAIL_W) / 2, cy = window.innerHeight / 2;
+    const k = s / c.s;
+    return { s, x: cx - (cx - c.x) * k, y: cy - (cy - c.y) * k };
+  });
   const zoomToSel = () => {
     const it = items.find(i => i.id === sel);
     if (!it) return;
@@ -24702,7 +24731,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
             <select value={value} onChange={e => onChange(e.target.value)}
               style={{ width: "100%", border: "none", outline: "none", background: "transparent",
-                color: theme.text, fontFamily: FONT, fontSize: 12.5, appearance: "none", cursor: "pointer" }}>
+                color: theme.text, fontFamily: FONT, fontSize: 12.5, appearance: "none", cursor: "pointer", paddingRight: 18 }}>
               {/* An entry is either [value, label] or [section, [entries]] — which
                   is all a native optgroup needs, and beats hand-building a menu
                   for the sake of a few headings. Two presets can share a size
@@ -24714,9 +24743,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   </optgroup>
                 : <option key={v + oi} value={v}>{l}</option>)}
             </select>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme.textFaint}
-              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-              <path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/></svg>
+            <svg width="10" height="10" viewBox="0 0 12 12" fill={darkMode ? "#B8B8C5" : "#595969"}
+              aria-hidden="true" style={{ position: "absolute", right: 12, pointerEvents: "none" }}>
+              <path d="M1.7 3.5h8.6q.8 0 .3.7L6.5 9.3q-.5.6-1 0L1.4 4.2q-.5-.7.3-.7Z" />
+            </svg>
           </div>
         );
         const segment = (value, options, onChange) => (
@@ -24901,7 +24931,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         {cam && !focus && boards.map((b, i) => (i === active ? null : (
           <div key={b.id} onPointerDown={(e) => { e.stopPropagation(); switchBoard(i); }}
             style={{ position: "absolute", left: 0, top: 0, width: b.w, height: b.h,
-              transformOrigin: "0 0", cursor: "pointer",
+              transformOrigin: "0 0", cursor: "default",
               transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.s}) translate(${b.x || 0}px, ${b.y || 0}px)`,
               transition: flying ? "transform 620ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
               // Each board carries its own answer, so a row of them need not agree.
@@ -25976,7 +26006,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 })}
               </div>
             )}
-            {barPop && barPop !== "size" && (() => {
+            {["color", "stroke", "bg", "bgStroke"].includes(barPop) && (() => {
               // One grid, whichever swatch opened it. A highlight and its
               // outline can also be taken off again, which a text colour
               // cannot: text with no colour is text nobody can read.
@@ -26359,8 +26389,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             </div>
           );
         })()}
+        {/* History is temporarily hidden; stored versions remain available. */}
         {canvasRow?.id && (
-          <div style={{ position: "relative", marginRight: 4 }}>
+          <div style={{ display: "none", position: "relative", marginRight: 4 }}>
             <motion.div whileTap={{ scale: 0.96 }} onClick={() => setHistOpen(o => !o)}
               title={de ? "Frühere Fassungen" : "Earlier versions"}
               style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 13px",
@@ -27393,16 +27424,23 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               </div>
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 6 }}>
-              {[["flipX", <><path d="m1 12 9-7v14zm22 0-9-7v14z" fill="currentColor" stroke="none"/></>, de ? "Horizontal spiegeln" : "Flip horizontal"],
-                ["flipY", <><path d="m12 1-7 9h14zm0 22-7-9h14z" fill="currentColor" stroke="none"/></>, de ? "Vertikal spiegeln" : "Flip vertical"],
-              ].map(([k, glyph, title]) => (
+              {[["flipX", de ? "Horizontal spiegeln" : "Flip horizontal"],
+                ["flipY", de ? "Vertikal spiegeln" : "Flip vertical"],
+              ].map(([k, title]) => (
                 <div key={k} title={title} onClick={() => set2({ [k]: !selItem[k] })}
                   style={{ flex: 1, height: 30, borderRadius: 8, display: "flex", alignItems: "center",
-                    justifyContent: "center", cursor: "pointer", color: theme.text,
+                    justifyContent: "center", cursor: "pointer", color: darkMode ? "#E5E5F0" : "#28283D",
                     border: `1px solid ${selItem[k] ? (darkMode ? "#A9A9AE" : "#BFC0C4") : "transparent"}`,
                     background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{glyph}</svg>
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <g transform={k === "flipY" ? "rotate(90 10 10)" : undefined}>
+                      <path d="M3.1 6.15 Q2.5 5.7 2.5 6.45 V13.55 Q2.5 14.3 3.1 13.85 L8.05 10.55 Q8.8 10 8.05 9.45 Z"
+                        fill="currentColor" transform="translate(5.5 10) scale(0.88) translate(-5.5 -10)" />
+                      <path d="M16.9 6.15 Q17.5 5.7 17.5 6.45 V13.55 Q17.5 14.3 16.9 13.85 L11.95 10.55 Q11.2 10 11.95 9.45 Z"
+                        fill="currentColor" transform="translate(14.5 10) scale(0.88) translate(-14.5 -10)" />
+                      <path d="M10 3.4V16.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="butt" />
+                    </g>
+                  </svg>
                 </div>
               ))}
             </div>
@@ -34270,7 +34308,8 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   // the same view already.
   const moodSlot = useRef(null);
   const ideasNewFolder = useRef(null);   // …and its "create folder" fn
-  const [rows, setRows] = useState(null);          // null = loading
+  const [rows, setRows] = useState(null);
+  const collectionLoad = useCollectionLoad(userOrg?.id, projectId);
   const [folders, setFolders] = useState([]);
   const [folderId, setFolderId] = useState(null);
   const [q, setQ] = useState("");
@@ -34309,17 +34348,17 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
 
   const scope = (query) => projectId ? query.eq("project_id", projectId) : query.is("project_id", null);
 
-  const load = async () => {
-    if (!userOrg?.id) return;
-    const [{ data: cs }, { data: fs }] = await Promise.all([
+  const load = () => collectionLoad.run(async () => {
+    const [canvases, folders] = await Promise.all([
       scope(supabase.from("brand_canvases").select("*").eq("org_id", userOrg.id))
         .order("updated_at", { ascending: false }),
       scope(supabase.from("canvas_folders").select("*").eq("org_id", userOrg.id))
         .order("created_at", { ascending: true }),
     ]);
-    setRows(cs || []); setFolders(fs || []);
-  };
-  useEffect(() => { load(); }, [userOrg?.id, projectId]);
+    if (canvases.error || folders.error) throw canvases.error || folders.error;
+    return { rows: canvases.data || [], folders: folders.data || [] };
+  }, result => { setRows(result.rows); setFolders(result.folders); });
+  useEffect(() => { load(); }, [collectionLoad.run]);
 
   // Working files and their exports go to the same bucket the rest of the brand
   // uses, so a thumbnail can be shown without signing anything.
@@ -34751,7 +34790,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
         </div>
       )}
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 24px 26px" }}>
-        {rows === null ? (
+        {collectionLoad.error ? <CollectionLoadError theme={theme} appLanguage={appLanguage} onRetry={load} /> : collectionLoad.pending ? (
           <div style={{ color: theme.textDim, fontFamily: FONT, fontSize: 13 }}>{de ? "Lädt …" : "Loading …"}</div>
         ) : visible.length === 0 ? (
           // Not inside a card any more: the other two tabs centre this in the
@@ -35557,7 +35596,8 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
 // kind='ideas'). Clicking a board opens the whiteboard via onOpenBoard(id).
 function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMembers = [], projectId = null, createRef, newFolderRef, onOpenBoard }) {
   const de = appLanguage === "de";
-  const [boards, setBoards] = useState(null); // null = loading
+  const [boards, setBoards] = useState(null);
+  const collectionLoad = useCollectionLoad(userOrg?.id, projectId);
   const [search, setSearch] = useState("");
   const [sortMode, setSortMode] = useState("updated"); // updated | name | creator
   const [viewMode, setViewMode] = useState("grid");
@@ -35588,13 +35628,13 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
     return m;
   }, [orgMembers, session?.user?.id]);
 
-  const load = useCallback(async () => {
-    if (!userOrg?.id) { setBoards([]); return; }
+  const load = useCallback(() => collectionLoad.run(async () => {
     let q = supabase.from("whiteboards").select("id,name,folder_id,project_id,created_by,created_at,updated_at").eq("org_id", userOrg.id);
     if (projectId) q = q.eq("project_id", projectId);
-    const { data } = await q.order("updated_at", { ascending: false });
-    setBoards(data || []);
-  }, [userOrg?.id, projectId]);
+    const { data, error } = await q.order("updated_at", { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }, setBoards), [collectionLoad.run, userOrg?.id, projectId]);
   useEffect(() => { load(); }, [load]);
   const loadFolders = useCallback(async () => {
     if (!userOrg?.id) { setFolders([]); return; }
@@ -35785,7 +35825,7 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
       </div>
       )}
 
-      {boards === null ? (
+      {collectionLoad.error ? <CollectionLoadError theme={theme} appLanguage={appLanguage} onRetry={load} /> : collectionLoad.pending ? (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>Lädt…</div>
       ) : (
       <>
@@ -36094,7 +36134,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const docsUploadPdf = useRef(null); // …and its "upload PDF" fn here
   const docsNewFolder = useRef(null); // DocsTab registers its "create folder" fn here
   const [boards, setBoards] = useState([]);
-  const [loadingBoards, setLoadingBoards] = useState(true);
+  const collectionLoad = useCollectionLoad(userOrg?.id, projectId);
   const [activeBoard, setActiveBoard] = useState(null);
   const activeMoodboardRef = useRef(null);
   activeMoodboardRef.current = { boardId: activeBoard?.id, orgId: userOrg?.id };
@@ -36132,16 +36172,13 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const glow = "0 18px 50px rgba(124,122,255,0.28)";
 
   // ── Data loading ──
-  const loadBoards = useCallback(async () => {
-    if (!userOrg?.id) { setLoadingBoards(false); return; }
-    setLoadingBoards(true);
+  const loadBoards = useCallback(() => collectionLoad.run(async () => {
     let q = supabase.from("moodboards").select("*").eq("org_id", userOrg.id).eq("archived", false);
-    if (projectId) q = q.eq("project_id", projectId); // project brand: only this project's boards
-    const { data } = await q.order("updated_at", { ascending: false });
-    setBoards(data || []);
-    setLoadingBoards(false);
-  }, [userOrg?.id, projectId]);
-
+    if (projectId) q = q.eq("project_id", projectId);
+    const { data, error } = await q.order("updated_at", { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }, setBoards), [collectionLoad.run, userOrg?.id, projectId]);
   useEffect(() => { loadBoards(); }, [loadBoards]);
 
   const openBoard = async (board) => {
@@ -37582,7 +37619,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {/* ── MOODBOARDS tab (boards grid) ── */}
           {tab === "moodboards" && (
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
-            {loadingBoards ? (
+            {collectionLoad.error ? <CollectionLoadError theme={theme} appLanguage={appLanguage} onRetry={loadBoards} /> : collectionLoad.pending ? (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
                 <MetaballsLoader size={52} color={metaballColor(darkMode)}
                   label={appLanguage === "de" ? "Moodboards werden geladen" : "Loading moodboards"} />
@@ -38088,7 +38125,8 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
       {m?.avatar_url ? <img src={m.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (m?.initials || (m?.display_name || "?").trim()[0] || "?").toUpperCase()}
     </div>
   );
-  const [files, setFiles] = useState(null); // null = loading
+  const [files, setFiles] = useState(null);
+  const collectionLoad = useCollectionLoad(userOrg?.id, projectId);
   const [uploading, setUploading] = useState(false);
   const [zoom, setZoom] = useState(null); // the file object being previewed
   const [search, setSearch] = useState("");
@@ -38347,8 +38385,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
   };
   useEffect(() => { onUploadingChange?.(uploading); }, [uploading, onUploadingChange]);
 
-  const load = useCallback(async () => {
-    if (!userOrg?.id) { setFiles([]); return; }
+  const load = useCallback(() => collectionLoad.run(async () => {
     // The media filter runs in the DATABASE, before the limit, not after it.
     //
     // It used to take the newest 300 rows of any kind and then keep the images.
@@ -38368,12 +38405,12 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
       .or("mime_type.ilike.image/%,mime_type.ilike.video/%");
     if (projectId) q = q.eq("project_id", projectId); // project brand: only this project's assets
     const { data, error } = await q.order("created_at", { ascending: false }).limit(300);
-    if (error) { console.warn("[creations] load failed:", error.message); setFiles([]); return; }
+    if (error) throw error;
     // Kept as a belt: a row with no mime_type at all must not slip through.
     const media = (data || []).filter(f => { const m = f.mime_type || ""; return m.startsWith("image/") || m.startsWith("video/"); });
     const fresh = await refreshUserFileUrls(media);
-    setFiles(fresh ? media.map(f => fresh.has(f.id) ? { ...f, public_url: fresh.get(f.id) } : f) : media);
-  }, [userOrg?.id, projectId]);
+    return fresh ? media.map(f => fresh.has(f.id) ? { ...f, public_url: fresh.get(f.id) } : f) : media;
+  }, setFiles), [collectionLoad.run, userOrg?.id, projectId]);
   useEffect(() => { load(); }, [load]);
   loadRef.current = load;
 
@@ -38992,7 +39029,7 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
           </div>
         </div>, document.body)}
 
-      {files === null ? (
+      {collectionLoad.error ? <CollectionLoadError theme={theme} appLanguage={appLanguage} onRetry={load} /> : collectionLoad.pending ? (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{t("common.loading") || "Lädt…"}</div>
       ) : (
         // ── Flat view: all media together + toolbar (search · type filter · sort · view) ──
@@ -41888,7 +41925,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   const [deletingFolder, setDeletingFolder] = useState(false);
   const [renameFolderObj, setRenameFolderObj] = useState(null);
   const [renameFolderName, setRenameFolderName] = useState("");
-  const [loading, setLoading] = useState(true);
+  const collectionLoad = useCollectionLoad(userOrg?.id, projectId);
   const [openDoc, setOpenDoc] = useState(null);
   const [title, setTitle] = useState("");
   const [saveState, setSaveState] = useState(""); // "saving" | "saved" | ""
@@ -42053,15 +42090,14 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
     }
   };
 
-  const load = async () => {
-    if (!userOrg?.id) { setLoading(false); return; }
+  const load = () => collectionLoad.run(async () => {
     let q = supabase.from("brand_documents").select("*").eq("org_id", userOrg.id);
-    if (projectId) q = q.eq("project_id", projectId); // project brand: only this project's docs
-    const { data } = await q.order("updated_at", { ascending: false });
-    setDocs(data || []);
-    setLoading(false);
-  };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [userOrg?.id, projectId]);
+    if (projectId) q = q.eq("project_id", projectId);
+    const { data, error } = await q.order("updated_at", { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }, setDocs);
+  useEffect(() => { load(); }, [collectionLoad.run]);
   // Tell AssetsView whether a doc is open (so it can hide the header/tabs).
   useEffect(() => { onOpenChange?.(!!openDoc); /* eslint-disable-next-line */ }, [openDoc]);
   // Fullscreen: exit on Escape and whenever the document is closed.
@@ -42666,7 +42702,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
 
       {/* Nothing while it loads. The list arrives in a moment and a word that
           flashes and goes is more noticeable than the wait it describes. */}
-      {loading ? null : (
+      {collectionLoad.error ? <CollectionLoadError theme={theme} appLanguage={appLanguage} onRetry={load} /> : collectionLoad.pending ? null : (
       <>
         {/* Breadcrumb when inside a folder */}
         {currentFolder != null && (
@@ -49941,6 +49977,44 @@ If you don't know a field, infer a plausible value. Write all text values in the
 // `image` is optional and `action` is optional, so the same component also
 // serves the smaller cases — an empty folder, a search with no matches — where
 // a full illustration would be shouting about nothing.
+// Empty states require a successful response for the current workspace/project.
+// Ignore superseded requests, including responses arriving after a scope switch.
+function useCollectionLoad(orgId, projectId) {
+  const scope = orgId ? JSON.stringify([orgId, projectId || null]) : null;
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
+  const request = useRef(0);
+  const [state, setState] = useState({ scope: null, pending: true, error: false });
+  useEffect(() => () => { request.current += 1; }, [scope]);
+  const run = useCallback(async (fetchData, applyData) => {
+    if (!scope || currentScope.current !== scope) return;
+    const ticket = ++request.current;
+    const current = () => request.current === ticket && currentScope.current === scope;
+    setState({ scope, pending: true, error: false });
+    try {
+      const result = await fetchData();
+      if (!current()) return;
+      applyData(result);
+      setState({ scope, pending: false, error: false });
+    } catch {
+      if (current()) setState({ scope, pending: false, error: true });
+    }
+  }, [scope]);
+  return { run, pending: !scope || state.scope !== scope || state.pending,
+    error: state.scope === scope && state.error };
+}
+
+function CollectionLoadError({ theme, appLanguage, onRetry }) {
+  const de = appLanguage === "de";
+  return <div role="alert" style={{ padding: 24, textAlign: "center", color: theme.textDim, fontFamily: FONT, fontSize: 13 }}>
+    <p>{de ? "Die Inhalte konnten nicht geladen werden." : "Could not load the content."}</p>
+    <button type="button" onClick={onRetry} style={{ border: `1px solid ${theme.borderFaint}`, borderRadius: 9,
+      padding: "8px 12px", background: "transparent", color: theme.text, font: "inherit", cursor: "pointer" }}>
+      {de ? "Erneut versuchen" : "Try again"}
+    </button>
+  </div>;
+}
+
 function CreationsEmpty({ theme, darkMode, image, imageWidth = 384, imageGap = null,
                          title, hint, actionLabel, onAction }) {
   return (
