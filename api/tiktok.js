@@ -80,12 +80,32 @@ const API = "https://open.tiktokapis.com/v2";
 //
 // Adding video.publish back is this one line plus one reconnect, because a
 // token keeps the scopes it was issued with.
-// The two Display API scopes ride along: user.info.stats is what carries a
-// follower count, video.list is what carries the posts and their numbers.
-// Neither belongs to the Content Posting API, so neither depends on that
-// review. Whether a Sandbox grants them is a different question and the only
-// way to learn it is to ask once.
-const SCOPES = ["user.info.basic", "user.info.stats", "video.list"].join(",");
+// Everything the app wants, once TikTok has approved the client. Not in use
+// yet: see SCOPES below.
+const SCOPES_FULL = [
+  "user.info.basic",    // who it is. The only one a Sandbox grants.
+  "user.info.stats",    // follower count and the account totals, for Analytics
+  "video.list",         // the posts and their numbers, for Top Posts
+  "video.publish",      // the direct post, for the composer
+];
+
+// ⚠ What a SANDBOX grants, which is one of the four. MEASURED, not assumed:
+// every combination containing any other scope was refused by the consent
+// screen naming only "scope", and basic alone connected every time. It is not
+// about which extra scope, and it is not about the comma between them, both of
+// which were tried.
+//
+// TikTok's own words, from "Add a Sandbox": "Sandbox mode does not offer access
+// to Content Posting API for public videos or Data Portability API." And from
+// "Content Posting API, Get Started": "Your app must be approved for the
+// video.publish scope." The Display API scopes turn out to sit behind the same
+// door.
+//
+// AFTER THE APP IS APPROVED this becomes SCOPES_FULL, and everybody reconnects
+// once, because a token keeps the scopes it was issued with. That is the whole
+// switch. Analytics and the composer are already built against the full set and
+// degrade to a plain notice without it.
+const SCOPES = ["user.info.basic"].join(",");
 
 // A token good for another hour is good enough for the call about to be made.
 // Below that it is renewed, because a request that starts valid and expires

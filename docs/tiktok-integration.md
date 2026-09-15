@@ -16,6 +16,7 @@ einer vorhandenen Datei.
 | Verbinden und Trennen | in den Einstellungen, neben Instagram und Threads |
 | Domainbestätigung | `app.i7os.com` und `i7os.com`, je Umgebung ein eigener Schlüssel |
 | Composer | TikTok steht als Kanal drin, mit den Einstellungen, die TikTok vorschreibt |
+| Analytics | eigene Pille, Beiträge in der Top-Liste, Anteil an den Kacheln, wartet auf die Scopes |
 | Posten | gebaut, aber nicht benutzbar, siehe unten |
 
 Umgebungsvariablen: `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`. Die Freigabeliste
@@ -42,6 +43,31 @@ einschalten.
 
 Dazu kommt, auch nach der Freigabe relevant: solange die App nicht auditiert
 ist, sind veröffentlichte Beiträge auf privat beschränkt.
+
+## Was eine Sandbox hergibt: genau einen Scope
+
+Gemessen, nicht angenommen. Von vier gewünschten Berechtigungen wird in der
+Sandbox genau eine gewährt:
+
+| Scope | wofür | Sandbox |
+|---|---|---|
+| `user.info.basic` | wer es ist | **ja** |
+| `user.info.stats` | Follower und Kontosummen, für Analytics | nein |
+| `video.list` | Beiträge mit ihren Zahlen, für Top Posts | nein |
+| `video.publish` | der Direktpost, für den Composer | nein |
+
+Jede Kombination, die irgendeine der unteren drei enthält, wird von der
+Zustimmungsseite abgewiesen, und zwar mit `scope` als einzigem Grund. `basic`
+allein verbindet jedes Mal. Es liegt nicht daran, welcher Zusatz-Scope es ist,
+und auch nicht am Komma dazwischen, beides wurde probiert.
+
+Die Display-API-Scopes sitzen also hinter derselben Tür wie das Veröffentlichen,
+obwohl sie nicht zur Content Posting API gehören.
+
+**Umschalten nach der Freigabe:** `SCOPES` in `api/tiktok.js` auf `SCOPES_FULL`
+setzen, das steht direkt darüber. Dann verbindet jeder einmal neu, weil ein
+Token die Scopes behält, mit denen es ausgestellt wurde. Analytics und Composer
+sind bereits gegen den vollen Satz gebaut und zeigen ohne ihn nur einen Hinweis.
 
 ## Die fünf Messungen, damit sie niemand wiederholt
 
