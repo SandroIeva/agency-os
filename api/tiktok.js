@@ -440,6 +440,15 @@ export default async function handler(req) {
           description: String(body.caption || "").slice(0, 4000),
           privacy_level: privacy,
           disable_comment: !!body.disableComment,
+          // Duet and Stitch do not exist for a photo post, so they are absent
+          // here rather than sent as false.
+          //
+          // The two commercial flags are what TikTok labels the post with:
+          // organic is "Promotional content", content is "Paid partnership".
+          // Their guidelines require the composer to ASK, and the labels are
+          // applied by TikTok from these.
+          brand_organic_toggle: !!body.brandOrganic,
+          brand_content_toggle: !!body.brandContent,
           // A photo carousel on TikTok normally carries a track. Off by
           // request, on by default, because silent is the unusual one here.
           auto_add_music: body.autoAddMusic !== false,
@@ -477,6 +486,11 @@ export default async function handler(req) {
           disable_comment: !!body.disableComment,
           disable_duet: !!body.disableDuet,
           disable_stitch: !!body.disableStitch,
+          // TikTok applies the label from these: organic is "Promotional
+          // content", content is "Paid partnership", both together is "Paid
+          // partnership". Their guidelines require the composer to ask.
+          brand_organic_toggle: !!body.brandOrganic,
+          brand_content_toggle: !!body.brandContent,
         },
         source_info: {
           source: "FILE_UPLOAD",

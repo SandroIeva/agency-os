@@ -1949,18 +1949,28 @@ function Dropdown({ value, onChange, options = [], placeholder = "Auswählen", t
                 border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.6)"}`,
                 boxShadow: "0 12px 32px rgba(0,0,0,0.14)",
               }}>
+              {/* An option can be `disabled`, and then it is SHOWN and dimmed
+                  rather than dropped from the list. A choice that has vanished
+                  says nothing; a greyed one says it exists and is not available
+                  right now, which is the difference TikTok's guidelines ask for
+                  when branded content rules out "only me". Purely additive: an
+                  option without the field behaves exactly as before. */}
               {options.map(o => {
                 const active = String(o.value) === String(value);
+                const off = !!o.disabled;
                 return (
-                  <div key={o.value} className={active ? "" : "hover-row"} onClick={() => { onChange(o.value); setOpen(false); }}
-                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, cursor: "pointer",
+                  <div key={o.value} className={active || off ? "" : "hover-row"}
+                    title={off ? o.disabledReason : undefined}
+                    onClick={off ? undefined : () => { onChange(o.value); setOpen(false); }}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9,
+                      cursor: off ? "not-allowed" : "pointer", opacity: off ? 0.45 : 1,
                       background: active ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent" }}>
                     {o.icon && <span style={{ display: "flex", flexShrink: 0 }}>{o.icon}</span>}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: active ? 600 : 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.label}</div>
                       {o.sub && <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{o.sub}</div>}
                     </div>
-                    {active && check}
+                    {active && !off && check}
                   </div>
                 );
               })}
@@ -32455,10 +32465,21 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // creator_info has answered, TikTok cannot be posted to.
   const ttPicked = selected.find(a => a.provider === "tiktok") || null;
   const [ttCreator, setTtCreator] = useState(null);   // null | {loading} | payload | {error}
+  // ⚠ Empty on purpose and it must STAY empty until somebody picks. TikTok's
+  // content sharing guidelines: "Users must manually select the privacy status
+  // from a dropdown and there should be no default value." Pre-selecting the
+  // first allowed option is the obvious convenience and it is a rejection.
   const [ttPrivacy, setTtPrivacy] = useState("");
   const [ttNoComment, setTtNoComment] = useState(false);
   const [ttNoDuet, setTtNoDuet] = useState(false);
   const [ttNoStitch, setTtNoStitch] = useState(false);
+  // Commercial content disclosure. Off, and both kinds unticked, because
+  // TikTok requires the default to be off and the labels it applies are not
+  // ours to assume: brandOrganic becomes "Promotional content", brandContent
+  // becomes "Paid partnership".
+  const [ttCommercial, setTtCommercial] = useState(false);
+  const [ttBrandOrganic, setTtBrandOrganic] = useState(false);
+  const [ttBrandContent, setTtBrandContent] = useState(false);
   const ttOpenId = ttPicked?.openId || null;
   useEffect(() => {
     if (!ttOpenId || !orgId) { setTtCreator(null); return; }
@@ -32475,16 +32496,27 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         if (!on) return;
         if (!r.ok) { setTtCreator({ error: j?.error || `HTTP ${r.status}` }); return; }
         setTtCreator(j);
-        // The first ALLOWED option, never a favourite of ours. Offering a level
-        // this account may not use is how a post fails at the last step.
-        setTtPrivacy(p => ((j.privacyOptions || []).includes(p) ? p : (j.privacyOptions || [])[0] || ""));
+        // Kept only if it is still on offer. NOT defaulted to the first one:
+        // the guidelines forbid a default, and a level this account may not use
+        // would fail at the last step anyway.
+        setTtPrivacy(p => ((j.privacyOptions || []).includes(p) ? p : ""));
       } catch (e) { if (on) setTtCreator({ error: String(e?.message || e) }); }
     })();
     return () => { on = false; };
   }, [ttOpenId, orgId, session?.access_token]);
-  // Ready to post to TikTok only when the creator answered AND a level this
-  // account may actually use has been chosen.
-  const ttReadyToPost = !!(ttCreator && !ttCreator.error && !ttCreator.loading && ttPrivacy);
+  // Branded content cannot be private. TikTok: "it can only be configured with
+  // visibility as public/friends", and "only me" has to be disabled when it is
+  // chosen. Enforced here rather than left to their error.
+  const ttPrivacyBlocked = (opt) => ttBrandContent && opt === "SELF_ONLY";
+  useEffect(() => {
+    if (ttBrandContent && ttPrivacy === "SELF_ONLY") setTtPrivacy("");
+  }, [ttBrandContent, ttPrivacy]);
+  // Ready only when the creator answered, a level has been PICKED by hand, and
+  // a disclosure that is switched on actually says which kind it is.
+  const ttReadyToPost = !!(
+    ttCreator && !ttCreator.error && !ttCreator.loading && ttPrivacy
+    && (!ttCommercial || ttBrandOrganic || ttBrandContent)
+  );
   const TT_PRIVACY_LABEL = {
     PUBLIC_TO_EVERYONE: { de: "Öffentlich", en: "Public" },
     MUTUAL_FOLLOW_FRIENDS: { de: "Freunde", en: "Friends" },
@@ -33030,6 +33062,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         const common = {
           privacy: ttPrivacy,
           disableComment: ttNoComment, disableDuet: ttNoDuet, disableStitch: ttNoStitch,
+          // Only when the disclosure is actually switched on. Sending them
+          // otherwise would label a post somebody never said was an advert.
+          brandOrganic: ttCommercial && ttBrandOrganic,
+          brandContent: ttCommercial && ttBrandContent,
           caption: text.trim() || undefined,
         };
         let init;
@@ -33469,43 +33505,117 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           <div style={{ marginTop: 6, color: theme.textFaint, fontSize: 11 }}>{ttCreator.error}</div>
                         </div>
                       ) : ttCreator ? (<>
+                        {/* A dropdown with NO preselection. TikTok: "Users must
+                            manually select the privacy status from a dropdown
+                            and there should be no default value." */}
                         <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6 }}>
                           {de ? "Wer den Beitrag sehen darf" : "Who may see the post"}
                         </div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                          {(ttCreator.privacyOptions || []).map(opt => {
-                            const on = ttPrivacy === opt;
-                            const lbl = TT_PRIVACY_LABEL[opt];
-                            return (
-                              <motion.div key={opt} whileTap={{ scale: 0.97 }} onClick={() => setTtPrivacy(opt)}
-                                style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer",
-                                  fontSize: 12, fontFamily: FONT, fontWeight: on ? 600 : 500,
-                                  border: `1px solid ${on ? "transparent" : theme.borderFaint}`,
-                                  background: on ? "#15151c" : "transparent",
-                                  color: on ? "#fff" : theme.textDim }}>
-                                {lbl ? (de ? lbl.de : lbl.en) : opt}
-                              </motion.div>
-                            );
-                          })}
+                        <Dropdown
+                          value={ttPrivacy}
+                          placeholder={de ? "Bitte wählen" : "Please select"}
+                          onChange={(v) => setTtPrivacy(v)}
+                          options={(ttCreator.privacyOptions || []).map(opt => ({
+                            value: opt,
+                            label: TT_PRIVACY_LABEL[opt] ? (de ? TT_PRIVACY_LABEL[opt].de : TT_PRIVACY_LABEL[opt].en) : opt,
+                            sub: ttPrivacyBlocked(opt)
+                              ? (de ? "Mit Branded Content nicht möglich" : "Not available with branded content") : undefined,
+                            disabled: ttPrivacyBlocked(opt),
+                          }))}
+                          theme={theme} darkMode={darkMode} minWidth={220}
+                        />
+
+                        {/* Shown even when the account has them switched off,
+                            greyed rather than hidden. TikTok: "your UX must
+                            disable and grey out the checkbox for the
+                            interaction". A missing control says nothing; a
+                            greyed one says TikTok turned it off. */}
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, margin: "14px 0 6px" }}>
+                          {de ? "Interaktionen" : "Interactions"}
                         </div>
-                        {/* Only what this account actually offers. A switch for
-                            something TikTok has turned off would be a lie with
-                            a checkbox on it. */}
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 12 }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
                           {[
-                            ["comment", de ? "Kommentare aus" : "Comments off", ttNoComment, setTtNoComment, ttCreator.commentDisabled],
-                            ["duet", de ? "Duette aus" : "Duets off", ttNoDuet, setTtNoDuet, ttCreator.duetDisabled],
-                            ["stitch", de ? "Stitches aus" : "Stitches off", ttNoStitch, setTtNoStitch, ttCreator.stitchDisabled],
-                          ].filter(([, , , , gone]) => !gone).map(([key, label, val, set]) => (
-                            <label key={key} style={{ display: "inline-flex", alignItems: "center", gap: 6,
-                              fontSize: 12, fontFamily: FONT, color: theme.textDim, cursor: "pointer" }}>
-                              <input type="checkbox" checked={val} onChange={e => set(e.target.checked)} />
+                            ["comment", de ? "Kommentare aus" : "Comments off", ttNoComment, setTtNoComment, ttCreator.commentDisabled, true],
+                            // Duet and Stitch do not exist on a photo post, so
+                            // they are left out entirely there rather than
+                            // offered and ignored.
+                            ["duet", de ? "Duette aus" : "Duets off", ttNoDuet, setTtNoDuet, ttCreator.duetDisabled, !!reel],
+                            ["stitch", de ? "Stitches aus" : "Stitches off", ttNoStitch, setTtNoStitch, ttCreator.stitchDisabled, !!reel],
+                          ].filter(([, , , , , applies]) => applies).map(([key, label, val, set, off]) => (
+                            <label key={key} title={off ? (de ? "Für dieses Konto bei TikTok abgeschaltet." : "Switched off for this account on TikTok.") : undefined}
+                              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12,
+                                fontFamily: FONT, color: off ? theme.textFaint : theme.textDim,
+                                cursor: off ? "not-allowed" : "pointer", opacity: off ? 0.5 : 1 }}>
+                              <input type="checkbox" disabled={off} checked={off ? false : val}
+                                onChange={e => set(e.target.checked)} />
                               {label}
                             </label>
                           ))}
                         </div>
+
+                        {/* Commercial content disclosure. Off by default, which
+                            TikTok requires, and once on it has to say WHICH
+                            kind: the label they apply differs. */}
+                        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${theme.borderFaint}` }}>
+                          <label style={{ display: "inline-flex", alignItems: "center", gap: 6,
+                            fontSize: 12, fontFamily: FONT, color: theme.text, cursor: "pointer" }}>
+                            <input type="checkbox" checked={ttCommercial}
+                              onChange={e => { setTtCommercial(e.target.checked);
+                                if (!e.target.checked) { setTtBrandOrganic(false); setTtBrandContent(false); } }} />
+                            {de ? "Dieser Beitrag bewirbt eine Marke oder ein Produkt"
+                                : "This post promotes a brand or product"}
+                          </label>
+                          {ttCommercial && (<>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 8 }}>
+                              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontFamily: FONT, color: theme.textDim, cursor: "pointer" }}>
+                                <input type="checkbox" checked={ttBrandOrganic} onChange={e => setTtBrandOrganic(e.target.checked)} />
+                                {de ? "Deine Marke" : "Your brand"}
+                              </label>
+                              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontFamily: FONT, color: theme.textDim, cursor: "pointer" }}>
+                                <input type="checkbox" checked={ttBrandContent} onChange={e => setTtBrandContent(e.target.checked)} />
+                                {de ? "Branded Content" : "Branded content"}
+                              </label>
+                            </div>
+                            {/* Their wording, not ours: the label TikTok puts on
+                                the post depends on which of the two is ticked,
+                                and both together is the paid one. */}
+                            {(ttBrandOrganic || ttBrandContent) && (
+                              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.text, marginTop: 8,
+                                padding: "7px 10px", borderRadius: 8,
+                                background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}>
+                                {ttBrandContent
+                                  ? (de ? "Dein Beitrag wird als „Bezahlte Partnerschaft“ gekennzeichnet."
+                                        : "Your photo/video will be labeled as 'Paid partnership'")
+                                  : (de ? "Dein Beitrag wird als „Werbeinhalt“ gekennzeichnet."
+                                        : "Your photo/video will be labeled as 'Promotional content'")}
+                              </div>
+                            )}
+                            {!ttBrandOrganic && !ttBrandContent && (
+                              <div style={{ fontSize: 11.5, fontFamily: FONT, color: "#E86767", marginTop: 8 }}>
+                                {de ? "Bitte wähle, um welche Art es sich handelt."
+                                    : "Please choose which kind it is."}
+                              </div>
+                            )}
+                          </>)}
+                        </div>
+
+                        {/* The declaration, and which one depends on the choice
+                            above. Both policies are real links, as required. */}
+                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 12, lineHeight: 1.55 }}>
+                          {ttBrandContent ? (de ? <>Mit dem Posten stimmst du TikToks{" "}
+                            <a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>Branded-Content-Richtlinie</a>{" "}und{" "}
+                            <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>Musiknutzungsbestätigung</a> zu.</>
+                            : <>By posting, you agree to TikTok's{" "}
+                            <a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>Branded Content Policy</a>{" "}and{" "}
+                            <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>Music Usage Confirmation</a>.</>)
+                          : (de ? <>Mit dem Posten stimmst du TikToks{" "}
+                            <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>Musiknutzungsbestätigung</a> zu.</>
+                            : <>By posting, you agree to TikTok's{" "}
+                            <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>Music Usage Confirmation</a>.</>)}
+                        </div>
+
                         {ttCreator.maxVideoSeconds ? (
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 10 }}>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 8 }}>
                             {de ? `Videos bis ${ttCreator.maxVideoSeconds} Sekunden.`
                                 : `Videos up to ${ttCreator.maxVideoSeconds} seconds.`}
                           </div>
