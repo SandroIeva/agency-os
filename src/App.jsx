@@ -30558,8 +30558,8 @@ function SocialBenchmarkPanel({ theme, darkMode, de, session, orgId, card, secLa
       <div style={secLabel}>{de ? "Benchmark" : "Benchmark"}</div>
       <div style={{ fontFamily: FONT, fontSize: 12, color: theme.textDim, lineHeight: 1.55,
         marginBottom: 12 }}>
-        {de ? "Öffentliche Profile nachschlagen — auch die, die hier niemand verbunden hat."
-            : "Look up public profiles — including ones nobody connected here."}
+        {de ? "Schau dir öffentliche Profile von Wettbewerbern oder Vorbildern an, um zu sehen, was dort funktioniert."
+            : "Look up public profiles of competitors or inspirations to see what works for them."}
       </div>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
@@ -31304,6 +31304,37 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
     return () => { on = false; };
   }, [orgId, accounts, platform]); // eslint-disable-line
 
+  // ── One gate for the whole page ─────────────────────────────────────────
+  // Analytics arrives in waves: Zernio's accounts, then Zernio's numbers, then
+  // the three direct status calls, then their numbers. Drawn as each wave
+  // lands, the page re-flows three times in front of the person reading it.
+  // So nothing is drawn until every wave that is actually going to happen has
+  // settled. `data` is only ever fetched when Zernio holds an account and
+  // `directStats` only when Meta or TikTok does, so both are conditional.
+  //
+  // Two things this must never do. It must not come back to false once it has
+  // been true: changing the platform pill re-fetches `data`, and flashing the
+  // loader between two dashboards is the same jank one step later. And it must
+  // not stick, which a readiness condition did once already today, so there is
+  // a hard release after twelve seconds beside the condition rather than trust
+  // that every path settles.
+  //
+  // Deliberately NOT part of this: LinkedInPagePanel and SocialBenchmarkPanel,
+  // which fetch their own data at the very bottom of the page. They go through
+  // SocialCrawl, which bills per call and answers slowly, and holding the whole
+  // dashboard back for them would trade a small late reflow for seconds of
+  // blank screen. They carry their own loading line inside a card of fixed
+  // width instead.
+  const allLoaded = accounts != null && direct != null
+    && (accounts.length === 0 || data != null)
+    && (!hasDirect || directStats != null);
+  const [ready, setReady] = useState(false);
+  useEffect(() => { if (allLoaded) setReady(true); }, [allLoaded]);
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 12000);
+    return () => clearTimeout(t);
+  }, []);
+
   const connect = async (uiKey) => {
     setBusyKey(uiKey); setError(null);
     try {
@@ -31540,8 +31571,20 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
         </div>
       )}
 
-      {accounts == null || direct == null ? (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{de ? "Lädt…" : "Loading…"}</div>
+      {!ready ? (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          gap: 14, height: 320 }}>
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            style={{ width: 22, height: 22, borderRadius: "50%",
+              border: `2px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)"}`,
+              borderTopColor: theme.text }}
+          />
+          <div style={{ color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>
+            {de ? "Analytics werden geladen …" : "Loading analytics …"}
+          </div>
+        </div>
       ) : (accounts.length === 0 && !hasDirect) ? (
         /* ── Empty state: connect the first account ── */
         <div style={{ maxWidth: 560, margin: "40px auto 0", textAlign: "center" }}>
