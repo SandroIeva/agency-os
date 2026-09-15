@@ -31319,6 +31319,12 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   // ── Derived dashboard numbers (defensive — every part can be missing) ──
   const followersOk = data?.followers && !data.followers.__unavailable;
   const dailyOk = data?.daily && !data.daily.__unavailable;
+  // The impressions chart is drawn from ZERNIO's daily series. Pick a platform
+  // Zernio does not hold and there is nothing behind it, so the chart came out
+  // as eight empty weeks under a confident heading. An empty chart reads as a
+  // channel that did nothing, not as a channel this chart cannot speak for.
+  const zernioPlatforms = [...new Set((accounts || []).map(a => uiKeyFor(a.platform)))];
+  const dailyCoversPlatform = platform === "all" || zernioPlatforms.includes(platform);
   const topOk = data?.top && !data.top.__unavailable;
   const followerAccounts = followersOk
     ? (data.followers.accounts || []).filter(a => platform === "all" || uiKeyFor(a.platform) === platform)
@@ -31584,7 +31590,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
             tt={directStats?.tt || null} />
 
           {/* Impressions trend — weekly buckets from the daily series */}
-          {dailyOk && weekly.length > 1 && (
+          {dailyOk && dailyCoversPlatform && weekly.length > 1 && (
             <div style={{ ...card, marginBottom: 22 }}>
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16 }}>
                 <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? `Impressionen · letzte ${weekly.length} Wochen` : `Impressions · last ${weekly.length} weeks`}</span>
