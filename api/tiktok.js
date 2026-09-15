@@ -443,10 +443,21 @@ export default async function handler(req) {
   // has, so there is no second product to add. What it needs is the scope, and
   // user.info.stats is what carries a follower count.
   if (body.mode === "overview") {
-    const r = await tk(token, "/user/info/", {
-      query: { fields: "open_id,display_name,avatar_url,follower_count,following_count,likes_count,video_count" },
-    });
-    if (!r.ok) return json({ error: r.message || "user_info_failed", code: r.errCode || "failed" }, 502);
+    const STATS = "open_id,display_name,avatar_url,follower_count,following_count,likes_count,video_count";
+    const BASIC = "open_id,display_name,avatar_url";
+    let r = await tk(token, "/user/info/", { query: { fields: STATS } });
+    // The whole call fails when one field is not covered by the granted
+    // scopes, so a connection without user.info.stats gets nothing at all,
+    // not even the name. Narrow and retry, the same way Instagram's overview
+    // drops a metric it is refused: what survives is shown, and what did not
+    // is SAID rather than left as a blank panel.
+    let limited = false;
+    if (!r.ok) {
+      const first = r;
+      r = await tk(token, "/user/info/", { query: { fields: BASIC } });
+      if (!r.ok) return json({ error: first.message || "user_info_failed", code: first.errCode || "failed" }, 502);
+      limited = true;
+    }
     const u = r.body?.data?.user || {};
     return json({
       account: {
@@ -457,6 +468,8 @@ export default async function handler(req) {
         likes: u.likes_count ?? null,
         posts: u.video_count ?? null,
       },
+      // The numbers need user.info.stats, which a Sandbox does not grant.
+      limited,
       tokenExpiresAt: row.token_expires_at,
     });
   }

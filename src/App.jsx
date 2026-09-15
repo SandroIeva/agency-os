@@ -30969,7 +30969,7 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
 //
 // It renders nothing at all when this workspace has no direct connection, so
 // every other workspace is unaffected.
-function InstagramDirectPanel({ theme, darkMode, de, card, secLabel, ig = null, th = null }) {
+function InstagramDirectPanel({ theme, darkMode, de, card, secLabel, ig = null, th = null, tt = null }) {
   // A renderer and nothing else now. It used to fetch its own numbers, which
   // meant the same overview call went out twice on every visit, once for this
   // panel and once for the tiles and the Top Posts list above. Two fetchers for
@@ -30985,6 +30985,41 @@ function InstagramDirectPanel({ theme, darkMode, de, card, secLabel, ig = null, 
     <div key={label} style={{ flex: "1 1 42%", minWidth: 0 }}>
       <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>{value}</div>
       <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>{label}</div>
+    </div>
+  );
+
+  // Same shape as the Threads block, and declared for the same reason: it uses
+  // num and tile. Kept separate rather than folded in, because TikTok answers a
+  // different set of questions and pretending otherwise would mean inventing
+  // the parts that do not line up.
+  const tiktokBlock = tt && (
+    <div style={{ marginTop: (state || thState) ? 18 : 0, paddingTop: (state || thState) ? 16 : 0,
+      borderTop: (state || thState) ? `1px solid ${theme.borderFaint}` : "none" }}>
+      <div style={{ ...secLabel, marginBottom: 8 }}>{de ? "TikTok direkt" : "TikTok direct"}</div>
+      {tt.error ? (
+        <div style={{ fontSize: 12.5, fontFamily: FONT, color: "#E86767" }}>{tt.error}</div>
+      ) : (<>
+        <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginBottom: 14 }}>
+          {tt.account?.displayName || "TikTok"}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+          {tile(de ? "Follower" : "Followers", num(tt.account?.followers))}
+          {tile(de ? "Beiträge" : "Posts", num(tt.account?.posts))}
+          {tile(de ? "Likes gesamt" : "Likes total", num(tt.account?.likes))}
+          {tile(de ? "Aufrufe, letzte Beiträge" : "Views, recent posts",
+            num((tt.posts || []).length ? (tt.posts || []).reduce((n, p) => n + (p.views || 0), 0) : null))}
+        </div>
+        {/* Said rather than left as four dashes. A tile showing nothing because
+            TikTok has not approved the app looks exactly like a tile showing
+            nothing because the account is new. */}
+        {tt.limited && (
+          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 12, lineHeight: 1.5 }}>
+            {de
+              ? "Die Zahlen kommen erst, wenn TikTok die App freigegeben hat. Die Verbindung selbst steht."
+              : "The numbers arrive once TikTok has approved the app. The connection itself is fine."}
+          </div>
+        )}
+      </>)}
     </div>
   );
 
@@ -31045,7 +31080,7 @@ function InstagramDirectPanel({ theme, darkMode, de, card, secLabel, ig = null, 
     </div>
   );
 
-  if (!state) return <div style={card}>{threadsBlock}</div>;
+  if (!state) return <div style={card}>{threadsBlock}{tiktokBlock}</div>;
 
   return (
     <div style={card}>
@@ -31081,6 +31116,7 @@ function InstagramDirectPanel({ theme, darkMode, de, card, secLabel, ig = null, 
         )}
       </>)}
       {threadsBlock}
+      {tiktokBlock}
     </div>
   );
 }
@@ -31544,7 +31580,8 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
               numbers, they are the numbers. */}
           <InstagramDirectPanel theme={theme} darkMode={darkMode} de={de}
             card={card} secLabel={secLabel}
-            ig={directStats?.ig || null} th={directStats?.th || null} />
+            ig={directStats?.ig || null} th={directStats?.th || null}
+            tt={directStats?.tt || null} />
 
           {/* Impressions trend — weekly buckets from the daily series */}
           {dailyOk && weekly.length > 1 && (
