@@ -30617,6 +30617,18 @@ function SocialBenchmarkPanel({ theme, darkMode, de, session, orgId, card, secLa
                 {[p.username && `@${p.username}`, plainField(p.location, de), p.bio]
                   .filter(Boolean).join(" · ")}
               </div>
+              {/* WHO answered, and it matters twice. A Threads lookup goes to
+                  Meta first and falls through to SocialCrawl when Meta refuses,
+                  silently, which hides two things at once: SocialCrawl bills
+                  per call, and the Meta permission only counts as used when
+                  Meta actually answered. threads_profile_discovery sat at zero
+                  calls in the console with nobody able to see why. */}
+              <div style={{ fontFamily: FONT, fontSize: 10.5, marginTop: 3,
+                color: p.__source === "meta" ? "#0B7D72" : theme.textFaint }}>
+                {p.__source === "meta"
+                  ? (de ? "über Meta · kostenlos" : "via Meta · free")
+                  : (de ? "über SocialCrawl · kostet ein Guthaben" : "via SocialCrawl · costs a credit")}
+              </div>
             </div>
             <div style={{ textAlign: "right", flexShrink: 0 }}>
               <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: theme.text }}>
