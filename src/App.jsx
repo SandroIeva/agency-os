@@ -31081,16 +31081,19 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
       body: JSON.stringify({ mode: "status", orgId }),
     }).then(r => (r.ok ? r.json() : null)).catch(() => null);
     (async () => {
-      const [ig, th] = await Promise.all([ask("/api/instagram"), ask("/api/threads")]);
+      const [ig, th, tt] = await Promise.all([
+        ask("/api/instagram"), ask("/api/threads"), ask("/api/tiktok"),
+      ]);
       if (!on) return;
       setDirect({
         ig: ig?.enabled ? (ig.accounts || [])[0] || null : null,
         th: th?.enabled ? (th.accounts || [])[0] || null : null,
+        tt: tt?.enabled ? (tt.accounts || [])[0] || null : null,
       });
     })();
     return () => { on = false; };
   }, [orgId, session?.access_token]);
-  const hasDirect = !!(direct?.ig || direct?.th);
+  const hasDirect = !!(direct?.ig || direct?.th || direct?.tt);
 
   // The numbers behind those accounts: the account totals AND the posts. Asked
   // here and handed down, rather than each consumer asking for itself. The
@@ -31100,9 +31103,10 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   const [directStats, setDirectStats] = useState(null);   // null = still asking
   const igId = direct?.ig?.igUserId || null;
   const thId = direct?.th?.threadsUserId || null;
+  const ttId = direct?.tt?.openId || null;
   useEffect(() => {
     if (!orgId || !session?.access_token || direct == null) { setDirectStats(null); return; }
-    if (!igId && !thId) { setDirectStats({ ig: null, th: null }); return; }
+    if (!igId && !thId && !ttId) { setDirectStats({ ig: null, th: null, tt: null }); return; }
     let on = true;
     setDirectStats(null);
     const ask = (path, payload) => fetch(path, {
@@ -31113,11 +31117,13 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
     (async () => {
       // In parallel. Four sequential round trips is most of a second of staring
       // at a half-drawn dashboard, and none of them depends on another.
-      const [igOv, igPosts, thOv, thPosts] = await Promise.all([
+      const [igOv, igPosts, thOv, thPosts, ttOv, ttPosts] = await Promise.all([
         igId ? ask("/api/instagram", { mode: "overview", igUserId: igId, days: 28 }) : null,
         igId ? ask("/api/instagram", { mode: "posts", igUserId: igId, days: 28 }) : null,
         thId ? ask("/api/threads", { mode: "overview", threadsUserId: thId }) : null,
         thId ? ask("/api/threads", { mode: "posts", threadsUserId: thId, days: 28 }) : null,
+        ttId ? ask("/api/tiktok", { mode: "overview", openId: ttId }) : null,
+        ttId ? ask("/api/tiktok", { mode: "posts", openId: ttId, limit: 10 }) : null,
       ]);
       if (!on) return;
       // A connected account whose numbers did not come back says so. Handing
@@ -31130,12 +31136,14 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
           : (igId ? failed("Instagram") : null),
         th: thOv ? { ...thOv, posts: thPosts?.posts || [], postCount: thPosts?.postCount ?? null }
           : (thId ? failed("Threads") : null),
+        tt: ttOv ? { ...ttOv, posts: ttPosts?.posts || [] }
+          : (ttId ? failed("TikTok") : null),
       });
     })();
     return () => { on = false; };
     // The IDS, not the object: `direct` is rebuilt on every render and would
     // restart this for ever.
-  }, [orgId, session?.access_token, igId, thId, direct == null]);
+  }, [orgId, session?.access_token, igId, thId, ttId, direct == null]);
 
   // Meta's posts in the shape the rest of this view already speaks, so they
   // stand in the same list as everything else instead of in a panel of their
@@ -31151,6 +31159,11 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
       _id: "th:" + p.id, platform: "threads", content: p.text,
       platformPostUrl: p.url, publishedAt: p.publishedAt,
       analytics: { likes: p.likes || 0, comments: p.replies || 0, shares: p.reposts || 0, impressions: p.views || 0 },
+    })),
+    ...((directStats?.tt?.posts) || []).map(p => ({
+      _id: "tt:" + p.id, platform: "tiktok", content: p.text,
+      platformPostUrl: p.url, publishedAt: p.publishedAt,
+      analytics: { likes: p.likes || 0, comments: p.comments || 0, shares: p.shares || 0, impressions: p.views || 0 },
     })),
   ];
 
@@ -31225,6 +31238,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
     ...(accounts || []).map(a => uiKeyFor(a.platform)),
     ...(direct?.ig ? ["instagram"] : []),
     ...(direct?.th ? ["threads"] : []),
+    ...(direct?.tt ? ["tiktok"] : []),
   ])];
   const unconnected = ZERNIO_UI_PLATFORMS.filter(k => !connectedUiKeys.includes(k));
 
@@ -31308,15 +31322,22 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   const usable = (x) => (x && !x.error ? x : null);
   const igOn = wants("instagram") ? usable(directStats?.ig) : null;
   const thOn = wants("threads") ? usable(directStats?.th) : null;
-  const directFollowers = (igOn?.account?.followers || 0) + (thOn?.followers || 0);
+  const ttOn = wants("tiktok") ? usable(directStats?.tt) : null;
+  const directFollowers = (igOn?.account?.followers || 0) + (thOn?.followers || 0)
+    + (ttOn?.account?.followers || 0);
   // Reach on Instagram, views on Threads. Neither is an "impression" in the
   // sense Zernio means, and adding them anyway would be a number with no
   // definition, so they are counted as what this tile is really asking: how
   // many times was it in front of somebody.
-  const directImpressions = (igOn?.metrics?.reach || 0) + (thOn?.metrics?.views || 0);
+  // TikTok has no account-level view count, only per post, so its share of
+  // this tile is what its recent posts were seen for. Counted from the same
+  // list Top Posts uses rather than a second call.
+  const ttViews = (ttOn?.posts || []).reduce((n, p) => n + (p.views || 0), 0);
+  const directImpressions = (igOn?.metrics?.reach || 0) + (thOn?.metrics?.views || 0) + ttViews;
   const directInteractions = (igOn?.metrics?.total_interactions || 0)
-    + (thOn?.metrics?.likes || 0) + (thOn?.metrics?.replies || 0);
-  const anyDirect = !!(igOn || thOn);
+    + (thOn?.metrics?.likes || 0) + (thOn?.metrics?.replies || 0)
+    + (ttOn?.posts || []).reduce((n, p) => n + (p.likes || 0) + (p.comments || 0) + (p.shares || 0), 0);
+  const anyDirect = !!(igOn || thOn || ttOn);
   const totalFollowers = (followersOk ? followerTotal : 0) + directFollowers;
   const totalImpressions = (dailyOk ? impressions : 0) + directImpressions;
   const totalInteractions = (dailyOk ? interactions : 0) + directInteractions;

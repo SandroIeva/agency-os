@@ -34,6 +34,8 @@
 //   POST { mode: "status",      orgId } → which accounts are connected
 //   POST { mode: "disconnect",  orgId, openId } → forget one account
 //   POST { mode: "creator",     orgId } → what this creator is allowed to post
+//   POST { mode: "overview",    orgId } → follower count and the account totals
+//   POST { mode: "posts",       orgId } → recent videos with their numbers
 //   POST { mode: "publish-init", orgId, kind: "video", … } → reserve, get upload url
 //   POST { mode: "publish-init", orgId, kind: "photo", images: [url] } → carousel
 //   POST { mode: "publish-status", orgId, publishId } → how far along it is
@@ -78,7 +80,12 @@ const API = "https://open.tiktokapis.com/v2";
 //
 // Adding video.publish back is this one line plus one reconnect, because a
 // token keeps the scopes it was issued with.
-const SCOPES = ["user.info.basic"].join(",");
+// The two Display API scopes ride along: user.info.stats is what carries a
+// follower count, video.list is what carries the posts and their numbers.
+// Neither belongs to the Content Posting API, so neither depends on that
+// review. Whether a Sandbox grants them is a different question and the only
+// way to learn it is to ask once.
+const SCOPES = ["user.info.basic", "user.info.stats", "video.list"].join(",");
 
 // A token good for another hour is good enough for the call about to be made.
 // Below that it is renewed, because a request that starts valid and expires
@@ -408,6 +415,58 @@ export default async function handler(req) {
       duetDisabled: !!d.duet_disabled,
       stitchDisabled: !!d.stitch_disabled,
       maxVideoSeconds: d.max_video_post_duration_sec ?? null,
+    });
+  }
+
+  // ── overview — the numbers a dashboard shows ──────────────────────────────
+  // Display API, not Content Posting: it rides on the Login Kit the app already
+  // has, so there is no second product to add. What it needs is the scope, and
+  // user.info.stats is what carries a follower count.
+  if (body.mode === "overview") {
+    const r = await tk(token, "/user/info/", {
+      query: { fields: "open_id,display_name,avatar_url,follower_count,following_count,likes_count,video_count" },
+    });
+    if (!r.ok) return json({ error: r.message || "user_info_failed", code: r.errCode || "failed" }, 502);
+    const u = r.body?.data?.user || {};
+    return json({
+      account: {
+        openId: u.open_id || row.open_id,
+        displayName: u.display_name || row.display_name,
+        followers: u.follower_count ?? null,
+        following: u.following_count ?? null,
+        likes: u.likes_count ?? null,
+        posts: u.video_count ?? null,
+      },
+      tokenExpiresAt: row.token_expires_at,
+    });
+  }
+
+  // ── posts — the recent videos, with what they did ─────────────────────────
+  // So TikTok can stand in the same Top Posts list as everything else instead
+  // of in a panel of its own. Capped: this runs on the Edge with a time limit,
+  // and nobody reads past the first handful.
+  if (body.mode === "posts") {
+    const limit = Math.min(20, Math.max(1, Number(body.limit) || 10));
+    const r = await tk(token, "/video/list/", {
+      method: "POST",
+      query: { fields: "id,title,video_description,create_time,cover_image_url,share_url,view_count,like_count,comment_count,share_count" },
+      body: { max_count: limit },
+    });
+    if (!r.ok) return json({ error: r.message || "video_list_failed", code: r.errCode || "failed" }, 502);
+    const videos = r.body?.data?.videos || [];
+    return json({
+      posts: videos.map(v => ({
+        id: v.id,
+        text: v.video_description || v.title || "",
+        url: v.share_url || null,
+        // create_time is seconds, and everything on our side counts in
+        // milliseconds. Multiplied here rather than in three consumers.
+        publishedAt: v.create_time ? new Date(v.create_time * 1000).toISOString() : null,
+        views: v.view_count ?? null,
+        likes: v.like_count ?? 0,
+        comments: v.comment_count ?? 0,
+        shares: v.share_count ?? 0,
+      })),
     });
   }
 
