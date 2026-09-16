@@ -35,10 +35,17 @@ for (const file of process.argv.slice(2)) {
       if (!dep) continue;
       for (const raw of dep[1].split(",")) {
         const name = raw.trim();
-        if (!/^\w+$/.test(name)) continue;
-        const d = declaredAt.get(name);
+        // A dependency entry is not always a bare name, and the binding it
+        // reads is its ROOT: `session?.user?.id` reads `session`. Discarding
+        // every entry that was not a single word is exactly how the App root
+        // went down on 2026-09-16 while this check printed zero. A dependency
+        // array is evaluated during RENDER, so the root has to exist by then,
+        // member access, optional chaining or not.
+        const root = (name.match(/^[A-Za-z_$][\w$]*/) || [])[0];
+        if (!root) continue;
+        const d = declaredAt.get(root);
         if (d != null && d > i) {
-          console.log(`${file}:${i + 1}  dependency "${name}" is declared below it, at line ${d + 1}`);
+          console.log(`${file}:${i + 1}  dependency "${name}" reads "${root}", which is declared below it, at line ${d + 1}`);
           bad++;
         }
       }

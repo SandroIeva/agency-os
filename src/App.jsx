@@ -50593,73 +50593,6 @@ export default function CircularMenu() {
     try { localStorage.setItem("agencyos-voice-speed", String(voiceSpeed)); } catch (_) {}
   }, [voiceSpeed]);
 
-  // ── The AI keys belong to the PERSON, not to the browser ──────────────────
-  // They used to live only in localStorage, so they were gone on the next
-  // device and wiped whenever somebody else signed in here. The wipe is right
-  // and stays (a shared machine must not hand the next person a paid key);
-  // what was missing was somewhere to come back from.
-  //
-  // `user_ai_keys` is that place. It is read and written through the ANON key,
-  // so RLS is the whole boundary: every policy names auth.uid() = user_id.
-  // Proven against production inside a rollback - the owner saw one row, a
-  // second user saw zero, and their write was refused.
-  //
-  // localStorage stays as a CACHE, so the first paint after a reload has the
-  // keys before the round trip lands. It is still in ACCOUNT_LOCAL_KEYS and is
-  // still cleared on a user switch; the difference is that the database then
-  // fills it again for whoever signed in.
-  const aiKeysLoaded = useRef(false);
-  const aiKeysSaved = useRef(null);
-  useEffect(() => {
-    const uid = session?.user?.id;
-    if (!uid) { aiKeysLoaded.current = false; aiKeysSaved.current = null; return; }
-    let on = true;
-    (async () => {
-      const { data } = await supabase.from("user_ai_keys")
-        .select("keys, provider").eq("user_id", uid).maybeSingle();
-      if (!on) return;
-      const stored = data?.keys && Object.keys(data.keys).length ? data.keys : null;
-      if (stored) {
-        setLlmKeys(stored);
-        if (data.provider) setLlmProvider(data.provider);
-        aiKeysSaved.current = JSON.stringify({ keys: stored, provider: data.provider || llmProvider });
-      } else {
-        // First run after this shipped: whatever this browser still holds
-        // becomes the row, so nobody has to type a key they already typed.
-        let local = {};
-        try { local = JSON.parse(localStorage.getItem("agencyos-llm-keys") || "{}"); } catch (_) {}
-        if (Object.keys(local).length) {
-          aiKeysSaved.current = JSON.stringify({ keys: local, provider: llmProvider });
-          await supabase.from("user_ai_keys").upsert({
-            user_id: uid, keys: local, provider: llmProvider,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: "user_id" }).then(() => {});
-        }
-      }
-      aiKeysLoaded.current = true;
-    })();
-    return () => { on = false; };
-  }, [session?.user?.id]); // eslint-disable-line
-
-  // Persist LLM settings: the cache always, the row once the row has been read.
-  // Writing before the read would push an empty object over a real key in the
-  // gap between mount and the round trip.
-  useEffect(() => { localStorage.setItem("agencyos-llm-provider", llmProvider); }, [llmProvider]);
-  useEffect(() => {
-    try { localStorage.setItem("agencyos-llm-keys", JSON.stringify(llmKeys)); } catch (_) {}
-    const uid = session?.user?.id;
-    if (!uid || !aiKeysLoaded.current) return;
-    const body = JSON.stringify({ keys: llmKeys, provider: llmProvider });
-    // The load itself sets the state, which lands here; without this the very
-    // first thing after reading a row is writing the same row back.
-    if (aiKeysSaved.current === body) return;
-    aiKeysSaved.current = body;
-    supabase.from("user_ai_keys").upsert({
-      user_id: uid, keys: llmKeys, provider: llmProvider,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "user_id" }).then(() => {});
-  }, [llmKeys, llmProvider, session?.user?.id]);
-
   const [activeMeetCall, setActiveMeetCall] = useState(null); // { link, title, windowRef }
   const meetWindowRef = useRef(null);
 
@@ -50734,6 +50667,82 @@ export default function CircularMenu() {
   // Kept in step during render, which is what makes the ref above usable from
   // a callback that has no dependency on it.
   sessionRef.current = session;
+
+  // Moved DOWN here on purpose, below `session`. Both effects below name
+  // `session?.user?.id` in their dependency ARRAY, and a dependency array is
+  // evaluated during render, not after it. While this block sat above the
+  // `const [session, setSession]` a few lines up, the first render read the
+  // binding before it existed and the whole App threw "Cannot access
+  // 'session' before initialization" into the ErrorBoundary. The effect
+  // BODIES would have been fine, which is what makes this easy to miss:
+  // nothing is wrong with the code inside, only with where it stands.
+
+  // ── The AI keys belong to the PERSON, not to the browser ──────────────────
+  // They used to live only in localStorage, so they were gone on the next
+  // device and wiped whenever somebody else signed in here. The wipe is right
+  // and stays (a shared machine must not hand the next person a paid key);
+  // what was missing was somewhere to come back from.
+  //
+  // `user_ai_keys` is that place. It is read and written through the ANON key,
+  // so RLS is the whole boundary: every policy names auth.uid() = user_id.
+  // Proven against production inside a rollback - the owner saw one row, a
+  // second user saw zero, and their write was refused.
+  //
+  // localStorage stays as a CACHE, so the first paint after a reload has the
+  // keys before the round trip lands. It is still in ACCOUNT_LOCAL_KEYS and is
+  // still cleared on a user switch; the difference is that the database then
+  // fills it again for whoever signed in.
+  const aiKeysLoaded = useRef(false);
+  const aiKeysSaved = useRef(null);
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid) { aiKeysLoaded.current = false; aiKeysSaved.current = null; return; }
+    let on = true;
+    (async () => {
+      const { data } = await supabase.from("user_ai_keys")
+        .select("keys, provider").eq("user_id", uid).maybeSingle();
+      if (!on) return;
+      const stored = data?.keys && Object.keys(data.keys).length ? data.keys : null;
+      if (stored) {
+        setLlmKeys(stored);
+        if (data.provider) setLlmProvider(data.provider);
+        aiKeysSaved.current = JSON.stringify({ keys: stored, provider: data.provider || llmProvider });
+      } else {
+        // First run after this shipped: whatever this browser still holds
+        // becomes the row, so nobody has to type a key they already typed.
+        let local = {};
+        try { local = JSON.parse(localStorage.getItem("agencyos-llm-keys") || "{}"); } catch (_) {}
+        if (Object.keys(local).length) {
+          aiKeysSaved.current = JSON.stringify({ keys: local, provider: llmProvider });
+          await supabase.from("user_ai_keys").upsert({
+            user_id: uid, keys: local, provider: llmProvider,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "user_id" }).then(() => {});
+        }
+      }
+      aiKeysLoaded.current = true;
+    })();
+    return () => { on = false; };
+  }, [session?.user?.id]); // eslint-disable-line
+
+  // Persist LLM settings: the cache always, the row once the row has been read.
+  // Writing before the read would push an empty object over a real key in the
+  // gap between mount and the round trip.
+  useEffect(() => { localStorage.setItem("agencyos-llm-provider", llmProvider); }, [llmProvider]);
+  useEffect(() => {
+    try { localStorage.setItem("agencyos-llm-keys", JSON.stringify(llmKeys)); } catch (_) {}
+    const uid = session?.user?.id;
+    if (!uid || !aiKeysLoaded.current) return;
+    const body = JSON.stringify({ keys: llmKeys, provider: llmProvider });
+    // The load itself sets the state, which lands here; without this the very
+    // first thing after reading a row is writing the same row back.
+    if (aiKeysSaved.current === body) return;
+    aiKeysSaved.current = body;
+    supabase.from("user_ai_keys").upsert({
+      user_id: uid, keys: llmKeys, provider: llmProvider,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id" }).then(() => {});
+  }, [llmKeys, llmProvider, session?.user?.id]);
   // Where this person is, kept current for the messenger's local-time readout.
   // Taken from the browser instead of asked for: it is already known exactly,
   // and a setting nobody remembers to change would be worse than none.
