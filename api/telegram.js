@@ -93,7 +93,7 @@ const T = {
     askComment: (title) => `Kommentar zu ${title}? Antworte einfach auf diese Nachricht.`,
     commented: "Kommentar gespeichert.",
     noteMade: "Notiz gespeichert.",
-    noteEmpty: "Schreib dazu, was du dir merken willst: /notiz Preise anheben",
+    noteWhat: "Was willst du dir merken? Antworte einfach auf diese Nachricht.",
     newEmptyTask: "Schreib dazu, was zu tun ist: /aufgabe Angebot schreiben",
     noteAsk: (body) => `<b>Neue Notiz</b>\n${body}\n\nWohin?`,
     notePrivate: "Allgemein",
@@ -167,7 +167,7 @@ const T = {
     askComment: (title) => `A comment on ${title}? Just reply to this message.`,
     commented: "Comment saved.",
     noteMade: "Note saved.",
-    noteEmpty: "Say what you want to remember: /note raise the prices",
+    noteWhat: "What do you want to remember? Just reply to this message.",
     newEmptyTask: "Say what needs doing: /task write the proposal",
     noteAsk: (body) => `<b>New note</b>\n${body}\n\nWhere?`,
     notePrivate: "General",
@@ -1137,11 +1137,34 @@ export default async function handler(req) {
   // why this is a command and a task is a conversation.
   const answering = replyTarget(msg.reply_to_message);
 
+  // The bot's own "what do you want to remember?" question, answered by
+  // replying to it. Telegram's command MENU sends a bare "/notiz" with no text
+  // after it, and the answer to that used to fall through to the free-text
+  // handler at the bottom of this file, where anything becomes a TASK: someone
+  // who asked for a note was asked for a project, a priority, a deadline and an
+  // owner. The question carries no state, exactly like every other question
+  // here: it is recognised by its own text, which Telegram hands back with the
+  // reply. `replyTarget` cannot see it, because that reads a task link out of
+  // the message entities and this question has no task.
+  const repliedText = (msg.reply_to_message?.text || "").trim();
+  const answeringNote = !answering && !!msg.reply_to_message?.from?.is_bot
+    && (repliedText === T.de.noteWhat || repliedText === T.en.noteWhat);
+
   const asNote = answering ? null : NOTE_PREFIX.exec(text);
-  if (asNote) {
+  if (asNote || answeringNote) {
     if (!link?.user_id) return reply(t.notLinked);
-    const body = text.slice(asNote[0].length);
-    if (!body.trim()) return reply(t.noteEmpty);
+    const body = answeringNote ? text : text.slice(asNote[0].length);
+    if (!body.trim()) {
+      // Ask, rather than explain the syntax and stop. force_reply puts the
+      // cursor in a reply to THIS message, which is what makes the answer
+      // recognisable without storing a thing. `selective` so that in a group
+      // it is only forced on the person who asked.
+      return api(botToken, "sendMessage", {
+        chat_id: chatId, text: t.noteWhat,
+        reply_to_message_id: msg.message_id,
+        reply_markup: { force_reply: true, selective: true },
+      }).then(() => json({ ok: true }));
+    }
     // A note belongs to a project or to nobody, exactly as on the board, so it
     // gets the same question a task gets. Nothing is written until it is
     // answered, and the text comes back with the reply rather than being stored.

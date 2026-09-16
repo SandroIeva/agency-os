@@ -79,6 +79,7 @@ const T = {
     noteMade: "Notiz gespeichert.",
     noteEmpty: "Schreib dazu, was du dir merken willst: /i7os notiz Preise anheben",
     noteTitle: "Neue Notiz",
+    noteLabel: "Notiz",
     linkTitle: "Link speichern",
     askFolder: "In welchen Ordner?",
     linkNoFolder: "Ohne Ordner",
@@ -147,6 +148,7 @@ const T = {
     noteMade: "Note saved.",
     noteEmpty: "Say what you want to remember: /i7os note raise the prices",
     noteTitle: "New note",
+    noteLabel: "Note",
     linkTitle: "Save link",
     askFolder: "Which folder?",
     linkNoFolder: "No folder",
@@ -665,7 +667,34 @@ export default async function handler(req) {
     const asNote = /^\s*(notiz|note)\b\s*/i.exec(said);
     if (asNote) {
       const body = said.slice(asNote[0].length);
-      if (!body.trim()) return ephemeral(t.noteEmpty);
+      if (!body.trim()) {
+        // Ask for the text instead of printing the syntax and stopping. A
+        // slash command with nothing after it used to answer with an example
+        // and keep nothing, so the next thing typed was a fresh command and
+        // became a TASK, with a priority, a deadline and an owner to answer
+        // for. A modal is Slack's version of Telegram's forced reply: the
+        // question is on screen and the answer comes back to it.
+        const { data: inst0 } = await db.from("slack_installations")
+          .select("bot_token").eq("team_id", teamId).maybeSingle();
+        if (!inst0?.bot_token) return ephemeral(t.noteEmpty);
+        await slack(inst0.bot_token, "views.open", {
+          trigger_id: params.get("trigger_id"),
+          view: {
+            type: "modal", callback_id: "new_note",
+            // The channel, so the question after the modal lands where the
+            // person is standing. A submission carries no response_url.
+            private_metadata: JSON.stringify({ ch: params.get("channel_id") || "" }),
+            title: { type: "plain_text", text: t.noteTitle.slice(0, 24) },
+            submit: { type: "plain_text", text: "OK" },
+            blocks: [{
+              type: "input", block_id: "n",
+              label: { type: "plain_text", text: t.noteLabel.slice(0, 2000) },
+              element: { type: "plain_text_input", action_id: "v", multiline: true },
+            }],
+          },
+        });
+        return new Response("", { status: 200 });
+      }
       // Same question the board answers with its filter: a project, or
       // nobody. Nothing is written until it is answered.
       const orgs = await workspacesFor(db, link.user_id);
@@ -765,6 +794,34 @@ export default async function handler(req) {
       const done = await finishTask(db, inst2.bot_token, mlink, mt, appUrl,
         { ...st, d: typed || "-", c: listed || "" }, null);
       return done.ok ? new Response("", { status: 200 }) : fail(done.msg);
+    }
+
+    // The note modal came back. It carries only the text: where the note goes
+    // is the same question the slash command asks, answered by the same
+    // buttons, so nothing about the note flow exists twice.
+    if (p.view?.callback_id === "new_note") {
+      const said = fieldOf("n").trim();
+      if (!said) return fail(mt.noteEmpty);
+      let meta = {}; try { meta = JSON.parse(p.view.private_metadata || "{}"); } catch { /* the DM is the fallback */ }
+      const { data: inst3 } = await db.from("slack_installations")
+        .select("bot_token").eq("team_id", p.team?.id).maybeSingle();
+      if (!inst3?.bot_token) return fail(mt.newFailed);
+      const orgs = await workspacesFor(db, mlink.user_id);
+      if (!orgs.length) return fail(mt.newNoWorkspace);
+      const one = orgs.length === 1 ? orgs[0] : null;
+      const projects = one ? await projectsFor(db, mlink.user_id, one.id) : [];
+      const blocks = one
+        ? draftBlocks(mt, { t: said, note: 1, o: one.id.slice(0, ID_HINT), chosen: one.name },
+            mt.askProject, [
+              { key: "p", label: mt.notePrivate, set: { p: "-" } },
+              ...projects.map(pr => ({ key: "p", label: pr.name, set: { p: pr.id.slice(0, ID_HINT) } })),
+            ], mt.noteTitle)
+        : draftBlocks(mt, { t: said, note: 1 }, mt.askWorkspace,
+            orgs.map(o => ({ key: "o", label: o.name, set: { o: o.id.slice(0, ID_HINT) } })), mt.noteTitle);
+      await slack(inst3.bot_token, "chat.postEphemeral", {
+        channel: meta.ch || mlink.chat_id, user: p.user?.id, text: mt.noteTitle, blocks,
+      });
+      return new Response("", { status: 200 });
     }
 
     const taskId = p.view?.private_metadata;
