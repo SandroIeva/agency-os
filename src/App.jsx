@@ -22931,11 +22931,30 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // a second paste of the same frame lands exactly where the first one did
   // rather than going down a second code path.
   const placeFigmaItems = (data, fromCache) => {
-    // Fitted to the board. The drawing layer clips, so a frame wider than the
-    // board keeps its background — which starts at 0,0 and covers what you can
-    // see — and loses everything past the edge. Which looks exactly like an
-    // import that brought nothing but a background.
-    const fitted = figmaFit(data.items || [], data.size, { w: W, h: H });
+    // A frame arrives at the size somebody drew it, and it keeps that size.
+    // This used to scale the whole design down to whatever board happened to be
+    // open, and the drawing layer clipped whatever still stuck out: a 1440-wide
+    // design in a 1080-wide board came out at 75% with its edges cut off. A
+    // design squeezed into the wrong shape is not the design any more.
+    //
+    // Three cases, in this order:
+    //   the frame already fits the open board  → straight in, untouched,
+    //   the board is still empty               → the board takes the frame's size,
+    //   the board already has work on it       → the frame gets its own board.
+    //
+    // Inside a component there is no board to resize and no board to add beside
+    // it, so that keeps the old behaviour and fits to what is open.
+    const fw = Math.round(Number(data.size?.w) || 0);
+    const fh = Math.round(Number(data.size?.h) || 0);
+    const known = fw > 0 && fh > 0;
+    const mode = (focus || !known || (fw === W && fh === H)) ? "here"
+      : items.length === 0 ? "resize"
+      : "board";
+    // Fitted against the board the items will actually land on, which in the
+    // last two cases is the frame's own size. `fitItems` only ever scales DOWN,
+    // so a target equal to the source leaves everything alone and `scale` is 1.
+    const fitted = figmaFit(data.items || [], data.size,
+      mode === "here" ? { w: W, h: H } : { w: fw, h: fh });
     // Fresh ids for the items AND for their groups. The import is cached per
     // link, so placing the same one twice hands out the same server-side group
     // ids a second time, and the two copies would fuse into one group that
@@ -22963,7 +22982,28 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     }
     pushUndo(takeSnap());
     markChange();
-    setItems(list => [...list, ...made]);
+    if (mode === "board") {
+      // Built in the same shape `addBoard` uses, because two places making a
+      // board differently is exactly how the two drift apart. It carries the
+      // frame's name, so the board says which design it is.
+      const list = boardsNow();
+      const b = {
+        id: crypto.randomUUID(), name: data.name || `Artboard ${list.length + 1}`,
+        x: nextBoardX(list), y: 0, w: fw, h: fh,
+        bg: "#FFFFFF", radius: 0, radii: undefined, clip: true, items: made,
+      };
+      setBoards([...list, b]);
+      setActive(list.length);
+      // Puts the new board on screen, including its size: `loadBoard` is what
+      // sets `frame`, and without it the editor would draw the new items at the
+      // old board's dimensions.
+      loadBoard(b);
+    } else {
+      // The empty board simply becomes the frame. `liveBoard` reads w/h back
+      // out of `frame`, so this is all it takes for the stored board to agree.
+      if (mode === "resize") setFrame({ w: fw, h: fh });
+      setItems(list => [...list, ...made]);
+    }
     setSel(null);
     setTool("select");
 
@@ -22996,6 +23036,14 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // cannot see it" looked identical from the outside, and that cost a round
     // of guessing.
     const head = (de ? `${made.length} Elemente übernommen` : `${made.length} items imported`)
+      // Said, because the board on screen is not the one that was open a
+      // moment ago, and a silent switch reads as the import having gone
+      // somewhere else entirely.
+      + (mode === "board"
+          ? (de ? `, als neues Artboard ${fw}×${fh}` : `, as a new artboard ${fw}×${fh}`)
+          : mode === "resize"
+            ? (de ? `, Artboard auf ${fw}×${fh} gesetzt` : `, artboard set to ${fw}×${fh}`)
+            : "")
       + (data.convertedAutoLayouts > 0
           ? (de ? `, ${data.convertedAutoLayouts} Auto-Layout-Frames in bearbeitbare Elemente umgewandelt`
                 : `, ${data.convertedAutoLayouts} auto-layout frames converted to editable elements`) : "")
