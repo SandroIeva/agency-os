@@ -465,10 +465,29 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
   // and the offset places them, so dragging and the arrow keys move it the way
   // they move any other path.
   const vectorItems = (node, b, opacity) => {
-    const geo = (Array.isArray(node.fillGeometry) && node.fillGeometry.length)
+    const hasFill = Array.isArray(node.fillGeometry) && node.fillGeometry.length > 0;
+    const geo = hasFill
       ? node.fillGeometry
       : (Array.isArray(node.strokeGeometry) ? node.strokeGeometry : []);
     if (!geo.length) return [];
+    // `strokeGeometry` is the stroke ALREADY OUTLINED as an area: every entry is
+    // a Path carrying a windingRule, which only means anything for a region, and
+    // the plugin docs say it is taken from the centre whatever strokeAlign says.
+    // So it is FILLED with the stroke's colour and stroked with nothing. Painting
+    // a second stroke of strokeWeight on top of it drew the outline of the
+    // outline, and that is why every unfilled arrow arrived far too thick.
+    const outlined = !hasFill;
+    // Rotation, baked in. Null when the node stands upright, and then nothing
+    // below changes at all.
+    const place = geometryPlacer(node.relativeTransform, node.size, b);
+    const movePts = (list) => (list || []).map(nd => {
+      const p = place(nd.x, nd.y);
+      const o = { ...nd, x: p.x, y: p.y };
+      // Both handles, or every curve bends somewhere its author never put it.
+      if (nd.h1x != null) { const q = place(nd.h1x, nd.h1y); o.h1x = q.x; o.h1y = q.y; }
+      if (nd.h2x != null) { const q = place(nd.h2x, nd.h2y); o.h2x = q.x; o.h2y = q.y; }
+      return o;
+    });
     const st = strokeOf(node);
     const solid = solidFill(node);
     const grad = gradientFill(node);
@@ -497,15 +516,23 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
       // same `d`.
       const [first, ...rest] = subs;
       out.push({
-        id: newId(), type: "path", ox: b.x, oy: b.y,
-        nodes: first.nodes, closed: first.closed, fill,
-        ...(rest.length ? { subs: rest.map(sp => ({ nodes: sp.nodes, closed: sp.closed })) } : {}),
+        // Placed points carry their own position, so the offset goes to zero;
+        // an upright node keeps the offset it always had.
+        id: newId(), type: "path", ox: place ? 0 : b.x, oy: place ? 0 : b.y,
+        nodes: place ? movePts(first.nodes) : first.nodes, closed: first.closed,
+        fill: outlined ? (st ? st.color : fill) : fill,
+        ...(rest.length ? { subs: rest.map(sp => ({
+          nodes: place ? movePts(sp.nodes) : sp.nodes, closed: sp.closed })) } : {}),
         // Figma names the rule per fill. Anything but EVENODD is SVG's default,
         // and with NONZERO the hole is made by winding the inner subpath the
         // other way round, which the parser preserves by keeping point order.
         ...(String(g.windingRule || "").toUpperCase() === "EVENODD" ? { fillRule: "evenodd" } : {}),
-        color: st ? st.color : "transparent",
-        width: st ? st.width : 0,
+        color: outlined || !st ? "transparent" : st.color,
+        width: outlined || !st ? 0 : st.width,
+        // Figma's own default is NONE, ours is round, so the two disagree unless
+        // it is said. Only where it can still be seen: on an outlined stroke the
+        // cap is already part of the shape.
+        ...(!outlined && st && node.strokeCap !== "ROUND" ? { cap: "butt" } : {}),
         ...(curGid ? { groupId: curGid } : {}),
       });
     }
@@ -651,6 +678,51 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
       fills: (root.fills || []).map(f => f.type),
       legacy: !!(root.background?.length || root.backgroundColor),
     },
+  };
+}
+
+// Where a node's geometry actually belongs on the board.
+//
+// Figma hands geometry over in the node's OWN coordinates, unrotated, and says
+// so twice in the spec: `relativeTransform` is "the top two rows of a matrix
+// that represents the 2D transform of this node relative to its parent. Use to
+// transform coordinates in geometry", and `size` "is different from the width
+// and height of the bounding box in that the absolute bounding box represents
+// the element AFTER scaling and rotation". Both arrive only because we ask for
+// `geometry=paths`, which we do.
+//
+// Taking the points as they came and dropping them at the corner of
+// absoluteBoundingBox therefore draws an unrotated shape inside a rotated
+// shape's box. Six chevrons pointing right arrived as a zigzag pointing up,
+// which is what this exists to stop.
+//
+// It is baked into the POINTS rather than carried as a rotation on the item,
+// because an artboard path cannot hold one: the SVG layer draws it with a
+// translate and nothing else. `canvasExpand` bakes an instance's rotation into
+// its parts for the same reason.
+//
+// Rotating about the local centre and then centring on the box is exact, not an
+// approximation: the axis-aligned box of a shape rotated about its own centre
+// is centred on that same centre, and absoluteBoundingBox IS that box.
+//
+// Returns null when there is nothing to do, so the untouched path keeps the
+// cheaper ox/oy placement it has always had.
+export function geometryPlacer(transform, size, box) {
+  const m = transform;
+  if (!Array.isArray(m) || !Array.isArray(m[0]) || !Array.isArray(m[1])) return null;
+  const a = Number(m[0][0]), b = Number(m[0][1]);
+  const c = Number(m[1][0]), d = Number(m[1][1]);
+  if (![a, b, c, d].every(Number.isFinite)) return null;
+  // Upright and unflipped. The axis vectors are unit vectors by Figma's own
+  // rule, so this is the identity and the old path is the right one.
+  if (Math.abs(b) < 1e-6 && Math.abs(c) < 1e-6 && a > 0 && d > 0) return null;
+  const lw = Number(size?.x) > 0 ? Number(size.x) : box.w;
+  const lh = Number(size?.y) > 0 ? Number(size.y) : box.h;
+  const cx = lw / 2, cy = lh / 2;
+  const tx = box.x + box.w / 2, ty = box.y + box.h / 2;
+  return (x, y) => {
+    const dx = x - cx, dy = y - cy;
+    return { x: round2(tx + a * dx + b * dy), y: round2(ty + c * dx + d * dy) };
   };
 }
 
