@@ -307,6 +307,29 @@ export default async function handler(req) {
       }, 404);
     }
 
+    // TEMPORARY, to be removed once the rotated-vector import is fixed: the raw
+    // transform chain of every vector and its ancestors, written to the
+    // function log. Two fixes built on assumptions about how Figma composes
+    // relativeTransform have failed on a real file; this records what the file
+    // actually says. Geometry only: types, matrices, sizes, boxes. No text, no
+    // fills, no image references.
+    try {
+      const VEC = new Set(["VECTOR", "STAR", "POLYGON", "REGULAR_POLYGON", "BOOLEAN_OPERATION", "LINE", "RECTANGLE", "ELLIPSE"]);
+      const rows = [];
+      const bb = (n) => n?.absoluteBoundingBox
+        ? [Math.round(n.absoluteBoundingBox.x), Math.round(n.absoluteBoundingBox.y),
+           Math.round(n.absoluteBoundingBox.width), Math.round(n.absoluteBoundingBox.height)] : null;
+      const m2 = (t) => Array.isArray(t) ? t.map(r => r.map(v => Math.round(v * 1000) / 1000)) : null;
+      const sz = (n) => n?.size ? [Math.round(n.size.x * 10) / 10, Math.round(n.size.y * 10) / 10] : null;
+      (function visit(n, chain) {
+        if (!n || rows.length >= 40) return;
+        const here = { t: n.type, rt: m2(n.relativeTransform), sz: sz(n), bb: bb(n) };
+        if (VEC.has(n.type)) rows.push({ id: n.id, node: here, chain });
+        (n.children || []).forEach(c => visit(c, [...chain, here]));
+      })(doc, []);
+      console.log("[figma-xf]", JSON.stringify({ node: link.nodeId, rows }));
+    } catch (e) { console.log("[figma-xf] failed", e?.message); }
+
     const out = figmaToItems(doc);
 
     // The refs are opaque until this call maps them to URLs. One request for the
