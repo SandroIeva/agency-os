@@ -11,31 +11,22 @@ Review.
 
 ## Was eingereicht wird
 
-Nur die Berechtigungen, die der Code tatsächlich anfragt. **Sieben**, nicht fünf:
+Nur die Berechtigungen, die der Code tatsächlich anfragt. **Sieben**:
 `threads_manage_insights` kam dazu, als die Threads-Zahlen in Audience gebaut
-wurden, und `threads_profile_discovery`, als der Benchmark für Threads von
-SocialCrawl auf Meta umgestellt wurde. SocialCrawl rechnet pro Aufruf ab, Meta
-liefert öffentliche Threads-Profile kostenlos; für LinkedIn, TikTok, X,
-Pinterest und YouTube bleibt es bei SocialCrawl, weil Meta dazu nichts sagt.
-
-Ein Token behält die Berechtigungen, mit denen es ausgestellt wurde. Der Scope
-wurde erweitert, also muss jede **vor** dieser Änderung angelegte Threads-
-Verbindung einmal neu verbunden werden. Heute betrifft das nur @i7os.app; nach
-der Freigabe wäre es jeder Kunde, weshalb Erweiterungen vor die Einreichung
-gehören und nicht dahinter. "Requesting future
-permissions" ist ein benannter Ablehnungsgrund, und in der Konsole stehen bei
-Threads noch `threads_keyword_search` und `threads_manage_insights` herum, die
-wir nicht benutzen.
+wurden, und `instagram_business_manage_comments`, als Analytics die
+Instagram-Kommentare direkt über Meta las. `threads_profile_discovery` ist
+**nicht mehr dabei**: Sie diente nur dem Benchmark, und der wurde am 17.09.2026
+entfernt. Nicht einreichen, der Code fragt sie nicht mehr an.
 
 | Berechtigung | wofür | wird ausgelöst durch |
 |---|---|---|
 | `instagram_business_basic` | Konto lesen | Analytics-Panel, Profil |
 | `instagram_business_content_publish` | veröffentlichen | Analytics-Panel, 24-h-Kontingent · Composer |
 | `instagram_business_manage_insights` | Zahlen lesen | Analytics-Panel, Kennzahlen |
+| `instagram_business_manage_comments` | Kommentare lesen | Analytics → Letzte Kommentare |
 | `threads_basic` | Konto lesen | Analytics-Panel, Profil |
 | `threads_content_publish` | veröffentlichen | Analytics-Panel, 24-h-Kontingent · Composer |
 | `threads_manage_insights` | Zahlen lesen | Analytics-Panel, Kennzahlen und Follower-Herkunft |
-| `threads_profile_discovery` | fremde öffentliche Profile | Audience → Benchmark, Plattform Threads |
 
 ## Die sechs Schritte, in dieser Reihenfolge
 
@@ -84,17 +75,10 @@ Nachgelesen im Code, nicht angenommen:
 | `/{th-id}/threads_insights` (Kennzahlen und Herkunft) | `threads_manage_insights` |
 | `/{th-id}/threads_publishing_limit` | `threads_content_publish` |
 
-⚠ **Die siebte fehlt dort.** `threads_profile_discovery` wird nur von
-**Audience → Benchmark** ausgelöst, und nur wenn dort die Plattform Threads
-gewählt und ein fremder Account nachgeschlagen wird. Ohne diesen zweiten Klick
-hat die Berechtigung keinen Aufruf, und eine Berechtigung ohne Aufruf ist ein
-benannter Ablehnungsgrund.
-
-Die Einstellungen-Seite tut das ausdrücklich **nicht**, sie liest nur unsere
-eigene Datenbank.
-
-Also kurz vor der Einreichung: Analytics öffnen **und** im Benchmark einen
-Threads-Account nachschlagen. Nicht Wochen vorher.
+⚠ **`instagram_business_manage_comments` braucht eine neue Verbindung.** Ein
+Instagram-Token behält die Rechte, mit denen es ausgestellt wurde. Vor der
+Einreichung also Instagram einmal trennen und neu verbinden und danach
+Analytics öffnen, damit `/{media-id}/comments` einen Aufruf hat.
 
 ⚠ Und die Voraussetzung dafür, dass Analytics überhaupt etwas aufruft: der
 Bereich zeigte bis zum 14.09.2026 die Seite "Verbinde deine Kanäle", sobald

@@ -24,7 +24,6 @@
 //   POST { mode: "publish",    orgId, … } → one post, container flow
 //   POST { mode: "publish-finish", orgId, containerId } → finish a slow one
 //   POST { mode: "overview",   orgId } → profile and the 24h window, one trip
-//   POST { mode: "discover",   orgId, username } → a PUBLIC profile, free
 //   POST { mode: "limit",      orgId } → posts left in the 24h window
 import { createClient } from "@supabase/supabase-js";
 
@@ -45,12 +44,9 @@ const GRAPH = `${GRAPH_ROOT}/${V}`;
 // absent: a token keeps the scopes it was issued with, so widening the list
 // later strands every connection made before the change, but asking for a
 // permission we do not use is the surest way to have a review rejected.
-const SCOPES = ["threads_basic", "threads_content_publish", "threads_manage_insights",
-  // Public profiles of accounts that have authorised nothing: the competitor
-  // half of Audience. SocialCrawl bills per call and can do this for fifty
-  // networks; Meta does it for Threads alone and for free, so Threads stops
-  // being a paid lookup.
-  "threads_profile_discovery"].join(",");
+// threads_profile_discovery was here for the Benchmark card, which is gone. A
+// connection made while it was asked for still carries it, which is harmless.
+const SCOPES = ["threads_basic", "threads_content_publish", "threads_manage_insights"].join(",");
 
 // 60-day tokens with no refresh token: a live one is traded for a fresh one, so
 // it must happen before the old one lapses. Threads refuses to refresh a token
@@ -395,11 +391,6 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     });
   }
 
-  // ── discover — a public Threads profile, by name ──────────────────────────
-  //
-  // Nobody has to connect anything for this. It is what SocialCrawl was being
-  // paid for on Threads, and Meta serves it at no cost, so the benchmark asks
-  // here first and falls back to SocialCrawl only for the other networks.
   // The posts themselves, so Threads can stand in the same Top Posts list as
   // everything else. Unlike Instagram's media edge, the list carries no counts
   // at all, so every post needs its own insights call and the cap is what keeps
@@ -448,40 +439,6 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     posts.sort((x, y) => (y.likes + y.replies + y.reposts) - (x.likes + x.replies + x.reposts));
 
     return json({ days, postCount: recent.length, posts: posts.slice(0, limit) });
-  }
-
-  if (body.mode === "discover") {
-    const username = String(body.username || "").trim().replace(/^@/, "");
-    if (!/^[\w.]{1,60}$/.test(username)) return json({ error: "A username is required", code: "invalid_username" }, 400);
-    const r = await th(token, "/profile_lookup", {
-      username,
-      fields: "username,name,profile_picture_url,biography,follower_count,likes_count,quotes_count,reposts_count,views_count,is_verified",
-    });
-    // "Exact match" is Meta's rule, so a typo is a miss and not a failure.
-    if (!r.ok || !r.body?.username) {
-      const msg = r.body?.error?.message || "";
-      return json({ error: msg || "No profile found", code: "not_found" }, 404);
-    }
-    const p = r.body;
-    return json({
-      profile: {
-        platform: "threads",
-        username: p.username,
-        name: p.name || p.username,
-        url: `https://www.threads.net/@${p.username}`,
-        avatar: p.profile_picture_url || null,
-        bio: p.biography || null,
-        verified: !!p.is_verified,
-        followers: p.follower_count ?? null,
-        likes: p.likes_count ?? null,
-        quotes: p.quotes_count ?? null,
-        reposts: p.reposts_count ?? null,
-        views: p.views_count ?? null,
-      },
-      // Said out loud, because the whole point of this path is that it is not
-      // the metered one.
-      source: "meta",
-    });
   }
 
   if (body.mode === "limit") {

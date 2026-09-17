@@ -30593,171 +30593,6 @@ function LinkedInPagePanel({ theme, darkMode, de, session, orgId, projectId, acc
   );
 }
 
-// ── Benchmark ────────────────────────────────────────────────────────────────
-// Zernio reads the accounts this workspace owns. SocialCrawl reads anyone's
-// public page — which is the only way to answer "how do we compare". Same
-// unified shape across platforms, so one card renders all of them.
-//
-// Every lookup costs a credit upstream, so it happens when asked for and the
-// result stays on screen rather than refetching on every render.
-const BENCH_PLATFORMS = [
-  ["linkedin", "LinkedIn", "linkedin.com/company/…"],
-  ["linkedinperson", de => (de ? "LinkedIn (Person)" : "LinkedIn (person)"), "linkedin.com/in/…"],
-  ["instagram", "Instagram", "@handle"],
-  ["tiktok", "TikTok", "@handle"],
-  ["youtube", "YouTube", "@handle"],
-  ["threads", "Threads", "@handle"],
-  ["twitter", "X", "@handle"],
-  ["facebook", "Facebook", "facebook.com/…"],
-];
-
-function SocialBenchmarkPanel({ theme, darkMode, de, session, orgId, card, secLabel, ownFollowers }) {
-  const [platform, setPlatform] = useState("linkedin");
-  const [handle, setHandle] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const [rows, setRows] = useState([]);      // looked up profiles, newest first
-
-  const look = async () => {
-    const h = handle.trim();
-    if (!h || busy) return;
-    setBusy(true); setError(null);
-    try {
-      // Threads goes to Meta first. It answers for free and needs nobody to
-      // have connected anything, which is the whole reason to prefer it:
-      // SocialCrawl bills per call. Everything else it cannot do, so the
-      // fallback is not a fallback for those, it is the only way.
-      let r = null;
-      if (platform === "threads") {
-        const res = await fetch("/api/threads", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
-          body: JSON.stringify({ mode: "discover", orgId, username: h }),
-        });
-        const j = await res.json().catch(() => null);
-        if (res.ok && j?.profile) r = j;
-        // A workspace with no Threads connection, or one not cleared for the
-        // direct path, falls through to the metered lookup rather than being
-        // told no.
-        else if (res.status === 404) { setError({ message: de ? "Kein Profil gefunden." : "No profile found." }); setBusy(false); return; }
-      }
-      if (!r) r = await zernioRequest(session, { mode: "lookup", orgId, platform, handle: h });
-      if (r.profile) {
-        setRows(list => [{ ...r.profile, __platform: platform, __credits: r.credits, __source: r.source || "socialcrawl" },
-          ...list.filter(x => x.url !== r.profile.url)].slice(0, 6));
-        setHandle("");
-      } else setError({ message: de ? "Kein Profil gefunden." : "No profile found." });
-    } catch (e) { setError(e); }
-    setBusy(false);
-  };
-
-  const label = (v) => (typeof v === "function" ? v(de) : v);
-  const spec = BENCH_PLATFORMS.find(([k]) => k === platform);
-  const field = { height: 36, borderRadius: 10, border: `1px solid ${theme.borderFaint}`,
-    background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", color: theme.text,
-    fontFamily: FONT, fontSize: 13, padding: "0 12px", outline: "none" };
-
-  return (
-    <div style={card}>
-      <div style={secLabel}>{de ? "Benchmark" : "Benchmark"}</div>
-      <div style={{ fontFamily: FONT, fontSize: 12, color: theme.textDim, lineHeight: 1.55,
-        marginBottom: 12 }}>
-        {de ? "Schau dir öffentliche Profile von Wettbewerbern oder Vorbildern an, um zu sehen, was dort funktioniert."
-            : "Look up public profiles of competitors or inspirations to see what works for them."}
-      </div>
-
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-        {BENCH_PLATFORMS.map(([k, l]) => (
-          <div key={k} onClick={() => setPlatform(k)}
-            style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontFamily: FONT,
-              fontSize: 12, fontWeight: platform === k ? 600 : 500,
-              color: platform === k ? "#fff" : theme.textDim,
-              background: platform === k ? "#15151c"
-                : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") }}>
-            {label(l)}
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", gap: 8 }}>
-        <input value={handle} onChange={e => setHandle(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") look(); }}
-          placeholder={spec ? spec[2] : ""}
-          style={{ ...field, flex: 1, minWidth: 0 }} />
-        <div onClick={look}
-          style={{ height: 36, padding: "0 18px", borderRadius: 10, display: "flex",
-            alignItems: "center", cursor: busy ? "default" : "pointer", background: "#15151c",
-            color: "#fff", fontFamily: FONT, fontSize: 12.5, fontWeight: 600, opacity: busy ? 0.6 : 1 }}>
-          {busy ? (de ? "Sucht…" : "Looking…") : (de ? "Nachschlagen" : "Look up")}
-        </div>
-      </div>
-
-      {error && (
-        <div style={{ marginTop: 10, fontFamily: FONT, fontSize: 12.5, color: theme.textDim,
-          lineHeight: 1.55 }}>
-          {error.code === "socialcrawl_not_configured"
-            ? (de ? "SocialCrawl ist noch nicht konfiguriert — SOCIALCRAWL_API_KEY als Env-Var hinterlegen."
-                  : "SocialCrawl is not configured yet — set the SOCIALCRAWL_API_KEY env var.")
-            : zernioErrorText(error, de)}
-        </div>
-      )}
-
-      {rows.map((p, i) => {
-        const diff = ownFollowers && p.followers
-          ? Math.round((p.followers / ownFollowers - 1) * 100) : null;
-        return (
-          <div key={(p.url || p.username || "") + i}
-            style={{ display: "flex", gap: 12, alignItems: "center", padding: "14px 0",
-              borderTop: `1px solid ${theme.borderFaint}`, marginTop: i ? 0 : 14 }}>
-            <div style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
-              background: p.avatar_url ? `center/cover no-repeat url(${p.avatar_url})` : "#15151c" }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: FONT, fontSize: 13.5, fontWeight: 600, color: theme.text,
-                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {p.display_name || p.username || "—"}
-              </div>
-              <div style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim, marginTop: 2,
-                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {[p.username && `@${p.username}`, plainField(p.location, de), p.bio]
-                  .filter(Boolean).join(" · ")}
-              </div>
-              {/* WHO answered, and it matters twice. A Threads lookup goes to
-                  Meta first and falls through to SocialCrawl when Meta refuses,
-                  silently, which hides two things at once: SocialCrawl bills
-                  per call, and the Meta permission only counts as used when
-                  Meta actually answered. threads_profile_discovery sat at zero
-                  calls in the console with nobody able to see why. */}
-              <div style={{ fontFamily: FONT, fontSize: 10.5, marginTop: 3,
-                color: p.__source === "meta" ? "#0B7D72" : theme.textFaint }}>
-                {p.__source === "meta"
-                  ? (de ? "über Meta · kostenlos" : "via Meta · free")
-                  : (de ? "über SocialCrawl · kostet ein Guthaben" : "via SocialCrawl · costs a credit")}
-              </div>
-            </div>
-            <div style={{ textAlign: "right", flexShrink: 0 }}>
-              <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: theme.text }}>
-                {fmtMetric(p.followers || 0, de)}
-              </div>
-              {/* The comparison is the point of looking someone up. Without your
-                  own number there is nothing to compare to, so it stays away. */}
-              <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textDim }}>
-                {diff == null ? (de ? "Follower" : "followers")
-                  : `${diff > 0 ? "+" : ""}${diff} % ${de ? "ggü. euch" : "vs you"}`}
-              </div>
-            </div>
-            {p.url && (
-              <a href={p.url} target="_blank" rel="noreferrer"
-                style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textFaint, flexShrink: 0 }}>
-                {de ? "Öffnen" : "Open"}
-              </a>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, card, secLabel, igUserId = null }) {
   const [recent, setRecent] = useState(null);   // null = loading
   const [error, setError] = useState(null);
@@ -31464,12 +31299,11 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   // a hard release after twelve seconds beside the condition rather than trust
   // that every path settles.
   //
-  // Deliberately NOT part of this: LinkedInPagePanel and SocialBenchmarkPanel,
-  // which fetch their own data at the very bottom of the page. They go through
-  // SocialCrawl, which bills per call and answers slowly, and holding the whole
-  // dashboard back for them would trade a small late reflow for seconds of
-  // blank screen. They carry their own loading line inside a card of fixed
-  // width instead.
+  // Deliberately NOT part of this: LinkedInPagePanel, which fetches its own data
+  // at the very bottom of the page. It goes through SocialCrawl, which bills per
+  // call and answers slowly, and holding the whole dashboard back for it would
+  // trade a small late reflow for seconds of blank screen. It carries its own
+  // loading line inside a card of fixed width instead.
   const allLoaded = accounts != null && direct != null
     && (accounts.length === 0 || data != null)
     && (!hasDirect || directStats != null);
@@ -31979,17 +31813,13 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
               session={session} orgId={orgId} platform={platform} igUserId={igId}
               card={card} secLabel={secLabel} />
             {/* Beside the comments, in the column the connected accounts use
-                above: both answer "who else is out there", one from the people
-                already talking to you and one from everybody else. */}
+                above. The Benchmark card that stood under it is gone: it gave
+                a follower count and little else, and Competitors already
+                holds the accounts worth comparing against. */}
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {/* The page itself, then everyone else's — same column, same
-                  question one step wider. */}
               <LinkedInPagePanel theme={theme} darkMode={darkMode} de={de}
                 session={session} orgId={orgId} projectId={projectId} accounts={accounts}
                 card={card} secLabel={secLabel} />
-              <SocialBenchmarkPanel theme={theme} darkMode={darkMode} de={de}
-                session={session} orgId={orgId} card={card} secLabel={secLabel}
-                ownFollowers={followersOk ? followerTotal : null} />
             </div>
           </div>
         </>
