@@ -31600,19 +31600,44 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
                     </div>
                   )}
                   <span style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500 }}>{p ? p.label : (de ? "Alle" : "All")}</span>
+                  {/* The one thing the Connected accounts card said that the
+                      tabs did not: an account that has to be connected again. */}
+                  {p && accounts.some(a => uiKeyFor(a.platform) === key && a.isActive === false) && (
+                    <span title={de ? "Neu verbinden nötig" : "Reconnect needed"}
+                      style={{ width: 7, height: 7, borderRadius: "50%", background: "#E86767", flexShrink: 0 }} />
+                  )}
                 </motion.div>
               );
             })}
             <div style={{ flex: 1 }} />
-            <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 20, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", fontSize: 11, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#00B894" }} />
-              {de ? "Live · Zernio" : "Live · Zernio"}
-            </div>
+            {/* Adding a channel, where the badge naming the provider used to
+                stand. The shared Dropdown with no value: its placeholder is the
+                button, and choosing a platform starts connecting it. */}
+            {unconnected.length > 0 && (
+              <Dropdown value={null} theme={theme} darkMode={darkMode} align="right" minWidth={220}
+                placeholder={de ? "Hinzufügen" : "Add"}
+                leadingIcon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>}
+                onChange={(k) => { if (!busyKey && !socialBlocked) connect(k); }}
+                options={unconnected.map(k => {
+                  const pm = platformMeta(k);
+                  return {
+                    value: k, label: pm?.label || k,
+                    icon: (
+                      <div style={{ width: 22, height: 22, borderRadius: 7, background: pm?.color || "#15151c",
+                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width={tpGlyphSize(k, 13)} height={tpGlyphSize(k, 13)} viewBox="0 0 24 24">{touchpointGlyph(k)}</svg>
+                      </div>
+                    ),
+                    disabled: socialBlocked,
+                    disabledReason: de ? "Teil eines bezahlten Plans" : "Part of a paid plan",
+                  };
+                })} />
+            )}
           </div>
 
           {addonMissing && (
             <div style={{ marginBottom: 18, padding: "10px 14px", borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
-              {de ? "Follower- und Tages-Metriken benötigen das Zernio Analytics-Add-on." : "Follower and daily metrics require the Zernio analytics add-on."}
+              {de ? "Follower- und Tagesmetriken sind für diese Kanäle noch nicht freigeschaltet." : "Follower and daily metrics are not enabled for these channels yet."}
             </div>
           )}
 
@@ -31664,11 +31689,10 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
 
           </>)}
 
-          {/* Top posts + connected accounts. One column instead of two when
-              there are no Zernio posts to put in the wide one. */}
-          <div style={{ display: "grid", alignItems: "start", gap: 14,
-            gridTemplateColumns: (accounts.length > 0 || topPosts.length > 0)
-              ? "minmax(0, 1.6fr) minmax(0, 1fr)" : "minmax(0, 1fr)" }}>
+          {/* Top posts, full width. The column beside it listed the connected
+              accounts, which the tabs above already name, and cards for adding
+              more, which the Add button above now does. */}
+          <div style={{ display: "grid", alignItems: "start", gap: 14, gridTemplateColumns: "minmax(0, 1fr)" }}>
             {(accounts.length > 0 || topPosts.length > 0) && (
             <div style={card}>
               <div style={secLabel}>{de ? "Top 5 Posts (Engagement)" : "Top 5 posts (engagement)"}</div>
@@ -31676,7 +31700,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
                 <div style={{ padding: "18px 0", color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>{de ? "Lädt…" : "Loading…"}</div>
               ) : topPosts.length === 0 ? (
                 <div style={{ padding: "18px 0", color: theme.textDim, fontSize: 12.5, fontFamily: FONT, lineHeight: 1.6 }}>
-                  {de ? "Noch keine Post-Daten. Nach dem Verbinden synct Zernio die letzten Monate — schau in ein paar Minuten wieder rein." : "No post data yet. After connecting, Zernio syncs recent months — check back in a few minutes."}
+                  {de ? "Noch keine Post-Daten. Nach dem Verbinden werden die letzten Monate geladen, schau in ein paar Minuten wieder rein." : "No post data yet. After connecting, recent months are loaded, so check back in a few minutes."}
                 </div>
               ) : topPosts.map((post, i) => {
                 const uiKey = uiKeyFor(post.platform || "");
@@ -31767,41 +31791,6 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
             </div>
             )}
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {accounts.length > 0 && (
-              <div style={card}>
-                <div style={secLabel}>{de ? "Verbundene Accounts" : "Connected accounts"}</div>
-                {accounts.map((a, i) => {
-                  const uiKey = uiKeyFor(a.platform);
-                  const meta = platformMeta(uiKey) || { color: "#15151c", label: a.platform };
-                  return (
-                    <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 0", borderBottom: i < accounts.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
-                      <div style={{ width: 30, height: 30, borderRadius: 9, background: meta.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <svg width={tpGlyphSize(uiKey, 15)} height={tpGlyphSize(uiKey, 15)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.displayName}</div>
-                        <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.username}</div>
-                      </div>
-                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: a.isActive ? "#00B894" : "#E86767", flexShrink: 0 }} title={a.isActive ? "OK" : (de ? "Neu verbinden nötig" : "Reconnect needed")} />
-                      <span onClick={() => busyKey !== a.id && disconnect(a.id)}
-                        style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2, opacity: busyKey === a.id ? 0.5 : 1 }}>
-                        {busyKey === a.id ? "…" : (de ? "Trennen" : "Remove")}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-              )}
-              {unconnected.length > 0 && (
-                <div style={card}>
-                  <div style={secLabel}>{de ? "Weitere verbinden" : "Connect more"}</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {unconnected.map(k => <ConnectChip key={k} uiKey={k} big />)}
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
 
           {/* Under the ranking, because it belongs to the same question: the
