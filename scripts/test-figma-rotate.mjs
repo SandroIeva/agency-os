@@ -81,4 +81,54 @@ const bp = bare.items.find(i => i.type === "path");
 ok(!!bp && bp.ox === 5 && bp.oy === 6 && near(bp.nodes[1].x, 10),
    "a node without relativeTransform is placed the old way, not dropped");
 
+// ── 4. The real file: the pasted frame is itself turned on the Figma canvas ──
+// Numbers from the function log of the actual import. The frame is 1920x1080
+// and relativeTransform [[0,-1,-3025],[1,0,-2000]] shows it upright at
+// 1080x1920. An upward chevron inside it, upright relative to the frame, must
+// arrive turned with the frame. Worked by hand: board point = (1030 - y, x + 100).
+const realRoot = (children) => ({
+  type: "FRAME", id: "647:121", name: "figma",
+  relativeTransform: [[0, -1, -3025], [1, 0, -2000]],
+  size: { x: 1920, y: 1080 },
+  absoluteBoundingBox: { x: -4105, y: -2000, width: 1080, height: 1920 },
+  fills: [], strokes: [], children,
+});
+const inTurnedFrame = figmaToItems(realRoot([vector({
+  id: "9:1",
+  relativeTransform: [[1, 0, 100], [0, 1, 50]],
+  size: { x: 20, y: 10 },
+  absoluteBoundingBox: { x: -3085, y: -1900, width: 10, height: 20 },
+})]));
+const tp = inTurnedFrame.items.find(i => i.type === "path");
+ok(!!tp, "a vector in a frame turned on the Figma canvas arrives");
+if (tp) {
+  const got = tp.nodes.map(n => [n.x + (tp.ox || 0), n.y + (tp.oy || 0)]);
+  ok(near(got[0][0], 1020) && near(got[0][1], 100) && near(got[1][0], 1030) && near(got[1][1], 110)
+     && near(got[2][0], 1020) && near(got[2][1], 120),
+     "its points land exactly where the whole transform chain puts them, pointing right");
+}
+
+// ── 5. Groups count: an ellipse-sized square two groups deep ─────────────────
+// The real chain from the log. Only multiplying the groups in gives Figma's own
+// box, x 315..765 and y 733..1183 on the board.
+const deep = figmaToItems(realRoot([{
+  type: "GROUP", id: "9:2", relativeTransform: [[1, 0, 436], [0, 1, 158.906]],
+  absoluteBoundingBox: { x: -3946, y: -1564, width: 762, height: 1048 },
+  children: [{
+    type: "GROUP", id: "9:3", relativeTransform: [[-1, 0, 746.969], [0, -1, 606.094]],
+    absoluteBoundingBox: { x: -3790, y: -1267, width: 450, height: 450 },
+    children: [{
+      ...vector({ id: "9:4", relativeTransform: [[1, 0, 0], [0, 1, 0]], size: { x: 450, y: 450 },
+        absoluteBoundingBox: { x: -3790, y: -1267, width: 450, height: 450 } }),
+      strokeGeometry: [{ path: "M 0 0 L 450 0 L 450 450 L 0 450 Z", windingRule: "NONZERO" }],
+    }],
+  }],
+}]));
+const dp = deep.items.find(i => i.type === "path");
+if (dp) {
+  const xs = dp.nodes.map(n => n.x + (dp.ox || 0)), ys = dp.nodes.map(n => n.y + (dp.oy || 0));
+  ok(near(Math.min(...xs), 315) && near(Math.max(...xs), 765) && near(Math.min(...ys), 733) && near(Math.max(...ys), 1183),
+     "two groups deep, the shape lands in exactly the box Figma reports");
+} else ok(false, "the deep vector arrives");
+
 process.exit(failed ? 1 : 0);

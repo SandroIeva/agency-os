@@ -252,6 +252,35 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
   const warn = new Map();
   const note = (k) => warn.set(k, (warn.get(k) || 0) + 1);
 
+  // Where every node's own coordinates land in the FILE, as one affine matrix
+  // per node: the product of every relativeTransform from the root down. This
+  // is measured, not assumed. A real file's log showed the pasted frame itself
+  // turned by 90 degrees on the Figma canvas (a 1920x1080 frame shown upright),
+  // a frame inside it turned by 180, and shapes inside GROUPS whose position is
+  // only right when the groups are multiplied in too. Composing all of them,
+  // root included, reproduced Figma's own absoluteBoundingBox to the pixel for a
+  // rectangle, an ellipse two groups deep and a line. Two earlier attempts each
+  // left one of those out.
+  //
+  // Null for a node when any matrix on the way is missing, and the old placement
+  // is used for it.
+  const absM = new Map();
+  (function chain(n, parent) {
+    if (!n) return;
+    const t = n.relativeTransform;
+    const own = Array.isArray(t) && Array.isArray(t[0]) && Array.isArray(t[1])
+      && [t[0][0], t[0][1], t[0][2], t[1][0], t[1][1], t[1][2]].every(v => Number.isFinite(Number(v)))
+      ? [Number(t[0][0]), Number(t[0][1]), Number(t[0][2]), Number(t[1][0]), Number(t[1][1]), Number(t[1][2])]
+      : null;
+    // [a, b, tx, c, d, ty]
+    const here = parent && own ? [
+      parent[0] * own[0] + parent[1] * own[3], parent[0] * own[1] + parent[1] * own[4], parent[0] * own[2] + parent[1] * own[5] + parent[2],
+      parent[3] * own[0] + parent[4] * own[3], parent[3] * own[1] + parent[4] * own[4], parent[3] * own[2] + parent[4] * own[5] + parent[5],
+    ] : null;
+    if (n.id && here) absM.set(n.id, here);
+    (n.children || []).forEach(ch => chain(ch, here));
+  })(root, [1, 0, 0, 0, 1, 0]);
+
   const box = (n) => {
     const b = n.absoluteBoundingBox;
     if (!b) return null;
@@ -479,7 +508,14 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     const outlined = !hasFill;
     // Rotation, baked in. Null when the node stands upright, and then nothing
     // below changes at all.
-    const place = geometryPlacer(node.relativeTransform, node.size, b);
+    // Turned anywhere on the way down, the points go through the whole chain and
+    // land on the board directly. Upright all the way, nothing here changes and
+    // the offset placement below stays exactly what it was.
+    const M = absM.get(node.id);
+    const turnedInFile = M && !(Math.abs(M[1]) < 1e-6 && Math.abs(M[3]) < 1e-6 && M[0] > 0 && M[4] > 0);
+    const place = turnedInFile
+      ? (x, y) => ({ x: round2(M[0] * x + M[1] * y + M[2] - origin.x), y: round2(M[3] * x + M[4] * y + M[5] - origin.y) })
+      : geometryPlacer(node.relativeTransform, node.size, b);
     const movePts = (list) => (list || []).map(nd => {
       const p = place(nd.x, nd.y);
       const o = { ...nd, x: p.x, y: p.y };
