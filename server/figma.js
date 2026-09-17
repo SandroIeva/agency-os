@@ -252,33 +252,6 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
   const warn = new Map();
   const note = (k) => warn.set(k, (warn.get(k) || 0) + 1);
 
-  // Every node's orientation ON THE BOARD, not just its own. The first fix read
-  // only the node's own relativeTransform, which is the identity for a shape
-  // that stands upright inside a rotated frame: six chevrons in a frame turned
-  // by 90 degrees kept their identity matrix and arrived pointing up, and the
-  // import looked untouched by the fix. Computed in one pass before the walk,
-  // keyed by id, because masks are walked as COPIES of their node.
-  const absXf = new Map();
-  (function spaceOf(n, parent) {
-    if (!n) return;
-    const here = n === root ? IDENT_XF : composeXf(parent, linearOf(n.relativeTransform) || IDENT_XF);
-    if (n.id) absXf.set(n.id, here);
-    const inner = n === root || XF_SPACES.has(n.type) ? here : parent;
-    (n.children || []).forEach(ch => spaceOf(ch, inner));
-  })(root, IDENT_XF);
-  // A boxed item (rectangle, ellipse, picture, text) CAN carry a rotation, so it
-  // gets one: its own unrotated size, centred where the rotated box is centred,
-  // turned by the angle. absoluteBoundingBox alone is the hull of the turned
-  // shape, which drew every rotated rectangle upright and too big.
-  const turned = (node, b) => {
-    const x = absXf.get(node?.id);
-    if (!x || uprightXf(x)) return null;
-    const w = Number(node.size?.x) > 0 ? Number(node.size.x) : b.w;
-    const h = Number(node.size?.y) > 0 ? Number(node.size.y) : b.h;
-    return { x: round2(b.x + b.w / 2 - w / 2), y: round2(b.y + b.h / 2 - h / 2),
-      w: round2(w), h: round2(h), rot: round2(Math.atan2(x.c, x.a) * 180 / Math.PI) };
-  };
-
   const box = (n) => {
     const b = n.absoluteBoundingBox;
     if (!b) return null;
@@ -424,7 +397,6 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
       const st = strokeOf(node);
       const surface = {
         id, type: "image", x: b.x, y: b.y, w: b.w, h: b.h,
-        ...(turned(node, b) || {}),
         ...(curGid ? { groupId: curGid } : {}),
         // Figma's own scale modes, mapped to the two the artboard has.
         fit: img.scaleMode === "FIT" ? "contain" : "cover",
@@ -464,15 +436,7 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
       items.push({
         id: newId(), type: "line",
         ...(curGid ? { groupId: curGid } : {}),
-        // A line is its own length along its own x axis. Upright, the hull's
-        // corners are exactly that; turned, they are not, so the two ends go
-        // through the same placer the paths use.
-        ...((() => {
-          const pl = geometryPlacer(absXf.get(node.id), { x: Number(node.size?.x) || b.w, y: 0 }, b);
-          if (!pl) return { x1: b.x, y1: b.y, x2: b.x + b.w, y2: b.y + b.h };
-          const p1 = pl(0, 0), p2 = pl(Number(node.size?.x) || b.w, 0);
-          return { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
-        })()),
+        x1: b.x, y1: b.y, x2: b.x + b.w, y2: b.y + b.h,
         ...(st ? { stroke: st.color, strokeWidth: st.width, strokeAlpha: st.alpha } : {}),
       });
       return;
@@ -515,7 +479,7 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     const outlined = !hasFill;
     // Rotation, baked in. Null when the node stands upright, and then nothing
     // below changes at all.
-    const place = geometryPlacer(absXf.get(node.id) || node.relativeTransform, node.size, b);
+    const place = geometryPlacer(node.relativeTransform, node.size, b);
     const movePts = (list) => (list || []).map(nd => {
       const p = place(nd.x, nd.y);
       const o = { ...nd, x: p.x, y: p.y };
@@ -586,7 +550,6 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
     const st = strokeOf(node);
     return {
       id, type, x: b.x, y: b.y, w: b.w, h: b.h,
-      ...(turned(node, b) || {}),
       ...(curGid ? { groupId: curGid } : {}),
       // A gradient object where there is one: the artboard paints fills through
       // paintCss, which takes either.
@@ -718,30 +681,6 @@ export function figmaToItems(root, { newId = () => Math.random().toString(36).sl
   };
 }
 
-// The 2x2 part of a transform: Figma's [[a, b, tx], [c, d, ty]] or an already
-// composed { a, b, c, d }. The translation is never needed, because every node's
-// POSITION comes from absoluteBoundingBox, which Figma has already resolved.
-export function linearOf(t) {
-  let a, b, c, d;
-  if (Array.isArray(t) && Array.isArray(t[0]) && Array.isArray(t[1])) {
-    a = Number(t[0][0]); b = Number(t[0][1]); c = Number(t[1][0]); d = Number(t[1][1]);
-  } else if (t && typeof t === "object") {
-    ({ a, b, c, d } = t);
-  } else return null;
-  return [a, b, c, d].every(Number.isFinite) ? { a, b, c, d } : null;
-}
-const IDENT_XF = { a: 1, b: 0, c: 0, d: 1 };
-const composeXf = (p, q) => ({
-  a: p.a * q.a + p.b * q.c, b: p.a * q.b + p.b * q.d,
-  c: p.c * q.a + p.d * q.c, d: p.c * q.b + p.d * q.d,
-});
-const uprightXf = (x) => Math.abs(x.b) < 1e-6 && Math.abs(x.c) < 1e-6 && x.a > 0 && x.d > 0;
-// The node types that open their OWN coordinate space. `relativeTransform` is
-// relative to the nearest of these, and a GROUP is not one: a group has no space
-// of its own, its rotation is already inside its children's transforms, and
-// composing it again would turn every rotated group twice.
-const XF_SPACES = new Set(["FRAME", "COMPONENT", "COMPONENT_SET", "INSTANCE", "SECTION"]);
-
 // Where a node's geometry actually belongs on the board.
 //
 // Figma hands geometry over in the node's OWN coordinates, unrotated, and says
@@ -769,9 +708,10 @@ const XF_SPACES = new Set(["FRAME", "COMPONENT", "COMPONENT_SET", "INSTANCE", "S
 // Returns null when there is nothing to do, so the untouched path keeps the
 // cheaper ox/oy placement it has always had.
 export function geometryPlacer(transform, size, box) {
-  const lin = linearOf(transform);
-  if (!lin) return null;
-  const { a, b, c, d } = lin;
+  const m = transform;
+  if (!Array.isArray(m) || !Array.isArray(m[0]) || !Array.isArray(m[1])) return null;
+  const a = Number(m[0][0]), b = Number(m[0][1]);
+  const c = Number(m[1][0]), d = Number(m[1][1]);
   if (![a, b, c, d].every(Number.isFinite)) return null;
   // Upright and unflipped. The axis vectors are unit vectors by Figma's own
   // rule, so this is the identity and the old path is the right one.
