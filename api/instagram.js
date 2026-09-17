@@ -48,15 +48,20 @@ const GRAPH = `https://graph.instagram.com/${V}`;
 const OAUTH_TOKEN = "https://api.instagram.com/oauth/access_token";
 const GRAPH_ROOT = "https://graph.instagram.com";
 
-// Read the account, publish to it, read its numbers. Comments and messaging are
-// deliberately absent: a token keeps the scopes it was issued with, so widening
-// the list later strands every connection made before the change, but asking
-// for a permission we do not use yet is the surest way to have a review
-// rejected. Pinterest taught the first half of that in this codebase.
+// Read the account, publish to it, read its numbers, read its comments.
+// Messaging is deliberately absent: asking for a permission we do not use yet is
+// the surest way to have a review rejected. Comments were added later, when the
+// Analytics panel started reading them, and a token keeps the scopes it was
+// issued with, so connections from before carry `missingScopes` in `status`
+// until they reconnect. Pinterest taught that half in this codebase.
 const SCOPES = [
   "instagram_business_basic",
   "instagram_business_content_publish",
   "instagram_business_manage_insights",
+  // Reading the comments under the account's own posts, with who wrote them.
+  // Added after accounts were already connected, and a token keeps the scopes
+  // it was issued with, so `status` says which connections predate it.
+  "instagram_business_manage_comments",
 ].join(",");
 
 // Long-lived tokens last 60 days and there is no refresh token: a live token is
@@ -356,6 +361,11 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
         // the one state the UI has to act on rather than merely display.
         needsReconnect: new Date(a.token_expires_at).getTime() <= Date.now() || !!a.last_error,
         lastError: a.last_error || null,
+        // What this connection was granted is what it can do. A token from
+        // before comments were added reads posts and numbers fine and gets
+        // refused on comments, so the UI can ask for one reconnect instead of
+        // showing an empty box.
+        missingScopes: SCOPES.split(",").filter(sc => !String(a.scopes || "").split(",").includes(sc)),
       })),
     });
   }
@@ -483,6 +493,66 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
       postCount: recent.length,
       posts: best.map((m, i) => ({ ...m, reach: reaches[i] })),
     });
+  }
+
+  // ── comments — who is saying what under the recent posts ────────────────
+  //
+  // The newest comments across the posts of the last four weeks, flattened and
+  // newest first, in the shape the Analytics comments panel already reads, so
+  // Instagram sits in the same list as everything else.
+  //
+  // What Instagram gives per comment is the username, the text, the time and
+  // its likes. No follower count, no bio, no location: Meta does not expose a
+  // commenter's profile to the account they commented on, with any permission.
+  if (body.mode === "comments") {
+    const days = Math.min(90, Math.max(1, Number(body.days) || 28));
+    const cutoff = Date.now() - days * 86400000;
+    const list = await ig(token, `/${row.ig_user_id}/media`, {
+      fields: "id,caption,permalink,timestamp,comments_count", limit: 50,
+    });
+    if (!list.ok) return json({ error: list.body?.error?.message || "media_failed" }, 502);
+    // Only posts that have anything under them, and at most ten of those: one
+    // request per post, and the newest ten are what a dashboard is looking at.
+    const posts = (list.body?.data || [])
+      .filter(m => (m.comments_count || 0) > 0 && (!m.timestamp || new Date(m.timestamp).getTime() >= cutoff))
+      .slice(0, 10);
+
+    const who = (c) => {
+      const username = c.from?.username || c.username || null;
+      return { id: c.from?.id || null, username, name: username,
+        isOwner: (c.from?.id && c.from.id === row.ig_user_id) || (!!username && username === row.username) };
+    };
+    let refused = null;
+    const perPost = await Promise.all(posts.map(async (m) => {
+      const r = await ig(token, `/${m.id}/comments`, {
+        fields: "id,text,timestamp,like_count,username,from{id,username},replies.limit(10){id,text,timestamp,like_count,username,from{id,username}}",
+        limit: 25,
+      });
+      if (!r.ok) { refused = refused || r.body?.error || { message: "comments_failed" }; return []; }
+      const base = { platform: "instagram", postId: m.id, postPermalink: m.permalink || null,
+        postContent: (m.caption || "").slice(0, 140) };
+      const out = [];
+      for (const c of r.body?.data || []) {
+        const from = who(c);
+        out.push({ ...base, id: c.id, message: c.text || "", createdTime: c.timestamp || null,
+          likeCount: c.like_count ?? 0, from });
+        for (const rp of c.replies?.data || []) {
+          out.push({ ...base, id: rp.id, message: rp.text || "", createdTime: rp.timestamp || null,
+            likeCount: rp.like_count ?? 0, from: who(rp), parentAuthor: from.username ? "@" + from.username : null });
+        }
+      }
+      return out;
+    }));
+    const flat = perPost.flat();
+    // Every post refused and nothing came back: that is a permission answer,
+    // not an empty account. Said as one, so the panel can ask for a reconnect.
+    if (!flat.length && refused && posts.length) {
+      const scopeMissing = String(row.scopes || "").split(",").indexOf("instagram_business_manage_comments") === -1;
+      return json({ error: refused.message || "comments_failed",
+        code: scopeMissing ? "scope_missing" : "instagram_error" }, scopeMissing ? 403 : 502);
+    }
+    flat.sort((a2, b2) => String(b2.createdTime || "").localeCompare(String(a2.createdTime || "")));
+    return json({ recent: flat.slice(0, 60) });
   }
 
   if (body.mode === "insights") {

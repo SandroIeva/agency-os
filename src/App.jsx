@@ -30758,9 +30758,13 @@ function SocialBenchmarkPanel({ theme, darkMode, de, session, orgId, card, secLa
   );
 }
 
-function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, card, secLabel }) {
+function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, card, secLabel, igUserId = null }) {
   const [recent, setRecent] = useState(null);   // null = loading
   const [error, setError] = useState(null);
+  // "scope" when the Instagram connection predates comment access and has to be
+  // made once more. Said in the panel, because an empty box looks like an
+  // account nobody talks to.
+  const [igHint, setIgHint] = useState(null);
   const [shown, setShown] = useState(5);
   const [scReady, setScReady] = useState(true);
   // Who a commenter actually is — headline, reach, where they are. Zernio gives
@@ -30836,14 +30840,43 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
     if (!orgId || !session) return;
     let alive = true;
     autoDone.current = false;
-    setRecent(null); setError(null); setShown(5);
-    zernioRequest(session, { mode: "comments", orgId, recent: true,
-      platform: platform === "all" ? undefined : zernioKeyFor(platform) })
-      .then(r => { if (alive) { setScReady(r.socialcrawl !== false);
-        setRecent(r.list?.__unavailable ? r.list : (r.recent || [])); } })
-      .catch(e => { if (alive) setError(e); });
+    setRecent(null); setError(null); setShown(5); setIgHint(null);
+    // Instagram straight from Meta when the workspace is connected there: free,
+    // and it names every commenter. It REPLACES Zernio's Instagram comments
+    // rather than joining them, or a comment reachable both ways would show
+    // twice. Zernio still answers for every other network.
+    const wantsIg = !!igUserId && (platform === "all" || platform === "instagram");
+    const fromZernio = wantsIg && platform === "instagram" ? Promise.resolve(null)
+      : zernioRequest(session, { mode: "comments", orgId, recent: true,
+          platform: platform === "all" ? undefined : zernioKeyFor(platform) })
+          .then(r => ({ ok: true, r })).catch(e => ({ ok: false, e }));
+    const fromMeta = !wantsIg ? Promise.resolve(null)
+      : fetch("/api/instagram", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ mode: "comments", orgId, igUserId }),
+        }).then(async res => ({ status: res.status, j: await res.json().catch(() => null) })).catch(() => null);
+    Promise.all([fromZernio, fromMeta]).then(([z, m]) => {
+      if (!alive) return;
+      const metaList = m && m.status === 200 && Array.isArray(m.j?.recent) ? m.j.recent : null;
+      if (m?.j?.code === "scope_missing") setIgHint("scope");
+      if (z?.ok) setScReady(z.r.socialcrawl !== false);
+      const zUsable = z?.ok && !z.r.list?.__unavailable;
+      if (!zUsable) {
+        if (metaList) { setRecent(metaList); return; }
+        if (z && !z.ok) { setError(z.e); return; }
+        if (z?.ok) { setRecent(z.r.list); return; }            // Zernio's add-on is off
+        if (m?.j?.code === "scope_missing") { setRecent([]); return; }
+        setError({ message: m?.j?.error || (de ? "Instagram hat nicht geantwortet." : "Instagram did not answer.") });
+        return;
+      }
+      const zList = z.r.recent || [];
+      const merged = metaList ? [...zList.filter(c => c.platform !== "instagram"), ...metaList] : zList;
+      merged.sort((a, b) => String(b.createdTime || "").localeCompare(String(a.createdTime || "")));
+      setRecent(merged);
+    });
     return () => { alive = false; };
-  }, [orgId, session, platform]);
+  }, [orgId, session, platform, igUserId]); // eslint-disable-line
 
   const when = (iso) => {
     const d = new Date(iso);
@@ -30893,6 +30926,14 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
   return (
     <div style={card}>
       <div style={secLabel}>{de ? "Letzte Kommentare" : "Latest comments"}</div>
+      {igHint === "scope" && (
+        <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 9,
+          fontFamily: FONT, fontSize: 11.5, color: theme.textDim, lineHeight: 1.5,
+          background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+          {de ? "Damit hier die Instagram-Kommentare erscheinen, verbinde Instagram in den Einstellungen einmal neu. Die bestehende Verbindung stammt von vor dem Kommentarzugriff."
+              : "To see Instagram comments here, connect Instagram once more in Settings. The current connection predates comment access."}
+        </div>
+      )}
       {error ? msg(zernioErrorText(error, de))
         : unavailable ? msg(de
             ? "Kommentare gehören zum Analytics-Add-on von Zernio. Ohne das Add-on liefert die API sie nicht."
@@ -31935,7 +31976,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
           <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(0, 1fr)",
             gap: 14, alignItems: "start", marginTop: 14 }}>
             <SocialCommentsPanel theme={theme} darkMode={darkMode} de={de}
-              session={session} orgId={orgId} platform={platform}
+              session={session} orgId={orgId} platform={platform} igUserId={igId}
               card={card} secLabel={secLabel} />
             {/* Beside the comments, in the column the connected accounts use
                 above: both answer "who else is out there", one from the people
