@@ -16843,6 +16843,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
 // files (documents + images) with upload + empty state. Settings stay behind
 // the card's edit button.
 function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", onOpenInKanban, triggerNewProject = false, onNewProjectTriggered = null, orgMembers = [], myProjectIds = [], createNotification, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, onNavigate, onOpenDoc, onUploadStorage, onUploadDrive, getProviderToken, autoReLogin, onOpenWhiteboard = null }) {
+  const de = appLanguage === "de";
   const [projects, setProjects] = useState([]);
   const [taskCounts, setTaskCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -16934,7 +16935,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
       role: "member",
     }, { onConflict: "project_id,user_id", ignoreDuplicates: true }).select();
     if (error && !/duplicate/i.test(error.message || "")) {
-      alert("Fehler beim Hinzufügen: " + error.message);
+      alert((de ? "Fehler beim Hinzufügen: " : "Could not add the member: ") + error.message);
       return;
     }
     // Notify the member — only when a row was actually inserted (skip duplicates).
@@ -17015,7 +17016,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
     if (!email || !email.includes("@") || !editing?.id) return;
     // Check if already a member
     const alreadyMember = members.some(m => m.profiles?.email?.toLowerCase() === email);
-    if (alreadyMember) { alert("Diese Person ist bereits Mitglied."); return; }
+    if (alreadyMember) { alert(de ? "Diese Person ist bereits Mitglied." : "This person is already a member."); return; }
     // A project invite grants access to the account's content, so it consumes a
     // seat just like a workspace invite does.
     if (!planAllows("seats").ok) { requestUpgrade("seats", appLanguage === "de"); return; }
@@ -17045,7 +17046,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
       loadMembers(editing.id);
     } catch (e) {
       alert(planLimitError(e, appLanguage === "de")
-        || "Einladung fehlgeschlagen: " + (e.message || "Unbekannter Fehler"));
+        || (de ? "Einladung fehlgeschlagen: " : "Invitation failed: ") + (e.message || (de ? "Unbekannter Fehler" : "Unknown error")));
     } finally {
       setInviteSending(false);
     }
@@ -17058,7 +17059,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
 
   const removeMember = async (userId) => {
     if (!editing?.id) return;
-    if (userId === session?.user?.id) { alert("Du kannst dich nicht selbst entfernen."); return; }
+    if (userId === session?.user?.id) { alert(de ? "Du kannst dich nicht selbst entfernen." : "You cannot remove yourself."); return; }
     await supabase.from("project_members").delete().eq("project_id", editing.id).eq("user_id", userId);
     loadMembers(editing.id);
   };
@@ -17077,7 +17078,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
       setForm(prev => ({ ...prev, logo_url: pub.publicUrl }));
     } catch (err) {
       console.error("Logo upload failed:", err);
-      alert("Logo Upload fehlgeschlagen: " + (err.message || "Unbekannter Fehler"));
+      alert((de ? "Logo-Upload fehlgeschlagen: " : "Logo upload failed: ") + (err.message || (de ? "Unbekannter Fehler" : "Unknown error")));
     } finally {
       setLogoUploading(false);
     }
@@ -17193,7 +17194,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
             <rect x="3" y="6" width="18" height="14" rx="2" stroke={theme.accent} strokeWidth="1.5"/>
             <path d="M3 10h18M9 6V4h6v2" stroke={theme.accent} strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
-          <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>Projekte</span>
+          <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{de ? "Projekte" : "Projects"}</span>
           <span style={{ minWidth: 22, height: 22, padding: "0 7px", borderRadius: 999, background: "#4D34E4", color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>{myProjects.length}</span>
           <div style={{ flex: 1 }} />
           {canCreateNewProject && (
@@ -17216,13 +17217,17 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
               }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Neues Projekt
+              {de ? "Neues Projekt" : "New project"}
             </motion.button>
           </>
           )}
         </motion.div>
 
-        {/* Toolbar: search (left) · sort toggle (right) — mirrors the Dokumente toolbar */}
+        {/* Toolbar: search (left) · sort toggle (right) — mirrors the Dokumente toolbar.
+            Not while there are no projects at all: a search box and a sort order
+            over nothing are two controls that cannot do anything, and Documents
+            leaves them out for exactly that reason. */}
+        {!loading && myProjects.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05, duration: 0.3 }}
@@ -17231,7 +17236,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
           <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "none", maxWidth: 340 }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
             <input value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Projekt suchen…"
+              placeholder={de ? "Projekt suchen…" : "Search projects…"}
               style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }}
             />
             {search && (
@@ -17249,6 +17254,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
             : (appLanguage === "de" ? "Zuletzt geändert" : "Last edited")}
           </motion.div>
         </motion.div>
+        )}
 
         {/* Grid */}
         <div style={{
@@ -17257,22 +17263,41 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
           {loading && (
             <motion.div animate={{ opacity: [0.3, 0.7, 0.3] }} transition={{ duration: 1.5, repeat: Infinity }}
               style={{ padding: 40, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}
-            >Lade Projekte...</motion.div>
+            >{de ? "Lade Projekte …" : "Loading projects …"}</motion.div>
           )}
           {!loading && filtered.length === 0 && (
-            <div style={{ padding: 40, textAlign: "center" }}>
-              <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.4 }}>📁</div>
-              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 16 }}>
-                {search ? "Keine Treffer" : "Noch keine Projekte"}
-              </div>
+            // The same empty state Documents uses, picture and pill included, so
+            // the two sections read as one app. The picture only for the case it
+            // describes: no projects at all. A search that found nothing is not
+            // that, and an illustration there would be shouting about nothing.
+            <div style={{ minHeight: myProjects.length === 0 ? "100%" : undefined,
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              textAlign: "center", gap: 9, padding: "20px 20px 48px" }}>
               {!search && (
-                <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={openNew}
-                  style={{
-                    padding: "9px 18px", borderRadius: 10, cursor: "pointer",
-                    background: theme.accent + "22", border: `1px solid ${theme.accent}40`,
-                    color: theme.accent, fontSize: 13, fontWeight: 500, fontFamily: FONT,
-                  }}
-                >Erstes Projekt erstellen</motion.button>
+                <motion.img
+                  src={darkMode ? "/visual-NewDocuments.png" : "/visual-NewDocuments-Light.png"} alt=""
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 160, damping: 18 }}
+                  style={{ width: 180, maxWidth: "61%", height: "auto", marginTop: 8, marginBottom: 2,
+                    pointerEvents: "none", userSelect: "none" }} />
+              )}
+              <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                {search ? (de ? "Keine Treffer" : "No matches") : (de ? "Noch keine Projekte" : "No projects yet")}
+              </div>
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, maxWidth: 340, lineHeight: 1.55 }}>
+                {search
+                  ? (de ? "Versuche einen anderen Suchbegriff." : "Try a different search term.")
+                  : (de ? "Lege ein Projekt an, um Aufgaben, Dokumente und das Team darin zu bündeln."
+                        : "Create a project to keep its tasks, documents and team in one place.")}
+              </div>
+              {!search && canCreateNewProject && (
+                <motion.div whileTap={{ scale: 0.97 }} onClick={openNew}
+                  style={{ marginTop: 12, padding: "13px 26px", borderRadius: 999,
+                    background: "transparent", border: `1px solid ${darkMode ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.22)"}`,
+                    color: theme.text, fontSize: 13.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
+                  {de ? "Erstellen" : "Create"}
+                </motion.div>
               )}
             </div>
           )}
@@ -17314,14 +17339,14 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{proj.name}</div>
                       <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
-                        {count} {count === 1 ? "Task" : "Tasks"}
+                        {count} {count === 1 ? (de ? "Aufgabe" : "task") : (de ? "Aufgaben" : "tasks")}
                       </div>
                     </div>
                     {/* Color indicator */}
                     <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
                     {/* Edit button — opens settings without entering the project */}
                     <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); openEdit(proj); }}
-                      title={t("common.edit") || "Bearbeiten"}
+                      title={t("common.edit") || (de ? "Bearbeiten" : "Edit")}
                       style={{ width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", color: theme.textDim, flexShrink: 0, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
                     </motion.div>
@@ -17353,7 +17378,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
             >
               <div style={{ padding: "20px 24px", borderBottom: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-                  {editing?.id ? "Projekt bearbeiten" : "Neues Projekt"}
+                  {editing?.id ? (de ? "Projekt bearbeiten" : "Edit project") : (de ? "Neues Projekt" : "New project")}
                 </div>
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.92 }} onClick={closeEditor}
                   style={{ width: 32, height: 32, borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 16 }}
@@ -17364,7 +17389,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                 <div>
                   <label style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", fontWeight: 600, letterSpacing: 0.2 }}>Name</label>
                   <input value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
-                    autoFocus={canManageThisProject} placeholder="z. B. Agency OS" readOnly={!canManageThisProject}
+                    autoFocus={canManageThisProject} placeholder={de ? "z. B. Agency OS" : "e.g. Agency OS"} readOnly={!canManageThisProject}
                     className="proj-input"
                     style={{
                       width: "100%", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)",
@@ -17405,14 +17430,14 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                       {canManageThisProject ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                           <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, cursor: "pointer" }} onClick={() => logoInputRef.current?.click()}>
-                            {logoUploading ? "Lädt…" : (logoPreview || form.logo_url) ? "Bild ersetzen" : "Bild hochladen"}
+                            {logoUploading ? (de ? "Lädt …" : "Uploading …") : (logoPreview || form.logo_url) ? (de ? "Bild ersetzen" : "Replace image") : (de ? "Bild hochladen" : "Upload image")}
                           </div>
                           {(logoPreview || form.logo_url) && (
-                            <div onClick={removeLogo} style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, cursor: "pointer" }}>Entfernen</div>
+                            <div onClick={removeLogo} style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, cursor: "pointer" }}>{de ? "Entfernen" : "Remove"}</div>
                           )}
                         </div>
                       ) : (
-                        <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, lineHeight: 1.5 }}>Nur Admins, der Projekt-Ersteller oder Projektmanager können das Logo ändern.</div>
+                        <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, lineHeight: 1.5 }}>{de ? "Nur Admins, der Projekt-Ersteller oder Projektmanager können das Logo ändern." : "Only admins, the project creator or project managers can change the logo."}</div>
                       )}
                     </div>
                   </div>
@@ -17420,7 +17445,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                 </div>
                 {/* Accent colour — a single swatch opening a picker popover */}
                 <div>
-                  <label style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", fontWeight: 600, letterSpacing: 0.2 }}>Akzentfarbe</label>
+                  <label style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginBottom: 8, display: "block", fontWeight: 600, letterSpacing: 0.2 }}>{de ? "Akzentfarbe" : "Accent colour"}</label>
                   {canManageThisProject ? (
                     <div style={{ position: "relative", display: "inline-block" }}>
                       <motion.div whileTap={{ scale: 0.97 }} onClick={() => setColorPickerOpen(o => !o)}
@@ -17451,7 +17476,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                               </div>
                               <div style={{ height: 1, background: theme.borderFaint, margin: "13px 0" }} />
                               <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, cursor: "pointer" }}>
-                                <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textSub }}>Eigene Farbe</span>
+                                <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textSub }}>{de ? "Eigene Farbe" : "Custom colour"}</span>
                                 <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                                   <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.3 }}>{form.color}</span>
                                   <span style={{ position: "relative", width: 26, height: 26, borderRadius: 8, background: form.color, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.12)", overflow: "hidden" }}>
@@ -17473,8 +17498,8 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                 {/* Define as Brand — turns this project into a full brand workspace */}
                 <div style={{ marginTop: 20, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14 }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Als Brand definieren</div>
-                    <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginTop: 3 }}>Öffnet dieses Projekt mit der vollen Brand-Struktur (Strategie, Identität, Designsystem …) — eigene Inhalte pro Projekt.</div>
+                    <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? "Als Brand definieren" : "Set up as a brand"}</div>
+                    <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginTop: 3 }}>{de ? "Öffnet dieses Projekt mit der vollen Brand-Struktur (Strategie, Identität, Designsystem …). Eigene Inhalte pro Projekt." : "Opens this project with the full brand structure (strategy, identity, design system …). Its own content per project."}</div>
                   </div>
                   <ToggleSwitch on={form.is_brand} darkMode={darkMode} disabled={!canManageThisProject}
                     style={{ marginTop: 1 }}
@@ -17485,7 +17510,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                 {editing?.id && (
                   <div style={{ marginTop: 4, paddingTop: 16, borderTop: `1px solid ${theme.borderFaint}` }}>
                     <label style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginBottom: 10, display: "block", fontWeight: 600, letterSpacing: 0.2 }}>
-                      Mitglieder {members.length > 0 && <span style={{ color: theme.textFaint, fontWeight: 400 }}>· {members.length}</span>}
+                      {de ? "Mitglieder" : "Members"} {members.length > 0 && <span style={{ color: theme.textFaint, fontWeight: 400 }}>· {members.length}</span>}
                     </label>
 
                     {/* Member list */}
@@ -17514,12 +17539,12 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                                 {p.display_name || p.email || "Unbekannt"} {isMe && <span style={{ color: theme.textFaint, fontWeight: 400 }}>(Du)</span>}
                               </div>
                               <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>
-                                {m.role === "owner" ? "Owner" : "Mitglied"}
+                                {m.role === "owner" ? "Owner" : (de ? "Mitglied" : "Member")}
                               </div>
                             </div>
                             {isOwner && !isMe && m.role !== "owner" && (
                               <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeMember(m.user_id)}
-                                title="Entfernen"
+                                title={de ? "Entfernen" : "Remove"}
                                 style={{ width: 24, height: 24, borderRadius: 6, cursor: "pointer", color: theme.textDim, display: "flex", alignItems: "center", justifyContent: "center" }}
                               >
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -17534,7 +17559,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                     {pendingInvites.length > 0 && (
                       <>
                         <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 6 }}>
-                          Ausstehende Einladungen
+                          {de ? "Ausstehende Einladungen" : "Pending invitations"}
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
                           {pendingInvites.map(inv => (
@@ -17549,11 +17574,11 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                               </div>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{inv.email}</div>
-                                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>Eingeladen · ausstehend</div>
+                                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{de ? "Eingeladen · ausstehend" : "Invited · pending"}</div>
                               </div>
                               {isOwner && (
                                 <motion.div whileTap={{ scale: 0.9 }} onClick={() => revokeInvite(inv.id)}
-                                  title="Zurückziehen"
+                                  title={de ? "Zurückziehen" : "Withdraw"}
                                   style={{ width: 24, height: 24, borderRadius: 6, cursor: "pointer", color: theme.textDim, display: "flex", alignItems: "center", justifyContent: "center" }}
                                 >
                                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -17596,7 +17621,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                             }}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-                            Mitglied hinzufügen
+                            {de ? "Mitglied hinzufügen" : "Add member"}
                           </motion.button>
 
                           <AnimatePresence>
@@ -17626,7 +17651,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                                       autoFocus
                                       value={pickerSearch}
                                       onChange={(e) => setPickerSearch(e.target.value)}
-                                      placeholder="Name oder E-Mail-Adresse..."
+                                      placeholder={de ? "Name oder E-Mail-Adresse …" : "Name or email address …"}
                                       style={{
                                         width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
                                         border: `1px solid ${theme.borderFaint}`, borderRadius: 9,
@@ -17674,8 +17699,8 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                                     ) : (
                                       <div style={{ padding: "20px 12px", textAlign: "center", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
                                         {(orgMembers || []).length <= 1
-                                          ? "Keine weiteren Workspace-Mitglieder"
-                                          : pickerSearch ? "Keine Treffer" : "Alle bereits hinzugefügt"}
+                                          ? (de ? "Keine weiteren Workspace-Mitglieder" : "No other workspace members")
+                                          : pickerSearch ? (de ? "Keine Treffer" : "No matches") : (de ? "Alle bereits hinzugefügt" : "Everyone is already added")}
                                       </div>
                                     )}
                                   </div>
@@ -17703,7 +17728,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
                                         </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                          <div style={{ fontSize: 13, fontFamily: FONT, color: "#8B7AFF", fontWeight: 500 }}>Per E-Mail einladen</div>
+                                          <div style={{ fontSize: 13, fontFamily: FONT, color: "#8B7AFF", fontWeight: 500 }}>{de ? "Per E-Mail einladen" : "Invite by email"}</div>
                                           <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pickerSearch}</div>
                                         </div>
                                       </motion.div>
@@ -17728,7 +17753,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                       background: "transparent", border: "1px solid rgba(239, 68, 68, 0.3)",
                       color: "#EF4444", fontSize: 13, fontWeight: 500, fontFamily: FONT,
                     }}
-                  >Löschen</motion.button>
+                  >{de ? "Löschen" : "Delete"}</motion.button>
                 ) : <div />}
                 {canSubmitForm ? (
                 <motion.button whileHover={{ scale: form.name.trim() ? 1.03 : 1 }} whileTap={{ scale: 0.97 }} onClick={saveProject}
@@ -17741,11 +17766,11 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                     fontSize: 13, fontWeight: 600, fontFamily: FONT,
                     transition: "background 0.18s ease",
                   }}
-                >{editing?.id ? "Speichern" : "Projekt erstellen"}</motion.button>
+                >{editing?.id ? (de ? "Speichern" : "Save") : (de ? "Projekt erstellen" : "Create project")}</motion.button>
                 ) : (
                   <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={closeEditor}
                     style={{ padding: "10px 24px", borderRadius: 999, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 13, fontWeight: 500, fontFamily: FONT }}
-                  >Schließen</motion.button>
+                  >{de ? "Schließen" : "Close"}</motion.button>
                 )}
               </div>
             </motion.div>
@@ -17768,17 +17793,19 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                 border: `1px solid ${theme.border}`, textAlign: "center",
               }}
             >
-              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>Projekt löschen?</div>
+              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{de ? "Projekt löschen?" : "Delete project?"}</div>
               <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 24, lineHeight: 1.5 }}>
-                „{confirmDelete.name}" wird gelöscht. Tasks bleiben erhalten (verlieren aber die Projektzuordnung).
+                {de
+                  ? <>„{confirmDelete.name}" wird gelöscht. Aufgaben bleiben erhalten, verlieren aber die Projektzuordnung.</>
+                  : <>"{confirmDelete.name}" will be deleted. Its tasks are kept but lose the project.</>}
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => setConfirmDelete(null)}
                   style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, fontWeight: 500 }}
-                >Abbrechen</motion.button>
+                >{de ? "Abbrechen" : "Cancel"}</motion.button>
                 <motion.button whileTap={{ scale: 0.97 }} onClick={deleteProject}
                   style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", fontSize: 13, fontFamily: FONT, color: "#EF4444", fontWeight: 600 }}
-                >Löschen</motion.button>
+                >{de ? "Löschen" : "Delete"}</motion.button>
               </div>
             </motion.div>
           </motion.div>
