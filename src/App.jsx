@@ -22787,6 +22787,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         ? { x1: it.x1 + dx, y1: it.y1 + dy, x2: it.x2 + dx, y2: it.y2 + dy }
         : { x: it.x + dx, y: it.y + dy };
 
+  // The zoom commands the keyboard reaches, refreshed on every render so the
+  // listener below never holds a board or a selection from an earlier one.
+  const zoomKeysRef = useRef(null);
   useEffect(() => {
     const onKey = (e) => {
       // Same guard the whiteboard already uses: while the focus is in a field,
@@ -22802,6 +22805,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing && (e.key === "+" || e.key === "-")) {
         e.preventDefault();
         zoomStep(e.key === "+" ? 1 : -1);
+        return;
+      }
+      // Shift and a digit, the way Figma does it: 0 is 100 %, 1 fits everything,
+      // 2 goes to the selection. Cmd or Ctrl with a digit is not an option in a
+      // browser, where it switches tabs before the page ever sees the key. Read
+      // off e.code, the physical key, because Shift turns the character into
+      // "=" or ")" depending on the keyboard layout.
+      if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing
+          && (e.code === "Digit0" || e.code === "Digit1" || e.code === "Digit2")) {
+        e.preventDefault();
+        const z = zoomKeysRef.current;
+        if (e.code === "Digit0") z?.hundred();
+        else if (e.code === "Digit1") z?.fit();
+        else z?.selection();
         return;
       }
 
@@ -22895,8 +22912,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           h: (it.h || (it.type === "text" ? canvasTextH(it) : it.size * CANVAS_LH)) || 1 };
     const aw = Math.max(120, window.innerWidth - RAIL_W - (PANEL_W + 16)), ah = Math.max(120, window.innerHeight - 88);
     const s2 = Math.min(8, Math.min(aw / bx.w, ah / bx.h) * 0.7);
-    setCam({ s: s2, x: RAIL_W + aw / 2 - (bx.x + bx.w / 2) * s2, y: 62 + ah / 2 - (bx.y + bx.h / 2) * s2 });
+    // originX/originY: the board's place in the row. Left out, zooming to a
+    // selection worked on the first board and flew to empty canvas on any other.
+    setCam({ s: s2, x: RAIL_W + aw / 2 - (originX + bx.x + bx.w / 2) * s2,
+      y: 62 + ah / 2 - (originY + bx.y + bx.h / 2) * s2 });
   };
+  zoomKeysRef.current = { hundred: () => zoomTo(1), fit: () => setCam(fitCam()), selection: zoomToSel };
 
   // Array order IS the stacking order — later is on top — so restacking is a
   // move within the list rather than a z-index to keep in sync with it.
@@ -26594,13 +26615,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 31, width: 246,
                   padding: 6, borderRadius: 14, background: panel, border: `1px solid ${line}`,
                   boxShadow: "0 16px 40px rgba(0,0,0,0.22)" }}>
-                {[[de ? "Auf Auswahl zoomen" : "Zoom to selection", "⌘0", () => zoomToSel(), !!selItem],
-                  [de ? "Gesamten Inhalt anpassen" : "Fit all content", "⌥⌘0", () => setCam(fitCam()), true],
+                {[[de ? "Auf Auswahl zoomen" : "Zoom to selection", "⇧2", () => zoomToSel(), !!selItem],
+                  [de ? "Gesamten Inhalt anpassen" : "Fit all content", "⇧1", () => setCam(fitCam()), true],
                   ["sep"],
                   [de ? "Einzoomen" : "Zoom in", "+", () => zoomStep(1), true],
                   [de ? "Auszoomen" : "Zoom out", "−", () => zoomStep(-1), true],
                   ["50 %", "", () => zoomTo(0.5), true],
-                  ["100 %", "⌘1", () => zoomTo(1), true],
+                  ["100 %", "⇧0", () => zoomTo(1), true],
                   ["150 %", "", () => zoomTo(1.5), true],
                   ["200 %", "⌘2", () => zoomTo(2), true],
                   ["sep"],
