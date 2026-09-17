@@ -20301,7 +20301,10 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style, transparentSurface =
       {/* One square viewport, then everything inside it in the canvas's own
           coordinates: the scale is a transform, so nothing has to be divided by
           hand and the numbers stay the ones in the document. */}
-      <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+      {/* clip-path as well as overflow: a filtered child sits in its own
+          compositing layer below a scale transform, and browsers let such a
+          layer paint past an overflow clip. clip-path cuts it regardless. */}
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden", clipPath: "inset(0)" }}>
         <div style={{ position: "absolute", left: 0, top: 0, width: W, height: H,
           transformOrigin: "0 0", transform: `scale(${k})`,
           // Nothing until the width is known, or the canvas flashes at full
@@ -20343,6 +20346,11 @@ function CanvasThumb({ doc, w, h, theme, radius = 0, style, transparentSurface =
             const inner = (
               <div style={{ position: "absolute", inset: 0,
                 opacity: it.opacity == null ? 1 : it.opacity,
+                // The same effects the editor draws. This card drew none, so a
+                // large blurred glow imported from Figma showed as a hard block
+                // here and as a soft one the moment its board was clicked.
+                filter: canvasRenderEffectFilter(it),
+                mixBlendMode: it.blend && it.blend !== "normal" ? it.blend : undefined,
                 borderRadius: it.type === "ellipse" ? "50%"
                   : radiiOf(it).map(v => `${v}px`).join(" "),
                 // A mask first, then the item's own shape. ONE property: written

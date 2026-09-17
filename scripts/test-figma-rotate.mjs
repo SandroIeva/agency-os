@@ -81,4 +81,78 @@ const bp = bare.items.find(i => i.type === "path");
 ok(!!bp && bp.ox === 5 && bp.oy === 6 && near(bp.nodes[1].x, 10),
    "a node without relativeTransform is placed the old way, not dropped");
 
+// ── 4. The real file: an UPRIGHT chevron inside a ROTATED frame ──────────────
+// The chevron's own relativeTransform is the identity; the 90° turn belongs to
+// the frame around it. Reading only the node's own matrix changed nothing, which
+// is what the first fix did.
+const inRotatedFrame = figmaToItems(frame({
+  type: "FRAME", id: "2:1", name: "turned",
+  relativeTransform: [[0, -1, 0], [1, 0, 0]],
+  size: { x: 20, y: 10 },
+  absoluteBoundingBox: { x: 0, y: 0, width: 10, height: 20 },
+  fills: [], strokes: [],
+  children: [vector({
+    id: "2:2",
+    relativeTransform: [[1, 0, 0], [0, 1, 0]],
+    size: { x: 20, y: 10 },
+    absoluteBoundingBox: { x: 0, y: 0, width: 10, height: 20 },
+  })],
+}));
+const fp = inRotatedFrame.items.find(i => i.type === "path");
+ok(!!fp, "a vector inside a rotated frame still arrives as a path");
+if (fp) {
+  const pts = fp.nodes.map(n => [n.x, n.y]);
+  const apex = pts.reduce((a, p) => (p[0] > a[0] ? p : a), pts[0]);
+  ok(near(apex[0], 10) && near(apex[1], 10),
+     "an upright chevron in a rotated frame turns with the frame and points right");
+}
+
+// ── 5. A GROUP is not a coordinate space, so it must not turn things twice ──
+// Its children already carry the group's rotation in their own transforms.
+const inGroup = figmaToItems(frame({
+  type: "GROUP", id: "3:1", name: "group",
+  relativeTransform: [[0, -1, 0], [1, 0, 0]],
+  absoluteBoundingBox: { x: 0, y: 0, width: 10, height: 20 },
+  children: [vector({
+    id: "3:2",
+    relativeTransform: [[0, -1, 0], [1, 0, 0]],
+    size: { x: 20, y: 10 },
+    absoluteBoundingBox: { x: 0, y: 0, width: 10, height: 20 },
+  })],
+}));
+const gp = inGroup.items.find(i => i.type === "path");
+if (gp) {
+  const pts = gp.nodes.map(n => [n.x, n.y]);
+  const apex = pts.reduce((a, p) => (p[0] > a[0] ? p : a), pts[0]);
+  ok(near(apex[0], 10) && near(apex[1], 10),
+     "a rotated group does not rotate its children a second time");
+} else ok(false, "a vector inside a group arrives");
+
+// ── 6. A rotated rectangle keeps its own size and gets a rotation ───────────
+const rect = figmaToItems(frame({
+  type: "RECTANGLE", id: "4:1", name: "bar",
+  relativeTransform: [[0, -1, 0], [1, 0, 0]],
+  size: { x: 40, y: 10 },
+  absoluteBoundingBox: { x: 0, y: 0, width: 10, height: 40 },
+  fills: [{ type: "SOLID", visible: true, color: { r: 1, g: 0, b: 0, a: 1 } }],
+  strokes: [],
+}));
+const rr = rect.items.find(i => i.type === "rect");
+ok(!!rr && near(rr.w, 40) && near(rr.h, 10) && near(Math.abs(rr.rot), 90)
+   && near(rr.x + rr.w / 2, 5) && near(rr.y + rr.h / 2, 20),
+   "a rotated rectangle keeps its own size, turns by 90° and stays centred");
+
+// ── 7. An upright rectangle is untouched ─────────────────────────────────────
+const flat = figmaToItems(frame({
+  type: "RECTANGLE", id: "5:1", name: "flat",
+  relativeTransform: [[1, 0, 3], [0, 1, 4]],
+  size: { x: 40, y: 10 },
+  absoluteBoundingBox: { x: 3, y: 4, width: 40, height: 10 },
+  fills: [{ type: "SOLID", visible: true, color: { r: 1, g: 0, b: 0, a: 1 } }],
+  strokes: [],
+}));
+const fr = flat.items.find(i => i.type === "rect");
+ok(!!fr && fr.x === 3 && fr.y === 4 && fr.w === 40 && fr.h === 10 && fr.rot == null,
+   "an upright rectangle comes out exactly as before, with no rotation");
+
 process.exit(failed ? 1 : 0);
