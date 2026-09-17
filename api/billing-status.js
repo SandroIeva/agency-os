@@ -41,6 +41,13 @@ export default async function handler(req, res) {
         expired: entitlements.trialExpired,
         endsAt: entitlements.trialEndsAt,
         daysLeft: entitlements.trialDaysLeft,
+        // How long THIS trial runs, from its own row. Every trial used to be
+        // described as TRIAL_DAYS long, so a trial extended by hand read
+        // "trying i7OS for 7 days, 90 days left". Null when the row has no
+        // start date, and the page falls back to the constant.
+        lengthDays: account?.trial_started_at && account?.trial_ends_at
+          ? Math.round((Date.parse(account.trial_ends_at) - Date.parse(account.trial_started_at)) / 86400000)
+          : null,
       },
       // Kept in the previous shape so existing consumers keep working.
       billing: account ? {
