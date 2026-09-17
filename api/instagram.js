@@ -511,11 +511,17 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
       fields: "id,caption,permalink,timestamp,comments_count", limit: 50,
     });
     if (!list.ok) return json({ error: list.body?.error?.message || "media_failed" }, 502);
-    // Only posts that have anything under them, and at most ten of those: one
-    // request per post, and the newest ten are what a dashboard is looking at.
-    const posts = (list.body?.data || [])
+    // Posts that have anything under them, at most ten: one request per post,
+    // and the newest ten are what a dashboard is looking at. The newest post is
+    // asked ALWAYS, even at zero comments, and even when it is older than the
+    // window. comments_count can lag behind a comment written a moment ago, and
+    // an account that asks nothing never makes the call Meta counts before a
+    // permission can go to App Review, which is how this sat at zero calls.
+    const media = list.body?.data || [];
+    const posts = media
       .filter(m => (m.comments_count || 0) > 0 && (!m.timestamp || new Date(m.timestamp).getTime() >= cutoff))
       .slice(0, 10);
+    if (media[0] && !posts.some(m => m.id === media[0].id)) posts.unshift(media[0]);
 
     const who = (c) => {
       const username = c.from?.username || c.username || null;
