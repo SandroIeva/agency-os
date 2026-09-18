@@ -25120,10 +25120,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         border: "none", borderBottom: `${1 * k}px solid ${theme.textFaint}`,
                         outline: "none", padding: 0, width: `${Math.max(6, boardNameDraft.length + 1)}ch` }} />
                   ) : (
-                    <span onDoubleClick={() => beginRenameBoard(active)}
-                      title={de ? "Doppelklick zum Umbenennen" : "Double-click to rename"}
+                    // The name selects the board. Clicking the board itself only
+                    // does that where nothing is drawn, so on a full artboard
+                    // there was no way to reach its own settings at all. Double
+                    // click still renames, and the pointerdown is stopped so the
+                    // stage below does not start a marquee under the label.
+                    <span onPointerDown={(e) => { e.stopPropagation(); setEditing(null); setPick([]); setEnteredGroup(null); setSel("frame"); }}
+                      onDoubleClick={() => beginRenameBoard(active)}
+                      title={de ? "Klick wählt das Artboard, Doppelklick benennt es um"
+                                : "Click selects the artboard, double-click renames it"}
                       style={{ fontFamily: FONT, fontSize: 12 * k, fontWeight: 600,
-                        color: theme.text, whiteSpace: "nowrap", cursor: "text" }}>
+                        color: theme.text, whiteSpace: "nowrap", cursor: "pointer" }}>
                       {board.name}
                     </span>
                   )}
