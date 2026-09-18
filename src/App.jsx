@@ -43230,9 +43230,11 @@ const DEFAULT_VOICE_TONE_EN = {
 };
 
 const DEFAULT_STORY_TIMELINE = [
-  { year: "2018", quarter: "Q1", title: "Gründung", desc: "Die Idee zu APPICS entsteht: Social Media, das Creator fair belohnt." },
-  { year: "2019", quarter: "Q2", title: "Token-Launch", desc: "Der APX-Token und die erste App-Version gehen live." },
-  { year: "2022", quarter: "Q3", title: "Relaunch", desc: "Neue App-Generation mit überarbeitetem Reward-System." },
+  // Neutral on purpose. It told the story of one real company, APPICS, to every
+  // brand that had none of its own yet.
+  { year: "2020", quarter: "Q1", title: "Gründung", desc: "Die Idee entsteht und das Team findet sich zusammen." },
+  { year: "2021", quarter: "Q3", title: "Erstes Produkt", desc: "Das erste Angebot geht an den Markt, die ersten Kunden kommen." },
+  { year: "2023", quarter: "Q2", title: "Neuausrichtung", desc: "Die Marke wird geschärft und das Angebot weiterentwickelt." },
 ];
 
 // Taglines — numbered (01/02/03) grid: big number, divider, tagline headline,
@@ -43350,9 +43352,9 @@ function BrandTaglines({ value, editing, theme, darkMode, t, onChange, appLangua
 // Purpose / Vision / Mission — 3-column block (top divider, title, description).
 // Lives under Brand Core. Editable descriptions with auto-save.
 const DEFAULT_STORY_TIMELINE_EN = [
-  { year: "2018", quarter: "Q1", title: "Founded", desc: "The idea for APPICS is born: social media that rewards creators fairly." },
-  { year: "2019", quarter: "Q2", title: "Token launch", desc: "The APX token and the first app version go live." },
-  { year: "2022", quarter: "Q3", title: "Relaunch", desc: "A new app generation with a reworked reward system." },
+  { year: "2020", quarter: "Q1", title: "Founded", desc: "The idea takes shape and the team comes together." },
+  { year: "2021", quarter: "Q3", title: "First product", desc: "The first offer goes to market and the first customers arrive." },
+  { year: "2023", quarter: "Q2", title: "Repositioning", desc: "The brand is sharpened and the offer evolves." },
 ];
 const DEFAULT_PVM_EN = {
   purpose: "Define your brand's fundamental reason to exist beyond profit. Describe the impact you want to make, and for whom.",
