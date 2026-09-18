@@ -45338,7 +45338,8 @@ function defaultGradients(paletteHexes) {
   }));
 }
 
-function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMode, onSave, onCancel, onSavePalette, onSaveGradients }) {
+function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMode, onSave, onCancel, onSavePalette, onSaveGradients, appLanguage = "de" }) {
+  const de = appLanguage === "de";
   const lum = (hex) => { try { const h = String(hex).replace("#", ""); const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; } catch { return 0.5; } };
   const norm = (c) => { if (!c) return ""; let h = String(c).trim(); if (!h.startsWith("#")) h = "#" + h; return /^#[0-9a-fA-F]{6}$/.test(h) ? h.toLowerCase() : ""; };
 
@@ -45423,12 +45424,12 @@ function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMod
       {editing ? (
         <RichTextEditor key="colors-desc" initialHTML={savedHtml || "<p></p>"} theme={theme} darkMode={darkMode} onSave={onSave} onCancel={onCancel}
           simple
-          placeholder="Wofür steht eure Farbwelt? Beschreibe, welche Farbe wofür eingesetzt wird — z. B. Primärfarbe für Flächen und Buttons, Akzentfarbe sparsam für Hervorhebungen — und was die Farben über die Marke aussagen sollen." />
+          placeholder={de ? "Wofür steht eure Farbwelt? Beschreibe, welche Farbe wofür eingesetzt wird, z. B. Primärfarbe für Flächen und Buttons, Akzentfarbe sparsam für Hervorhebungen, und was die Farben über die Marke aussagen sollen." : "What does your colour world stand for? Describe which colour is used for what, e.g. the primary colour for surfaces and buttons, the accent sparingly for highlights, and what the colours should say about the brand."} />
       ) : savedHtml ? (
         <div className="brand-rich" dangerouslySetInnerHTML={{ __html: cleanHtml(savedHtml) }} />
       ) : (
         <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 560 }}>
-          Beschreibe eure Farbwelt — wofür die Farben stehen und wie sie eingesetzt werden. Über „Bearbeiten" oben rechts kannst du den Text ergänzen.
+          {de ? "Beschreibe eure Farbwelt: wofür die Farben stehen und wie sie eingesetzt werden. Über „Bearbeiten“ oben rechts kannst du den Text ergänzen." : "Describe your colour world: what the colours stand for and how they are used. Add the text with “Edit” at the top right."}
         </div>
       )}
 
@@ -45450,7 +45451,7 @@ function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMod
         );
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)" }}>
-            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>Farben bearbeiten</div>
+            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>{de ? "Farben bearbeiten" : "Edit colours"}</div>
             {row("Primary", draft.primary, v => update({ ...draft, primary: v }))}
             {row("Secondary", draft.secondary, v => update({ ...draft, secondary: v }))}
             {(draft.accents || []).map((a, i) => (
@@ -45471,11 +45472,11 @@ function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMod
                 <div style={{ marginTop: 8, padding: 13, borderRadius: 12,
                   background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
                   border: `1px solid ${theme.borderFaint}` }}>
-                  <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Farbvorschläge</div>
+                  <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? "Farbvorschläge" : "Colour suggestions"}</div>
                   <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginTop: 3 }}>
                     {norm(draft.primary)
-                      ? "Vorschläge, die zu eurer Grundfarbe passen. Ein Klick übernimmt die Palette — danach bleibt alles frei bearbeitbar."
-                      : "Noch keine Grundfarbe gewählt — hier ein paar Startpunkte. Ein Klick übernimmt die Palette."}
+                      ? (de ? "Vorschläge, die zu eurer Grundfarbe passen. Ein Klick übernimmt die Palette, danach bleibt alles frei bearbeitbar." : "Suggestions that match your base colour. One click applies the palette, and everything stays editable afterwards.")
+                      : (de ? "Noch keine Grundfarbe gewählt, hier ein paar Startpunkte. Ein Klick übernimmt die Palette." : "No base colour chosen yet, so here are a few starting points. One click applies the palette.")}
                   </div>
 
                   <div style={{ display: "flex", gap: 10, marginTop: 11 }}>
@@ -45557,7 +45558,7 @@ function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMod
               <motion.div key="shades" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }}
                 style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => setOpenColor(null)} title="Zurück"
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => setOpenColor(null)} title={de ? "Zurück" : "Back"}
                     style={{ cursor: "pointer", color: theme.textDim, display: "flex", alignItems: "center" }}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
                   </motion.div>
@@ -45574,7 +45575,7 @@ function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMod
                     return (
                       <div key={sh + j} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
                         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: j * 0.045, duration: 0.32, ease: [0.22, 0.68, 0.35, 1] }}
-                          whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} onClick={() => copyHex(sh)} title="Hex kopieren"
+                          whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} onClick={() => copyHex(sh)} title={de ? "Hex kopieren" : "Copy hex"}
                           style={{ width: "100%", height: 360, borderRadius: 14, background: sh, position: "relative", cursor: "pointer" }}>
                           <div style={{ position: "absolute", bottom: 14, left: 0, right: 0, textAlign: "center", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: txt, opacity: 0.9 }}>{isCopied ? "Kopiert ✓" : sh.toUpperCase()}</div>
                         </motion.div>
@@ -45600,13 +45601,13 @@ function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMod
         <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 10 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
             <div style={{ fontSize: 11, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: 1.6, textTransform: "uppercase" }}>
-              Farbverläufe
+              {de ? "Farbverläufe" : "Gradients"}
             </div>
             {!editing && !savedGradients && (
               // Says why these exist before anyone saved anything, so they don't
               // look like stale data someone forgot to change.
               <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint }}>
-                aus eurer Palette abgeleitet — über „Bearbeiten" anpassbar
+                {de ? "aus eurer Palette abgeleitet, über „Bearbeiten“ anpassbar" : "derived from your palette, adjustable with “Edit”"}
               </div>
             )}
           </div>
@@ -45895,7 +45896,8 @@ function GoogleFontPicker({ selectedName, onPick, theme, darkMode }) {
   );
 }
 
-function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, session, userOrg }) {
+function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, session, userOrg, appLanguage = "de" }) {
+  const de = appLanguage === "de";
   const seedFont = (font, fallbackName) => {
     if (font && (font.family || font.name)) return font;
     if (fallbackName) return { name: fallbackName, family: fallbackName, kind: "system" };
@@ -45968,7 +45970,7 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
     const Lbl = (s) => <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 600, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4 }}>{s}</div>;
     const weightOpts = [100, 200, 300, 400, 500, 600, 700, 800, 900];
     // Plain function (NOT a nested component) so inputs/selects don't remount on every change.
-    const METHOD_TABS = [{ id: "google", label: "Google Font" }, { id: "url", label: "Google-URL" }, { id: "upload", label: "Hochladen" }];
+    const METHOD_TABS = [{ id: "google", label: "Google Font" }, { id: "url", label: "Google-URL" }, { id: "upload", label: de ? "Hochladen" : "Upload" }];
     const section = (role, font, fileRef, label) => {
       const avail = typoAvailableWeights(font);
       const shown = typoDisplayWeights(font);
@@ -45997,7 +45999,7 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
             })}
           </div>
           {method === "google" && (
-            <div>{Lbl("Google Font auswählen")}
+            <div>{Lbl(de ? "Google Font auswählen" : "Choose a Google font")}
               <GoogleFontPicker selectedName={font?.kind === "google" ? font.name : ""} theme={theme} darkMode={darkMode}
                 onPick={(f) => setFont(role, { ...(font || {}), name: f.name, family: f.name, kind: "google", url: buildGoogleFontUrl(f.name, f.weights), weights: f.weights })} />
             </div>
@@ -46025,7 +46027,7 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
                 ))}
                 <input ref={fileRef} type="file" accept=".woff2,.woff,.ttf,.otf,font/*" multiple hidden onChange={e => { uploadFonts(role, e.target.files); e.target.value = ""; }} />
                 <button onClick={() => fileRef.current?.click()} style={{ alignSelf: "flex-start", padding: "8px 13px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>
-                  {uploading ? "Lädt…" : "+ Schriftschnitte hochladen"}
+                  {uploading ? (de ? "Lädt…" : "Uploading…") : (de ? "+ Schriftschnitte hochladen" : "+ Upload font files")}
                 </button>
               </div>
             </div>
@@ -46054,14 +46056,14 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
               </div>
             </div>
           )}
-          {font && <button onClick={() => setFont(role, null)} style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: "#e5484d", fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>Schrift entfernen</button>}
+          {font && <button onClick={() => setFont(role, null)} style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: "#e5484d", fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>{de ? "Schrift entfernen" : "Remove font"}</button>}
         </div>
       );
     };
     return (
       <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
-        {section("primary", primary, fileRefP, "Primärschrift")}
-        {section("secondary", secondary, fileRefS, "Sekundärschrift (optional)")}
+        {section("primary", primary, fileRefP, de ? "Primärschrift" : "Primary font")}
+        {section("secondary", secondary, fileRefS, de ? "Sekundärschrift (optional)" : "Secondary font (optional)")}
       </div>
     );
   }
@@ -46069,7 +46071,7 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
   // ── DISPLAY (specimen) ──
   if (!primary) {
     return <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, textAlign: "center" }}>
-      Noch keine Schrift hinterlegt. Über „Bearbeiten" kannst du eine Google-Schrift verbinden oder Schriften hochladen.
+      {de ? "Noch keine Schrift hinterlegt. Über „Bearbeiten“ kannst du eine Google-Schrift verbinden oder Schriften hochladen." : "No font yet. With “Edit” you can connect a Google font or upload your own."}
     </div>;
   }
   const fam = familyCss(primary);
@@ -46083,7 +46085,7 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
           <div style={{ fontFamily: fam, fontSize: 210, fontWeight: heroWeight, color: theme.text, lineHeight: 1, letterSpacing: -10 }}>Aa</div>
           <div style={{ borderTop: divider, marginTop: 18, paddingTop: 14 }}>
             <div style={{ fontFamily: fam, fontSize: 34, fontWeight: 500, color: theme.text }}>{primary.name}</div>
-            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>Typografie für Texte.</div>
+            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginTop: 4 }}>{de ? "Typografie für Texte." : "Typography for body text."}</div>
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column" }}>
@@ -46108,7 +46110,7 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
 
       {/* Secondary */}
       <div style={{ borderTop: divider, paddingTop: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Sekundärschrift</span>
+        <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Sekundärschrift" : "Secondary font"}</span>
         <span style={{ fontSize: 15, fontFamily: secondary ? familyCss(secondary) : FONT, fontWeight: 500, color: secondary ? theme.text : theme.textDim }}>{secondary ? secondary.name : "None"}</span>
       </div>
     </div>
@@ -46121,6 +46123,7 @@ function BrandTypography({ value, fonts, editing, theme, darkMode, onChange, ses
 // button. Admins toggle edit mode via the header "Bearbeiten" button to upload
 // more images, edit prompts inline, and remove tiles.
 function BrandImagery({ value, editing, onChange, uploadFile, llmProvider, llmKeys, ensureValidToken, appLanguage = "de", theme, darkMode, accent }) {
+  const de = appLanguage === "de";
   const items = Array.isArray(value) ? value : [];
   const [uploading, setUploading] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
@@ -46297,13 +46300,13 @@ Write it as ONE flowing, highly vivid and detailed prompt (about 5–8 sentences
               <div style={{ position: "absolute", inset: 0, borderRadius: 16, display: "flex", flexDirection: "column", padding: 12, background: "rgba(10,10,16,0.55)", backdropFilter: "blur(7px)", WebkitBackdropFilter: "blur(7px)" }}>
                 <div style={{ position: "absolute", top: 10, right: 10, display: "flex", gap: 6 }}>
                   {aiConnected && (
-                    <motion.div whileTap={{ scale: 0.9 }} onClick={() => !genIds.includes(it.id) && generatePrompt(it)} title="Prompt mit KI generieren"
+                    <motion.div whileTap={{ scale: 0.9 }} onClick={() => !genIds.includes(it.id) && generatePrompt(it)} title={de ? "Prompt mit KI generieren" : "Generate prompt with AI"}
                       style={{ ...btnStyle, width: 28, height: 28, borderRadius: 8, cursor: genIds.includes(it.id) ? "default" : "pointer", background: "rgba(0,0,0,0.45)" }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={genIds.includes(it.id) ? { animation: "docpulse 1s ease-in-out infinite" } : undefined}><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/></svg>
                     </motion.div>
                   )}
-                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => download(it)} title="Herunterladen" style={{ ...btnStyle, width: 28, height: 28, borderRadius: 8, cursor: "pointer", background: "rgba(0,0,0,0.45)" }}>{downloadIcon}</motion.div>
-                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => remove(it.id)} title="Entfernen" style={{ ...btnStyle, width: 28, height: 28, borderRadius: 8, cursor: "pointer", background: "rgba(0,0,0,0.45)" }}>
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => download(it)} title={de ? "Herunterladen" : "Download"} style={{ ...btnStyle, width: 28, height: 28, borderRadius: 8, cursor: "pointer", background: "rgba(0,0,0,0.45)" }}>{downloadIcon}</motion.div>
+                  <motion.div whileTap={{ scale: 0.9 }} onClick={() => remove(it.id)} title={de ? "Entfernen" : "Remove"} style={{ ...btnStyle, width: 28, height: 28, borderRadius: 8, cursor: "pointer", background: "rgba(0,0,0,0.45)" }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                   </motion.div>
                 </div>
@@ -46316,11 +46319,11 @@ Write it as ONE flowing, highly vivid and detailed prompt (about 5–8 sentences
             ) : (
               // View mode: blurred overlay with the prompt; copy top-right, download bottom-right.
               <div className="imagery-overlay" style={{ position: "absolute", inset: 0, borderRadius: 16, display: "flex", flexDirection: "column", padding: 14, background: "rgba(10,10,16,0.42)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
-                <motion.div whileTap={{ scale: 0.9 }} onClick={() => copyPrompt(it)} title="Prompt kopieren"
+                <motion.div whileTap={{ scale: 0.9 }} onClick={() => copyPrompt(it)} title={de ? "Prompt kopieren" : "Copy prompt"}
                   style={{ ...btnStyle, position: "absolute", top: 10, right: 10, cursor: it.prompt ? "pointer" : "default", opacity: it.prompt ? 1 : 0.4 }}>
                   {copiedId === it.id ? checkIcon : copyIcon}
                 </motion.div>
-                <motion.div whileTap={{ scale: 0.9 }} onClick={() => download(it)} title="Herunterladen"
+                <motion.div whileTap={{ scale: 0.9 }} onClick={() => download(it)} title={de ? "Herunterladen" : "Download"}
                   style={{ ...btnStyle, position: "absolute", bottom: 10, right: 10, cursor: "pointer" }}>{downloadIcon}</motion.div>
                 <div style={{ flex: 1, overflowY: "auto", paddingRight: 40, paddingBottom: 36, color: "#fff", fontSize: 12.5, lineHeight: 1.55, fontFamily: FONT }}>
                   {it.prompt || <span style={{ opacity: 0.6 }}>{appLanguage === "de" ? "Kein Prompt hinterlegt." : "No prompt yet."}</span>}
@@ -46359,16 +46362,16 @@ Write it as ONE flowing, highly vivid and detailed prompt (about 5–8 sentences
 // adjustable scale and built-in padding, and the whole board sits on a
 // configurable background. Admins edit via the header "Bearbeiten" button.
 const LOGO_LAYOUTS = {
-  single:  { label: "Nur Logo",             rows: [["a"]] },
-  split:   { label: "Zweiteilung + Lockup", rows: [["a", "b"], ["c"]] },
-  quad:    { label: "Vier Kacheln",         rows: [["a", "b"], ["c", "d"]] },
-  stacked: { label: "Zwei längliche",       rows: [["a"], ["b"]] },
+  single:  { label: "Nur Logo",             labelEn: "Logo only",          rows: [["a"]] },
+  split:   { label: "Zweiteilung + Lockup", labelEn: "Split + lockup",     rows: [["a", "b"], ["c"]] },
+  quad:    { label: "Vier Kacheln",         labelEn: "Four tiles",         rows: [["a", "b"], ["c", "d"]] },
+  stacked: { label: "Zwei längliche",       labelEn: "Two stacked",        rows: [["a"], ["b"]] },
 };
 const LOGO_ASSET_SLOTS = [
-  { key: "visual",      label: "Logo Visual",              inv: false },
-  { key: "visualInv",   label: "Logo Visual · invertiert", inv: true },
-  { key: "original",    label: "Originallogo",             inv: false },
-  { key: "originalInv", label: "Originallogo · invertiert", inv: true },
+  { key: "visual",      label: "Logo Visual",              labelEn: "Logo visual",            inv: false },
+  { key: "visualInv",   label: "Logo Visual · invertiert", labelEn: "Logo visual · inverted", inv: true },
+  { key: "original",    label: "Originallogo",             labelEn: "Original logo",          inv: false },
+  { key: "originalInv", label: "Originallogo · invertiert", labelEn: "Original logo · inverted", inv: true },
 ];
 const LayoutGlyph = ({ variant, color }) => {
   const rows = (LOGO_LAYOUTS[variant] || LOGO_LAYOUTS.split).rows;
@@ -46386,7 +46389,8 @@ const LayoutGlyph = ({ variant, color }) => {
   );
 };
 
-function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteColors = [], theme, darkMode, accent }) {
+function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteColors = [], theme, darkMode, accent, appLanguage = "de" }) {
+  const de = appLanguage === "de";
   const [busyAsset, setBusyAsset] = useState(null);
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [colorCellId, setColorCellId] = useState(null); // cell whose colour modal is open
@@ -46500,7 +46504,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
   if (!editing && !hasAny) {
     return (
       <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, textAlign: "center" }}>
-        Noch kein Logo hinterlegt. Über „Bearbeiten" oben rechts kannst du Logo-Dateien hochladen und das Layout festlegen.
+        {de ? "Noch kein Logo hinterlegt. Über „Bearbeiten“ oben rechts kannst du Logo-Dateien hochladen und das Layout festlegen." : "No logo yet. Use “Edit” at the top right to upload logo files and set the layout."}
       </div>
     );
   }
@@ -46522,7 +46526,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
           {busy ? "…" : <>{present ? checkIcon : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>}{fmt.toUpperCase()}</>}
         </motion.div>
         {present && (
-          <motion.div whileTap={{ scale: 0.85 }} onClick={() => removeAsset(slotKey, fmt)} title="Entfernen"
+          <motion.div whileTap={{ scale: 0.85 }} onClick={() => removeAsset(slotKey, fmt)} title={de ? "Entfernen" : "Remove"}
             style={{ width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim }}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </motion.div>
@@ -46554,13 +46558,13 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
           <motion.div whileHover={{ scale: 1.03 }} onClick={() => setPickerCellId(id)}
             style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, cursor: "pointer", color: dk ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.4)" }}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-            <span style={{ fontSize: 11.5, fontFamily: FONT, fontWeight: 600 }}>Logo wählen</span>
+            <span style={{ fontSize: 11.5, fontFamily: FONT, fontWeight: 600 }}>{de ? "Logo wählen" : "Choose logo"}</span>
           </motion.div>
         ) : null}
 
         {editing && (
           /* colour-fan icon (bottom-right) → per-cell background colour */
-          <motion.div whileHover={{ opacity: 1 }} whileTap={{ scale: 0.9 }} onClick={() => setColorCellId(id)} title="Hintergrundfarbe"
+          <motion.div whileHover={{ opacity: 1 }} whileTap={{ scale: 0.9 }} onClick={() => setColorCellId(id)} title={de ? "Hintergrundfarbe" : "Background colour"}
             style={{ position: "absolute", bottom: 10, right: 10, width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: ctrlColor, background: ctrlBg, opacity: 0.65 }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2z"/></svg>
           </motion.div>
@@ -46568,7 +46572,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
         {editing && url && (
           <>
             {/* select-logo icon (top-right) → pick which uploaded logo this cell shows */}
-            <motion.div whileHover={{ opacity: 1 }} whileTap={{ scale: 0.9 }} onClick={() => setPickerCellId(id)} title="Logo auswählen"
+            <motion.div whileHover={{ opacity: 1 }} whileTap={{ scale: 0.9 }} onClick={() => setPickerCellId(id)} title={de ? "Logo auswählen" : "Choose logo"}
               style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: ctrlColor, background: ctrlBg, opacity: 0.65 }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             </motion.div>
@@ -46582,13 +46586,13 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
         {!editing && url && (
           /* View mode: copy logo to clipboard + download (SVG/PNG), on hover. */
           <div className="logo-actions" style={{ position: "absolute", bottom: 10, right: 10, display: "flex", gap: 6 }}>
-            <motion.div whileTap={{ scale: 0.9 }} onClick={() => copyCellImage(c, id)} title="Logo kopieren"
+            <motion.div whileTap={{ scale: 0.9 }} onClick={() => copyCellImage(c, id)} title={de ? "Logo kopieren" : "Copy logo"}
               style={{ width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: ctrlColor, background: ctrlBg }}>
               {copiedCell === id
                 ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                 : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}
             </motion.div>
-            <motion.div whileTap={{ scale: 0.9 }} title="Herunterladen"
+            <motion.div whileTap={{ scale: 0.9 }} title={de ? "Herunterladen" : "Download"}
               onClick={() => { const fmts = cellFormats(c); if (fmts.length === 1) downloadCell(c, fmts[0]); else setDlCellId(id); }}
               style={{ width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: ctrlColor, background: ctrlBg }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -46616,7 +46620,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
                         : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={slot.inv ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.3)"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>}
                     </div>
                     <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 9 }}>{slot.label}</div>
+                      <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 9 }}>{de ? slot.label : (slot.labelEn || slot.label)}</div>
                       <div style={{ display: "flex", gap: 10 }}>{formatChip(slot.key, "svg")}{formatChip(slot.key, "png")}</div>
                     </div>
                   </div>
@@ -46631,7 +46635,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
               <div onClick={() => setLayoutOpen(o => !o)}
                 style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 34px 8px 12px", borderRadius: 10, cursor: "pointer", position: "relative", minWidth: 180, background: darkMode ? "rgba(255,255,255,0.05)" : "#fff", border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 12.5, fontFamily: FONT }}>
                 <LayoutGlyph variant={cfg.variant} color={theme.textDim} />
-                {layout.label}
+                {de ? layout.label : (layout.labelEn || layout.label)}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)" }}><polyline points="6 9 12 15 18 9"/></svg>
               </div>
               {layoutOpen && (
@@ -46642,7 +46646,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
                       <div key={id} onClick={() => { update({ variant: id }); setLayoutOpen(false); }}
                         style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 8, cursor: "pointer", fontSize: 12.5, fontFamily: FONT, color: theme.text, background: cfg.variant === id ? (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.04)") : "transparent" }}>
                         <LayoutGlyph variant={id} color={cfg.variant === id ? accent : theme.textDim} />
-                        {l.label}
+                        {de ? l.label : (l.labelEn || l.label)}
                       </div>
                     ))}
                   </div>
@@ -46666,7 +46670,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
           <motion.div initial={{ opacity: 0, scale: 0.95, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} onClick={e => e.stopPropagation()}
             style={{ width: "100%", maxWidth: 320, padding: 20, borderRadius: 18, background: darkMode ? "rgba(24,24,32,0.99)" : "#fff", border: `1px solid ${theme.border}`, boxShadow: "0 24px 60px rgba(0,0,0,0.35)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <div style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Logo herunterladen</div>
+              <div style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? "Logo herunterladen" : "Download logo"}</div>
               <motion.div whileTap={{ scale: 0.9 }} onClick={() => setDlCellId(null)} style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
               </motion.div>
@@ -46691,13 +46695,13 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
           <motion.div initial={{ opacity: 0, scale: 0.95, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} onClick={e => e.stopPropagation()}
             style={{ width: "100%", maxWidth: 380, padding: 20, borderRadius: 18, background: darkMode ? "rgba(24,24,32,0.99)" : "#fff", border: `1px solid ${theme.border}`, boxShadow: "0 24px 60px rgba(0,0,0,0.35)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <div style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Logo auswählen</div>
+              <div style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? "Logo auswählen" : "Choose logo"}</div>
               <motion.div whileTap={{ scale: 0.9 }} onClick={() => setPickerCellId(null)} style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
               </motion.div>
             </div>
             {availableSlots.length === 0 ? (
-              <div style={{ padding: "24px 8px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>Lade zuerst oben unter „Logo-Dateien" ein Logo hoch.</div>
+              <div style={{ padding: "24px 8px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>{de ? "Lade zuerst oben unter „Logo-Dateien“ ein Logo hoch." : "First upload a logo under “Logo files” above."}</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {availableSlots.map(slot => {
@@ -46710,7 +46714,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
                       <div style={{ width: 46, height: 46, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 7, background: slot.inv ? "#1a1a2e" : "#f4f4f6" }}>
                         <img src={assetUrl(slot.key)} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
                       </div>
-                      <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{slot.label}</div>
+                      <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{de ? slot.label : (slot.labelEn || slot.label)}</div>
                       {on && <span style={{ color: accent }}>{checkIcon}</span>}
                     </motion.div>
                   );
@@ -50028,25 +50032,25 @@ If you don't know a field, infer a plausible value. Write all text values in the
                           <div style={{ fontSize: 10, fontFamily: FONT, color: l.key === "dark" ? "#ffffff90" : theme.textDim }}>{l.label}</div>
                         </div>
                       ))}</div></div>
-                    ) : Empty("Noch kein Logo hochgeladen.");
+                    ) : Empty(de ? "Noch kein Logo hochgeladen." : "No logo uploaded yet.");
                   } else if (k === "design/colors") {
                     const hasPalette = cp.primary || cp.secondary || (cp.accents && cp.accents.length);
                     body = hasPalette ? (
-                      <div>{SL(t("brand.recap.colors") || "Farben")}<div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "flex-start" }}>{cp.primary && Sw(cp.primary, "Primary")}{cp.secondary && Sw(cp.secondary, "Secondary")}{(cp.accents || []).map((c) => Sw(c))}</div></div>
+                      <div>{SL(t("brand.recap.colors") || (de ? "Farben" : "Colours"))}<div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "flex-start" }}>{cp.primary && Sw(cp.primary, "Primary")}{cp.secondary && Sw(cp.secondary, "Secondary")}{(cp.accents || []).map((c) => Sw(c))}</div></div>
                     ) : (profile.colors?.length ? (
-                      <div>{SL(t("brand.recap.colors") || "Farben")}<div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>{profile.colors.map((c) => Sw(c))}</div></div>
-                    ) : Empty("Noch keine Farben hinterlegt."));
+                      <div>{SL(t("brand.recap.colors") || (de ? "Farben" : "Colours"))}<div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>{profile.colors.map((c) => Sw(c))}</div></div>
+                    ) : Empty(de ? "Noch keine Farben hinterlegt." : "No colours yet."));
                   } else if (k === "design/typography") {
                     body = (fonts.heading || fonts.body) ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
                         {fonts.heading && <div>{SL("Headline")}<div style={{ fontSize: 26, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{fonts.heading}</div></div>}
                         {fonts.body && <div>{SL("Body")}<div style={{ fontSize: 16, fontFamily: FONT, color: theme.textSub }}>{fonts.body}</div></div>}
                       </div>
-                    ) : Empty("Noch keine Typografie erkannt.");
+                    ) : Empty(de ? "Noch keine Typografie erkannt." : "No typography detected yet.");
                   } else if (k === "design/imagery") {
-                    body = Empty("Bildsprache — hier kommen Brand-Bildbeispiele mit ihren Prompts hin. Bald verfügbar.");
+                    body = Empty(de ? "Bildsprache: hier kommen Brand-Bildbeispiele mit ihren Prompts hin. Bald verfügbar." : "Imagery: brand image examples with their prompts will live here. Coming soon.");
                   } else {
-                    body = Empty("Bald verfügbar.");
+                    body = Empty(de ? "Bald verfügbar." : "Coming soon.");
                   }
 
                   // Saved rich-text override for this section (set via the editor).
@@ -50077,13 +50081,13 @@ If you don't know a field, infer a plausible value. Write all text values in the
                       ) : k === "strategy/positioning" ? (
                         <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} onEditingChange={setVisionEditing} canEdit={canEditCurrent} appLanguage={appLanguage} />
                       ) : k === "design/colors" ? (
-                        <BrandColors cp={cp} colors={profile.colors} gradients={profile.gradients} editing={editingText} savedHtml={savedHtml} theme={theme} darkMode={darkMode}
+                        <BrandColors appLanguage={appLanguage} cp={cp} colors={profile.colors} gradients={profile.gradients} editing={editingText} savedHtml={savedHtml} theme={theme} darkMode={darkMode}
                           onSave={(html) => saveSection(k, html)} onCancel={() => setEditingText(false)} onSavePalette={saveColorPalette} onSaveGradients={saveGradients} />
                       ) : k === "design/typography" ? (
-                        <BrandTypography value={profile.typography} fonts={fonts} editing={editingText} theme={theme} darkMode={darkMode}
+                        <BrandTypography appLanguage={appLanguage} value={profile.typography} fonts={fonts} editing={editingText} theme={theme} darkMode={darkMode}
                           onChange={saveTypography} session={session} userOrg={userOrg} />
                       ) : k === "design/logo" ? (
-                        <BrandLogoLayout value={profile.logo_layout} logos={profile.logos} editing={editingText} onChange={saveLogoLayout}
+                        <BrandLogoLayout appLanguage={appLanguage} value={profile.logo_layout} logos={profile.logos} editing={editingText} onChange={saveLogoLayout}
                           uploadFile={uploadFile} paletteColors={[cp.primary, cp.secondary, ...(cp.accents || [])].filter(Boolean).length ? [cp.primary, cp.secondary, ...(cp.accents || [])].filter(Boolean) : (profile.colors || [])}
                           theme={theme} darkMode={darkMode} accent={theme.accent} />
                       ) : k === "design/imagery" ? (
