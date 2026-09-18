@@ -17917,6 +17917,9 @@ const BRAND_SUBVIEW_LABELS = {
   identity: "Identität",
   design: "Brand Design",
 };
+// The same labels in English. Kept beside the German ones rather than inside
+// them, because the object above is read by key in two places.
+const BRAND_SUBVIEW_LABELS_EN = { strategy: "Strategy", identity: "Identity", design: "Brand Design" };
 
 // The Brand pillar tab bar. The three content pillars switch inline; Touchpoints
 // and Assets are dedicated views, so their tabs navigate there.
@@ -43162,12 +43165,20 @@ const DEFAULT_STORY_TIMELINE = [
 // Taglines — numbered (01/02/03) grid: big number, divider, tagline headline,
 // short description. Editable (add/remove/edit) with auto-save.
 const DEFAULT_TAGLINES = [
-  { tagline: "Deine Tagline mit klarem USP — was dich einzigartig macht", desc: "Beschreibe kurz, worum es bei dieser Tagline geht und welche Botschaft sie transportiert." },
+  { tagline: "Deine Tagline mit klarem USP: was dich einzigartig macht", desc: "Beschreibe kurz, worum es bei dieser Tagline geht und welche Botschaft sie transportiert." },
   { tagline: "Ein einprägsamer Claim, der dein Versprechen auf den Punkt bringt", desc: "Beschreibe kurz, worum es bei dieser Tagline geht und welche Botschaft sie transportiert." },
   { tagline: "Dein Alleinstellungsmerkmal in einem Satz", desc: "Beschreibe kurz, worum es bei dieser Tagline geht und welche Botschaft sie transportiert." },
 ];
 
-function BrandTaglines({ value, editing, theme, darkMode, t, onChange }) {
+// The same three examples in English. Shown only while nothing is entered.
+const DEFAULT_TAGLINES_EN = [
+  { tagline: "Your tagline with a clear USP: what makes you unique", desc: "Briefly describe what this tagline is about and the message it carries." },
+  { tagline: "A memorable claim that puts your promise in a nutshell", desc: "Briefly describe what this tagline is about and the message it carries." },
+  { tagline: "Your unique selling point in one sentence", desc: "Briefly describe what this tagline is about and the message it carries." },
+];
+function BrandTaglines({ value, editing, theme, darkMode, t, onChange, appLanguage = "de" }) {
+  const de = appLanguage === "de";
+  const DEF_TAGLINES = de ? DEFAULT_TAGLINES : DEFAULT_TAGLINES_EN;
   const divider = darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)";
   // Editor styling: the number and the delete button used to sit in the same
   // row as the input, indenting the field on both sides. They now live in a
@@ -43189,9 +43200,9 @@ function BrandTaglines({ value, editing, theme, darkMode, t, onChange }) {
     transition: "background .18s ease",
     ...extra,
   });
-  const [entries, setEntries] = useState(value && value.length ? value : DEFAULT_TAGLINES);
-  useEffect(() => { if (editing) setEntries((value && value.length) ? JSON.parse(JSON.stringify(value)) : JSON.parse(JSON.stringify(DEFAULT_TAGLINES))); }, [editing]);
-  const display = (value && value.length) ? value : DEFAULT_TAGLINES;
+  const [entries, setEntries] = useState(value && value.length ? value : DEF_TAGLINES);
+  useEffect(() => { if (editing) setEntries((value && value.length) ? JSON.parse(JSON.stringify(value)) : JSON.parse(JSON.stringify(DEF_TAGLINES))); }, [editing]);
+  const display = (value && value.length) ? value : DEF_TAGLINES;
 
   const commit = (next) => { setEntries(next); onChange(next); };
   const setField = (i, f, v) => commit(entries.map((e, j) => j === i ? { ...e, [f]: v } : e));
@@ -43217,7 +43228,7 @@ function BrandTaglines({ value, editing, theme, darkMode, t, onChange }) {
               <motion.div
                 whileHover={{ opacity: 1 }} whileTap={{ scale: 0.9 }}
                 onClick={() => removeEntry(i)}
-                title={t("common.delete") || "Löschen"}
+                title={t("common.delete") || (de ? "Löschen" : "Delete")}
                 style={{ cursor: "pointer", color: theme.textFaint, opacity: 0.7, display: "flex", padding: 3, transition: "color .18s ease" }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
@@ -43235,7 +43246,7 @@ function BrandTaglines({ value, editing, theme, darkMode, t, onChange }) {
               value={e.desc}
               onChange={ev => setField(i, "desc", ev.target.value)}
               onFocus={() => setFocusedKey(`${i}-d`)} onBlur={() => setFocusedKey(null)}
-              placeholder="Beschreibung"
+              placeholder={de ? "Beschreibung" : "Description"}
               style={fieldStyle(`${i}-d`, { fontSize: 13.5, color: theme.textSub })}
             />
           </div>
@@ -43243,7 +43254,7 @@ function BrandTaglines({ value, editing, theme, darkMode, t, onChange }) {
         <motion.div whileTap={{ scale: 0.97 }} onClick={addEntry}
           style={{ marginTop: 2, alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 13px", borderRadius: 999, border: `1px solid ${hairline}`, color: theme.textSub, fontSize: 12.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Tagline hinzufügen
+          {de ? "Tagline hinzufügen" : "Add tagline"}
         </motion.div>
       </div>
     );
@@ -43571,6 +43582,7 @@ const SAMPLE_PERSONA = () => ({
 });
 
 function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, darkMode, t, appLanguage = "de", aiHere = true, canEdit = true }) {
+  const de = appLanguage === "de";
   // Ignore legacy auto-generated website stubs — they shouldn't show an overview
   // before the user has actually created a persona. They get dropped on next save.
   const personas = (Array.isArray(value) ? value : []).filter(p => p && p.source !== "website");
@@ -43641,7 +43653,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
       const next = [...personas, p];
       commit(next); setSelIdx(next.length - 1); setManualText(""); setScreen("detail");
     } catch (e) {
-      setGenError("Generierung fehlgeschlagen. Versuch es nochmal oder prüfe deinen AI-Provider in den Einstellungen.");
+      setGenError(de ? "Generierung fehlgeschlagen. Versuch es nochmal oder prüfe deinen AI-Provider in den Einstellungen." : "Generation failed. Try again, or check your AI provider in Settings.");
     } finally { setGenerating(false); }
   };
   const saveDraft = () => {
@@ -43673,11 +43685,12 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
         {personas.length > 0 && (
           <div style={{ alignSelf: "flex-start" }}>
-            <BackLink theme={theme} onClick={() => setScreen("overview")} label="Zurück" />
+            <BackLink theme={theme} onClick={() => setScreen("overview")} label={de ? "Zurück" : "Back"} />
           </div>
         )}
         <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, maxWidth: 560 }}>
-          Lege eine Persona an. Beschreibe sie kurz und lass sie von der KI ausarbeiten, oder fülle die Vorlage selbst aus.
+          {de ? "Lege eine Persona an. Beschreibe sie kurz und lass sie von der KI ausarbeiten, oder fülle die Vorlage selbst aus."
+                : "Create a persona. Describe it briefly and let the AI work it out, or fill in the template yourself."}
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
           <OptCard
@@ -43686,7 +43699,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
               <path d="M9 16.5L7.2 20.2l4.6-3.7"/>
               <path d="M12 7.4l.8 2.05 2.05.8-2.05.8-.8 2.05-.8-2.05-2.05-.8 2.05-.8z"/>
             </svg>}
-            title="Persona beschreiben" desc="Beschreibe die Persona in ein paar Sätzen. Die KI füllt Name, Beruf, Motivations, Goals und Pains automatisch aus."
+            title={de ? "Persona beschreiben" : "Describe a persona"} desc={de ? "Beschreibe die Persona in ein paar Sätzen. Die KI füllt Name, Beruf, Motivations, Goals und Pains automatisch aus." : "Describe the persona in a few sentences. The AI fills in name, role, motivations, goals and pains."}
             onClick={() => { setManualText(""); setGenError(""); setScreen("manual"); }} />
           <OptCard
             icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -43696,7 +43709,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
               <line x1="14.4" y1="10" x2="18.2" y2="10"/>
               <line x1="14.4" y1="13.6" x2="18.2" y2="13.6"/>
             </svg>}
-            title="Vorlage nutzen" desc="Starte mit einer leeren Persona-Karte und trage alle Felder selbst ein."
+            title={de ? "Vorlage nutzen" : "Use the template"} desc={de ? "Starte mit einer leeren Persona-Karte und trage alle Felder selbst ein." : "Start from an empty persona card and fill in every field yourself."}
             onClick={startTemplate} />
         </div>
       </div>
@@ -43707,13 +43720,14 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
   if (view === "manual") {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 620 }}>
-        <BackLink theme={theme} onClick={() => setScreen(personas.length ? "choice" : "auto")} label="Zurück" />
-        <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text }}>Persona beschreiben</div>
+        <BackLink theme={theme} onClick={() => setScreen(personas.length ? "choice" : "auto")} label={de ? "Zurück" : "Back"} />
+        <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{de ? "Persona beschreiben" : "Describe a persona"}</div>
         <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-          Beschreibe die Persona so genau wie möglich — z.B. Alter, Beruf, Lebensstil, Ziele und Frustrationen.
+          {de ? "Beschreibe die Persona so genau wie möglich, zum Beispiel Alter, Beruf, Lebensstil, Ziele und Frustrationen."
+                : "Describe the persona as precisely as you can, for example age, job, lifestyle, goals and frustrations."}
         </div>
         <textarea value={manualText} onChange={e => setManualText(e.target.value)} rows={6}
-          placeholder="z.B. Lily, 24, Deutschlehrerin in Queens. Probiert ständig neue Skincare-Produkte, hat aber wenig Zeit für Recherche und ärgert sich über Fehlkäufe…"
+          placeholder={de ? "z.B. Lily, 24, Deutschlehrerin in Queens. Probiert ständig neue Skincare-Produkte, hat aber wenig Zeit für Recherche und ärgert sich über Fehlkäufe…" : "e.g. Lily, 24, a German teacher in Queens. Always trying new skincare products, short on time for research and annoyed by bad buys…"}
           style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
         {genError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT }}>{genError}</div>}
         {!aiHere && (
@@ -43724,7 +43738,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
           <motion.button whileTap={{ scale: 0.97 }} onClick={doGenerate} disabled={!manualText.trim() || generating || !aiHere}
             style={{ padding: "11px 20px", borderRadius: 12, border: "none", cursor: manualText.trim() && !generating && aiHere ? "pointer" : "default",
               background: acc, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: manualText.trim() && !generating && aiHere ? 1 : 0.5, display: "inline-flex", alignItems: "center", gap: 8 }}>
-            {generating ? "Generiere…" : "Persona generieren"}
+            {generating ? (de ? "Generiere…" : "Generating…") : (de ? "Persona generieren" : "Generate persona")}
             {!generating && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg>}
           </motion.button>
         </div>
@@ -43746,7 +43760,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
           </div>
         ))}
         <button onClick={() => setDraft(d => ({ ...d, [field]: [...(d[field] || []), ""] }))}
-          style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>+ Hinzufügen</button>
+          style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>{de ? "+ Hinzufügen" : "+ Add"}</button>
       </div>
     );
     return (
@@ -43758,13 +43772,13 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
             style={{ width: "100%", aspectRatio: "4/5", borderRadius: 18, cursor: "pointer", overflow: "hidden", border: `1px solid ${theme.borderFaint}`, background: draft.photo_url ? "transparent" : (acc + "1a"), display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
             {draft.photo_url
               ? <img src={draft.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : <div style={{ textAlign: "center", color: acc }}><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="9" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg><div style={{ fontSize: 12, fontFamily: FONT, marginTop: 8, fontWeight: 600 }}>{uploading ? "Lädt…" : "Foto hochladen"}</div></div>}
+              : <div style={{ textAlign: "center", color: acc }}><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="9" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg><div style={{ fontSize: 12, fontFamily: FONT, marginTop: 8, fontWeight: 600 }}>{uploading ? (de ? "Lädt…" : "Uploading…") : (de ? "Foto hochladen" : "Upload photo")}</div></div>}
             {/* Hover / always-on overlay button to change photo */}
             {(draft.photo_url) && (
               <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 14, background: photoHover ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0)", transition: "background 0.18s", pointerEvents: "none" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 10, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600, opacity: photoHover ? 1 : 0, transition: "opacity 0.18s" }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                  {uploading ? "Lädt…" : "Foto ändern"}
+                  {uploading ? (de ? "Lädt…" : "Uploading…") : (de ? "Foto ändern" : "Change photo")}
                 </div>
               </div>
             )}
@@ -43773,24 +43787,24 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
               <div>{Lbl("Name")}<input value={draft.name} onChange={e => setF({ name: e.target.value })} style={inputStyle} placeholder="Lily Ng" /></div>
-              <div>{Lbl("Alter")}<input value={draft.age} onChange={e => setF({ age: e.target.value })} style={inputStyle} placeholder="24" /></div>
+              <div>{Lbl(de ? "Alter" : "Age")}<input value={draft.age} onChange={e => setF({ age: e.target.value })} style={inputStyle} placeholder="24" /></div>
             </div>
-            <div>{Lbl("Beruf / Rolle")}<input value={draft.role} onChange={e => setF({ role: e.target.value })} style={inputStyle} placeholder="Deutschlehrerin" /></div>
-            <div>{Lbl("Geschlecht")}
+            <div>{Lbl(de ? "Beruf / Rolle" : "Job / role")}<input value={draft.role} onChange={e => setF({ role: e.target.value })} style={inputStyle} placeholder={de ? "Deutschlehrerin" : "German teacher"} /></div>
+            <div>{Lbl(de ? "Geschlecht" : "Gender")}
               <select value={draft.gender || ""} onChange={e => setF({ gender: e.target.value })} style={selectStyle}>
-                <option value="">– auswählen –</option>
-                <option value="Weiblich">Weiblich</option>
-                <option value="Männlich">Männlich</option>
-                <option value="Divers">Divers</option>
+                <option value="">{de ? "– auswählen –" : "– select –"}</option>
+                <option value="Weiblich">{de ? "Weiblich" : "Female"}</option>
+                <option value="Männlich">{de ? "Männlich" : "Male"}</option>
+                <option value="Divers">{de ? "Divers" : "Diverse"}</option>
               </select>
             </div>
             <div>{Lbl("Consumer Behavior")}<input value={draft.consumer_behavior} onChange={e => setF({ consumer_behavior: e.target.value })} style={inputStyle} placeholder="Fast Pace-Buyer" /></div>
-            <div>{Lbl("Standort")}<input value={draft.location} onChange={e => setF({ location: e.target.value })} style={inputStyle} placeholder="Queens, NY" /></div>
+            <div>{Lbl(de ? "Standort" : "Location")}<input value={draft.location} onChange={e => setF({ location: e.target.value })} style={inputStyle} placeholder="Queens, NY" /></div>
           </div>
         </div>
 
         {/* Zitat */}
-        <div>{Lbl("Zitat")}<textarea value={draft.quote} onChange={e => setF({ quote: e.target.value })} rows={2} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} placeholder="Love trying new products out all the time…" /></div>
+        <div>{Lbl(de ? "Zitat" : "Quote")}<textarea value={draft.quote} onChange={e => setF({ quote: e.target.value })} rows={2} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} placeholder="Love trying new products out all the time…" /></div>
 
         {/* Motivations with sliders */}
         <div>
@@ -43798,7 +43812,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {(draft.motivations || []).map((m, i) => (
               <div key={i} style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <input value={m.label} onChange={e => setMot(i, { label: e.target.value })} style={{ ...inputStyle, flex: 1 }} placeholder="Bewertungen lesen" />
+                <input value={m.label} onChange={e => setMot(i, { label: e.target.value })} style={{ ...inputStyle, flex: 1 }} placeholder={de ? "Bewertungen lesen" : "Read reviews"} />
                 <input type="range" min="0" max="100" value={m.value} onChange={e => setMot(i, { value: Number(e.target.value) })} style={{ flex: 1, accentColor: theme.accent }} />
                 <span style={{ width: 34, textAlign: "right", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{m.value}</span>
                 <button onClick={() => setDraft(d => ({ ...d, motivations: d.motivations.filter((_, j) => j !== i) }))}
@@ -43817,20 +43831,20 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
         </div>
 
         {/* Product Expectation */}
-        <div>{Lbl("Product Expectation")}<textarea value={draft.product_expectation} onChange={e => setF({ product_expectation: e.target.value })} rows={3} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} placeholder="Was erwartet die Persona von einem Produkt?" /></div>
+        <div>{Lbl("Product Expectation")}<textarea value={draft.product_expectation} onChange={e => setF({ product_expectation: e.target.value })} rows={3} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} placeholder={de ? "Was erwartet die Persona von einem Produkt?" : "What does the persona expect from a product?"} /></div>
 
         {/* Actions: Löschen far left · Abbrechen + Speichern right */}
         <div style={{ display: "flex", alignItems: "center", paddingTop: 4 }}>
           {!draftIsNew ? (
             <button onClick={() => deletePersona(selIdx)}
-              style={{ padding: "11px 16px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: "#e5484d", fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>Löschen</button>
+              style={{ padding: "11px 16px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: "#e5484d", fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>{de ? "Löschen" : "Delete"}</button>
           ) : <div />}
           <div style={{ flex: 1 }} />
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <button onClick={() => { setDraft(null); setScreen(personas.length ? "overview" : "auto"); }}
-              style={{ padding: "11px 18px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>Abbrechen</button>
+              style={{ padding: "11px 18px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>{de ? "Abbrechen" : "Cancel"}</button>
             <motion.button whileTap={{ scale: 0.97 }} onClick={saveDraft}
-              style={{ padding: "11px 24px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</motion.button>
+              style={{ padding: "11px 24px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>{de ? "Speichern" : "Save"}</motion.button>
           </div>
         </div>
       </div>
@@ -43862,10 +43876,10 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
       <div style={{ display: "flex", flexDirection: "column", gap: 56 }}>
         {/* Top bar: back + edit */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <BackLink theme={theme} onClick={() => setScreen("overview")} label="Alle Personas" />
+          <BackLink theme={theme} onClick={() => setScreen("overview")} label={de ? "Alle Personas" : "All personas"} />
           {canEdit && (
           <motion.button whileTap={{ scale: 0.96 }} onClick={() => startEdit(selIdx)}
-            style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
+            style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>{de ? "Bearbeiten" : "Edit"}</motion.button>
           )}
         </div>
 
@@ -43880,10 +43894,10 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
               <span style={{ fontSize: 40, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.5, lineHeight: 1 }}>{p.name || "Persona"}</span>
               {p.age && <span style={{ fontSize: 17, fontFamily: FONT, color: theme.textDim, fontWeight: 500, marginTop: 2 }}>{p.age}</span>}
             </div>
-            {Field("Beruf", p.role)}
-            {Field("Geschlecht", p.gender)}
+            {Field(de ? "Beruf" : "Job", p.role)}
+            {Field(de ? "Geschlecht" : "Gender", de ? p.gender : ({ Weiblich: "Female", "Männlich": "Male", Divers: "Diverse" }[p.gender] || p.gender))}
             {Field("Consumer Behavior", p.consumer_behavior)}
-            {Field("Location", p.location)}
+            {Field(de ? "Standort" : "Location", p.location)}
           </div>
         </div>
 
@@ -43921,7 +43935,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
         {/* Row 4: Product Expectation (full width, no border) */}
         {p.product_expectation && (
           <div style={{ padding: "22px 26px", borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
-            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 8 }}>Produkterwartung</div>
+            <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 8 }}>{de ? "Produkterwartung" : "Product expectation"}</div>
             <div style={{ fontSize: 15, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{p.product_expectation}</div>
           </div>
         )}
@@ -43951,7 +43965,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
         <motion.div whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }} onClick={() => setScreen("choice")}
           style={{ cursor: "pointer", borderRadius: 16, minHeight: 130, border: `1px dashed ${theme.borderFaint}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: theme.textDim }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          <span style={{ fontSize: 12, fontFamily: FONT }}>Persona hinzufügen</span>
+          <span style={{ fontSize: 12, fontFamily: FONT }}>{de ? "Persona hinzufügen" : "Add persona"}</span>
         </motion.div>
       </div>
     </div>
@@ -44053,6 +44067,7 @@ function CompAccordion({ label, children, theme, darkMode, defaultOpen = false }
 }
 
 function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, theme, darkMode, t, appLanguage = "de", aiHere = true, canEdit = true }) {
+  const de = appLanguage === "de";
   // Only real entries. A `null` got saved here once (see doGenerate) and every
   // render after that read .name off it, took the whole app down and sent the
   // person back to the start page, on every visit. Filtered on the way IN, so a
@@ -44123,18 +44138,23 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
     const val = (rawText || "").trim();
     if (!val || generating) return;
     if (listening) { try { recogRef.current?.stop(); } catch {} }
-    setGenerating(true); setGenError(""); setGenStatus("Wird vorbereitet …");
+    setGenerating(true); setGenError(""); setGenStatus(de ? "Wird vorbereitet …" : "Getting ready …");
     try {
       // Progress callback → live status so the user can follow what's happening.
       const onProgress = (p) => {
-        if (p.stage === "fetch") setGenStatus(`Website „${p.label}" wird geladen …`);
-        else if (p.stage === "fetched") setGenStatus(`„${p.name || "Seite"}" gefunden — Inhalt wird analysiert …`);
+        if (p.stage === "fetch") setGenStatus(de ? `Website „${p.label}" wird geladen …` : `Loading website "${p.label}" …`);
+        else if (p.stage === "fetched") setGenStatus(de ? `„${p.name || "Seite"}" gefunden, Inhalt wird analysiert …` : `Found "${p.name || "the page"}", analysing its content …`);
         else if (p.stage === "analyze") {
-          startRotating([
+          startRotating(de ? [
             "Ähnliche Wettbewerber werden recherchiert …",
             "Profile werden erstellt …",
             "Stärken & Schwächen werden ausgewertet …",
             "Strategische Empfehlungen werden formuliert …",
+          ] : [
+            "Researching similar competitors …",
+            "Building the profiles …",
+            "Weighing strengths and weaknesses …",
+            "Writing strategic recommendations …",
           ]);
         }
       };
@@ -44148,14 +44168,14 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
       if (list == null) return;
       const arr = (Array.isArray(list) ? list : [list]).filter(c => c && typeof c === "object");
       if (!arr.length) throw new Error("empty");
-      setGenStatus(`${arr.length} Wettbewerber gefunden`);
+      setGenStatus(de ? `${arr.length} Wettbewerber gefunden` : `${arr.length} competitors found`);
       const next = [...competitors, ...arr];
       commit(next); setInputText(""); setDescribeText("");
       // Always land on the overview so all new cards are visible; user clicks one for detail.
       setScreen("overview");
     } catch (e) {
       stopRotating();
-      setGenError("Analyse fehlgeschlagen. Versuch es nochmal oder prüfe deinen AI-Provider in den Einstellungen.");
+      setGenError(de ? "Analyse fehlgeschlagen. Versuch es nochmal oder prüfe deinen AI-Provider in den Einstellungen." : "Analysis failed. Try again, or check your AI provider in Settings.");
     } finally { setGenerating(false); setGenStatus(""); }
   };
   const saveDraft = () => {
@@ -44184,25 +44204,25 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
     const urlError = urlish && !validUrl;
     const directOk = !!trimmed && !urlError && !generating;
     const describeOk = !!describeText.trim() && !generating;
-    const SubmitBtn = ({ ok, onClick, label = "Analysieren" }) => (
+    const SubmitBtn = ({ ok, onClick, label = de ? "Analysieren" : "Analyse" }) => (
       <motion.button whileTap={{ scale: 0.97 }} onClick={onClick} disabled={!ok}
         style={{ height: 44, padding: "0 22px", borderRadius: 11, border: "none", cursor: ok ? "pointer" : "default", boxSizing: "border-box",
           background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
           fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: ok ? 1 : 0.45, flexShrink: 0 }}>
-        {generating ? "Analysiere…" : label}
+        {generating ? (de ? "Analysiere…" : "Analysing…") : label}
       </motion.button>
     );
     // The same bar the post composer uses, numbers and all: two ways of saying
     // the same thing, and the app should not have two shapes for that.
     const MODES = [
-      { key: "url", label: "Website oder Name" },
-      { key: "describe", label: "Selbst beschreiben" },
+      { key: "url", label: de ? "Website oder Name" : "Website or name" },
+      { key: "describe", label: de ? "Selbst beschreiben" : "Describe it yourself" },
     ];
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 760 }}>
-        {competitors.length > 0 && <div style={{ alignSelf: "flex-start" }}><BackLink theme={theme} onClick={() => setScreen("overview")} label="Zurück" /></div>}
+        {competitors.length > 0 && <div style={{ alignSelf: "flex-start" }}><BackLink theme={theme} onClick={() => setScreen("overview")} label={de ? "Zurück" : "Back"} /></div>}
         <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, maxWidth: 600 }}>
-          Die KI macht aus beidem ein Profil und findet ähnliche Wettbewerber dazu.
+          {de ? "Die KI macht aus beidem ein Profil und findet ähnliche Wettbewerber dazu." : "The AI turns either into a profile and finds similar competitors."}
         </div>
 
         <div style={{ display: "flex", gap: 10 }}>
@@ -44223,21 +44243,21 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
         <div style={{ padding: 22, borderRadius: 18, background: cardBg, display: "flex", flexDirection: "column", gap: 14 }}>
           {addMode === "url" ? (<>
             <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>
-              Firmenname oder Website. Die Seite wird gelesen, daraus entsteht das Profil.
+              {de ? "Firmenname oder Website. Die Seite wird gelesen, daraus entsteht das Profil." : "A company name or website. The page is read and the profile is built from it."}
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
               <div style={{ flex: 1 }}>
                 <input value={inputText} onChange={e => setInputText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && directOk) doGenerate(inputText); }}
                   placeholder="Instagram / instagram.com" autoFocus
                   style={{ ...inputStyle, height: 44, border: `1px solid ${urlError ? "#e5484d" : theme.borderFaint}` }} />
-                {urlError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT, marginTop: 6 }}>Ungültige URL. Prüf die Schreibweise, zum Beispiel instagram.com.</div>}
+                {urlError && <div style={{ fontSize: 12, color: "#e5484d", fontFamily: FONT, marginTop: 6 }}>{de ? "Ungültige URL. Prüf die Schreibweise, zum Beispiel instagram.com." : "Invalid URL. Check the spelling, for example instagram.com."}</div>}
               </div>
               <SubmitBtn ok={directOk} onClick={() => doGenerate(inputText)} />
             </div>
           </>) : (<>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>
-                Ein paar Sätze reichen: was sie anbieten, für wen, und was sie anders machen.
+                {de ? "Ein paar Sätze reichen: was sie anbieten, für wen, und was sie anders machen." : "A few sentences are enough: what they offer, for whom, and what they do differently."}
               </div>
               {dictationSupported && (
                 <motion.div whileTap={{ scale: 0.9 }} onClick={toggleDictation}
@@ -44252,10 +44272,10 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
               )}
             </div>
             <textarea value={describeText} onChange={e => setDescribeText(e.target.value)} rows={6} autoFocus
-              placeholder="Eine Social-Media-Plattform für Foto- und Video-Sharing mit Fokus auf Stories und Reels…"
+              placeholder={de ? "Eine Social-Media-Plattform für Foto- und Video-Sharing mit Fokus auf Stories und Reels…" : "A social media platform for photo and video sharing, focused on stories and reels…"}
               style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6, border: `1px solid ${listening ? "#EF444450" : theme.borderFaint}` }} />
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <SubmitBtn ok={describeOk} onClick={() => doGenerate(describeText)} label="Profil erstellen" />
+              <SubmitBtn ok={describeOk} onClick={() => doGenerate(describeText)} label={de ? "Profil erstellen" : "Create profile"} />
             </div>
           </>)}
         </div>
@@ -44305,14 +44325,14 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
             <div>{Lbl("Name")}<input value={draft.name} onChange={e => setF({ name: e.target.value })} style={{ ...headInput, fontSize: 16, fontWeight: 600 }} placeholder="Instagram" /></div>
             <div>{Lbl("Website")}<input value={draft.website} onChange={e => setF({ website: e.target.value })} style={headInput} placeholder="instagram.com" /></div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div>{Lbl("Gegründet")}<input value={draft.founded} onChange={e => setF({ founded: e.target.value })} style={headInput} placeholder="2008" /></div>
-              <div>{Lbl("Team-Größe")}<input value={draft.team_size} onChange={e => setF({ team_size: e.target.value })} style={headInput} placeholder="300+" /></div>
+              <div>{Lbl(de ? "Gegründet" : "Founded")}<input value={draft.founded} onChange={e => setF({ founded: e.target.value })} style={headInput} placeholder="2008" /></div>
+              <div>{Lbl(de ? "Team-Größe" : "Team size")}<input value={draft.team_size} onChange={e => setF({ team_size: e.target.value })} style={headInput} placeholder="300+" /></div>
             </div>
-            <div>{Lbl("Standort")}<input value={draft.location} onChange={e => setF({ location: e.target.value })} style={headInput} placeholder="Menlo Park, CA" /></div>
+            <div>{Lbl(de ? "Standort" : "Location")}<input value={draft.location} onChange={e => setF({ location: e.target.value })} style={headInput} placeholder="Menlo Park, CA" /></div>
           </div>
           <div>
-            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 10 }}>Zusammenfassung</div>
-            <textarea value={draft.summary || ""} onChange={e => setF({ summary: e.target.value })} rows={9} placeholder="Kurze Zusammenfassung des Wettbewerbers…"
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 10 }}>{de ? "Zusammenfassung" : "Summary"}</div>
+            <textarea value={draft.summary || ""} onChange={e => setF({ summary: e.target.value })} rows={9} placeholder={de ? "Kurze Zusammenfassung des Wettbewerbers…" : "A short summary of the competitor…"}
               style={{ ...headInput, resize: "vertical", lineHeight: 1.6 }} />
           </div>
         </div>
@@ -44320,20 +44340,20 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
         {/* Two columns of labelled boxes — same order as the detail accordions */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {BoxArea("Produkte & Services", "products")}
+            {BoxArea(de ? "Produkte & Services" : "Products & services", "products")}
             {BoxArea("Core Focus", "core_focus")}
-            {BoxArea("Direkte Wettbewerber", "direct_competitors")}
+            {BoxArea(de ? "Direkte Wettbewerber" : "Direct competitors", "direct_competitors")}
             <Box label="CEO">
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <input value={draft.ceo_name || ""} onChange={e => setF({ ceo_name: e.target.value })} style={{ ...inputStyle, fontWeight: 600 }} placeholder="Name" />
-                <textarea value={draft.ceo_info || ""} onChange={e => setF({ ceo_info: e.target.value })} rows={2} placeholder="Kurze Info zur Person…" style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} />
+                <textarea value={draft.ceo_info || ""} onChange={e => setF({ ceo_info: e.target.value })} rows={2} placeholder={de ? "Kurze Info zur Person…" : "A short note on the person…"} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} />
               </div>
             </Box>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {BoxArea("Audience", "audience")}
-            {BoxArea("Stärken", "strengths")}
-            {BoxArea("Schwächen", "weaknesses")}
+            {BoxArea(de ? "Stärken" : "Strengths", "strengths")}
+            {BoxArea(de ? "Schwächen" : "Weaknesses", "weaknesses")}
             <Box label="Social Media">
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {(draft.socials || []).map((s, i) => (
@@ -44345,7 +44365,7 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
                   </div>
                 ))}
                 <button onClick={() => setDraft(d => ({ ...d, socials: [...(d.socials || []), { platform: "", url: "" }] }))}
-                  style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>+ Social-Kanal</button>
+                  style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>{de ? "+ Social-Kanal" : "+ Social channel"}</button>
               </div>
             </Box>
           </div>
@@ -44362,21 +44382,21 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
               </div>
             ))}
             <button onClick={() => setDraft(d => ({ ...d, recommendations: [...(d.recommendations || []), ""] }))}
-              style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>+ Empfehlung</button>
+              style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>{de ? "+ Empfehlung" : "+ Recommendation"}</button>
           </div>
         </Box>
 
         <div style={{ display: "flex", alignItems: "center", paddingTop: 4 }}>
           {!draftIsNew ? (
             <button onClick={() => deleteCompetitor(selIdx)}
-              style={{ padding: "11px 16px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: "#e5484d", fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>Löschen</button>
+              style={{ padding: "11px 16px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: "#e5484d", fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>{de ? "Löschen" : "Delete"}</button>
           ) : <div />}
           <div style={{ flex: 1 }} />
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={() => { setDraft(null); setScreen(competitors.length ? "overview" : "auto"); }}
-              style={{ padding: "11px 18px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>Abbrechen</button>
+              style={{ padding: "11px 18px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>{de ? "Abbrechen" : "Cancel"}</button>
             <motion.button whileTap={{ scale: 0.97 }} onClick={saveDraft}
-              style={{ padding: "11px 24px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</motion.button>
+              style={{ padding: "11px 24px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>{de ? "Speichern" : "Save"}</motion.button>
           </div>
         </div>
       </div>
@@ -44403,10 +44423,10 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <BackLink theme={theme} onClick={() => setScreen("overview")} label="Alle Competitors" />
+          <BackLink theme={theme} onClick={() => setScreen("overview")} label={de ? "Alle Competitors" : "All competitors"} />
           {canEdit && (
           <motion.button whileTap={{ scale: 0.96 }} onClick={() => startEdit(selIdx)}
-            style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>Bearbeiten</motion.button>
+            style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT }}>{de ? "Bearbeiten" : "Edit"}</motion.button>
           )}
         </div>
 
@@ -44417,16 +44437,16 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
             {c.website && <a href={websiteHref(c.website)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 15, fontFamily: FONT, color: theme.accent, textDecoration: "none", marginTop: 4, display: "inline-block" }}>{c.website}</a>}
             {hasStats && (
               <div style={{ display: "flex", gap: 22, marginTop: 26, flexWrap: "wrap", alignItems: "stretch" }}>
-                {Stat("🚀", "Founded", c.founded)}
+                {Stat("🚀", de ? "Gegründet" : "Founded", c.founded)}
                 {(c.founded && c.team_size) && <div style={{ width: 1, background: theme.borderFaint }} />}
-                {Stat("🧑‍💼", "Team Size", c.team_size)}
+                {Stat("🧑‍💼", de ? "Team-Größe" : "Team size", c.team_size)}
                 {((c.founded || c.team_size) && c.location) && <div style={{ width: 1, background: theme.borderFaint }} />}
-                {Stat("📍", "Location", c.location)}
+                {Stat("📍", de ? "Standort" : "Location", c.location)}
               </div>
             )}
           </div>
           <div>
-            <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 14 }}>Zusammenfassung</div>
+            <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 14 }}>{de ? "Zusammenfassung" : "Summary"}</div>
             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textSub, lineHeight: 1.7 }}>{c.summary || "—"}</div>
           </div>
         </div>
@@ -44453,15 +44473,15 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
           return (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 40px", alignItems: "start" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <CompAccordion label="Produkte & Services" theme={theme} darkMode={darkMode}>{c.products}</CompAccordion>
+                <CompAccordion label={de ? "Produkte & Services" : "Products & services"} theme={theme} darkMode={darkMode}>{c.products}</CompAccordion>
                 <CompAccordion label="Core Focus" theme={theme} darkMode={darkMode}>{c.core_focus}</CompAccordion>
-                <CompAccordion label="Direkte Wettbewerber" theme={theme} darkMode={darkMode}>{c.direct_competitors}</CompAccordion>
+                <CompAccordion label={de ? "Direkte Wettbewerber" : "Direct competitors"} theme={theme} darkMode={darkMode}>{c.direct_competitors}</CompAccordion>
                 <CompAccordion label="CEO" theme={theme} darkMode={darkMode}>{ceoContent}</CompAccordion>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <CompAccordion label="Audience" theme={theme} darkMode={darkMode}>{c.audience}</CompAccordion>
-                <CompAccordion label="Stärken" theme={theme} darkMode={darkMode}>{c.strengths}</CompAccordion>
-                <CompAccordion label="Schwächen" theme={theme} darkMode={darkMode}>{c.weaknesses}</CompAccordion>
+                <CompAccordion label={de ? "Stärken" : "Strengths"} theme={theme} darkMode={darkMode}>{c.strengths}</CompAccordion>
+                <CompAccordion label={de ? "Schwächen" : "Weaknesses"} theme={theme} darkMode={darkMode}>{c.weaknesses}</CompAccordion>
                 <CompAccordion label="Social Media" theme={theme} darkMode={darkMode}>{socialsContent}</CompAccordion>
               </div>
             </div>
@@ -44471,7 +44491,7 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
         {/* Strategic Recommendations: heading (left) | list (right) */}
         {(c.recommendations || []).filter(Boolean).length > 0 && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, alignItems: "start" }}>
-            <div style={{ fontSize: 28, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.5, lineHeight: 1.15 }}>Strategische Empfehlungen</div>
+            <div style={{ fontSize: 28, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.5, lineHeight: 1.15 }}>{de ? "Strategische Empfehlungen" : "Strategic recommendations"}</div>
             <div>{(c.recommendations || []).filter(Boolean).map((r, i) => <Arrow key={i}>{r}</Arrow>)}</div>
           </div>
         )}
@@ -44501,7 +44521,7 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
       <motion.div whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }} onClick={() => setScreen("choice")}
         style={{ cursor: "pointer", borderRadius: 16, minHeight: 130, border: `1px dashed ${theme.borderFaint}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: theme.textDim }}>
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        <span style={{ fontSize: 12, fontFamily: FONT }}>Competitor hinzufügen</span>
+        <span style={{ fontSize: 12, fontFamily: FONT }}>{de ? "Competitor hinzufügen" : "Add competitor"}</span>
       </motion.div>
     </div>
   );
@@ -44521,7 +44541,8 @@ function VisionOrb({ size, label }) {
 
 // Vision view with three states: intro (no data) → edit (timeline form) → saved
 // (smaller hero + read-only timeline + Bearbeiten button). Saved to brand_profile.vision.
-function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange, canEdit = true }) {
+function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange, canEdit = true, appLanguage = "de" }) {
+  const de = appLanguage === "de";
   const v = value && typeof value === "object" ? value : {};
   const hasData = !!(v.now || v.year3 || v.year5 || v.aspiration);
   const [editing, setEditing] = useState(false);
@@ -44539,9 +44560,9 @@ function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange
     color: theme.text, outline: "none", resize: "vertical", boxSizing: "border-box",
   });
   const stages = [
-    { key: "now", chip: "Jetzt", placeholder: "Wo steht die Brand aktuell? Was hast du jetzt?", filled: true },
-    { key: "year3", chip: "3 Jahre", placeholder: "Wo siehst du die Brand in 3 Jahren?" },
-    { key: "year5", chip: "5 Jahre", placeholder: "Wo siehst du die Brand in 5 Jahren?" },
+    { key: "now", chip: de ? "Jetzt" : "Now", placeholder: de ? "Wo steht die Brand aktuell? Was hast du jetzt?" : "Where does the brand stand today? What do you have now?", filled: true },
+    { key: "year3", chip: de ? "3 Jahre" : "3 years", placeholder: de ? "Wo siehst du die Brand in 3 Jahren?" : "Where do you see the brand in 3 years?" },
+    { key: "year5", chip: de ? "5 Jahre" : "5 years", placeholder: de ? "Wo siehst du die Brand in 5 Jahren?" : "Where do you see the brand in 5 years?" },
   ];
 
   // Vertical timeline rail (shared by edit + saved). `editable` swaps text for inputs.
@@ -44571,13 +44592,14 @@ function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange
         <div>
           <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 4 }}>Aspiration</div>
           <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 10 }}>
-            Eine Aspiration ist die ultimative Ambition deiner Brand — Arbeit wird zur Mission, der sich andere anschließen.
+            {de ? "Eine Aspiration ist die ultimative Ambition deiner Brand. Aus Arbeit wird eine Mission, der sich andere anschließen."
+                : "An aspiration is your brand's ultimate ambition. Work becomes a mission that others join."}
           </div>
-          <textarea value={draft.aspiration || ""} onChange={(e) => setF("aspiration", e.target.value)} placeholder="Wofür steht deine Brand letztlich? Welche größere Ambition treibt euch an?" style={areaStyle(90)} />
+          <textarea value={draft.aspiration || ""} onChange={(e) => setF("aspiration", e.target.value)} placeholder={de ? "Wofür steht deine Brand letztlich? Welche größere Ambition treibt euch an?" : "What does your brand ultimately stand for? What bigger ambition drives you?"} style={areaStyle(90)} />
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <button onClick={cancel} style={{ padding: "11px 18px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>Abbrechen</button>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={save} style={{ padding: "11px 24px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</motion.button>
+          <button onClick={cancel} style={{ padding: "11px 18px", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>{de ? "Abbrechen" : "Cancel"}</button>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={save} style={{ padding: "11px 24px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>{de ? "Speichern" : "Save"}</motion.button>
         </div>
       </div>
     );
@@ -44591,13 +44613,14 @@ function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange
       <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", paddingTop: 215 }}>
         <span style={{ fontSize: 60, fontFamily: FONT, fontWeight: 400, letterSpacing: 1, color: theme.text }}>BRAND VISION</span>
         <div style={{ marginTop: 6, fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 520 }}>
-          A vision is your destination plan. It aligns your team<br />and turns tasks into purpose.
+          {de ? <>Eine Vision ist dein Zielplan. Sie richtet dein Team aus<br />und macht aus Aufgaben einen Sinn.</>
+              : <>A vision is your destination plan. It aligns your team<br />and turns tasks into purpose.</>}
         </div>
         {canEdit && (
         <motion.button whileTap={{ scale: 0.97 }} onClick={startEdit}
           style={{ marginTop: 28, padding: "13px 26px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 600,
             background: darkMode ? "#fff" : "#0f1320", color: darkMode ? "#0f1320" : "#fff" }}>
-          Define Your Vision
+          {de ? "Vision festlegen" : "Define your vision"}
         </motion.button>
         )}
       </div>
@@ -44611,7 +44634,7 @@ function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange
         <VisionOrb size={120} label="VISION" />
         {canEdit && (
         <motion.button whileTap={{ scale: 0.96 }} onClick={startEdit}
-          style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT, alignSelf: "flex-start" }}>Bearbeiten</motion.button>
+          style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT, alignSelf: "flex-start" }}>{de ? "Bearbeiten" : "Edit"}</motion.button>
         )}
       </div>
       <Timeline editable={false} />
@@ -49703,7 +49726,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                       background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
                       border: `1px solid ${theme.borderFaint}`, outline: "none" }} />
                 )}
-                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{BRAND_SUBVIEW_LABELS[brandTab] || ""}</span>
+                <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{(appLanguage === "de" ? BRAND_SUBVIEW_LABELS : BRAND_SUBVIEW_LABELS_EN)[brandTab] || ""}</span>
               </div>
               <div style={{ flex: 1 }} />
               {/* Project brand: pillar switcher (top-right dropdown) */}
@@ -49837,7 +49860,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
               <div style={{ maxWidth: 770, minHeight: "100%", display: "flex", flexDirection: "column", gap: 20 }}>
                 {(() => {
                   const subs = BRAND_PILLAR_SUBTABS[brandTab] || [];
-                  const subLabel = subs.find(s => s.key === brandSub)?.label || BRAND_SUBVIEW_LABELS[brandTab] || "Brand";
+                  const subLabel = subs.find(s => s.key === brandSub)?.label || (appLanguage === "de" ? BRAND_SUBVIEW_LABELS : BRAND_SUBVIEW_LABELS_EN)[brandTab] || "Brand";
                   const intel = profile.intelligence || {};
                   const ana = profile.analysis || {};
                   const cp = profile.color_palette || {};
@@ -49962,7 +49985,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                           cp={cp} accent={theme.accent} theme={theme} darkMode={darkMode} t={t}
                           appLanguage={appLanguage} aiHere={aiHere} canEdit={canEditCurrent} />
                       ) : k === "strategy/positioning" ? (
-                        <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} onEditingChange={setVisionEditing} canEdit={canEditCurrent} />
+                        <BrandVision value={profile.vision} onChange={saveVision} accent={theme.accent} theme={theme} darkMode={darkMode} onEditingChange={setVisionEditing} canEdit={canEditCurrent} appLanguage={appLanguage} />
                       ) : k === "design/colors" ? (
                         <BrandColors cp={cp} colors={profile.colors} gradients={profile.gradients} editing={editingText} savedHtml={savedHtml} theme={theme} darkMode={darkMode}
                           onSave={(html) => saveSection(k, html)} onCancel={() => setEditingText(false)} onSavePalette={saveColorPalette} onSaveGradients={saveGradients} />
@@ -49986,7 +50009,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                         <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
                       ) : k === "strategy/taglines" ? (
-                        <BrandTaglines value={profile.taglines} editing={editingText} theme={theme} darkMode={darkMode} t={t} onChange={saveTaglines} />
+                        <BrandTaglines value={profile.taglines} editing={editingText} theme={theme} darkMode={darkMode} t={t} onChange={saveTaglines} appLanguage={appLanguage} />
                       ) : editingText ? (
                         <RichTextEditor key={k} initialHTML={seed || "<p></p>"} theme={theme} darkMode={darkMode}
                           onSave={(html) => saveSection(k, html)} onCancel={() => setEditingText(false)} />
