@@ -14,7 +14,7 @@ import { getTranslation } from "./translations";
 // Shared with api/figma: the browser fits what the endpoint converted, and both
 // sides agree about it because there is one function. Dependency-free, so it
 // loads in the bundle and on the edge alike, the way entitlements.js does.
-import { fitItems as figmaFit } from "../server/figma.js";
+import { fitItems as figmaFit, svgPathToSubpaths } from "../server/figma.js";
 import { openGooglePicker, openGoogleFolderPicker } from "./googlePicker";
 import BillingSettings from "./BillingSettings";
 import PinterestBoardCount from "./PinterestBoardCount";
@@ -7379,13 +7379,98 @@ function wbSnapBox(box, targets, tol) {
 // the canvas editor stands it on end at the left. Everything else — which tools,
 // what they look like, how the flyouts behave — is the same by construction,
 // because a second copy would answer "do they behave the same?" with "for now".
+// ── The shape library ────────────────────────────────────────────────────────
+// Every SVG in src/assets/shapes, read at build time and bundled, so opening the
+// library costs no request at all. They live under src and not public because
+// the build can only READ what is under src; public is served, never imported.
+// A new shape is a new file there and appears after the next deploy.
+//
+// Each file is one <path> in a 256 x 256 box with one fill, which is what makes
+// them insertable as a real path and not as a picture: the fill can be changed,
+// the nodes edited, like anything drawn here. A file that is not one path is
+// skipped rather than half-read.
+const CANVAS_SHAPES = Object.entries(import.meta.glob("./assets/shapes/*.svg",
+  { query: "?raw", import: "default", eager: true }))
+  .map(([file, raw]) => ({
+    name: file.split("/").pop().replace(/\.svg$/i, ""),
+    d: String(raw).match(/\sd="([^"]+)"/)?.[1] || null,
+  }))
+  .filter(sh => sh.d)
+  .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+// The overlay the library opens in. The same frame as the image browser beside
+// it (size, dim, card, header), because the two buttons sit together and should
+// open the same kind of thing. Each shape stands in its own tile with room around
+// it, centred, rather than packed edge to edge.
+function ShapePickerModal({ theme, darkMode, de, onPick, onClose }) {
+  // Escape closes this, and only this. Caught in the capture phase and stopped
+  // there, or the editor underneath reads the same key as "leave the editor".
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      e.stopImmediatePropagation(); e.stopPropagation(); onClose();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
+  const ink = darkMode ? "#EDEDF0" : "#2A2A31";
+  return createPortal(
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 100010,
+        background: darkMode ? "rgba(0,0,0,0.22)" : "rgba(0,0,0,0.14)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+        onClick={e => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 640, height: "min(620px, 82vh)", display: "flex", flexDirection: "column",
+          borderRadius: 20, overflow: "hidden", background: darkMode ? "rgba(22,22,30,0.99)" : "#ffffff",
+          border: `1px solid ${theme.border}`, boxShadow: "0 24px 70px rgba(0,0,0,0.4)" }}>
+        <div style={{ padding: "18px 20px 14px", borderBottom: `1px solid ${theme.borderFaint}`,
+          display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Shapes</div>
+          <motion.div whileTap={{ scale: 0.9 }} onClick={onClose}
+            style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center",
+              justifyContent: "center", cursor: "pointer", color: theme.textDim }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </motion.div>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 20 }}>
+          {CANVAS_SHAPES.length === 0 ? (
+            <div style={{ padding: 40, textAlign: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>
+              {de ? "Noch keine Shapes." : "No shapes yet."}
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))", gap: 14 }}>
+              {CANVAS_SHAPES.map(sh => (
+                <motion.div key={sh.name} whileHover={{ y: -2 }} whileTap={{ scale: 0.96 }}
+                  onClick={() => onPick(sh)} title={sh.name}
+                  style={{ aspectRatio: "1 / 1", borderRadius: 14, cursor: "pointer", boxSizing: "border-box",
+                    display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
+                    background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                    border: `1px solid ${theme.borderFaint}` }}>
+                  <svg viewBox="0 0 256 256" width="100%" height="100%" style={{ display: "block", overflow: "hidden" }}>
+                    <path d={sh.d} fill={ink} />
+                  </svg>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>,
+    document.body
+  );
+}
+
 function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
   lastShape, setLastShape, shapesOpen, setShapesOpen,
   lastLineTool, setLastLineTool, lineToolOpen, setLineToolOpen,
   mediaOpen, setMediaOpen, mediaBtnRef, imgMenuOpen, setImgMenuOpen, imgBtnRef,
   fileRef, onFiles, zoomPct, onZoom, onResetZoom,
   shapes = WB_SHAPE_TYPES, hide = [], extra = null,
-  lineTools = ["arrow", "line", "pen"], mediaFlyout = null, theme, darkMode, de }) {
+  lineTools = ["arrow", "line", "pen"], mediaFlyout = null,
+  // The shape library. Only a board that passes onVectorShapes shows the button,
+  // so the whiteboard, which shares this bar, is untouched.
+  vectorShapesOpen = false, onVectorShapes = null, theme, darkMode, de }) {
 
   const vertical = orientation === "vertical";
   const sw = 1.8;
@@ -7590,6 +7675,14 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
           background: imgMenuOpen ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: imgMenuOpen ? (darkMode ? "#202023" : "#fff") : toolColor, transition: "background 0.15s ease" }}>
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
       </motion.div>
+      {onVectorShapes && (
+        <motion.div whileTap={{ scale: 0.9 }}
+          onClick={() => { closeFlyouts("vshapes"); onVectorShapes(); }} title="Shapes"
+          style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+            background: vectorShapesOpen ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: vectorShapesOpen ? (darkMode ? "#202023" : "#fff") : toolColor, transition: "background 0.15s ease" }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M12 3.5l3.6 6.2H8.4z"/><circle cx="7.2" cy="16.4" r="3.6"/><rect x="13.4" y="12.8" width="7.2" height="7.2" rx="1.4"/></svg>
+        </motion.div>
+      )}
       {fileRef && (
         <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
           onChange={(e) => { onFiles?.(e.target.files); e.target.value = ""; }} />
@@ -21849,6 +21942,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [cam, setCam] = useState(null);
   const [flying, setFlying] = useState(!!originRect);
   const [imgMenuOpen, setImgMenuOpen] = useState(false);
+  const [vshapesOpen, setVshapesOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const beginEdit = (id) => { setEditing(id); setSel(id); };
 
@@ -26733,6 +26827,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           lineToolOpen={lineToolOpen} setLineToolOpen={setLineToolOpen}
           mediaOpen={mediaOpen} setMediaOpen={setMediaOpen}
           imgMenuOpen={imgMenuOpen} setImgMenuOpen={setImgMenuOpen}
+          vectorShapesOpen={vshapesOpen} onVectorShapes={() => setVshapesOpen(o => !o)}
           zoomPct={cam ? Math.round(cam.s * 100) : 100}
           onZoom={(d) => setCam(c => c && ({ ...c, s: Math.min(8, Math.max(0.02, c.s * (d > 0 ? 1.2 : 1 / 1.2))) }))}
           onResetZoom={() => setCam(fitCam())}
@@ -28442,6 +28537,33 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             setImgMenuOpen(false);
           }}
           onClose={() => { setImgMenuOpen(false); setTool("select"); }} />
+      )}
+
+      {/* A shape from the library, placed as a PATH: one fill in the brand's
+          first colour, nodes editable, recolourable like anything drawn here.
+          Sized to a third of the board's shorter side and centred on it. */}
+      {vshapesOpen && (
+        <ShapePickerModal theme={theme} darkMode={darkMode} de={de}
+          onClose={() => setVshapesOpen(false)}
+          onPick={(sh) => {
+            const parts = svgPathToSubpaths(sh.d);
+            setVshapesOpen(false);
+            if (!parts.length) return;
+            const side = Math.max(40, Math.round(Math.min(W, H) * 0.3)), k = side / 256;
+            const r2 = (v) => Math.round(v * k * 100) / 100;
+            const scale = (list) => (list || []).map(nd => {
+              const o = { ...nd, x: r2(nd.x), y: r2(nd.y) };
+              if (nd.h1x != null) { o.h1x = r2(nd.h1x); o.h1y = r2(nd.h1y); }
+              if (nd.h2x != null) { o.h2x = r2(nd.h2x); o.h2y = r2(nd.h2y); }
+              return o;
+            });
+            const [first, ...rest] = parts;
+            addItem({ id: crypto.randomUUID(), type: "path", name: sh.name,
+              ox: Math.round((W - side) / 2), oy: Math.round((H - side) / 2),
+              nodes: scale(first.nodes), closed: first.closed,
+              ...(rest.length ? { subs: rest.map(sp => ({ nodes: scale(sp.nodes), closed: sp.closed })) } : {}),
+              fill: palette[0] || "#15151c", color: "transparent", width: 0 });
+          }} />
       )}
     </motion.div>,
     document.body
