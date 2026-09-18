@@ -25042,15 +25042,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               boxShadow: b.shadow === false ? "none" : "0 18px 60px rgba(0,0,0,0.28)",
               borderRadius: `${Math.max(0, Number(b.radius) || 0)}px` }}>
             <CanvasThumb doc={{ ...b, components }} theme={theme} />
-            {/* pointerEvents back on, for this label only: the board behind it
-                still switches on a single click, and the label needs a
-                double-click of its own. stopPropagation keeps the two apart. */}
-            <div onPointerDown={(e) => e.stopPropagation()}
+            {/* The name of a board that is not the active one. A click makes it
+                active AND selects it, so its settings open straight away: the
+                same thing a click on the active board's name does. It used to
+                stop the click and do nothing with it, which is why selecting
+                by name worked on the first board and on no other. switchBoard
+                clears the selection, so the frame is set after it, in the same
+                handler, where the later call wins. */}
+            <div onPointerDown={(e) => { e.stopPropagation(); switchBoard(i); setSel("frame"); }}
               onDoubleClick={(e) => { e.stopPropagation(); switchBoard(i); beginRenameBoard(i); }}
-              title={de ? "Doppelklick zum Umbenennen" : "Double-click to rename"}
+              title={de ? "Klick wählt das Artboard, Doppelklick benennt es um"
+                        : "Click selects the artboard, double-click renames it"}
               style={{ position: "absolute", left: 0, bottom: "100%",
               marginBottom: 8 / cam.s, fontFamily: FONT, fontSize: 12 / cam.s,
-              color: theme.textDim, whiteSpace: "nowrap", cursor: "text" }}>
+              color: theme.textDim, whiteSpace: "nowrap", cursor: "pointer" }}>
               {b.name}
             </div>
           </div>
