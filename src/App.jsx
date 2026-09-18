@@ -43635,6 +43635,9 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
     setGenerating(true); setGenError("");
     try {
       const p = await generatePersona(manualText.trim());
+      // The same hole as on Competitors: no AI key returns nothing, and
+      // nothing must not be saved as a persona.
+      if (!p || typeof p !== "object") return;
       const next = [...personas, p];
       commit(next); setSelIdx(next.length - 1); setManualText(""); setScreen("detail");
     } catch (e) {
@@ -44050,7 +44053,12 @@ function CompAccordion({ label, children, theme, darkMode, defaultOpen = false }
 }
 
 function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, theme, darkMode, t, appLanguage = "de", aiHere = true, canEdit = true }) {
-  const competitors = Array.isArray(value) ? value : [];
+  // Only real entries. A `null` got saved here once (see doGenerate) and every
+  // render after that read .name off it, took the whole app down and sent the
+  // person back to the start page, on every visit. Filtered on the way IN, so a
+  // workspace carrying one is healed on the next open and cleaned on the next
+  // save, without anybody touching the row.
+  const competitors = Array.isArray(value) ? value.filter(c => c && typeof c === "object") : [];
   const [screen, setScreen] = useState("auto"); // auto | choice | describe | direct | detail | edit
   const [selIdx, setSelIdx] = useState(0);
   const [draft, setDraft] = useState(null);
@@ -44133,7 +44141,12 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
       // Returns an array: [mainCompetitor, ...similarCompetitors]
       const list = await generateCompetitor(val, onProgress);
       stopRotating();
-      const arr = Array.isArray(list) ? list : [list];
+      // No AI key: generateCompetitor opened the key dialog and returned
+      // nothing. That is not a failure to report and certainly not a
+      // competitor. `[list]` used to turn it into [undefined], which was saved,
+      // came back from the database as null, and crashed the tab from then on.
+      if (list == null) return;
+      const arr = (Array.isArray(list) ? list : [list]).filter(c => c && typeof c === "object");
       if (!arr.length) throw new Error("empty");
       setGenStatus(`${arr.length} Wettbewerber gefunden`);
       const next = [...competitors, ...arr];
