@@ -43084,26 +43084,26 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
 // Theme-aware, neutral colours. Editable in place when `editing` is on.
 const DEFAULT_VOICE_TONE = {
   intro: {
-    body: "Unsere Stimme bleibt immer gleich — der Ton ist, wie wir sie situativ ausdrücken. Über Wortwahl, Schreibstil, Typografie, Satzbau und Phrasierung passen wir die Stimme an den Kontext an. Der richtige Ton schafft emotionale Verbindung und Vertrauen durch Anpassungsfähigkeit.",
+    body: "Unsere Stimme bleibt immer gleich, der Ton ist, wie wir sie situativ ausdrücken. Über Wortwahl, Schreibstil, Typografie, Satzbau und Phrasierung passen wir die Stimme an den Kontext an. Der richtige Ton schafft emotionale Verbindung und Vertrauen durch Anpassungsfähigkeit.",
     questions: ["Was soll dieser Text bewirken?", "Für welches Szenario schreiben wir?", "Mit wem sprichst du?"],
-    closing: "Wir nutzen die Customer Journey, um Momente und Ton-Leitlinien zu mappen — als Erinnerung, dass jede Interaktion einen kundenzentrierten Zweck hat.",
+    closing: "Wir nutzen die Customer Journey, um Momente und Ton-Leitlinien zu mappen, als Erinnerung, dass jede Interaktion einen kundenzentrierten Zweck hat.",
   },
   moments: [
     {
       title: "First impressions",
-      desc: "Hier wollen wir Interesse wecken und Neugier entfachen — durch mutige, clevere Sprache, die zum genaueren Hinsehen einlädt.",
+      desc: "Hier wollen wir Interesse wecken und Neugier entfachen, durch mutige, clevere Sprache, die zum genaueren Hinsehen einlädt.",
       traits: [{ label: "To-the-point", value: 40 }, { label: "Approachable", value: 90 }, { label: "Upfront", value: 12 }],
       channels: ["In-app Product Flows", "Transactional Email", "Push Notifications"],
     },
     {
       title: "Consideration",
-      desc: "Wir haben die Aufmerksamkeit — jetzt geht es um Verständnis und Vertrauen. Wir erklären Produkte, wie sie funktionieren und welche Ergebnisse sie bringen.",
+      desc: "Wir haben die Aufmerksamkeit, jetzt geht es um Verständnis und Vertrauen. Wir erklären Produkte, wie sie funktionieren und welche Ergebnisse sie bringen.",
       traits: [{ label: "To-the-point", value: 88 }, { label: "Approachable", value: 30 }, { label: "Upfront", value: 70 }],
       channels: ["Product Pages", "Campaign Lander", "App Store"],
     },
     {
       title: "Education",
-      desc: "Wir geben Nutzer:innen die Infos, die sie für Entscheidungen brauchen. Jede Interaktion vermittelt Kontrolle, Sicherheit und Vertrauen — mit Social Proof, Metaphern und Daten.",
+      desc: "Wir geben Nutzer:innen die Infos, die sie für Entscheidungen brauchen. Jede Interaktion vermittelt Kontrolle, Sicherheit und Vertrauen, mit Social Proof, Metaphern und Daten.",
       traits: [{ label: "To-the-point", value: 80 }, { label: "Approachable", value: 95 }, { label: "Upfront", value: 45 }],
       channels: ["Announcement Emails", "Tooltips", "New-User States", "Half Sheets"],
     },
@@ -43123,7 +43123,7 @@ const DEFAULT_VOICE_TONE = {
       tactics: [
         { title: "Never bury the lead", desc: "Wir beginnen immer mit der wichtigsten Information zuerst und respektieren die begrenzte Zeit und Aufmerksamkeit unseres Publikums." },
         { title: "Clarity first (style second)", desc: "Wir fokussieren die Botschaft und strukturieren Inhalte so, dass Punkt, Zweck und Absicht unmissverständlich sind. Stil überlagert nie die Botschaft." },
-        { title: "Guide with confidence", desc: "Wir erklären, wie Dinge funktionieren und was zu erwarten ist — klar und prägnant, damit Kunden befähigt sind, den nächsten Schritt zu gehen." },
+        { title: "Guide with confidence", desc: "Wir erklären, wie Dinge funktionieren und was zu erwarten ist, klar und prägnant, damit Kunden befähigt sind, den nächsten Schritt zu gehen." },
         { title: "Build familiarity", desc: "Durch Konsistenz und Wiederholung schaffen wir Vertrautheit, die die Beziehung zu unseren Kunden vertieft." },
       ],
     },
@@ -43133,19 +43133,19 @@ const DEFAULT_VOICE_TONE = {
       shouldBe: ["Selbstbewusst", "Gesprächig", "Reaktionsschnell", "Verlässlich", "Unterstützend", "Optimistisch"],
       shouldntBe: ["Übergriffig", "Geschwätzig", "Kindisch", "Distanziert", "Reißerisch", "Exklusiv"],
       tactics: [
-        { title: "Read the room", desc: "Wir berücksichtigen den Kontext, bevor wir schreiben — was Kunden wollen, brauchen und fühlen." },
+        { title: "Read the room", desc: "Wir berücksichtigen den Kontext, bevor wir schreiben, was Kunden wollen, brauchen und fühlen." },
         { title: "Act as a translator", desc: "Wir machen Komplexes einfach und entmystifizieren Fachsprache, ohne überkonstruiert zu klingen." },
         { title: "Be inventive", desc: "Wir fordern Konventionen heraus, wenn es unseren Kunden besser dient." },
-        { title: "Write inclusively", desc: "Unsere Inhalte sind für alle zugänglich — keine ausschließende oder herabsetzende Sprache." },
+        { title: "Write inclusively", desc: "Unsere Inhalte sind für alle zugänglich, keine ausschließende oder herabsetzende Sprache." },
       ],
     },
     {
       name: "Upfront",
-      overview: "Wir sagen, wie es ist, und stellen uns zugleich vor, wie es sein könnte. Wir vermeiden Schönfärberei und setzen klare Erwartungen — Vertrauen entsteht durch Ehrlichkeit und Transparenz.",
+      overview: "Wir sagen, wie es ist, und stellen uns zugleich vor, wie es sein könnte. Wir vermeiden Schönfärberei und setzen klare Erwartungen, Vertrauen entsteht durch Ehrlichkeit und Transparenz.",
       shouldBe: ["Offen", "Aufrichtig", "Verantwortungsvoll", "Echt", "Empathisch"],
       shouldntBe: ["Technokratisch", "Angstmachend", "Akademisch"],
       tactics: [
-        { title: "Tell the whole truth", desc: "Wir sind ehrlich über Produkte, Prozesse und Richtlinien — der einzige Weg, echtes Vertrauen aufzubauen." },
+        { title: "Tell the whole truth", desc: "Wir sind ehrlich über Produkte, Prozesse und Richtlinien, der einzige Weg, echtes Vertrauen aufzubauen." },
         { title: "Balance humility & confidence", desc: "Wir lassen Begeisterung und Stärken strahlen und erkennen zugleich Grenzen offen an." },
         { title: "Use friction", desc: "Wenn viel auf dem Spiel steht, verlangsamen wir und sorgen dafür, dass Kunden die Kontrolle behalten." },
       ],
@@ -43153,11 +43153,84 @@ const DEFAULT_VOICE_TONE = {
   ],
 };
 
-// Brand Story timeline — a vertical history rail under the story text.
+// Brand Story timeline, a vertical history rail under the story text.
 // Display: dots on a line, each with year · quarter + title + description.
 // Editing: edit each entry's fields, remove, or add new ones (auto-saved).
+// The same example voice in English. Shown, like the German one, only while a
+// brand has none of its own; editing starts from it and saves the result.
+const DEFAULT_VOICE_TONE_EN = {
+  intro: {
+    body: "Our voice always stays the same. Tone is how we express it in a given situation. Through word choice, writing style, typography, sentence structure and phrasing we adapt the voice to the context. The right tone builds emotional connection and trust through adaptability.",
+    questions: ["What should this text achieve?", "Which scenario are we writing for?", "Who are you talking to?"],
+    closing: "We use the customer journey to map moments and tone guidelines, as a reminder that every interaction has a customer-centred purpose.",
+  },
+  moments: [
+    {
+      title: "First impressions",
+      desc: "Here we want to spark interest and curiosity with bold, clever language that invites a closer look.",
+      traits: [{ label: "To-the-point", value: 40 }, { label: "Approachable", value: 90 }, { label: "Upfront", value: 12 }],
+      channels: ["In-app Product Flows", "Transactional Email", "Push Notifications"],
+    },
+    {
+      title: "Consideration",
+      desc: "We have their attention. Now it is about understanding and trust. We explain products, how they work and what results they bring.",
+      traits: [{ label: "To-the-point", value: 88 }, { label: "Approachable", value: 30 }, { label: "Upfront", value: 70 }],
+      channels: ["Product Pages", "Campaign Lander", "App Store"],
+    },
+    {
+      title: "Education",
+      desc: "We give users the information they need to make decisions. Every interaction conveys control, security and trust, with social proof, metaphors and data.",
+      traits: [{ label: "To-the-point", value: 80 }, { label: "Approachable", value: 95 }, { label: "Upfront", value: 45 }],
+      channels: ["Announcement Emails", "Tooltips", "New-User States", "Half Sheets"],
+    },
+    {
+      title: "Support",
+      desc: "When something goes wrong, we are calm, clear and solution-oriented. We take concerns seriously and guide step by step to a solution.",
+      traits: [{ label: "To-the-point", value: 72 }, { label: "Approachable", value: 82 }, { label: "Upfront", value: 88 }],
+      channels: ["Help Center", "Support Chat", "Status Updates", "FAQ"],
+    },
+  ],
+  attributes: [
+    {
+      name: "To-the-point",
+      overview: "We are clear in what we say and stand by it. We break down barriers by translating jargon, and give our customers confidence on their journey.",
+      shouldBe: ["Clear", "Focused", "Organised", "Curated", "Confident", "Empowering"],
+      shouldntBe: ["Sparse", "Cold", "Boring", "Lifeless", "Blunt", "Vague"],
+      tactics: [
+        { title: "Never bury the lead", desc: "We always lead with the most important information and respect our audience's limited time and attention." },
+        { title: "Clarity first (style second)", desc: "We focus the message and structure content so that point, purpose and intent are unmistakable. Style never overrides the message." },
+        { title: "Guide with confidence", desc: "We explain how things work and what to expect, clearly and concisely, so customers are empowered to take the next step." },
+        { title: "Build familiarity", desc: "Through consistency and repetition we create familiarity that deepens the relationship with our customers." },
+      ],
+    },
+    {
+      name: "Approachable",
+      overview: "Our inviting, imaginative style makes us approachable and effortless to understand. We do not hide behind jargon, ego or cheap emotion.",
+      shouldBe: ["Confident", "Conversational", "Responsive", "Reliable", "Supportive", "Optimistic"],
+      shouldntBe: ["Pushy", "Chatty", "Childish", "Distant", "Sensational", "Exclusive"],
+      tactics: [
+        { title: "Read the room", desc: "We consider the context before we write: what customers want, need and feel." },
+        { title: "Act as a translator", desc: "We make the complex simple and demystify jargon without sounding over-engineered." },
+        { title: "Be inventive", desc: "We challenge conventions when it serves our customers better." },
+        { title: "Write inclusively", desc: "Our content is accessible to everyone, with no exclusionary or demeaning language." },
+      ],
+    },
+    {
+      name: "Upfront",
+      overview: "We say how it is and imagine how it could be. We avoid sugar-coating and set clear expectations. Trust comes from honesty and transparency.",
+      shouldBe: ["Open", "Sincere", "Responsible", "Genuine", "Empathetic"],
+      shouldntBe: ["Technocratic", "Fear-mongering", "Academic"],
+      tactics: [
+        { title: "Tell the whole truth", desc: "We are honest about products, processes and policies. It is the only way to build real trust." },
+        { title: "Balance humility & confidence", desc: "We let enthusiasm and strengths shine while openly acknowledging limits." },
+        { title: "Use friction", desc: "When a lot is at stake, we slow down and make sure customers stay in control." },
+      ],
+    },
+  ],
+};
+
 const DEFAULT_STORY_TIMELINE = [
-  { year: "2018", quarter: "Q1", title: "Gründung", desc: "Die Idee zu APPICS entsteht — Social Media, das Creator fair belohnt." },
+  { year: "2018", quarter: "Q1", title: "Gründung", desc: "Die Idee zu APPICS entsteht: Social Media, das Creator fair belohnt." },
   { year: "2019", quarter: "Q2", title: "Token-Launch", desc: "Der APX-Token und die erste App-Version gehen live." },
   { year: "2022", quarter: "Q3", title: "Relaunch", desc: "Neue App-Generation mit überarbeitetem Reward-System." },
 ];
@@ -43276,19 +43349,30 @@ function BrandTaglines({ value, editing, theme, darkMode, t, onChange, appLangua
 
 // Purpose / Vision / Mission — 3-column block (top divider, title, description).
 // Lives under Brand Core. Editable descriptions with auto-save.
+const DEFAULT_STORY_TIMELINE_EN = [
+  { year: "2018", quarter: "Q1", title: "Founded", desc: "The idea for APPICS is born: social media that rewards creators fairly." },
+  { year: "2019", quarter: "Q2", title: "Token launch", desc: "The APX token and the first app version go live." },
+  { year: "2022", quarter: "Q3", title: "Relaunch", desc: "A new app generation with a reworked reward system." },
+];
+const DEFAULT_PVM_EN = {
+  purpose: "Define your brand's fundamental reason to exist beyond profit. Describe the impact you want to make, and for whom.",
+  vision: "Describe the future you want to create. It is your highest goal, the long-term impact or the ideal world you imagine.",
+  mission: "Put concisely what your brand does, for whom and how it creates value: your practical guide for daily decisions, tied to your vision.",
+};
 const DEFAULT_PVM = {
-  purpose: "Definiere hier den fundamentalen Daseinsgrund deiner Marke jenseits von Profit. Beschreibe die Wirkung, die du erzielen willst — und für wen.",
+  purpose: "Definiere hier den fundamentalen Daseinsgrund deiner Marke jenseits von Profit. Beschreibe die Wirkung, die du erzielen willst, und für wen.",
   vision: "Beschreibe die Zukunft, die du erschaffen willst. Das ist dein höchstes Ziel, die langfristige Wirkung oder die ideale Welt, die du dir vorstellst.",
-  mission: "Formuliere prägnant, was deine Marke tut, für wen und wie sie Wert schafft — dein praktischer Leitfaden für tägliche Entscheidungen, verknüpft mit deiner Vision.",
+  mission: "Formuliere prägnant, was deine Marke tut, für wen und wie sie Wert schafft: dein praktischer Leitfaden für tägliche Entscheidungen, verknüpft mit deiner Vision.",
 };
 
-function BrandPVM({ value, editing, theme, darkMode, t, onChange }) {
+function BrandPVM({ value, editing, theme, darkMode, t, onChange, appLanguage = "de" }) {
+  const PVM = appLanguage === "de" ? DEFAULT_PVM : DEFAULT_PVM_EN;
   const divider = darkMode ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.16)";
   const fieldStyle = { padding: "8px 10px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none", lineHeight: 1.55, resize: "vertical", width: "100%" };
   const ITEMS = [["purpose", "Purpose"], ["vision", "Vision"], ["mission", "Mission"]];
-  const base = (value && (value.purpose || value.vision || value.mission)) ? { ...DEFAULT_PVM, ...value } : DEFAULT_PVM;
+  const base = (value && (value.purpose || value.vision || value.mission)) ? { ...PVM, ...value } : PVM;
   const [draft, setDraft] = useState(base);
-  useEffect(() => { if (editing) setDraft((value && (value.purpose || value.vision || value.mission)) ? { ...DEFAULT_PVM, ...value } : { ...DEFAULT_PVM }); }, [editing]);
+  useEffect(() => { if (editing) setDraft((value && (value.purpose || value.vision || value.mission)) ? { ...PVM, ...value } : { ...PVM }); }, [editing]);
   const setField = (k, v) => { const next = { ...draft, [k]: v }; setDraft(next); onChange(next); };
 
   return (
@@ -43308,17 +43392,19 @@ function BrandPVM({ value, editing, theme, darkMode, t, onChange }) {
   );
 }
 
-function BrandStoryTimeline({ timeline, editing, theme, darkMode, t, onChange }) {
+function BrandStoryTimeline({ timeline, editing, theme, darkMode, t, onChange, appLanguage = "de" }) {
+  const de = appLanguage === "de";
+  const DEF_TIMELINE = de ? DEFAULT_STORY_TIMELINE : DEFAULT_STORY_TIMELINE_EN;
   const rail = darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)";
   const label = { fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 16 };
   const fieldStyle = { padding: "7px 10px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, outline: "none", lineHeight: 1.5, resize: "vertical" };
   const QUARTERS = ["", "Q1", "Q2", "Q3", "Q4"];
 
   // Edit works on a live local copy that's pushed up (debounce-saved) on change.
-  const [entries, setEntries] = useState(timeline && timeline.length ? timeline : DEFAULT_STORY_TIMELINE);
-  useEffect(() => { if (editing) setEntries((timeline && timeline.length) ? JSON.parse(JSON.stringify(timeline)) : JSON.parse(JSON.stringify(DEFAULT_STORY_TIMELINE))); }, [editing]);
+  const [entries, setEntries] = useState(timeline && timeline.length ? timeline : DEF_TIMELINE);
+  useEffect(() => { if (editing) setEntries((timeline && timeline.length) ? JSON.parse(JSON.stringify(timeline)) : JSON.parse(JSON.stringify(DEF_TIMELINE))); }, [editing]);
 
-  const display = (timeline && timeline.length) ? timeline : DEFAULT_STORY_TIMELINE;
+  const display = (timeline && timeline.length) ? timeline : DEF_TIMELINE;
   const sortKey = (e) => `${e.year || "0000"}-${e.quarter || "Q0"}`;
   // Newest first — scroll down to go back in time.
   const sorted = [...display].sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
@@ -43336,23 +43422,23 @@ function BrandStoryTimeline({ timeline, editing, theme, darkMode, t, onChange })
           {entries.map((e, i) => (
             <div key={i} style={{ padding: 14, borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input value={e.year} onChange={ev => setField(i, "year", ev.target.value)} placeholder="Jahr" style={{ ...fieldStyle, width: 80 }} />
+                <input value={e.year} onChange={ev => setField(i, "year", ev.target.value)} placeholder={de ? "Jahr" : "Year"} style={{ ...fieldStyle, width: 80 }} />
                 <select value={e.quarter || ""} onChange={ev => setField(i, "quarter", ev.target.value)} style={{ ...fieldStyle, width: 90 }}>
                   {QUARTERS.map(q => <option key={q} value={q}>{q || "—"}</option>)}
                 </select>
-                <input value={e.title} onChange={ev => setField(i, "title", ev.target.value)} placeholder="Titel" style={{ ...fieldStyle, flex: 1, fontWeight: 600 }} />
-                <div onClick={() => removeEntry(i)} title={t("common.delete") || "Löschen"} style={{ cursor: "pointer", color: theme.textDim, padding: 6, flexShrink: 0 }}>
+                <input value={e.title} onChange={ev => setField(i, "title", ev.target.value)} placeholder={de ? "Titel" : "Title"} style={{ ...fieldStyle, flex: 1, fontWeight: 600 }} />
+                <div onClick={() => removeEntry(i)} title={t("common.delete") || (de ? "Löschen" : "Delete")} style={{ cursor: "pointer", color: theme.textDim, padding: 6, flexShrink: 0 }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
                 </div>
               </div>
-              <textarea rows={2} value={e.desc} onChange={ev => setField(i, "desc", ev.target.value)} placeholder="Was ist passiert?" style={fieldStyle} />
+              <textarea rows={2} value={e.desc} onChange={ev => setField(i, "desc", ev.target.value)} placeholder={de ? "Was ist passiert?" : "What happened?"} style={fieldStyle} />
             </div>
           ))}
         </div>
         <motion.div whileTap={{ scale: 0.97 }} onClick={addEntry}
           style={{ marginTop: 12, display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, border: `1px dashed ${theme.borderFaint}`, color: theme.text, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          {"Eintrag hinzufügen"}
+          {de ? "Eintrag hinzufügen" : "Add entry"}
         </motion.div>
       </div>
     );
@@ -43380,13 +43466,15 @@ function BrandStoryTimeline({ timeline, editing, theme, darkMode, t, onChange })
   );
 }
 
-function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel }) {
-  const base = (value && Array.isArray(value.attributes) && value.attributes.length) ? value : DEFAULT_VOICE_TONE;
+function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel, appLanguage = "de" }) {
+  const de = appLanguage === "de";
+  const DVT = de ? DEFAULT_VOICE_TONE : DEFAULT_VOICE_TONE_EN;
+  const base = (value && Array.isArray(value.attributes) && value.attributes.length) ? value : DVT;
   const [draft, setDraft] = useState(base);
   useEffect(() => {
     if (!editing) return;
-    const v = (value && Array.isArray(value.attributes) && value.attributes.length) ? JSON.parse(JSON.stringify(value)) : JSON.parse(JSON.stringify(DEFAULT_VOICE_TONE));
-    if (!Array.isArray(v.moments) || !v.moments.length) v.moments = JSON.parse(JSON.stringify(DEFAULT_VOICE_TONE.moments));
+    const v = (value && Array.isArray(value.attributes) && value.attributes.length) ? JSON.parse(JSON.stringify(value)) : JSON.parse(JSON.stringify(DVT));
+    if (!Array.isArray(v.moments) || !v.moments.length) v.moments = JSON.parse(JSON.stringify(DVT.moments));
     setDraft(v);
   }, [editing]);
 
@@ -43406,21 +43494,21 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
         <div style={{ position: "sticky", top: 0, zIndex: 2, display: "flex", gap: 8, padding: "4px 0 10px", background: theme.cardBg }}>
-          <button type="button" onClick={() => onSave(draft)} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</button>
-          <button type="button" onClick={onCancel} style={{ padding: "8px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>Abbrechen</button>
+          <button type="button" onClick={() => onSave(draft)} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>{de ? "Speichern" : "Save"}</button>
+          <button type="button" onClick={onCancel} style={{ padding: "8px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>{de ? "Abbrechen" : "Cancel"}</button>
         </div>
         {/* Intro */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={label}>Our tone — Einleitung</div>
+          <div style={label}>{de ? "Unser Ton: Einleitung" : "Our tone: introduction"}</div>
           <textarea rows={4} value={draft.intro.body} onChange={e => setIntro("body", e.target.value)} style={fieldStyle} />
-          <div style={label}>Leitfragen (eine pro Zeile)</div>
+          <div style={label}>{de ? "Leitfragen (eine pro Zeile)" : "Guiding questions (one per line)"}</div>
           <textarea rows={3} value={lines(draft.intro.questions)} onChange={e => setIntro("questions", toArr(e.target.value))} style={fieldStyle} />
-          <div style={label}>Abschluss</div>
+          <div style={label}>{de ? "Abschluss" : "Closing"}</div>
           <textarea rows={3} value={draft.intro.closing} onChange={e => setIntro("closing", e.target.value)} style={fieldStyle} />
         </div>
         {/* Moments — title, desc, tone sliders, channels */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 18, borderTop: `1px solid ${divider}` }}>
-          <div style={{ ...label, fontWeight: 600, fontSize: 14, color: theme.text }}>Momente (Customer Journey)</div>
+          <div style={{ ...label, fontWeight: 600, fontSize: 14, color: theme.text }}>{de ? "Momente (Customer Journey)" : "Moments (customer journey)"}</div>
           {(draft.moments || []).map((m, mi) => (
             <div key={mi} style={{ padding: 16, borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", display: "flex", flexDirection: "column", gap: 10 }}>
               <input value={m.title} onChange={e => setMoment(mi, "title", e.target.value)} style={{ ...fieldStyle, fontWeight: 600, fontSize: 16 }} />
@@ -43434,7 +43522,7 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
                   </div>
                 ))}
               </div>
-              <div style={{ ...label, marginBottom: 0, marginTop: 4 }}>Touchpoints & Channels (eine pro Zeile)</div>
+              <div style={{ ...label, marginBottom: 0, marginTop: 4 }}>{de ? "Touchpoints & Channels (eine pro Zeile)" : "Touchpoints & channels (one per line)"}</div>
               <textarea rows={3} value={lines(m.channels)} onChange={e => setMoment(mi, "channels", toArr(e.target.value))} style={fieldStyle} />
             </div>
           ))}
@@ -43443,13 +43531,13 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
         {draft.attributes.map((a, ai) => (
           <div key={ai} style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 18, borderTop: `1px solid ${divider}` }}>
             <input value={a.name} onChange={e => setAttr(ai, "name", e.target.value)} style={{ ...fieldStyle, fontSize: 20, fontWeight: 700 }} />
-            <div style={label}>Übersicht</div>
+            <div style={label}>{de ? "Übersicht" : "Overview"}</div>
             <textarea rows={3} value={a.overview} onChange={e => setAttr(ai, "overview", e.target.value)} style={fieldStyle} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div><div style={label}>We should be (eine pro Zeile)</div><textarea rows={6} value={lines(a.shouldBe)} onChange={e => setAttr(ai, "shouldBe", toArr(e.target.value))} style={fieldStyle} /></div>
-              <div><div style={label}>We shouldn't be (eine pro Zeile)</div><textarea rows={6} value={lines(a.shouldntBe)} onChange={e => setAttr(ai, "shouldntBe", toArr(e.target.value))} style={fieldStyle} /></div>
+              <div><div style={label}>{de ? "So sollten wir sein (eine pro Zeile)" : "We should be (one per line)"}</div><textarea rows={6} value={lines(a.shouldBe)} onChange={e => setAttr(ai, "shouldBe", toArr(e.target.value))} style={fieldStyle} /></div>
+              <div><div style={label}>{de ? "So sollten wir nicht sein (eine pro Zeile)" : "We shouldn't be (one per line)"}</div><textarea rows={6} value={lines(a.shouldntBe)} onChange={e => setAttr(ai, "shouldntBe", toArr(e.target.value))} style={fieldStyle} /></div>
             </div>
-            <div style={label}>Taktiken</div>
+            <div style={label}>{de ? "Taktiken" : "Tactics"}</div>
             {a.tactics.map((tc, ti) => (
               <div key={ti} style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 4 }}>
                 <input value={tc.title} onChange={e => setTactic(ai, ti, "title", e.target.value)} style={{ ...fieldStyle, fontWeight: 600 }} />
@@ -43469,9 +43557,9 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
     <div style={{ display: "flex", flexDirection: "column", gap: 72 }}>
       {/* Our tone intro */}
       <div style={{ maxWidth: 640 }}>
-        <div style={{ fontSize: 32, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 18 }}>Unser Ton</div>
+        <div style={{ fontSize: 32, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5, marginBottom: 18 }}>{de ? "Unser Ton" : "Our tone"}</div>
         <p style={{ fontSize: 16, fontFamily: FONT, lineHeight: 1.6, color: theme.textSub, margin: "0 0 18px" }}>{d.intro.body}</p>
-        <p style={{ fontSize: 16, fontFamily: FONT, color: theme.text, margin: "0 0 12px" }}>Beim Hoch- oder Runterregeln der Stimme frag dich:</p>
+        <p style={{ fontSize: 16, fontFamily: FONT, color: theme.text, margin: "0 0 12px" }}>{de ? "Beim Hoch- oder Runterregeln der Stimme frag dich:" : "When turning the voice up or down, ask yourself:"}</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
           {(d.intro.questions || []).map((q, i) => <div key={i} style={{ fontSize: 16, fontFamily: FONT, color: theme.text }}>{i + 1}—{q}</div>)}
         </div>
@@ -43479,9 +43567,9 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
       </div>
 
       {/* Journey moments — cards with tone-level bars + touchpoints */}
-      {(d.moments || DEFAULT_VOICE_TONE.moments).length > 0 && (
+      {(d.moments || DVT.moments).length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
-          {(d.moments || DEFAULT_VOICE_TONE.moments).map((m, mi) => (
+          {(d.moments || DVT.moments).map((m, mi) => (
             <div key={mi} style={{ borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.025)", padding: 22, display: "flex", flexDirection: "column" }}>
               <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3, marginBottom: 10 }}>{m.title}</div>
               <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textSub, lineHeight: 1.6, minHeight: 110 }}>{m.desc}</div>
@@ -43516,22 +43604,22 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 48 }}>
             {/* Left: Overview + should/shouldn't */}
             <div>
-              <div style={label}>Übersicht</div>
+              <div style={label}>{de ? "Übersicht" : "Overview"}</div>
               <p style={{ fontSize: 18, fontFamily: FONT, lineHeight: 1.5, color: theme.text, margin: "0 0 32px" }}>{a.overview}</p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
                 <div>
-                  <div style={label}>So sollten wir sein</div>
+                  <div style={label}>{de ? "So sollten wir sein" : "We should be"}</div>
                   {(a.shouldBe || []).map((w, i) => <div key={i} style={listItem}>{w}</div>)}
                 </div>
                 <div>
-                  <div style={label}>So sollten wir nicht sein</div>
+                  <div style={label}>{de ? "So sollten wir nicht sein" : "We shouldn't be"}</div>
                   {(a.shouldntBe || []).map((w, i) => <div key={i} style={listItem}>{w}</div>)}
                 </div>
               </div>
             </div>
             {/* Right: Tactics */}
             <div>
-              <div style={label}>Taktiken</div>
+              <div style={label}>{de ? "Taktiken" : "Tactics"}</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "30px 28px", marginTop: 6 }}>
                 {(a.tactics || []).map((tc, i) => (
                   <div key={i} style={{ borderTop: `1px solid ${divider}`, paddingTop: 14 }}>
@@ -44859,7 +44947,8 @@ const VALUES_INSPIRATIONAL = [
   "Freedom","Growth","Impact","Innovation","Inspiration","Originality","Passion","Purpose","Resilience","Vision",
 ];
 
-function BrandValues({ value, onChange, theme, darkMode, editing, onEditingChange }) {
+function BrandValues({ value, onChange, theme, darkMode, editing, onEditingChange, appLanguage = "de" }) {
+  const de = appLanguage === "de";
   const saved = Array.isArray(value) ? value : [];
   const hasData = saved.length > 0;
   // We're in the pick/describe flow when the header "Bearbeiten" is active OR there's no data yet (onboarding).
@@ -44901,9 +44990,9 @@ function BrandValues({ value, onChange, theme, darkMode, editing, onEditingChang
     const full = picked.length >= 4;
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 8, paddingTop: 20 }}>
-        <div style={{ fontSize: 28, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.4 }}>Setze deine Top 4 Brand Values</div>
+        <div style={{ fontSize: 28, fontFamily: FONT, fontWeight: 800, color: theme.text, letterSpacing: -0.4 }}>{de ? "Setze deine Top 4 Brand Values" : "Set your top 4 brand values"}</div>
         <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 540, marginBottom: 18 }}>
-          Wähle bis zu vier Werte aus der Liste oder gib eigene ein — sie definieren, wofür deine Marke steht.
+          {de ? "Wähle bis zu vier Werte aus der Liste oder gib eigene ein. Sie definieren, wofür deine Marke steht." : "Pick up to four values from the list or enter your own. They define what your brand stands for."}
         </div>
 
         <div style={{ width: "100%", maxWidth: 760, borderRadius: 20, background: panelBg, padding: 20, textAlign: "left", boxSizing: "border-box" }}>
@@ -44920,7 +45009,7 @@ function BrandValues({ value, onChange, theme, darkMode, editing, onEditingChang
               ))}
               {!full && (
                 <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { addValue(input); setInput(""); } }}
-                  placeholder={picked.length ? "" : "Wert eingeben oder unten auswählen…"}
+                  placeholder={picked.length ? "" : (de ? "Wert eingeben oder unten auswählen…" : "Type a value or pick one below…")}
                   style={{ flex: 1, minWidth: 120, border: "none", outline: "none", background: "transparent", fontSize: 14, fontFamily: FONT, color: theme.text }} />
               )}
             </div>
@@ -44928,10 +45017,10 @@ function BrandValues({ value, onChange, theme, darkMode, editing, onEditingChang
               <motion.button whileTap={{ scale: 0.97 }} onClick={goDescribe}
                 style={{ padding: "0 22px", borderRadius: 13, border: "none", cursor: "pointer",
                   background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
-                  fontSize: 13, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>Speichern</motion.button>
+                  fontSize: 13, fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>{de ? "Speichern" : "Save"}</motion.button>
             ) : (
               <motion.button whileTap={{ scale: 0.95 }} onClick={() => { addValue(input); setInput(""); }} disabled={!input.trim()}
-                title="Hinzufügen"
+                title={de ? "Hinzufügen" : "Add"}
                 style={{ width: 48, borderRadius: 13, border: `1px solid ${theme.borderFaint}`, cursor: input.trim() ? "pointer" : "default", background: fieldBg, color: theme.textSub, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: input.trim() ? 1 : 0.5 }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></svg>
               </motion.button>
@@ -44964,8 +45053,8 @@ function BrandValues({ value, onChange, theme, darkMode, editing, onEditingChang
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 760, flex: 1, minHeight: 0 }}>
         <div>
-          <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 800, color: theme.text }}>Warum diese Werte?</div>
-          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginTop: 4 }}>Beschreibe kurz, warum jeder Wert für deine Marke wichtig ist.</div>
+          <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 800, color: theme.text }}>{de ? "Warum diese Werte?" : "Why these values?"}</div>
+          <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginTop: 4 }}>{de ? "Beschreibe kurz, warum jeder Wert für deine Marke wichtig ist." : "Briefly describe why each value matters to your brand."}</div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "26px 24px" }}>
           {picked.map((name, i) => (
@@ -44975,15 +45064,15 @@ function BrandValues({ value, onChange, theme, darkMode, editing, onEditingChang
                 <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text }}>{name}</span>
               </div>
               <textarea value={notes[name] || ""} onChange={e => setNotes(n => ({ ...n, [name]: e.target.value }))} rows={5}
-                placeholder={`Warum ist „${name}" wichtig für eure Marke?`}
+                placeholder={de ? `Warum ist „${name}" wichtig für eure Marke?` : `Why does "${name}" matter to your brand?`}
                 style={{ width: "100%", minHeight: 130, background: fieldBg, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, padding: "13px 15px", fontFamily: FONT, fontSize: 14, lineHeight: 1.6, color: theme.text, outline: "none", resize: "vertical", boxSizing: "border-box" }} />
             </div>
           ))}
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto" }}>
-          <button onClick={() => setStep("select")} style={{ width: 150, padding: "12px 0", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer", textAlign: "center" }}>Zurück</button>
+          <button onClick={() => setStep("select")} style={{ width: 150, padding: "12px 0", borderRadius: 12, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer", textAlign: "center" }}>{de ? "Zurück" : "Back"}</button>
           <motion.button whileTap={{ scale: 0.97 }} onClick={finalize}
-            style={{ width: 150, padding: "12px 0", borderRadius: 12, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer", textAlign: "center" }}>Finalisieren</motion.button>
+            style={{ width: 150, padding: "12px 0", borderRadius: 12, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer", textAlign: "center" }}>{de ? "Finalisieren" : "Finalise"}</motion.button>
         </div>
       </div>
     );
@@ -49887,6 +49976,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                   const p2 = (s) => esc(s).replace(/\n/g, "<br>");
 
                   let body = null;
+                  const de = appLanguage === "de";
                   const k = brandTab + "/" + brandSub;
                   if (k === "identity/core") {
                     const claim = ana.claim_summary || profile.claim;
@@ -49895,13 +49985,13 @@ If you don't know a field, infer a plausible value. Write all text values in the
                     body = (claim || profile.description || valueProps.length || keyMessages.length) ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
                         {claim && <div>{SL("Claim")}<div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 500, color: theme.text, lineHeight: 1.4 }}>{claim}</div></div>}
-                        {profile.description && <div>{SL("Beschreibung")}{Para(profile.description)}</div>}
-                        {valueProps.length > 0 && <div>{SL("Nutzenversprechen")}<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{valueProps.map((v, i) => <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5 }}><span style={{ color: theme.accent, marginRight: 8, fontWeight: 600 }}>·</span>{v}</div>)}</div></div>}
+                        {profile.description && <div>{SL(de ? "Beschreibung" : "Description")}{Para(profile.description)}</div>}
+                        {valueProps.length > 0 && <div>{SL(de ? "Nutzenversprechen" : "Value proposition")}<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{valueProps.map((v, i) => <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.015)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, lineHeight: 1.5 }}><span style={{ color: theme.accent, marginRight: 8, fontWeight: 600 }}>·</span>{v}</div>)}</div></div>}
                       </div>
-                    ) : Empty("Noch kein Brand Core hinterlegt. Ergänze Claim, Beschreibung und Nutzenversprechen im Onboarding.");
+                    ) : Empty(de ? "Noch kein Brand Core hinterlegt. Ergänze Claim, Beschreibung und Nutzenversprechen im Onboarding." : "No brand core yet. Add a claim, description and value proposition in onboarding.");
                   } else if (k === "strategy/positioning") {
                     const positioning = ana.market_positioning;
-                    body = positioning ? <div>{SL("Positionierung")}{Para(positioning)}</div> : Empty("Noch keine Positionierung hinterlegt.");
+                    body = positioning ? <div>{SL(de ? "Positionierung" : "Positioning")}{Para(positioning)}</div> : Empty(de ? "Noch keine Positionierung hinterlegt." : "No positioning yet.");
                   } else if (k === "strategy/personas") {
                     body = (Array.isArray(profile.personas) && profile.personas.length) ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -49918,18 +50008,18 @@ If you don't know a field, infer a plausible value. Write all text values in the
                           </div>
                         ))}
                       </div>
-                    ) : Empty("Noch keine Personas definiert.");
+                    ) : Empty(de ? "Noch keine Personas definiert." : "No personas defined yet.");
                   } else if (k === "strategy/competitors") {
                     const comps = ana.competitors || intel.competitors || [];
                     body = (Array.isArray(comps) && comps.length) ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                         {comps.map((c, i) => <div key={i} style={{ padding: "12px 14px", borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }}>{typeof c === "string" ? c : (c.name || c.title || JSON.stringify(c))}</div>)}
                       </div>
-                    ) : Empty("Noch keine Competitor-Analyse vorhanden.");
+                    ) : Empty(de ? "Noch keine Competitor-Analyse vorhanden." : "No competitor analysis yet.");
                   } else if (k === "identity/story") {
-                    body = profile.description ? <div>{SL("Brand Story")}{Para(profile.description)}</div> : Empty("Noch keine Brand Story hinterlegt.");
+                    body = profile.description ? <div>{SL("Brand Story")}{Para(profile.description)}</div> : Empty(de ? "Noch keine Brand Story hinterlegt." : "No brand story yet.");
                   } else if (k === "identity/voice") {
-                    body = <VoiceToneSection theme={theme} darkMode={darkMode} t={t} />;
+                    body = <VoiceToneSection theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} />;
                   } else if (k === "design/logo") {
                     body = (profile.logos?.length) ? (
                       <div>{SL(t("brand.recap.logoVariants") || "Logo-Varianten")}<div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>{profile.logos.map(l => (
@@ -49966,9 +50056,9 @@ If you don't know a field, infer a plausible value. Write all text values in the
                   if (!seed) {
                     if (k === "identity/core") {
                       seed = (claimT ? `<h3>Claim</h3><h2>${esc(claimT)}</h2>` : "")
-                        + (profile.description ? `<h3>Beschreibung</h3><p>${p2(profile.description)}</p>` : "")
-                        + (vProps.length ? `<h3>Nutzenversprechen</h3><ul>${vProps.map(v => `<li>${esc(v)}</li>`).join("")}</ul>` : "")
-                        + (kMsgs.length ? `<h3>Kern-Botschaften</h3><ul>${kMsgs.map(m => `<li>${esc(m)}</li>`).join("")}</ul>` : "");
+                        + (profile.description ? `<h3>${de ? "Beschreibung" : "Description"}</h3><p>${p2(profile.description)}</p>` : "")
+                        + (vProps.length ? `<h3>${de ? "Nutzenversprechen" : "Value proposition"}</h3><ul>${vProps.map(v => `<li>${esc(v)}</li>`).join("")}</ul>` : "")
+                        + (kMsgs.length ? `<h3>${de ? "Kern-Botschaften" : "Key messages"}</h3><ul>${kMsgs.map(m => `<li>${esc(m)}</li>`).join("")}</ul>` : "");
                     } else if (k === "strategy/positioning") seed = posT ? `<p>${p2(posT)}</p>` : "";
                     else if (k === "identity/story") seed = profile.description ? `<p>${p2(profile.description)}</p>` : "";
                     else if (k === "identity/voice") seed = voice.length ? `<p>${voice.map(esc).join(", ")}</p>` : "";
@@ -50006,7 +50096,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                           onCreateStory={createAvatarStory}
                           theme={theme} darkMode={darkMode} accent={theme.accent} />
                       ) : k === "identity/voice" ? (
-                        <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t}
+                        <VoiceToneSection value={profile.voice_tone} editing={editingText} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage}
                           onSave={saveVoiceTone} onCancel={() => setEditingText(false)} />
                       ) : k === "strategy/taglines" ? (
                         <BrandTaglines value={profile.taglines} editing={editingText} theme={theme} darkMode={darkMode} t={t} onChange={saveTaglines} appLanguage={appLanguage} />
@@ -50018,19 +50108,19 @@ If you don't know a field, infer a plausible value. Write all text values in the
                       ) : body}
                       {/* Brand Story gets a history timeline under the text */}
                       {k === "identity/story" && (
-                        <BrandStoryTimeline timeline={profile.story_timeline || []} editing={editingText} theme={theme} darkMode={darkMode} t={t} onChange={saveTimeline} />
+                        <BrandStoryTimeline timeline={profile.story_timeline || []} editing={editingText} theme={theme} darkMode={darkMode} t={t} onChange={saveTimeline} appLanguage={appLanguage} />
                       )}
                       {/* Brand Core: Purpose/Vision/Mission, then Kern-Botschaften below */}
                       {k === "identity/core" && (
-                        <BrandPVM value={profile.pvm} editing={editingText} theme={theme} darkMode={darkMode} t={t} onChange={savePvm} />
+                        <BrandPVM value={profile.pvm} editing={editingText} theme={theme} darkMode={darkMode} t={t} onChange={savePvm} appLanguage={appLanguage} />
                       )}
                       {k === "identity/core" && kMsgs.length > 0 && (
-                        <div style={{ marginTop: 36 }}>{SL("Kern-Botschaften")}<div style={{ display: "flex", flexDirection: "column", gap: 11 }}>{kMsgs.map((m, i) => <div key={i} style={{ display: "flex", gap: 11, alignItems: "center", fontSize: 14, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }}><span style={{ width: 22, height: 22, borderRadius: 7, background: theme.accent + "1f", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>{m}</div>)}</div></div>
+                        <div style={{ marginTop: 36 }}>{SL(de ? "Kern-Botschaften" : "Key messages")}<div style={{ display: "flex", flexDirection: "column", gap: 11 }}>{kMsgs.map((m, i) => <div key={i} style={{ display: "flex", gap: 11, alignItems: "center", fontSize: 14, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }}><span style={{ width: 22, height: 22, borderRadius: 7, background: theme.accent + "1f", color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>{m}</div>)}</div></div>
                       )}
                       {/* Brand Values — merged into Brand Core; its picker runs in the core "Bearbeiten" mode */}
                       {k === "identity/core" && (
                         <div style={{ marginTop: 36 }}>{SL("Brand Values")}
-                          <BrandValues value={profile.brand_values} onChange={saveBrandValues} theme={theme} darkMode={darkMode} editing={editingText} onEditingChange={setEditingText} />
+                          <BrandValues value={profile.brand_values} onChange={saveBrandValues} theme={theme} darkMode={darkMode} editing={editingText} onEditingChange={setEditingText} appLanguage={appLanguage} />
                         </div>
                       )}
                     </>
