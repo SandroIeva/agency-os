@@ -62263,7 +62263,7 @@ export default function CircularMenu() {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Pinterest</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, whiteSpace: pinConn ? "nowrap" : "normal", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {pinConn
                           ? (pinConn.needs_reconnect
                               ? (pinConn.scopes_missing?.length
@@ -62274,9 +62274,21 @@ export default function CircularMenu() {
                               : (appLanguage === "de"
                                   ? `Verbunden${pinConn.username ? ` als @${pinConn.username}` : ""}. Gilt für diesen Workspace.`
                                   : `Connected${pinConn.username ? ` as @${pinConn.username}` : ""}. Applies to this workspace.`))
-                          : (appLanguage === "de"
-                              ? "Boards und Pins hereinholen, und Bilder als Pin veröffentlichen."
-                              : "Bring in boards and pins, and publish images as a pin.")}
+                          : (<span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", columnGap: 6, rowGap: 4 }}>
+                              <span>
+                                {appLanguage === "de"
+                                  ? "Holt Boards und Pins in deinen Workspace. Pins veröffentlichen"
+                                  : "Brings boards and pins to your workspace. Publish pins"}
+                              </span>
+                              {/* The same grey chip as Notifications under Darstellung:
+                                  publishing exists on the server and waits for
+                                  Pinterest's Standard access. Wraps flush left
+                                  when the line is full. */}
+                              <span style={{ padding: "2px 8px", borderRadius: 20, fontSize: 11, lineHeight: 1.4, whiteSpace: "nowrap",
+                                background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)", color: theme.textDim }}>
+                                {appLanguage === "de" ? "Bald verfügbar" : "Coming soon"}
+                              </span>
+                            </span>)}
                       </div>
                     </div>
                     <motion.button whileTap={{ scale: 0.97 }}
