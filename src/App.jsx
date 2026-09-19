@@ -4418,8 +4418,10 @@ function KanbanBoard({ onBack, session, theme: themeIn, darkMode, t, appLanguage
                     </div>
                   </div>
 
-                  {/* Description */}
-                  <div style={{ position: "relative" }}>
+                  {/* Description. As wide as the checklist rows below, which
+                      reach 8px past the column on each side so their hover
+                      ground has room; the text inside stays on the column. */}
+                  <div style={{ position: "relative", margin: "0 -8px" }}>
                     {(!editingDesc || !isTaskOwner) && taskForm.description ? (
                       <div
                         onClick={(e) => {
@@ -4433,8 +4435,8 @@ function KanbanBoard({ onBack, session, theme: themeIn, darkMode, t, appLanguage
                         style={{
                           background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
                           border: "1px solid transparent",
-                          borderRadius: 16, padding: "14px 52px 14px 18px", fontSize: 14, fontFamily: FONT, lineHeight: 1.6,
-                          color: theme.text, width: "100%", height: 120, boxSizing: "border-box",
+                          borderRadius: 16, padding: "14px 60px 14px 26px", fontSize: 14, fontFamily: FONT, lineHeight: 1.6,
+                          color: theme.text, width: "100%", height: 150, boxSizing: "border-box",
                           overflowY: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word",
                           cursor: isTaskOwner ? "text" : "default",
                         }}
@@ -4453,9 +4455,12 @@ function KanbanBoard({ onBack, session, theme: themeIn, darkMode, t, appLanguage
                       style={{
                         background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
                         border: `1px solid ${isRecording ? "#EF444450" : "transparent"}`,
-                        borderRadius: 16, padding: "14px 52px 14px 18px", fontSize: 14, fontFamily: FONT, lineHeight: 1.6,
+                        borderRadius: 16, padding: "14px 60px 14px 26px", fontSize: 14, fontFamily: FONT, lineHeight: 1.6,
                         color: theme.text, outline: "none", resize: "none", caretColor: theme.text,
-                        width: "100%", height: 120, cursor: isTaskOwner ? "text" : "default",
+                        // display block: a textarea is inline by default and
+                        // sits on the text baseline, which added 3.5px under it
+                        // and made the dialog grow on every click into the text.
+                        display: "block", width: "100%", height: 150, boxSizing: "border-box", cursor: isTaskOwner ? "text" : "default",
                         transition: "border-color 0.2s ease",
                       }}
                     />
@@ -4479,7 +4484,7 @@ function KanbanBoard({ onBack, session, theme: themeIn, darkMode, t, appLanguage
                       </motion.div>
                     )}
                     {isRecording && (
-                      <div style={{ position: "absolute", bottom: 13, left: 14, display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, fontFamily: FONT, color: "#EF4444" }}>
+                      <div style={{ position: "absolute", bottom: 13, left: 22, display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, fontFamily: FONT, color: "#EF4444" }}>
                         <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#EF4444", animation: "pulse 1.2s ease-in-out infinite" }} />
                         {de ? "Aufnahme läuft…" : "Recording…"}
                       </div>
