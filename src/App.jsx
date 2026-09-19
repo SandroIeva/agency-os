@@ -3520,8 +3520,12 @@ function ChatBubble({ message, theme, darkMode, appLanguage, onUploadStorage, on
   );
 }
 
-function KanbanBoard({ onBack, session, theme, darkMode, t, appLanguage = "de", openTaskId, triggerNewTask, onNewTaskTriggered, userOrg, orgMembers, createNotification, myProjectNames = new Set() }) {
+function KanbanBoard({ onBack, session, theme: themeIn, darkMode, t, appLanguage = "de", openTaskId, triggerNewTask, onNewTaskTriggered, userOrg, orgMembers, createNotification, myProjectNames = new Set() }) {
   const de = appLanguage === "de";
+  // No purple on the board: the theme's accent is violet, and it reached the
+  // task dialog's links, inputs and buttons ("+ Add link" among them). The
+  // house anthracite instead, light on a dark ground, as in Documents.
+  const theme = useMemo(() => ({ ...themeIn, accent: darkMode ? "#F4F4F7" : "#15151c" }), [themeIn, darkMode]);
   const [tasks, setTasks] = useState([]);
   const [teamMembers, setTeamMembers] = useState({});
   const [filter, setFilter] = useState("all");
@@ -4484,11 +4488,13 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, appLanguage = "de", 
 
                   {/* Checklist */}
                   <div>
-                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.6"/><path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        {de ? "Checkliste" : "Checklist"} {taskChecklist.length > 0 && (<span style={{ fontWeight: 400, color: theme.textFaint }}>({taskChecklist.filter(i => i.checked).length}/{taskChecklist.length})</span>)}
-                      </span>
+                    {/* The title starts where the checkboxes start, so the
+                        section reads as one column; the icon sits behind it. */}
+                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 8, display: "flex", alignItems: "center", gap: 7 }}>
+                      <span>{de ? "Checkliste" : "Checklist"}</span>
+                      <span style={{ display: "flex", color: theme.textFaint }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.6"/><path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
+                      <div style={{ flex: 1 }} />
+                      {taskChecklist.length > 0 && (<span style={{ fontSize: 13, fontWeight: 400, color: theme.textFaint, fontVariantNumeric: "tabular-nums" }}>{taskChecklist.filter(i => i.checked).length}/{taskChecklist.length}</span>)}
                     </div>
                     {/* Progress bar */}
                     {taskChecklist.length > 0 && (
@@ -4504,7 +4510,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, appLanguage = "de", 
                     <div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 8 }}>
                       {taskChecklist.map(item => (
                         <div key={chkId(item)} style={{
-                          display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8,
+                          display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", margin: "0 -8px", borderRadius: 8,
                           background: "transparent",
                         }}
                           onMouseEnter={e => e.currentTarget.style.background = darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)"}
@@ -4560,7 +4566,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, appLanguage = "de", 
                     </div>
                     {/* Add new item — owner only */}
                     {isTaskOwner && (
-                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                         <div style={{
                           width: 18, height: 18, borderRadius: 5, flexShrink: 0,
                           border: `1.5px dashed ${theme.textFaint}40`,
@@ -4595,13 +4601,14 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, appLanguage = "de", 
                   {editingTask && (
                     <div>
                       <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M13.5 6L5.5 14c-1.5 1.5-1.5 4 0 5.5s4 1.5 5.5 0l10-10c1-1 1-3 0-4s-3-1-4 0l-10 10c-.5.5-.5 1.5 0 2s1.5.5 2 0l8-8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                          {de ? "Anhänge" : "Attachments"} {taskAttachments.length > 0 && `(${taskAttachments.length})`}
+                        <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                          <span>{de ? "Anhänge" : "Attachments"}</span>
+                          <span style={{ display: "flex", color: theme.textFaint }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M13.5 6L5.5 14c-1.5 1.5-1.5 4 0 5.5s4 1.5 5.5 0l10-10c1-1 1-3 0-4s-3-1-4 0l-10 10c-.5.5-.5 1.5 0 2s1.5.5 2 0l8-8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></span>
+                          {taskAttachments.length > 0 && <span style={{ fontSize: 13, fontWeight: 400, color: theme.textFaint }}>{taskAttachments.length}</span>}
                         </span>
                         <motion.span whileTap={{ scale: 0.95 }}
                           onClick={() => setShowAttachInput(!showAttachInput)}
-                          style={{ fontSize: 14, fontWeight: 400, color: theme.accent, cursor: "pointer" }}
+                          style={{ fontSize: 13, fontWeight: 500, color: theme.textSub, cursor: "pointer" }}
                         >{de ? "+ Link hinzufügen" : "+ Add link"}</motion.span>
                       </div>
                       {showAttachInput && (
