@@ -83,9 +83,9 @@ Syncing only adds. A pin you delete on Pinterest stays on the moodboard, because
 
 ### Social media
 
-#### Social channels
+Connect your social accounts to see their performance and publish content from i7OS.&#x20;
 
-Connect your social accounts to see their performance and publish content from i7OS. Supported channels:
+**Supported channels:**
 
 * Instagram
 * LinkedIn
@@ -109,7 +109,7 @@ These direct connections are being rolled out step by step and are currently ava
 
 ### Messengers
 
-Slack and Telegram bring i7OS to where your team already talks. Both connections belong to **you**, not to the workspace: every person connects their own.
+Slack and Telegram bring i7OS to where your team already talks. Both connections belong to you, not to the workspace: every person connects their own.
 
 #### Slack
 
