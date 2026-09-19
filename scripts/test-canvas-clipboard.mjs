@@ -15,6 +15,7 @@ let items = [{id:'mask',type:'rect',x:10,y:20,w:30,h:40,groupId:'g',isMask:true}
 let sel='content',pick=['mask','content'],changes=0;
 const clipRef={current:[]};
 const selectionIds=()=>new Set(pick.length?pick:[sel]);
+const canvasFrameAttach=list=>list;
 const setItems=fn=>{items=fn(items)},setSel=v=>{sel=v},setPick=v=>{pick=v};
 const markChange=()=>{changes++};
 const canvasRenderBoxOf=it=>it;
@@ -39,6 +40,12 @@ assert.equal(changes,2,'cut and paste both enter undo history');
 pasteClip({x:100,y:200});
 assert.equal(items[2].x,100); assert.equal(items[2].y,200);
 assert.equal(items[3].x,140); assert.equal(items[3].y,250);
+items=[{id:'frame',type:'rect',isFrame:true,x:10,y:10,w:100,h:100},
+ {id:'text',type:'rect',frameId:'frame',x:20,y:20,w:30,h:20}];
+pick=['frame','text'];copySel();items=[];pasteClip({x:200,y:300});
+assert.equal(items[1].frameId,items[0].id);
+assert.notEqual(items[0].id,'frame');
+assert.equal(items[1].x-items[0].x,10);
 `);
 run(assert);
 console.log('Passed: cut/paste retains selection, spacing, groups and masks across artboards.');

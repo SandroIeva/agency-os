@@ -7974,7 +7974,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
   lastLineTool, setLastLineTool, lineToolOpen, setLineToolOpen,
   mediaOpen, setMediaOpen, mediaBtnRef, imgMenuOpen, setImgMenuOpen, imgBtnRef,
   fileRef, onFiles, zoomPct, onZoom, onResetZoom,
-  shapes = WB_SHAPE_TYPES, hide = [], extra = null,
+  shapes = WB_SHAPE_TYPES, hide = [], extra = null, frameTool = false,
   lineTools = ["arrow", "line", "pen"], mediaFlyout = null,
   // The shape library. Only a board that passes onVectorShapes shows the button,
   // so the whiteboard, which shares this bar, is untouched.
@@ -8089,6 +8089,8 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
       {sep}
       {!skip("sticky") && toolBtn("sticky", "Sticky Note", <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5z"/><path d="M15 3v6h6"/></svg>)}
 
+      {frameTool && toolBtn("frame", de ? "Frame zeichnen" : "Draw frame", <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round"><path d="M7 3v18M17 3v18M3 7h18M3 17h18"/></svg>)}
+
       {/* Shapes — one button, Figma-style flyout with all shapes */}
       <div style={{ position: "relative" }}>
         <motion.div whileTap={{ scale: 0.9 }}
@@ -8188,7 +8190,7 @@ function BoardToolbar({ orientation = "horizontal", tool, setTool, setEditing,
           onClick={() => { closeFlyouts("vshapes"); onVectorShapes(); }} title="Shapes"
           style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
             background: vectorShapesOpen ? (darkMode ? "#EEEEF0" : "#202023") : "transparent", color: vectorShapesOpen ? (darkMode ? "#202023" : "#fff") : toolColor, transition: "background 0.15s ease" }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M12 3.5l3.6 6.2H8.4z"/><circle cx="7.2" cy="16.4" r="3.6"/><rect x="13.4" y="12.8" width="7.2" height="7.2" rx="1.4"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="9" height="9" rx="1.8"/><circle cx="16.5" cy="16.5" r="4.5"/></svg>
         </motion.div>
       )}
       {fileRef && (
@@ -20730,6 +20732,152 @@ const CANVAS_INSTANCE_DEPTH = 8;
 // Components use violet; the lighter tone keeps labels readable on dark panels.
 const CANVAS_COMPONENT_ACCENT = "#8050D8";
 const CANVAS_COMPONENT_ACCENT_DARK = "#B99AF4";
+// Frames use rectangle rendering and explicit ownership. Coordinates stay in
+// artboard space so previews, export, undo and component snapshots share one model.
+const canvasFramePadding = (cfg = {}) => ({
+  top: Math.max(0, Number(cfg.paddingTop ?? cfg.paddingY ?? 0) || 0),
+  right: Math.max(0, Number(cfg.paddingRight ?? cfg.paddingX ?? 0) || 0),
+  bottom: Math.max(0, Number(cfg.paddingBottom ?? cfg.paddingY ?? 0) || 0),
+  left: Math.max(0, Number(cfg.paddingLeft ?? cfg.paddingX ?? 0) || 0),
+});
+const canvasFrameLayerRows = (items, collapsed = []) => {
+  const rows = [], seen = new Set(), frames = new Set(items.filter(it => it.isFrame).map(it => it.id));
+  const reversed = [...items].reverse();
+  const visit = (it, depth) => {
+    if (seen.has(it.id)) return;
+    seen.add(it.id);
+    rows.push({ it, depth, rev: items.length - 1 - items.indexOf(it) });
+    if (it.isFrame && !collapsed.includes(it.id)) reversed.filter(child => child.frameId === it.id).forEach(child => visit(child, depth + 1));
+  };
+  reversed.filter(it => !frames.has(it.frameId)).forEach(it => visit(it, 0));
+  return rows;
+};
+const canvasFrameDescendants = (items, ids) => {
+  const result = new Set(ids);
+  for (let n = 0; n < items.length; n++) {
+    let added = false;
+    for (const it of items) if (it.frameId && result.has(it.frameId) && !result.has(it.id)) {
+      result.add(it.id); added = true;
+    }
+    if (!added) break;
+  }
+  return result;
+};
+const canvasFrameMove = (it, dx, dy) => {
+  if (!dx && !dy) return it;
+  if (it.type === "draw" || it.type === "path") return { ...it, ox: (it.ox || 0) + dx, oy: (it.oy || 0) + dy };
+  if (it.type === "line" || it.type === "arrow") return { ...it, x1: it.x1 + dx, y1: it.y1 + dy, x2: it.x2 + dx, y2: it.y2 + dy };
+  return { ...it, x: (it.x || 0) + dx, y: (it.y || 0) + dy };
+};
+const canvasFrameAttach = (items, ids, capture = false, anchor = false) => {
+  let result = items.slice();
+  for (const id of ids) {
+    const it = result.find(o => o.id === id);
+    if (!it || it.type === "comment") continue;
+    const descendants = canvasFrameDescendants(result, [id]);
+    const b = canvasRenderBoxOf(it);
+    const atX = b.x + (anchor ? 0 : b.w / 2), atY = b.y + (anchor ? 0 : b.h / 2);
+    const candidates = result.filter(f => f.isFrame && !descendants.has(f.id) && !f.hidden && !f.locked)
+      .filter(f => atX >= f.x && atX <= f.x + f.w && atY >= f.y && atY <= f.y + f.h)
+      .sort((a, b) => a.w * a.h - b.w * b.h);
+    const parent = candidates[0];
+    result = result.map(o => o.id === id ? { ...o, frameId: parent?.id } : o);
+    if (capture && it.isFrame) {
+      result = result.map(o => {
+        if (o.id === id || o.id === parent?.id || o.frameId !== parent?.id || o.type === "comment") return o;
+        const box = canvasRenderBoxOf(o);
+        return box.x >= it.x && box.y >= it.y && box.x + box.w <= it.x + it.w && box.y + box.h <= it.y + it.h
+          ? { ...o, frameId: id } : o;
+      });
+    }
+  }
+  // A frame's surface always precedes its children, also after dragging in.
+  const ordered = [], seen = new Set();
+  const visit = it => {
+    if (seen.has(it.id)) return;
+    seen.add(it.id); ordered.push(it);
+    result.filter(o => o.frameId === it.id).forEach(visit);
+  };
+  result.filter(it => !it.frameId || !result.some(f => f.isFrame && f.id === it.frameId)).forEach(visit);
+  result.forEach(visit);
+  return ordered;
+};
+const canvasFrameLayout = (items, previous = [], suspend = false) => {
+  if (!items.some(it => it.isFrame || it.frameId)) return items;
+  const map = new Map(items.map(it => [it.id, it]));
+  const old = new Map(previous.map(it => [it.id, it]));
+  // Moving a frame transports descendants which weren't already moved by a
+  // multi-selection operation. Resizing changes its container, not its contents.
+  const transported = new Set();
+  const transport = id => {
+    if (transported.has(id)) return;
+    transported.add(id);
+    let it = map.get(id);
+    if (!it) return;
+    if (it.frameId && map.get(it.frameId)?.isFrame) {
+      transport(it.frameId);
+      const parent = map.get(it.frameId), before = old.get(it.frameId), ownBefore = old.get(id);
+      if (before && ownBefore) {
+        const b = canvasRenderBoxOf(it), ob = canvasRenderBoxOf(ownBefore);
+        if (b.x === ob.x && b.y === ob.y) it = canvasFrameMove(it, parent.x - before.x, parent.y - before.y);
+      }
+    } else if (it.frameId) it = { ...it, frameId: undefined };
+    map.set(id, it);
+  };
+  items.forEach(it => transport(it.id));
+  if (!suspend) {
+    const done = new Set();
+    const layout = id => {
+      if (done.has(id)) return;
+      done.add(id);
+      let f = map.get(id);
+      if (!f?.isFrame) return;
+      let children = [...map.values()].filter(it => it.frameId === id && !it.hidden);
+      children.forEach(it => { if (it.isFrame) layout(it.id); });
+      const cfg = f.autoLayout;
+      if (!cfg?.enabled) return;
+      const vertical = cfg.direction === "vertical", gap = Math.max(0, Number(cfg.gap) || 0);
+      const pad = canvasFramePadding(cfg), px = pad.left + pad.right, py = pad.top + pad.bottom;
+      children = children.map(it => {
+        let child = map.get(it.id);
+        if (child.type === "text" && child.frameTextWidth !== "fixed") {
+          const ctx = measureCtx();
+          if (ctx) {
+            let width = 0, max = 0;
+            const text = canvasText(child);
+            for (let i = 0; i < text.length; i++) {
+              if (text[i] === "\n") { max = Math.max(max, width); width = 0; continue; }
+              ctx.font = canvasFontAt(child, i);
+              width += ctx.measureText(text[i]).width + canvasLS(child);
+            }
+            child = { ...child, w: Math.max(1, Math.ceil(Math.max(max, width))) };
+            map.set(child.id, child);
+          }
+        }
+        return child;
+      });
+      const boxes = children.map(canvasRenderBoxOf);
+      const main = boxes.reduce((n, b) => n + (vertical ? b.h : b.w), 0) + gap * Math.max(0, boxes.length - 1);
+      const cross = Math.max(0, ...boxes.map(b => vertical ? b.w : b.h));
+      f = { ...f, w: cfg.hugW ? Math.max(8, (vertical ? cross : main) + px) : f.w,
+        h: cfg.hugH ? Math.max(8, (vertical ? main : cross) + py) : f.h };
+      map.set(id, f);
+      let cursor = vertical ? pad.top : pad.left;
+      children.forEach((it, i) => {
+        const b = boxes[i], space = Math.max(0, (vertical ? f.w - px - b.w : f.h - py - b.h));
+        const offset = cfg.align === "end" ? space : cfg.align === "center" ? space / 2 : 0;
+        const x = f.x + (vertical ? pad.left + offset : cursor), y = f.y + (vertical ? cursor : pad.top + offset);
+        const dx = x - b.x, dy = y - b.y;
+        const ids = canvasFrameDescendants([...map.values()], [it.id]);
+        ids.forEach(cid => map.set(cid, canvasFrameMove(map.get(cid), dx, dy)));
+        cursor += (vertical ? b.h : b.w) + gap;
+      });
+    };
+    items.filter(it => it.isFrame).forEach(it => layout(it.id));
+  }
+  return canvasFrameAttach(items.map(it => map.get(it.id)), []);
+};
+
 const canvasExpand = (items, components) => {
   const list = Array.isArray(items) ? items : [];
   const defs = components || null;
@@ -21184,7 +21332,7 @@ const REPEAT_MODES = [
 // other than a box, and repeating those means answering a different question
 // for each — not worth guessing at before anyone asks.
 const REPEATABLE = ["rect", "ellipse", "triangle", "diamond", "star", "image", "instance"];
-const canRepeat = (it) => !!it && REPEATABLE.includes(it.type);
+const canRepeat = (it) => !!it && !it.isFrame && REPEATABLE.includes(it.type);
 const isRepeating = (it) => !!it?.repeat && (it.repeat.count || 0) > 1;
 const defaultRepeat = (mode, it) => mode === "radial"
   ? { mode: "radial", count: 6, radius: Math.round(Math.max(it?.w || 120, it?.h || 120) * 1.1),
@@ -22296,7 +22444,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // opened with an empty canvas — and the first autosave wrote that emptiness
   // back over the real thing. boardsFromDoc has already folded the legacy shape
   // into board 0, so this one source covers both.
-  const [items, setItems] = useState(() => bootRef.current[0].items);
+  const [items, setItemsState] = useState(() => canvasFrameLayout(bootRef.current[0].items));
+  const setItems = (update) => {
+    const suspend = ["move", "create"].includes(dragRef.current?.mode);
+    setItemsState(previous => canvasFrameLayout(typeof update === "function" ? update(previous) : update, previous, suspend));
+  };
   // The component definitions belong to the DOCUMENT, not to a board: one
   // component is used on several boards, and a definition parked on board 0
   // would vanish the moment somebody deleted that board. Null while there are
@@ -22416,6 +22568,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const [spacePan, setSpacePan] = useState(false);
   // Collapsed by default: it is a panel you reach for, not one you work in.
   const [layersOpen, setLayersOpen] = useState(false);
+  const [collapsedFrames, setCollapsedFrames] = useState([]);
   const [pick, setPick] = useState([]);          // ids ticked in the layers list
   const [commentOpenId, setCommentOpenId] = useState(null);
   const [dragRow, setDragRow] = useState(null);      // index in the reversed list
@@ -22797,6 +22950,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     flush(latestRef.current);
   }, []);
   const dragRef = useRef(null);
+  useEffect(() => {
+    const reflow = () => setItemsState(list => canvasFrameLayout(list));
+    document.fonts?.addEventListener("loadingdone", reflow);
+    return () => document.fonts?.removeEventListener("loadingdone", reflow);
+  }, []);
+
 
   // ── Live collaboration ────────────────────────────────────────────────────
   // Only on a SAVED canvas: the same editor also runs brand slots, which are
@@ -23017,7 +23176,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     <span onClick={(e) => { e.stopPropagation(); onLock(); }}
       title={locked ? (de ? "Entsperren" : "Unlock") : (de ? "Sperren" : "Lock")}
       style={{ display: "flex", padding: 2, cursor: "pointer",
-        color: locked ? theme.text : theme.textFaint, opacity: locked ? 1 : 0.55 }}>
+        color: darkMode ? (locked ? "#EEEEF0" : "#898996") : (locked ? theme.text : theme.textFaint), opacity: darkMode || locked ? 1 : 0.55 }}>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
         strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
         <rect x="4" y="11" width="16" height="10" rx="2" />
@@ -23027,7 +23186,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     <span onClick={(e) => { e.stopPropagation(); onHide(); }}
       title={hidden ? (de ? "Einblenden" : "Show") : (de ? "Ausblenden" : "Hide")}
       style={{ display: "flex", padding: 2, cursor: "pointer",
-        color: hidden ? theme.text : theme.textFaint, opacity: hidden ? 1 : 0.55 }}>
+        color: darkMode ? (hidden ? "#EEEEF0" : "#898996") : (hidden ? theme.text : theme.textFaint), opacity: darkMode || hidden ? 1 : 0.55 }}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
         strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
         {hidden ? (
@@ -23052,6 +23211,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     // is a word about the model and not about the thing on the board.
     it.type === "instance"
       ? ((components || {})[it.componentId]?.name || (de ? "Komponente" : "Component"))
+    : it.isFrame ? (it.name || "Frame")
     : it.isMask ? (de ? "Maske" : "Mask")
     : it.type === "text" || it.type === "sticky" || it.type === "comment"
       ? (String(it.text || "").split("\n")[0].slice(0, 22) || it.type)
@@ -23183,7 +23343,20 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // The same write across several items in ONE history step, so undoing a group
   // effect takes it off the whole group rather than one member per press.
   const patchMany = (ids, p) => { markChange(); setItems(list => list.map(i => (ids.includes(i.id) ? { ...i, ...p } : i))); };
-  const addItem = (it) => { markChange(); setItems(list => [...list, it]); setSel(it.id); setTool("select"); };
+  const addItem = (it) => { markChange(); setItems(list => canvasFrameAttach([...list, it], [it.id], false, true)); setSel(it.id); setTool("select"); };
+
+  // Picker content is inserted into the selected container, while drawing and
+  // file drops use the pointer's position to choose their frame.
+  const addPickedItem = (it) => {
+    const selected = items.find(o => o.id === sel);
+    const target = selected?.isFrame ? selected : items.find(o => o.isFrame && o.id === selected?.frameId);
+    if (!target) { addItem(it); return; }
+    const b = canvasRenderBoxOf(it), pad = canvasFramePadding({ paddingX: 16, paddingY: 16, ...target.autoLayout }), px = pad.left + pad.right, py = pad.top + pad.bottom;
+    const k = Math.min(1, Math.max(1, target.w - px) / Math.max(1, b.w), Math.max(1, target.h - py) / Math.max(1, b.h));
+    const placed = scaleItemInBox(it, b, k, k, target.x + pad.left + (target.w - px - b.w * k) / 2, target.y + pad.top + (target.h - py - b.h * k) / 2);
+    markChange(); setItems(list => [...list, { ...placed, frameId: target.id }]);
+    setSel(it.id); setPick([]); setTool("select");
+  };
 
   // Enter and Escape both FINISH rather than one finishing and one discarding:
   // a half-drawn path is work, and Escape next to Enter is where a slip lands.
@@ -23393,7 +23566,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       const o = items.find(q => q.id === sid);
       if (o?.groupId) items.filter(q => q.groupId === o.groupId).forEach(q => ids.add(q.id));
     }
-    return ids;
+    return canvasFrameDescendants(items, ids);
   };
 
   const movedBy = (it, dx, dy) =>
@@ -23573,6 +23746,15 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const duplicateSel = (id = sel) => {
     const it = items.find(i => i.id === id);
     if (!it) return;
+    if (it.isFrame) {
+      const ids = canvasFrameDescendants(items, [it.id]);
+      const source = items.filter(o => ids.has(o.id));
+      const remap = new Map(source.map(o => [o.id, crypto.randomUUID()]));
+      const made = source.map(o => ({ ...structuredClone(o), ...movedBy(o, 20, 20), id: remap.get(o.id),
+        frameId: remap.get(o.frameId), maskId: remap.get(o.maskId),
+        groupId: o.groupId ? `${remap.get(it.id)}:${o.groupId}` : undefined }));
+      markChange(); setItems(list => [...list, ...made]); setSel(remap.get(it.id)); return;
+    }
     const c = cloneOf(it, 20, 20);
     setItems(list => [...list, c]); setSel(c.id);
   };
@@ -23894,6 +24076,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const pasteClip = (at) => {
     if (!clipRef.current.length) return;
     const source = clipRef.current;
+    const targetFrame = !at ? items.find(it => it.id === sel && it.isFrame) : null;
+    if (targetFrame) {
+      const pad = canvasFramePadding({ paddingX: 16, paddingY: 16, ...targetFrame.autoLayout });
+      at = { x: targetFrame.x + pad.left, y: targetFrame.y + pad.top };
+    }
     const idMap = new Map(source.map(it => [it.id, crypto.randomUUID()]));
     const groupMap = new Map(source.filter(it => it.groupId).map(it => [it.groupId, crypto.randomUUID()]));
     const bounds = source.map(canvasRenderBoxOf);
@@ -23901,9 +24088,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const dy = at ? Math.round(at.y - Math.min(...bounds.map(b => b.y))) : 0;
     const made = source.map(it => ({ ...structuredClone(it), ...movedBy(it, dx, dy), id: idMap.get(it.id),
       ...(it.groupId ? { groupId: groupMap.get(it.groupId) } : {}),
-      ...(it.maskId ? { maskId: idMap.get(it.maskId) } : {}) }));
+      ...(it.maskId ? { maskId: idMap.get(it.maskId) } : {}),
+      ...(it.frameId ? { frameId: idMap.get(it.frameId) } : {}) }));
     markChange();
-    setItems(list => [...list, ...made]);
+    setItems(list => {
+      const placed = made.map(it => !it.frameId && targetFrame ? { ...it, frameId: targetFrame.id } : it);
+      return targetFrame ? [...list, ...placed] : canvasFrameAttach([...list, ...placed], placed.filter(it => !it.frameId).map(it => it.id));
+    });
     setPick(made.length > 1 ? made.map(it => it.id) : []);
     setSel(made[made.length - 1].id);
   };
@@ -24102,7 +24293,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       d.live = box;
       if (!d.started) {
         d.started = true;
-        setItems(list => [...list, { id: d.id, type: d.type, ...box, fill: palette[0],
+        setItems(list => [...list, { id: d.id, type: d.type === "frame" ? "rect" : d.type, ...box, fill: d.type === "frame" ? "#FFFFFF" : palette[0],
+          ...(d.type === "frame" ? { isFrame: true, name: "Frame", stroke: "#B8B8C2", strokeWidth: 1 } : {}),
           ...(d.type === "star" ? { points: 5, innerRatio: 0.42 } : {}) }]);
       } else patch(d.id, box);
       return;
@@ -24376,6 +24568,9 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       return;
     }
     dragRef.current = null;
+    if (d?.mode === "move") {
+      setItems(list => canvasFrameAttach(list, d.ids || [d.id]));
+    }
     if (d?.mode === "create") {
       // A plain click drops a comfortably sized square centred on the cursor —
       // ellipse becomes a real circle, rect a real square — exactly as it does
@@ -24387,14 +24582,16 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       if (dragged) {
         const w = Math.max(48, live.w), h = Math.max(48, live.h);
         patch(d.id, { w, h });
+        setItems(list => canvasFrameAttach(list, [d.id], d.type === "frame"));
         setSel(d.id);
       } else {
         if (d.started) setItems(list => list.filter(i => i.id !== d.id));
         const side = Math.min(300, Math.round(Math.min(W, H) * 0.6));
-        const it = { id: crypto.randomUUID(), type: d.type, w: side, h: side,
-          x: Math.round(d.ox - side / 2), y: Math.round(d.oy - side / 2), fill: palette[0],
+        const it = { id: crypto.randomUUID(), type: d.type === "frame" ? "rect" : d.type, w: side, h: side,
+          x: Math.round(d.ox - side / 2), y: Math.round(d.oy - side / 2), fill: d.type === "frame" ? "#FFFFFF" : palette[0],
+          ...(d.type === "frame" ? { isFrame: true, name: "Frame", stroke: "#B8B8C2", strokeWidth: 1 } : {}),
           ...(d.type === "star" ? { points: 5, innerRatio: 0.42 } : {}) };
-        setItems(list => [...list, it]);
+        setItems(list => canvasFrameAttach([...list, it], [it.id], d.type === "frame"));
         setSel(it.id);
       }
       setTool("select");
@@ -24405,7 +24602,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       setItems(list => {
         const it = list.find(i => i.id === d.id);
         if (it && Math.hypot(it.x2 - it.x1, it.y2 - it.y1) <= 12) return list.filter(i => i.id !== d.id);
-        return list;
+        return canvasFrameAttach(list, [d.id], false, true);
       });
       setSel(d.id); setTool("select");
     }
@@ -24413,7 +24610,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       setItems(list => {
         const it = list.find(i => i.id === d.id);
         if (it && it.pts.length < 2) return list.filter(i => i.id !== d.id);
-        return list;
+        return canvasFrameAttach(list, [d.id], false, true);
       });
       setSel(d.id); setTool("select");
     }
@@ -24482,6 +24679,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     return [it.id];
   };
   const onOrbitDown = (e, it) => {
+    if (it.isFrame) { e.stopPropagation(); return; }
     e.stopPropagation();
     pushUndo(takeSnap());
     const d = d3Of(it);
@@ -24540,8 +24738,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                                 border: `${bw}px solid ${ac}`, cursor: CURSORS[hd], zIndex: 2,
                                 pointerEvents: "auto" }} />
                           ))}
-                          {orbitGrip(it, k, ac)}
-                          {!edgeOnly && [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => (
+                          {!it.isFrame && orbitGrip(it, k, ac)}
+                          {!it.isFrame && !edgeOnly && [["nw", 0, 0], ["ne", 1, 0], ["se", 1, 1], ["sw", 0, 1]].map(([hd, fx, fy]) => (
                             <div key={"r" + hd} onPointerDown={e2 => onRotateDown(e2, it)}
                               title={de ? "Drehen" : "Rotate"}
                               style={{ position: "absolute", left: `calc(${fx * 100}% - ${rs / 2}px)`,
@@ -24657,7 +24855,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   };
   const makeComponent = (ids2) => {
     const from = ids2 && ids2.length ? ids2 : [...pick, ...(sel && sel !== "frame" ? [sel] : [])];
-    const ids = [...new Set(from)].filter(id => items.some(i => i.id === id));
+    const ids = [...canvasFrameDescendants(items, from)].filter(id => items.some(i => i.id === id));
     if (!ids.length) return;
     // Stacking order is array order, so the parts have to keep the order they
     // had on the board or a component would come out with its background on top.
@@ -24669,7 +24867,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       name: `${de ? "Komponente" : "Component"} ${Object.keys(components || {}).length + 1}`,
       w: bx.w, h: bx.h, items: members.map(shift) };
     const inst = { id: crypto.randomUUID(), type: "instance", componentId: cid,
-      x: bx.x, y: bx.y, w: bx.w, h: bx.h };
+      x: bx.x, y: bx.y, w: bx.w, h: bx.h, frameId: members.find(it => !ids.includes(it.frameId))?.frameId };
     markChange();
     setComponents(c => ({ ...(c || {}), [cid]: def }));
     // In the place the FIRST member held, so a component made out of the
@@ -24759,7 +24957,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
       x: Math.round(wx - (b.x || 0) - def.w / 2), y: Math.round(wy - (b.y || 0) - def.h / 2), w: def.w, h: def.h };
     markChange(); setComponents(c => ({ ...(c || {}), [def.id]: structuredClone(def) }));
     if (target !== active) { setBoards(next); setActive(target); loadBoard(b); }
-    setItems([...(b.items || []), inst]); setSel(inst.id); setPick([]);
+    setItems(canvasFrameAttach([...(b.items || []), inst], [inst.id])); setSel(inst.id); setPick([]);
   };
   const enterComponent = (inst) => {
     const def = (components || {})[inst.componentId];
@@ -25163,6 +25361,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // Rotation reads the angle from the shape's centre to the pointer, so the
   // corner stays under the finger instead of the shape lagging behind it.
   const onRotateDown = (e, it) => {
+    if (it.isFrame) { e.stopPropagation(); return; }
     e.stopPropagation();
     const { x: cx, y: cy } = toScreen(it.x + it.w / 2, it.y + (it.h || 0) / 2);
     pushUndo(takeSnap());
@@ -25517,7 +25716,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
 
   const label = (s) => (
     <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600,
-      color: theme.textDim, margin: "12px 0 6px" }}>{s}</div>
+      color: darkMode ? "#ABABB6" : theme.textDim, margin: "12px 0 6px" }}>{s}</div>
   );
 
   // Handed to the toolbar, which hangs it off the media button through the
@@ -25552,7 +25751,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                         // square, centred, contained — so it arrives with handles,
                         // rotates from its corners, and keeps its proportion.
                         const sz = Math.round(Math.min(W, H) * 0.3);
-                        addItem({ id: crypto.randomUUID(), type: "image", url: emojiImageUrl(ch),
+                        addPickedItem({ id: crypto.randomUUID(), type: "image", url: emojiImageUrl(ch),
                           emoji: ch, fit: "contain",
                           x: Math.round((W - sz) / 2), y: Math.round((H - sz) / 2),
                           w: sz, h: sz });
@@ -25573,7 +25772,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   {files.map(f => (
                     <div key={f} onClick={() => {
                         const sz = Math.round(Math.min(W, H) * 0.3);
-                        addItem({ id: crypto.randomUUID(), type: "image", url: wbStickerUrl(cat, f),
+                        addPickedItem({ id: crypto.randomUUID(), type: "image", url: wbStickerUrl(cat, f),
                           fit: "contain", x: Math.round((W - sz) / 2), y: Math.round((H - sz) / 2),
                           w: sz, h: sz });
                         setMediaOpen(false);
@@ -27340,6 +27539,8 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
         display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 10 }}
         onPointerDown={e => e.stopPropagation()}>
         <BoardToolbar orientation="vertical"
+          frameTool
+
           lineTools={["arrow", "line", "pen", "path"]}
           mediaFlyout={mediaPanel}
           tool={tool} setTool={setTool} setEditing={setEditing}
@@ -27396,7 +27597,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             {/* Topmost first, because that is the order the eye sees them in.
                 Rows drag to reorder, which is the same items order the canvas
                 paints in — the list is that order made visible, not a copy. */}
-            {[...items].reverse().map((it, rev) => {
+            {canvasFrameLayerRows(items, collapsedFrames).map(({ it, rev, depth }) => {
               const m = maskOf(it);
               // The first row of a group carries its header, so a mask reads as
               // one thing with parts rather than two unrelated rows.
@@ -27416,7 +27617,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   }}
                   title={de ? "Klick wählt die Gruppe · Doppelklick geht hinein"
                             : "Click selects the group · double-click steps inside"}
-                  style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 8px",
+                  style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 8px", marginLeft: depth * 16,
                     borderRadius: 8, cursor: "pointer", color: theme.textDim,
                     background: (selGid === gid || items.some(o => o.groupId === gid && pick.includes(o.id)))
                       ? "rgba(47,107,255,0.16)"
@@ -27480,7 +27681,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     } else { setSel(it.id); setPick([]); }
                   }}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px",
-                    marginLeft: gid ? 16 : 0, borderRadius: 8,
+                    marginLeft: depth * 16 + (gid ? 16 : 0), borderRadius: 8,
                     cursor: it.isMask ? "default" : "grab",
                     borderTop: dropHere ? "2px solid #2F6BFF" : "2px solid transparent",
                     opacity: dragRow === rev ? 0.45 : 1,
@@ -27490,6 +27691,11 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                     background: selGid === gid ? "transparent"
                       : ticked ? "rgba(47,107,255,0.16)"
                       : sel === it.id ? (darkMode ? "rgba(255,255,255,0.08)" : "#EDEDF0") : "transparent" }}>
+                  {it.isFrame && <button type="button" aria-label={collapsedFrames.includes(it.id) ? (de ? "Frame aufklappen" : "Expand frame") : (de ? "Frame einklappen" : "Collapse frame")}
+                    aria-expanded={!collapsedFrames.includes(it.id)} onClick={e => { e.stopPropagation(); setCollapsedFrames(list => list.includes(it.id) ? list.filter(id => id !== it.id) : [...list, it.id]); }}
+                    style={{ border: "none", background: "transparent", color: theme.textDim, padding: 0, width: 12, display: "flex", cursor: "pointer", flexShrink: 0 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: collapsedFrames.includes(it.id) ? "none" : "rotate(90deg)" }}><path d="m9 5 7 7-7 7"/></svg>
+                  </button>}
                   <div style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0,
                     border: `1px solid ${line}`,
                     background: it.type === "image" ? `center/cover no-repeat url(${it.url})`
@@ -27497,7 +27703,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                       : it.fill ? paintCss(it.fill, it.fillAlpha) : "transparent",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 11, color: theme.textDim }}>
-                    {it.type === "text" ? "T" : it.type === "comment" ? "@" : ""}
+                    {it.isFrame ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M7 3v18M17 3v18M3 7h18M3 17h18"/></svg> : it.type === "text" ? "T" : it.type === "comment" ? "@" : ""}
                   </div>
 
                   {renameId === it.id ? (
@@ -27763,7 +27969,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               there is no canvas, so it names the component instead: saying
               "Canvas 1080 x 1350" while a 200px logo is on screen is simply
               the wrong answer. */}
-          <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 12 }}>
+          <div style={{ fontSize: 11, color: darkMode ? "#9C9CA8" : theme.textFaint, marginTop: 12 }}>
             {focus
               ? `${(components || {})[focus.cid]?.name || (de ? "Komponente" : "Component")} · ${stageW} × ${stageH}`
               : `${de ? "Canvas" : "Canvas"} · ${W} × ${H}`}
@@ -27781,7 +27987,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             does not read them, and a line that says otherwise is a promise the
             panel does not keep. */}
         {!selItem && sel !== "frame" && !focus && (
-          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5,
+          <div style={{ fontSize: 12, fontFamily: FONT, color: darkMode ? "#ABABB6" : theme.textDim, lineHeight: 1.5,
             marginTop: 6, paddingBottom: 8, borderBottom: `1px solid ${line}` }}>
             {de ? "Noch keine Vorlagen. Ein Artboard, das als Vorlage markiert ist, findest du unter Artboards."
                 : "No templates yet. An artboard marked as a template is listed under Artboards."}
@@ -28031,6 +28237,25 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 everything below it means. Without it the panel looked exactly
                 like a rectangle's and there was nothing on screen saying a
                 component had been made at all. */}
+            {selItem.isFrame && !many && <>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "4px 0 2px",
+                fontSize: 10.5, fontFamily: FONT, letterSpacing: 0.6, textTransform: "uppercase", fontWeight: 600, color: theme.textDim }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M7 3v18M17 3v18M3 7h18M3 17h18"/></svg>
+                Frame
+              </div>
+              <div style={{ display: "flex", marginTop: 6, borderRadius: 8, padding: "2px 10px",
+                background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                <input key={`${selItem.id}:${selItem.name || "Frame"}`} defaultValue={selItem.name || "Frame"}
+                  aria-label={de ? "Name des Frames" : "Frame name"} placeholder={de ? "Name des Frames" : "Frame name"}
+                  onBlur={e => { const name = e.currentTarget.value.trim() || "Frame";
+                    e.currentTarget.value = name; if (name !== (selItem.name || "Frame")) patch(selItem.id, { name }); }}
+                  onKeyDown={e => { if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
+                    if (e.key === "Escape") { e.currentTarget.value = selItem.name || "Frame"; e.currentTarget.blur(); }
+                    if (e.key === "Enter") e.currentTarget.blur(); }}
+                  style={{ width: "100%", minWidth: 0, padding: "6px 0", border: "none", background: "transparent",
+                    color: theme.text, fontFamily: FONT, fontSize: 12.5, outline: "none" }} />
+              </div>
+            </>}
             {selItem.type === "instance" && (() => {
               const cid = selItem.componentId;
               const def = (components || {})[cid];
@@ -28149,6 +28374,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               }, "Y")}
               </>)}
             </div>
+            {!selItem.isFrame && <>
             <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <SliderField label={de ? "Drehung" : "Rotation"} value={selItem.rot || 0}
@@ -28249,6 +28475,65 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               );
             })()}
 
+            </>}
+
+            {selItem.isFrame && (() => {
+              const cfg = { enabled: false, direction: "horizontal", gap: 12, paddingX: 16, paddingY: 16,
+                align: "center", hugW: true, hugH: true, ...selItem.autoLayout };
+              const put = change => set2({ autoLayout: { ...cfg, ...change } });
+              const options = rows => rows.map(([value, label]) => ({ value, label }));
+              const children = items.filter(it => it.frameId === selItem.id);
+              const inp = { border: "none", borderRadius: 9, padding: "9px 10px", fontFamily: FONT, fontSize: 12,
+                color: theme.text, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" };
+              return <>
+                {label("Auto Layout")}
+                <button type="button" onClick={() => put({ enabled: !cfg.enabled })}
+                  style={{ ...inp, width: "100%", cursor: "pointer", textAlign: "left", marginBottom: 8 }}>
+                  {cfg.enabled ? (de ? "Auto Layout entfernen" : "Remove auto layout") : (de ? "Auto Layout hinzufügen" : "Add auto layout")}
+                </button>
+                {cfg.enabled && <>
+                  <Dropdown triggerStyle={{ width: "100%", justifyContent: "space-between", borderRadius: 9 }} value={cfg.direction} onChange={direction => put({ direction })}
+                    options={options([["horizontal", "Horizontal"], ["vertical", de ? "Vertikal" : "Vertical"]])} theme={theme} darkMode={darkMode} />
+                  <div style={{ marginTop: 8 }}><SliderField label={de ? "Abstand" : "Gap"} value={cfg.gap} min={0} max={120}
+                    onChange={gap => put({ gap })} onCommit={gap => put({ gap })} theme={theme} darkMode={darkMode} /></div>
+                  {label(de ? "Innenabstände" : "Padding")}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    {[["Top", "top", de ? "Oben" : "Top"], ["Right", "right", de ? "Rechts" : "Right"],
+                      ["Bottom", "bottom", de ? "Unten" : "Bottom"], ["Left", "left", de ? "Links" : "Left"]].map(([key, side, title]) => (
+                      <SliderField key={key} label={title} value={canvasFramePadding(cfg)[side]} min={0} max={120}
+                        onChange={value => put({ ["padding" + key]: value })} onCommit={value => put({ ["padding" + key]: value })} theme={theme} darkMode={darkMode} />
+                    ))}
+                  </div>
+                  {label(de ? "Ausrichtung" : "Alignment")}
+                  <Dropdown triggerStyle={{ width: "100%", justifyContent: "space-between", borderRadius: 9 }} value={cfg.align} onChange={align => put({ align })}
+                    options={options([["start", de ? "Anfang" : "Start"], ["center", de ? "Mitte" : "Center"], ["end", de ? "Ende" : "End"]])} theme={theme} darkMode={darkMode} />
+                  {[["hugW", de ? "Breite" : "Width"], ["hugH", de ? "Höhe" : "Height"]].map(([key, title]) => <div key={key}>
+                    {label(title)}
+                    <Dropdown triggerStyle={{ width: "100%", justifyContent: "space-between", borderRadius: 9 }} value={cfg[key] ? "hug" : "fixed"} onChange={value => put({ [key]: value === "hug" })}
+                      options={options([["hug", de ? "An Inhalt anpassen" : "Hug contents"], ["fixed", de ? "Fest" : "Fixed"]])} theme={theme} darkMode={darkMode} />
+                  </div>)}
+                </>}
+                {label(de ? "Inhalt" : "Contents")}
+                {!children.length && <p style={{ color: theme.textDim, fontSize: 12, lineHeight: 1.5 }}>
+                  {de ? "Elemente in den Frame zeichnen oder hineinziehen." : "Draw elements inside the frame or drag them in."}</p>}
+                {children.map((child, index) => <div key={child.id} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                  <button type="button" onClick={() => { setPick([]); setSel(child.id); }} style={{ ...inp, flex: 1, minWidth: 0, textAlign: "left", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {child.name || child.text || child.type}
+                  </button>
+                  {[-1, 1].map(direction => <button key={direction} type="button" disabled={index + direction < 0 || index + direction >= children.length}
+                    aria-label={direction < 0 ? (de ? "Nach vorne" : "Move earlier") : (de ? "Nach hinten" : "Move later")}
+                    onClick={() => { markChange(); setItems(list => {
+                      const next = [...list], from = next.findIndex(it => it.id === child.id), to = next.findIndex(it => it.id === children[index + direction].id);
+                      [next[from], next[to]] = [next[to], next[from]]; return next;
+                    }); }} style={{ ...inp, padding: "6px", cursor: "pointer" }}>{direction < 0 ? "↑" : "↓"}</button>)}
+                </div>)}
+              </>;
+            })()}
+            {selItem.type === "text" && selItem.frameId && <>
+              {label(de ? "Textbreite im Frame" : "Text width in frame")}
+              <Dropdown triggerStyle={{ width: "100%", justifyContent: "space-between", borderRadius: 9 }} value={selItem.frameTextWidth || "hug"} onChange={frameTextWidth => set2({ frameTextWidth })}
+                options={[{ value: "hug", label: de ? "An Text anpassen" : "Hug text" }, { value: "fixed", label: de ? "Fest / Zeilenumbruch" : "Fixed / wrap" }]} theme={theme} darkMode={darkMode} />
+            </>}
             {panelBox ? (<>
               {label(de ? "Maße" : "Layout")}
               <div style={two}>
@@ -29054,7 +29339,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
           uploadFile={onUpload} theme={theme} darkMode={darkMode} accent={theme.accent}
           onPick={(url) => {
             const w = Math.round(W * 0.5), h = Math.round(w * 0.66);
-            addItem({ id: crypto.randomUUID(), type: "image", url, fit: "cover",
+            addPickedItem({ id: crypto.randomUUID(), type: "image", url, fit: "cover",
               x: Math.round((W - w) / 2), y: Math.round((H - h) / 2), w, h });
             setImgMenuOpen(false);
           }}
@@ -29080,7 +29365,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
               return o;
             });
             const [first, ...rest] = parts;
-            addItem({ id: crypto.randomUUID(), type: "path", name: sh.name,
+            addPickedItem({ id: crypto.randomUUID(), type: "path", name: sh.name,
               ox: Math.round((W - side) / 2), oy: Math.round((H - side) / 2),
               nodes: scale(first.nodes), closed: first.closed,
               ...(rest.length ? { subs: rest.map(sp => ({ nodes: scale(sp.nodes), closed: sp.closed })) } : {}),
@@ -31468,7 +31753,7 @@ function InstagramDirectPanel({ theme, darkMode, de, card, secLabel, ig = null, 
   const state = ig;
   const thState = th;
 
-  if (!state && !thState) return null;
+  if (!state && !thState && !tt) return null;
 
   const num = (v) => v == null ? "–" : new Intl.NumberFormat(de ? "de-DE" : "en-US").format(v);
   const tile = (label, value) => (
