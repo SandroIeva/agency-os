@@ -1895,7 +1895,8 @@ let uiLanguage = "de";
 const uiDe = () => uiLanguage !== "en";
 
 function Dropdown({ value, onChange, options = [], placeholder = uiDe() ? "Auswählen" : "Select", theme, darkMode,
-  leadingIcon = null, minWidth = 200, align = "left", maxTriggerWidth, disabled = false, triggerStyle = {}, footer = null, maxHeight = 280 }) {
+  leadingIcon = null, minWidth = 200, align = "left", maxTriggerWidth, disabled = false, triggerStyle = {}, footer = null, maxHeight = 280,
+  chevronColor }) {
   const [open, setOpen] = useState(false);
   const sel = options.find(o => String(o.value) === String(value));
 
@@ -1949,7 +1950,7 @@ function Dropdown({ value, onChange, options = [], placeholder = uiDe() ? "Ausw�
             styling the list item carries — a menu that previews each option at
             its own font size ended up with a 26px trigger. */}
         <span style={{ minWidth: 0, marginRight: "auto", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sel ? (sel.triggerLabel ?? sel.label) : placeholder}</span>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}><path d="M6 9l6 6 6-6" stroke={chevronColor || "currentColor"} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </motion.div>
       <AnimatePresence>
         {open && (
@@ -62105,9 +62106,16 @@ export default function CircularMenu() {
                                             : (appLanguage === "de" ? `Abgerechnet über deinen ${p.sub}-Key.` : `Billed to your ${p.sub} key.`)}
                                       </div>
                                     </div>
+                                    {/* Dressed like the language field under Darstellung
+                                        (white, 10px corners, a hairline, a faint
+                                        chevron), still the shared Dropdown inside. */}
                                     <Dropdown value={chosen}
                                       onChange={(v) => setLlmModels(prev => { const n = { ...prev }; if (v) n[p.id] = v; else delete n[p.id]; return n; })}
-                                      options={opts} theme={theme} darkMode={darkMode} align="right" minWidth={230} maxHeight={320} />
+                                      options={opts} theme={theme} darkMode={darkMode} align="right" minWidth={230} maxHeight={320}
+                                      maxTriggerWidth={280} chevronColor={darkMode ? "#ffffff60" : "#1a1a2e60"}
+                                      triggerStyle={{ padding: "10px 9px 10px 12px", borderRadius: 10, minWidth: 150, gap: 10, fontWeight: 400,
+                                        background: darkMode ? "rgba(255,255,255,0.08)" : "#fff",
+                                        border: `1px solid ${theme.borderFaint}` }} />
                                   </div>
                                 );
                               })()}
