@@ -61523,7 +61523,7 @@ export default function CircularMenu() {
                       background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
-                      <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+                      <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
                         <path d="M3.362 10.11c0 .926-.756 1.681-1.681 1.681S0 11.036 0 10.111.756 8.43 1.68 8.43h1.682zm.846 0c0-.924.756-1.68 1.681-1.68s1.681.756 1.681 1.68v4.21c0 .924-.756 1.68-1.68 1.68a1.685 1.685 0 0 1-1.682-1.68z" fill="#E01E5A"/>
                         <path d="M5.89 3.362c-.926 0-1.682-.756-1.682-1.681S4.964 0 5.89 0s1.68.756 1.68 1.68v1.682zm0 .846c.924 0 1.68.756 1.68 1.681S6.814 7.57 5.89 7.57H1.68C.757 7.57 0 6.814 0 5.89c0-.926.756-1.682 1.68-1.682z" fill="#36C5F0"/>
                         <path d="M12.638 5.89c0-.926.755-1.682 1.68-1.682S16 4.964 16 5.889s-.756 1.681-1.68 1.681h-1.681zm-.848 0c0 .924-.755 1.68-1.68 1.68A1.685 1.685 0 0 1 8.43 5.89V1.68C8.43.757 9.186 0 10.11 0c.926 0 1.681.756 1.681 1.68z" fill="#2EB67D"/>
@@ -61632,7 +61632,7 @@ export default function CircularMenu() {
                       background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
-                      <NotionMark size={24} invert={darkMode} />
+                      <NotionMark size={22} invert={darkMode} />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Notion</div>
@@ -61684,7 +61684,7 @@ export default function CircularMenu() {
                     }}>
                       {/* The same mark the channel chips draw, from the one place it is
                           written down. */}
-                      <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true">
+                      <svg width="23" height="23" viewBox="0 0 24 24" aria-hidden="true">
                         {metaMark("instagram", theme.text)}
                       </svg>
                     </div>
@@ -61736,7 +61736,7 @@ export default function CircularMenu() {
                     }}>
                       {/* The same mark the channel chips draw, from the one place it is
                           written down. */}
-                      <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true">
+                      <svg width="23" height="23" viewBox="0 0 24 24" aria-hidden="true">
                         {metaMark("threads", theme.text)}
                       </svg>
                     </div>
@@ -61842,7 +61842,7 @@ export default function CircularMenu() {
                       {/* Figma's mark: five shapes, five colours. A brand logo
                           is content and not chrome, so it keeps its own colours
                           the way the Pinterest and Google marks beside it do. */}
-                      <svg width="14" height="21" viewBox="0 0 38 57" aria-hidden="true">
+                      <svg width="12" height="18" viewBox="0 0 38 57" aria-hidden="true">
                         <path fill="#1ABCFE" d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z"/>
                         <path fill="#0ACF83" d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z"/>
                         <path fill="#FF7262" d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z"/>
@@ -61896,7 +61896,7 @@ export default function CircularMenu() {
                       {/* Wikimedia's public-domain mark, not a hand drawing: a
                           brand people recognise at a glance is worth nothing if
                           it is merely reminiscent of itself. */}
-                      <svg width="20" height="20" viewBox="0 0 240 240" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 240 240" aria-hidden="true">
                         <defs>
                           <linearGradient id="i7TelegramRow" x1="120" y1="240" x2="120" y2="0" gradientUnits="userSpaceOnUse">
                             <stop offset="0" stopColor="#1d93d2" />
