@@ -37715,7 +37715,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
                             <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
                               background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
-                              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
+                              {it.mark || <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>}
                             </div>
                             <div style={{ minWidth: 0 }}>
                               <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{it.label}</div>
@@ -37766,7 +37766,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             onClick: () => { setDocsAddOpen(false); docsImport.current?.(); } },
                           { key: "notion", label: appLanguage === "de" ? "Aus Notion importieren" : "Import from Notion",
                             sub: appLanguage === "de" ? "Notion-Seiten als Dokumente übernehmen" : "Bring in Notion pages as documents",
-                            icon: <><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M9 16.5v-9l6 9v-9"/></>,
+                            mark: <NotionMark size={22} invert={darkMode} />,
                             onClick: () => { setDocsAddOpen(false); docsNotion.current?.(); } },
                           { key: "skills", label: appLanguage === "de" ? "Dokument mit Skills erstellen" : "Create document with Skills",
                             sub: appLanguage === "de" ? "Mit einem KI-Skill generieren" : "Generate with an AI skill",
@@ -37781,7 +37781,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
                             <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
                               background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
-                              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
+                              {it.mark || <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>}
                             </div>
                             <div style={{ minWidth: 0 }}>
                               <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{it.label}</div>
@@ -42312,15 +42312,14 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
   );
 }
 
-// Notion's own mark (Simple Icons, CC0), drawn once and used by the import
-// dialog and the Settings row. Monochrome by design: black on the white tile
-// the dialog gives it, the text colour on the neutral tile in Settings.
-const NOTION_MARK_PATH = "M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L17.86 1.968c-.42-.326-.981-.7-2.055-.607L3.01 2.295c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.841-.046.935-.56.935-1.167V6.354c0-.606-.233-.933-.748-.887l-15.177.887c-.56.047-.747.327-.747.933zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.748 0-.935-.234-1.495-.933l-4.577-7.186v6.952L12.21 19s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.139c-.093-.514.28-.887.747-.933zM1.936 1.035l13.31-.98c1.634-.14 2.055-.047 3.082.7l4.249 2.986c.7.513.934.653.934 1.213v16.378c0 1.026-.373 1.634-1.68 1.726l-15.458.934c-.98.047-1.448-.093-1.962-.747l-3.129-4.06c-.56-.747-.793-1.306-.793-1.96V2.667c0-.839.374-1.54 1.447-1.632z";
-function NotionMark({ size = 19, color = "#000" }) {
+// Notion's mark, from the one file every place that shows it reads
+// (public/notion-logo.svg): the import dialog, the Settings row and the entry
+// in the Documents menu. The file is black; on a dark ground it is inverted
+// rather than kept as a second file that could drift from the first.
+function NotionMark({ size = 22, invert = false }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true">
-      <path d={NOTION_MARK_PATH} />
-    </svg>
+    <img src="/notion-logo.svg" alt="" aria-hidden="true" width={size} height={size} draggable={false}
+      style={{ display: "block", width: size, height: size, filter: invert ? "invert(1)" : "none" }} />
   );
 }
 
@@ -42420,7 +42419,7 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
               Pinterest connect dialog uses. */}
           <div style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, display: "flex",
             alignItems: "center", justifyContent: "center", background: "#fff", border: `1px solid ${theme.borderFaint}` }}>
-            <NotionMark size={20} />
+            <NotionMark size={26} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? "Aus Notion importieren" : "Import from Notion"}</div>
@@ -61633,7 +61632,7 @@ export default function CircularMenu() {
                       background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
-                      <NotionMark size={18} color={theme.text} />
+                      <NotionMark size={24} invert={darkMode} />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Notion</div>
