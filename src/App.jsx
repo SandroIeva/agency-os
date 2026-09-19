@@ -42312,6 +42312,18 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
   );
 }
 
+// Notion's own mark (Simple Icons, CC0), drawn once and used by the import
+// dialog and the Settings row. Monochrome by design: black on the white tile
+// the dialog gives it, the text colour on the neutral tile in Settings.
+const NOTION_MARK_PATH = "M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L17.86 1.968c-.42-.326-.981-.7-2.055-.607L3.01 2.295c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.841-.046.935-.56.935-1.167V6.354c0-.606-.233-.933-.748-.887l-15.177.887c-.56.047-.747.327-.747.933zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.748 0-.935-.234-1.495-.933l-4.577-7.186v6.952L12.21 19s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.139c-.093-.514.28-.887.747-.933zM1.936 1.035l13.31-.98c1.634-.14 2.055-.047 3.082.7l4.249 2.986c.7.513.934.653.934 1.213v16.378c0 1.026-.373 1.634-1.68 1.726l-15.458.934c-.98.047-1.448-.093-1.962-.747l-3.129-4.06c-.56-.747-.793-1.306-.793-1.96V2.667c0-.839.374-1.54 1.447-1.632z";
+function NotionMark({ size = 19, color = "#000" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true">
+      <path d={NOTION_MARK_PATH} />
+    </svg>
+  );
+}
+
 // ── Import from Notion ──────────────────────────────────────────────────────
 // Lists the pages the workspace's Notion connection can see and hands the
 // chosen ones back to DocsTab, which imports them the same way it imports a
@@ -42381,7 +42393,9 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
 
   const btn = (primary) => ({
     padding: "10px 18px", borderRadius: 999, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: FONT,
-    ...(primary ? { background: "#15151c", border: "none", color: "#fff" } : { background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.text }),
+    // The app's own primary button, which turns light on a dark card; a
+    // fixed anthracite one all but vanished there.
+    ...(primary ? { ...primaryBtn(darkMode), border: "none" } : { background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.text }),
   });
   const needsConnect = status && (!status.connected || status.needs_reconnect);
 
@@ -42400,7 +42414,14 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
           border: `1px solid ${theme.borderFaint}`, borderRadius: 20, overflow: "hidden",
           boxShadow: "0 24px 64px rgba(0,0,0,0.32)",
         }}>
-        <div style={{ padding: "18px 22px 14px", borderBottom: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "flex-start", gap: 12 }}>
+        <div style={{ padding: "18px 22px 14px", borderBottom: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", gap: 12 }}>
+          {/* White in both themes, the ground the mark is drawn for; the
+              border keeps the tile visible on the light card. Same tile the
+              Pinterest connect dialog uses. */}
+          <div style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, display: "flex",
+            alignItems: "center", justifyContent: "center", background: "#fff", border: `1px solid ${theme.borderFaint}` }}>
+            <NotionMark size={20} />
+          </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? "Aus Notion importieren" : "Import from Notion"}</div>
             <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
@@ -61610,11 +61631,9 @@ export default function CircularMenu() {
                     <div style={{
                       width: 36, height: 36, borderRadius: 10, flexShrink: 0,
                       background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                      display: "flex", alignItems: "center", justifyContent: "center", color: theme.text,
+                      display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <rect x="4" y="3" width="16" height="18" rx="2.5" /><path d="M9 16.5v-9l6 9v-9" />
-                      </svg>
+                      <NotionMark size={18} color={theme.text} />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Notion</div>
