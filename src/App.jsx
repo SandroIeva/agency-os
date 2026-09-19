@@ -60547,7 +60547,7 @@ export default function CircularMenu() {
                         {appLanguage === "de" ? "Tour erneut ansehen" : "Replay the tour"}
                       </div>
                       <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
-                        {appLanguage === "de" ? "Die fünf Slides von der Einrichtung" : "The five slides from setup"}
+                        {appLanguage === "de" ? "Die fünf Slides und der Rundgang übers Dashboard" : "The five slides and the dashboard walkthrough"}
                       </div>
                     </div>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim}
