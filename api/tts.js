@@ -47,11 +47,11 @@ async function tourClips(apiKey, lang) {
   if (listError) throw new Error(`list: ${listError.message}`);
   const have = new Set((listed || []).map(f => `tour/${l}/${f.name}`));
   const urls = {};
-  await Promise.all(TOUR_STEPS.map(async (step) => {
+  const record = async (step) => {
     const path = tourClipPath(l, step);
     if (!have.has(path)) {
       try {
-        const mp3 = await fishMp3(apiKey, step[l], TOUR_VOICE, TOUR_SPEED);
+        const mp3 = await fishWithRetry(apiKey, step[l]);
         const { error } = await bucket.upload(path, mp3, {
           contentType: "audio/mpeg", upsert: true,
           // The name changes whenever the words do, so a file never changes
@@ -66,8 +66,30 @@ async function tourClips(apiKey, lang) {
       }
     }
     urls[step.key] = bucket.getPublicUrl(path).data.publicUrl;
+  };
+  // Two at a time, not eight. All eight at once is what the first tour ever
+  // did, and Fish turned three of them away: the sphere's own line among them,
+  // so the step where it introduces itself showed its words and said nothing.
+  const queue = [...TOUR_STEPS];
+  await Promise.all([0, 1].map(async () => {
+    while (queue.length) await record(queue.shift());
   }));
   return urls;
+}
+
+// A refusal for load (429) or a hiccup on their side (5xx) is worth a second
+// and third try; anything else is a real answer and is passed on.
+async function fishWithRetry(apiKey, text) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fishMp3(apiKey, text, TOUR_VOICE, TOUR_SPEED);
+    } catch (e) {
+      const status = Number((/^Fish (\d+)/.exec(e.message) || [])[1]);
+      const retry = !status || status === 429 || status >= 500;
+      if (!retry || attempt >= 2) throw e;
+      await new Promise(r => setTimeout(r, 1200 * (attempt + 1)));
+    }
+  }
 }
 
 export default async function handler(req, res) {

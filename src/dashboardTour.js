@@ -20,26 +20,29 @@ export const TOUR_BUCKET = "os-visuals";
 export const TOUR_VOICE = "b347db033a6549378b48d00acb0d06cd";
 export const TOUR_SPEED = 1.1;
 
-// In the order somebody would look around the screen. `target` names the
-// data-tour attribute on the element to light up; `null` means no element, the
-// card sits in the middle. Written in the sphere's own voice, because it is the
-// sphere that says them.
+// The name the tour's voice goes by: TOUR_VOICE is Selene in VOICE_OPTIONS
+// (App.jsx). The sphere introduces itself by it, never as "your AI", and
+// changing the voice above means changing this name too.
+export const TOUR_VOICE_NAME = "Selene";
+
+// In the order somebody would look around the screen, ending on the sphere:
+// the one talking introduces itself last, once everything else has a place.
+// `target` names the data-tour attribute on the element to light up; `null`
+// means no element, the card sits in the middle. Written in the sphere's own
+// voice, because it is the sphere that says them.
 export const TOUR_STEPS = [
   { key: "logo", target: "logo",
-    de: "Hallo, ich bin deine KI und zeige dir kurz, wo was ist. Unten links, das Logo: Ein Klick darauf öffnet die Einstellungen für Profil, Workspace und Team.",
-    en: "Hi, I'm your AI, and I'll quickly show you around. Bottom left, the logo: click it to open the settings for your profile, workspace and team." },
+    de: "Hallo! Ich zeige dir kurz, wo was ist. Unten links das Logo: Ein Klick darauf öffnet die Einstellungen für Profil, Workspace und Team.",
+    en: "Hi! Let me quickly show you around. Bottom left, the logo: click it to open the settings for your profile, workspace and team." },
   { key: "bell", target: "bell",
     de: "Oben rechts die Glocke. Hier landet alles, was dich betrifft: Aufgaben, Erwähnungen und Kommentare.",
     en: "Top right, the bell. Everything that concerns you lands here: tasks, mentions and comments." },
-  { key: "sphere", target: "sphere",
-    de: "Und das bin ich. Klick mich an und sprich einfach los. Ich kenne deine Marke und helfe dir überall in der App.",
-    en: "And this is me. Click me and just start talking. I know your brand and can help you anywhere in the app." },
   { key: "messenger", target: "messenger",
-    de: "Der Messenger. Hier schreibst du mit deinem Team.",
-    en: "The messenger. This is where you talk to your team." },
+    de: "Der Messenger. Hier schreibst du mit deinem Team. Und unter Agents warten deine KI-Experten: ein Marketing Guide, ein Trend Scout und ein Brand Strategist. Frag sie, wann immer du Rat brauchst.",
+    en: "The messenger. This is where you talk to your team. And under Agents, your AI experts are waiting: a marketing guide, a trend scout and a brand strategist. Ask them whenever you need advice." },
   { key: "home", target: "home",
-    de: "Das Raster bringt dich von überall zurück zu diesem Dashboard.",
-    en: "The grid brings you back to this dashboard from anywhere." },
+    de: "Der Home-Button bringt dich von überall zurück zu diesem Dashboard.",
+    en: "The home button brings you back to this dashboard from anywhere." },
   { key: "menu", target: "menu",
     de: "Das Menü. Von hier erreichst du alles: Brand, Erstellen, Projekte, Files und Plan.",
     en: "The menu. Everything is reachable from here: brand, create, projects, files and plan." },
@@ -47,8 +50,11 @@ export const TOUR_STEPS = [
     de: "In der Mitte steht, was als Nächstes ansteht. Am Anfang sind das deine ersten Schritte, danach deine Aufgaben und Termine.",
     en: "In the middle is what's up next. At first that's your first steps, later your tasks and appointments." },
   { key: "swipe", target: null,
-    de: "Noch ein Trick: Wisch nach oben, dann bin ich sofort da. Wisch nach unten, dann siehst du die Übersicht mit deinen Zahlen. Viel Spaß!",
-    en: "One more trick: swipe up and I'm right there. Swipe down for the overview with your numbers. Have fun!" },
+    de: "Noch ein Trick: Wisch nach oben, dann bin ich sofort da. Wisch nach unten, dann siehst du die Übersicht mit deinen Zahlen.",
+    en: "One more trick: swipe up and I'm right there. Swipe down for the overview with your numbers." },
+  { key: "sphere", target: "sphere",
+    de: `Und zum Schluss ich. Ich bin ${TOUR_VOICE_NAME}. Klick mich an und sprich einfach los. Ich kenne deine Marke und helfe dir überall in der App. Viel Spaß!`,
+    en: `And last of all, me. I'm ${TOUR_VOICE_NAME}. Click me and just start talking. I know your brand and can help you anywhere in the app. Have fun!` },
 ];
 
 // FNV-1a over the UTF-16 code units. Not for security, only so that the same

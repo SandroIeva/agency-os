@@ -2228,10 +2228,41 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
 // shares. Each element carries a `data-tour` attribute and is looked up by it,
 // every frame, so a layout change or an element still animating in never
 // leaves the light on an empty patch of screen.
-const TOUR_MUTED = "agencyos-tour-muted";
 // Rounded to a circle rather than to a box: the round buttons of the bar and
 // the sphere read wrong inside a square of light.
 const TOUR_ROUND = { sphere: true, messenger: true, home: true, menu: true, bell: true };
+// How far the light reaches past the element, and how soft its edge is. The
+// edge is a Gaussian blur of the hole, so it fades out over about twice
+// TOUR_FEATHER on either side of the line; the padding keeps the element
+// itself fully in the light while the fade happens around it.
+const TOUR_PAD = 16;
+const TOUR_FEATHER = 12;
+
+// The veil over everything but the element is a tint AND a blur of what lies
+// behind it, with a hole. SVG fills cannot blur what is behind them, so the
+// veil is a plain div with backdrop-filter and the hole is its mask: an SVG
+// image with the hole's edge run through a Gaussian blur, which is what makes
+// the light fade out instead of ending on a line.
+function tourMask(vw, vh, hole, dot) {
+  const n = (v) => Math.round(v * 10) / 10;
+  const shapes =
+    (hole.w > 0.5 ? `<rect x="${n(hole.x)}" y="${n(hole.y)}" width="${n(hole.w)}" height="${n(hole.h)}" rx="${n(hole.r)}" fill="#000"/>` : "")
+    + (dot ? `<circle cx="${n(dot.x)}" cy="${n(dot.y)}" r="${n(dot.r)}" fill="#000"/>` : "");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${vw}" height="${vh}" viewBox="0 0 ${vw} ${vh}">`
+    + `<defs><filter id="f" filterUnits="userSpaceOnUse" x="0" y="0" width="${vw}" height="${vh}"><feGaussianBlur stdDeviation="${TOUR_FEATHER}"/></filter>`
+    + `<mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="${vw}" height="${vh}"><rect width="${vw}" height="${vh}" fill="#fff"/><g filter="url(#f)">${shapes}</g></mask></defs>`
+    + `<rect width="${vw}" height="${vh}" fill="#000" mask="url(#m)"/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+// Where the light should be for a step: the element plus padding, a circle
+// for the round ones, and nothing at all (a point in the middle) for a step
+// without an element.
+function tourHole(t, key, vw, vh) {
+  if (!t) return { x: vw / 2, y: vh / 2, w: 0, h: 0, r: 0 };
+  return { x: t.x - TOUR_PAD, y: t.y - TOUR_PAD, w: t.w + TOUR_PAD * 2, h: t.h + TOUR_PAD * 2,
+    r: TOUR_ROUND[key] ? (Math.min(t.w, t.h) + TOUR_PAD * 2) / 2 : 24 };
+}
 
 // One request per language per page load, shared by every mount. StrictMode
 // mounts twice in development, and on the very first tour ever each of those
@@ -2251,22 +2282,10 @@ function loadTourClips(lang) {
   return tourClipRequests[lang];
 }
 
-function TourSpeakerIcon({ off }) {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M11 5 6 9H3v6h3l5 4V5Z" />
-      {off
-        ? <path d="M22 9l-6 6M16 9l6 6" />
-        : <><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" /></>}
-    </svg>
-  );
-}
-
-function DashboardTour({ appLanguage = "de", onClose }) {
+function DashboardTour({ appLanguage = "de", darkMode = false, onClose }) {
   const de = appLanguage === "de";
   const lang = de ? "de" : "en";
   const LAST = TOUR_STEPS.length - 1;
-  const maskId = "dtour" + useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const [idx, setIdx] = useState(0);
   // A moment's grace before the light comes on, so the dashboard has finished
   // arriving (the cards fade in one after another) and the first frame of the
@@ -2274,25 +2293,32 @@ function DashboardTour({ appLanguage = "de", onClose }) {
   const [shown, setShown] = useState(false);
   const [geo, setGeo] = useState(() => ({ vw: window.innerWidth, vh: window.innerHeight, target: null, sphere: null }));
   const [cardH, setCardH] = useState(0);
-  const [muted, setMuted] = useState(() => { try { return localStorage.getItem(TOUR_MUTED) === "1"; } catch (_) { return false; } });
-  // The browser refused to play before anybody clicked anything. Shown as
-  // "sound off", and a click on the speaker is the gesture it wants.
-  const [needsTap, setNeedsTap] = useState(false);
   const [talking, setTalking] = useState(false);
   const [clipsReady, setClipsReady] = useState(false);
   const idxRef = useRef(0);
-  const mutedRef = useRef(muted);
   const clipsRef = useRef(null);
   const audioRef = useRef(null);
   const cardRef = useRef(null);
+  const veilRef = useRef(null);
+  // The step whose line was not recorded yet when it came up; it is played as
+  // soon as the recording arrives, if the tour is still standing on it.
+  const waitingRef = useRef(-1);
+  // The browser refused to play before anybody had clicked. The next press
+  // anywhere on the tour is the gesture it wants.
+  const blockedRef = useRef(false);
   const step = TOUR_STEPS[idx];
 
   useEffect(() => { const t = setTimeout(() => setShown(true), 650); return () => clearTimeout(t); }, []);
 
-  // Where everything is, every frame. Cheap: two lookups and two rects, and
-  // state is only set when a number actually changed.
+  // Where everything is, every frame, and the light easing towards it. The
+  // mask is written straight onto the veil rather than through state: it
+  // changes every frame while the light travels, and nothing else on screen
+  // needs to hear about that.
   useEffect(() => {
     let raf = 0;
+    let cur = null;
+    let lastMask = "";
+    let lastT = performance.now();
     const box = (name) => {
       if (!name) return null;
       const el = document.querySelector(`[data-tour="${name}"]`);
@@ -2302,10 +2328,30 @@ function DashboardTour({ appLanguage = "de", onClose }) {
       return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
     };
     const same = (a, b) => (!a && !b) || (!!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h);
-    const tick = () => {
-      const next = { vw: window.innerWidth, vh: window.innerHeight,
-        target: box(TOUR_STEPS[idxRef.current].target), sphere: box("sphere") };
-      setGeo(prev => (prev.vw === next.vw && prev.vh === next.vh && same(prev.target, next.target) && same(prev.sphere, next.sphere)) ? prev : next);
+    const tick = (now = performance.now()) => {
+      const s = TOUR_STEPS[idxRef.current];
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const target = box(s.target);
+      const sphere = box("sphere");
+      setGeo(prev => (prev.vw === vw && prev.vh === vh && same(prev.target, target) && same(prev.sphere, sphere))
+        ? prev : { vw, vh, target, sphere });
+
+      const goal = tourHole(target, s.target, vw, vh);
+      // Frame-rate independent ease-out: the same glide at 60 and 120 Hz.
+      const k = cur ? 1 - Math.pow(0.8, Math.min(64, now - lastT) / 16.7) : 1;
+      lastT = now;
+      cur = cur || goal;
+      cur = { x: cur.x + (goal.x - cur.x) * k, y: cur.y + (goal.y - cur.y) * k,
+        w: cur.w + (goal.w - cur.w) * k, h: cur.h + (goal.h - cur.h) * k, r: cur.r + (goal.r - cur.r) * k };
+      // The sphere stays lit throughout: it is the one talking.
+      const dot = sphere && s.target !== "sphere"
+        ? { x: sphere.x + sphere.w / 2, y: sphere.y + sphere.h / 2, r: Math.min(sphere.w, sphere.h) / 2 + 6 } : null;
+      const mask = tourMask(vw, vh, cur, dot);
+      if (mask !== lastMask && veilRef.current) {
+        lastMask = mask;
+        veilRef.current.style.maskImage = mask;
+        veilRef.current.style.webkitMaskImage = mask;
+      }
       raf = requestAnimationFrame(tick);
     };
     tick();
@@ -2341,12 +2387,6 @@ function DashboardTour({ appLanguage = "de", onClose }) {
     };
   }, []);
 
-  useEffect(() => {
-    let alive = true;
-    loadTourClips(lang).then(c => { if (!alive) return; clipsRef.current = c; setClipsReady(true); });
-    return () => { alive = false; };
-  }, [lang]);
-
   // Called straight from the click that moved the tour on, not from an effect
   // afterwards, because a click is what allows a page to make a sound.
   const play = (i) => {
@@ -2354,11 +2394,37 @@ function DashboardTour({ appLanguage = "de", onClose }) {
     if (!a) return;
     a.pause();
     const url = clipsRef.current?.[TOUR_STEPS[i]?.key];
-    if (mutedRef.current || !url) return;
+    if (!url) { waitingRef.current = i; return; }
+    waitingRef.current = -1;
     a.src = url;
     const p = a.play();
-    if (p && p.catch) p.catch((e) => { if (e?.name === "NotAllowedError") setNeedsTap(true); });
+    if (p && p.catch) p.catch((e) => { if (e?.name === "NotAllowedError") blockedRef.current = true; });
   };
+  const playRef = useRef(play);
+  playRef.current = play;
+
+  // The recordings. If the server could not record every line, one more
+  // request fills in the missing ones, and a step already waiting for its line
+  // gets it then. The very first tour ever had exactly this: three lines
+  // missing, and the sphere showed its words without a sound.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      let c = await loadTourClips(lang);
+      if (!alive) return;
+      clipsRef.current = c;
+      setClipsReady(true);
+      if (TOUR_STEPS.every(s => c[s.key])) return;
+      delete tourClipRequests[lang];
+      await new Promise(r => setTimeout(r, 1500));
+      if (!alive) return;
+      c = await loadTourClips(lang);
+      if (!alive) return;
+      clipsRef.current = { ...clipsRef.current, ...c };
+      if (waitingRef.current >= 0 && waitingRef.current === idxRef.current) playRef.current(idxRef.current);
+    })();
+    return () => { alive = false; };
+  }, [lang]);
 
   // The first line, once the light is on AND the recordings are known. The
   // recordings take a few seconds only the very first time anybody takes the
@@ -2371,23 +2437,10 @@ function DashboardTour({ appLanguage = "de", onClose }) {
   const go = (i) => {
     if (i < 0) return;
     if (i > LAST) { finish(); return; }
+    blockedRef.current = false;
     idxRef.current = i;
     setIdx(i);
     play(i);
-  };
-  const toggleSound = () => {
-    if (muted || needsTap) {
-      mutedRef.current = false;
-      setMuted(false);
-      setNeedsTap(false);
-      try { localStorage.removeItem(TOUR_MUTED); } catch (_) {}
-      play(idxRef.current);
-    } else {
-      mutedRef.current = true;
-      setMuted(true);
-      try { localStorage.setItem(TOUR_MUTED, "1"); } catch (_) {}
-      audioRef.current?.pause();
-    }
   };
   const goRef = useRef(go);
   goRef.current = go;
@@ -2407,11 +2460,7 @@ function DashboardTour({ appLanguage = "de", onClose }) {
   }, []);
 
   const { vw, vh, target: t, sphere: sp } = geo;
-  const PAD = 8;
-  const hole = t
-    ? { x: t.x - PAD, y: t.y - PAD, w: t.w + PAD * 2, h: t.h + PAD * 2,
-        r: TOUR_ROUND[step.target] ? (Math.min(t.w, t.h) + PAD * 2) / 2 : 20 }
-    : { x: vw / 2, y: vh / 2, w: 0, h: 0, r: 0 };
+  const hole = tourHole(t, step.target, vw, vh);
   const sphereR = sp ? Math.min(sp.w, sp.h) / 2 + 4 : 0;
   const spX = sp ? sp.x + sp.w / 2 : 0;
   const spY = sp ? sp.y + sp.h / 2 : 0;
@@ -2420,7 +2469,7 @@ function DashboardTour({ appLanguage = "de", onClose }) {
   // bar at the bottom, below for the bell at the top, and in the middle when
   // there is no element at all.
   const W = Math.min(340, vw - 32);
-  const GAP = 16;
+  const GAP = 12;
   let left, top;
   if (t) {
     left = Math.min(Math.max(16, t.x + t.w / 2 - W / 2), vw - W - 16);
@@ -2434,7 +2483,6 @@ function DashboardTour({ appLanguage = "de", onClose }) {
     top = (vh - cardH) / 2;
   }
 
-  const spring = { type: "spring", stiffness: 170, damping: 26 };
   const ghostBtn = { padding: "9px 14px", borderRadius: 11, background: "transparent", border: "none",
     color: "rgba(255,255,255,0.55)", fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: "pointer" };
   const lineBtn = { ...ghostBtn, border: "1px solid rgba(255,255,255,0.16)", color: "rgba(255,255,255,0.8)" };
@@ -2446,27 +2494,23 @@ function DashboardTour({ appLanguage = "de", onClose }) {
       initial={{ opacity: 0 }} animate={{ opacity: shown ? 1 : 0 }} transition={{ duration: 0.35 }}
       style={{ position: "fixed", inset: 0, zIndex: 100005, pointerEvents: shown ? "auto" : "none" }}
       onWheel={(e) => e.stopPropagation()}
+      onPointerDown={() => { if (blockedRef.current) { blockedRef.current = false; play(idxRef.current); } }}
     >
-      <svg width={vw} height={vh} style={{ position: "absolute", inset: 0, display: "block" }}>
-        <defs>
-          <mask id={maskId}>
-            <rect width={vw} height={vh} fill="white" />
-            <motion.rect initial={false} fill="black" transition={spring}
-              animate={{ attrX: hole.x, attrY: hole.y, width: hole.w, height: hole.h, rx: hole.r }} />
-            {/* The sphere stays lit throughout: it is the one talking. */}
-            {sp && step.target !== "sphere" && <circle cx={spX} cy={spY} r={sphereR} fill="black" />}
-          </mask>
-        </defs>
-        <rect width={vw} height={vh} fill="rgba(6,6,10,0.68)" mask={`url(#${maskId})`} />
-        {t && (
-          <motion.rect initial={false} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" transition={spring}
-            animate={{ attrX: hole.x, attrY: hole.y, width: hole.w, height: hole.h, rx: hole.r }} />
-        )}
-        {/* Rings off the sphere while it speaks, so it is plain where the
-            voice is coming from. */}
+      {/* Light enough to still read the dashboard through it, in both themes;
+          the blur is what says where to look. */}
+      <div ref={veilRef} style={{
+        position: "absolute", inset: 0,
+        background: darkMode ? "rgba(0,0,0,0.38)" : "rgba(20,20,28,0.16)",
+        backdropFilter: "blur(7px)", WebkitBackdropFilter: "blur(7px)",
+        maskSize: "100% 100%", WebkitMaskSize: "100% 100%",
+        maskRepeat: "no-repeat", WebkitMaskRepeat: "no-repeat",
+      }} />
+      {/* Rings off the sphere while it speaks, so it is plain where the
+          voice is coming from. */}
+      <svg width={vw} height={vh} style={{ position: "absolute", inset: 0, display: "block", pointerEvents: "none" }}>
         {sp && talking && [0, 1].map(k => (
-          <motion.circle key={k} cx={spX} cy={spY} fill="none" stroke="#ffffff" strokeWidth="1.5"
-            initial={{ r: sphereR, opacity: 0.5 }} animate={{ r: sphereR + 22, opacity: 0 }}
+          <motion.circle key={k} cx={spX} cy={spY} fill="none" stroke={darkMode ? "#ffffff" : "#15151c"} strokeWidth="1.5"
+            initial={{ r: sphereR, opacity: 0.45 }} animate={{ r: sphereR + 22, opacity: 0 }}
             transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut", delay: k * 0.8 }} />
         ))}
       </svg>
@@ -2476,18 +2520,10 @@ function DashboardTour({ appLanguage = "de", onClose }) {
         visibility: cardH ? "visible" : "hidden",
         transition: "left .45s cubic-bezier(0.32,0.72,0,1), top .45s cubic-bezier(0.32,0.72,0,1)",
         background: "#15151c", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 18,
-        padding: 18, boxShadow: "0 24px 60px rgba(0,0,0,0.45)", fontFamily: FONT, color: "#fff",
+        padding: 18, boxShadow: "0 24px 60px rgba(0,0,0,0.3)", fontFamily: FONT, color: "#fff",
       }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <span style={{ fontSize: 11.5, color: "rgba(255,255,255,0.45)", fontVariantNumeric: "tabular-nums" }}>
-            {idx + 1} / {TOUR_STEPS.length}
-          </span>
-          <button onClick={toggleSound}
-            title={muted || needsTap ? (de ? "Ton an" : "Sound on") : (de ? "Ton aus" : "Sound off")}
-            style={{ width: 30, height: 30, borderRadius: 15, border: "none", cursor: "pointer",
-              background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <TourSpeakerIcon off={muted || needsTap} />
-          </button>
+        <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.45)", fontVariantNumeric: "tabular-nums", marginBottom: 10 }}>
+          {idx + 1} / {TOUR_STEPS.length}
         </div>
         <AnimatePresence mode="wait" initial={false}>
           <motion.div key={idx} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
@@ -63148,7 +63184,7 @@ export default function CircularMenu() {
       )}
 
       {dashTourOpen && currentView === "dashboard" && (
-        <DashboardTour appLanguage={appLanguage} onClose={() => setDashTourOpen(false)} />
+        <DashboardTour appLanguage={appLanguage} darkMode={darkMode} onClose={() => setDashTourOpen(false)} />
       )}
 
       {/* Bottom bar — in document fullscreen only the AI orb floats above the overlay */}
