@@ -52250,10 +52250,15 @@ export default function CircularMenu() {
   // accounts in ADMIN_USER_IDS, the same list that guards /?admin. The browser
   // cannot know that list, so it asks once per person, and only when Settings
   // is actually opened. Anything but a clear yes hides the row.
-  const [isOperator, setIsOperator] = useState(false);
+  //
+  // Local development always shows it: `npm run dev` serves no api/ functions,
+  // so the question has nobody to answer it there, and localhost is only ever
+  // the people building the app.
+  const [isOperator, setIsOperator] = useState(!!import.meta.env.DEV);
   const operatorAskedRef = useRef(null);
   useEffect(() => {
     const uid = session?.user?.id;
+    if (import.meta.env.DEV) return;
     if (!uid) { operatorAskedRef.current = null; setIsOperator(false); return; }
     if (currentView !== "settings" || operatorAskedRef.current === uid) return;
     operatorAskedRef.current = uid;
