@@ -398,8 +398,8 @@ const translations = {
   "brand.loading": { de: "Lädt…", en: "Loading…" },
 
   // Step 0
-  "brand.hero.title": { de: "Lass uns deine Brand definieren", en: "Let´s define your Brand" },
-  "brand.hero.subtitle": { de: "Wir gehen Schritt für Schritt durch, was wir wissen sollten. Du kannst überall überspringen, was du noch nicht hast.", en: "We´ll go through, step by step, everything we need to know —and you can skip anything you don´t have yet." },
+  "brand.hero.title": { de: "Lass uns deine Brand definieren", en: "Let’s define your brand" },
+  "brand.hero.subtitle": { de: "Ein paar Minuten jetzt, und alles, was i7OS danach für dich erstellt, trifft deine Marke: Posts, Designs, Texte. Was du noch nicht hast, überspringst du einfach.", en: "A few minutes now, and everything i7OS creates for you afterwards fits your brand: posts, designs, copy. Skip anything you don’t have yet." },
   "brand.hero.brandNameLabel": { de: "Brand-Name", en: "Brand name" },
   "brand.hero.brandNamePlaceholder": { de: "z.B. Agency OS", en: "e.g. Agency OS" },
 
@@ -408,7 +408,7 @@ const translations = {
   "brand.sources.subtitle": { de: "Vorhandene Quellen sparen dir später viel Zeit. Wir extrahieren Farben, Texte und Style automatisch.", en: "Existing sources save you a ton of time later. We extract colors, copy and style automatically." },
   "brand.sources.empty": { de: "Du hast noch nichts? Kein Problem. Überspring den nächsten Schritt mit „Weiter“.", en: "Got nothing yet? No problem. Skip the next step with “Next”." },
   "brand.sources.website": { de: "Website", en: "Website" },
-  "brand.sources.websiteHint": { de: "Wir ziehen später Texte, Farben und Tonalität automatisch", en: "We´ll extract copy, colors and tone of voice automatically" },
+  "brand.sources.websiteHint": { de: "Wir ziehen später Texte, Farben und Tonalität automatisch", en: "We’ll extract copy, colors and tone of voice automatically" },
   "brand.sources.figma": { de: "Figma / Design System", en: "Figma / Design System" },
   "brand.sources.figmaHint": { de: "Link zur Figma-Datei oder Library", en: "Link to Figma file or library" },
   "brand.sources.brandbook": { de: "Brand Book (PDF)", en: "Brand Book (PDF)" },
@@ -462,9 +462,9 @@ const translations = {
   "brand.voice.descPlaceholder": { de: "Was macht deine Brand besonders? Wer seid ihr, für wen, wofür?", en: "What makes your brand special? Who are you, for whom, what for?" },
 
   // Step 5 — Next steps checklist
-  "brand.nextSteps.title": { de: "Was kommt als Nächstes?", en: "What´s next?" },
-  "brand.nextSteps.subtitle": { de: "Markiere, was du schon hast und wo wir dich unterstützen sollen. Im nächsten Schritt arbeiten wir die offenen Punkte zusammen aus.", en: "Mark what you already have and where you need help. In the next step we´ll work the open ones out together." },
-  "brand.nextSteps.empty": { de: "Nichts markiert? Auch okay. Du kannst die Themen jederzeit später angehen.", en: "Nothing marked? That´s fine. You can pick these up anytime later." },
+  "brand.nextSteps.title": { de: "Was kommt als Nächstes?", en: "What’s next?" },
+  "brand.nextSteps.subtitle": { de: "Markiere, was du schon hast und wo wir dich unterstützen sollen. Im nächsten Schritt arbeiten wir die offenen Punkte zusammen aus.", en: "Mark what you already have and where you need help. In the next step we’ll work the open ones out together." },
+  "brand.nextSteps.empty": { de: "Nichts markiert? Auch okay. Du kannst die Themen jederzeit später angehen.", en: "Nothing marked? That’s fine. You can pick these up anytime later." },
   "brand.nextSteps.have": { de: "Habe ich", en: "I have it" },
   "brand.nextSteps.help": { de: "Brauche Hilfe", en: "Need help" },
   "brand.nextSteps.skip": { de: "Nicht relevant", en: "Not relevant" },
@@ -482,7 +482,7 @@ const translations = {
   "brand.nextSteps.voiceHint": { de: "Wie klingt deine Brand in Texten?", en: "How does your brand sound in writing?" },
 
   // Step 6 — Recap
-  "brand.recap.title": { de: "Sieht gut aus, oder?", en: "Looks good, doesn´t it?" },
+  "brand.recap.title": { de: "Sieht gut aus, oder?", en: "Looks good, doesn’t it?" },
   "brand.recap.subtitle": { de: "Du kannst alles später jederzeit anpassen und fehlende Stücke ergänzen.", en: "You can adjust everything later anytime, and add missing pieces." },
   "brand.recap.logoVariants": { de: "Logo-Varianten", en: "Logo variants" },
   "brand.recap.website": { de: "Website", en: "Website" },
