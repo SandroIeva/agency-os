@@ -3505,7 +3505,8 @@ function ChatBubble({ message, theme, darkMode, appLanguage, onUploadStorage, on
   );
 }
 
-function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerNewTask, onNewTaskTriggered, userOrg, orgMembers, createNotification, myProjectNames = new Set() }) {
+function KanbanBoard({ onBack, session, theme, darkMode, t, appLanguage = "de", openTaskId, triggerNewTask, onNewTaskTriggered, userOrg, orgMembers, createNotification, myProjectNames = new Set() }) {
+  const de = appLanguage === "de";
   const [tasks, setTasks] = useState([]);
   const [teamMembers, setTeamMembers] = useState({});
   const [filter, setFilter] = useState("all");
@@ -3825,10 +3826,10 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
   // Speech-to-text dictation for description
   const startDictation = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { alert("Spracherkennung wird in diesem Browser nicht unterstützt. Bitte verwende Chrome."); return; }
+    if (!SpeechRecognition) { alert(de ? "Spracherkennung wird in diesem Browser nicht unterstützt. Bitte verwende Chrome." : "Speech recognition is not supported in this browser. Please use Chrome."); return; }
     if (isRecording) { stopDictation(); return; }
     const recognition = new SpeechRecognition();
-    recognition.lang = "de-DE";
+    recognition.lang = de ? "de-DE" : "en-US";
     recognition.continuous = true;
     recognition.interimResults = true;
     let finalTranscript = taskForm.description || "";
@@ -4007,7 +4008,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
     const { data, error } = await supabase.from("tasks").insert(taskData).select().single();
     console.log("Task create result:", { data, error, taskData });
     if (error) {
-      alert("Fehler: " + error.message);
+      alert((de ? "Fehler: " : "Error: ") + error.message);
       return;
     }
     if (data) {
@@ -4148,7 +4149,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "16px 16px 16px 22px", borderBottom: `1px solid ${theme.borderFaint}` }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                   <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap" }}>
-                    {editingTask ? "Aufgabe bearbeiten" : t("task.newTask")}
+                    {editingTask ? (de ? "Aufgabe bearbeiten" : "Edit task") : t("task.newTask")}
                   </span>
                   {editingTask && (
                     <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", padding: "3px 9px", borderRadius: 999, whiteSpace: "nowrap" }}>
@@ -4226,7 +4227,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                             ? <img src={m.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: 18, height: 18, borderRadius: "50%" }} />
                             : <span style={{ width: 18, height: 18, borderRadius: "50%", background: (m.avatar_color || "#64748B") + "30", color: m.avatar_color || "#64748B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 600 }}>{m.initials}</span>,
                         }))}
-                        placeholder="Zuweisen"
+                        placeholder={de ? "Zuweisen" : "Assign"}
                         leadingIcon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke={theme.textDim} strokeWidth="1.6"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke={theme.textDim} strokeWidth="1.6" strokeLinecap="round"/></svg>}
                         theme={theme} darkMode={darkMode} minWidth={200} maxTriggerWidth={170}
                         triggerStyle={{ height: 36, padding: "0 11px 0 13px" }}
@@ -4245,7 +4246,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                           }}
                         >
                           <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.6"/><path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                          {taskForm.due_date ? new Date(taskForm.due_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" }) : "Frist"}
+                          {taskForm.due_date ? new Date(taskForm.due_date).toLocaleDateString(de ? "de-DE" : "en-US", { day: "2-digit", month: "short", year: "numeric" }) : (de ? "Frist" : "Due date")}
                           {taskForm.due_date ? (
                             <span onClick={e => { e.stopPropagation(); setTaskForm(prev => ({ ...prev, due_date: "" })); }} style={{ cursor: "pointer", opacity: 0.6, display: "flex" }}>
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -4308,7 +4309,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                             }}
                           >
                             <span style={{ width: 6, height: 6, borderRadius: "50%", background: on ? activeDot : theme.textFaint }} />
-                            {p === "high" ? "Hoch" : p === "medium" ? "Mittel" : "Niedrig"}
+                            {p === "high" ? (de ? "Hoch" : "High") : p === "medium" ? (de ? "Mittel" : "Medium") : (de ? "Niedrig" : "Low")}
                           </motion.div>
                         );
                       })}
@@ -4344,7 +4345,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       onBlur={() => setEditingDesc(false)}
                       value={taskForm.description}
                       onChange={e => { if (isTaskOwner) setTaskForm(p => ({ ...p, description: e.target.value })); }}
-                      placeholder={isTaskOwner ? "Beschreibung hinzufügen..." : "Keine Beschreibung"}
+                      placeholder={isTaskOwner ? (de ? "Beschreibung hinzufügen..." : "Add a description...") : (de ? "Keine Beschreibung" : "No description")}
                       readOnly={!isTaskOwner}
                       spellCheck={true}
                       style={{
@@ -4360,7 +4361,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                     {/* Dictation mic — round bubble in the textarea's bottom-right corner */}
                     {isTaskOwner && (
                       <motion.div whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.9 }} onClick={startDictation}
-                        title={isRecording ? "Aufnahme stoppen" : "Diktieren"}
+                        title={isRecording ? (de ? "Aufnahme stoppen" : "Stop recording") : (de ? "Diktieren" : "Dictate")}
                         style={{
                           position: "absolute", bottom: 10, right: 10, width: 30, height: 30, borderRadius: "50%",
                           display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
@@ -4378,7 +4379,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                     {isRecording && (
                       <div style={{ position: "absolute", bottom: 13, left: 14, display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, fontFamily: FONT, color: "#EF4444" }}>
                         <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#EF4444", animation: "pulse 1.2s ease-in-out infinite" }} />
-                        Aufnahme läuft…
+                        {de ? "Aufnahme läuft…" : "Recording…"}
                       </div>
                     )}
                   </div>
@@ -4388,7 +4389,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                     <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.6"/><path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        Checkliste {taskChecklist.length > 0 && (<span style={{ fontWeight: 400, color: theme.textFaint }}>({taskChecklist.filter(i => i.checked).length}/{taskChecklist.length})</span>)}
+                        {de ? "Checkliste" : "Checklist"} {taskChecklist.length > 0 && (<span style={{ fontWeight: 400, color: theme.textFaint }}>({taskChecklist.filter(i => i.checked).length}/{taskChecklist.length})</span>)}
                       </span>
                     </div>
                     {/* Progress bar */}
@@ -4479,7 +4480,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                               if (newChecklistText.trim()) addChecklistItem();
                             }
                           }}
-                          placeholder="Neuer Punkt..."
+                          placeholder={de ? "Neuer Punkt..." : "New item..."}
                           style={{
                             flex: 1, background: "transparent", border: "none", borderBottom: `1px solid transparent`,
                             padding: "4px 0", fontSize: 14, fontFamily: FONT,
@@ -4498,17 +4499,17 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M13.5 6L5.5 14c-1.5 1.5-1.5 4 0 5.5s4 1.5 5.5 0l10-10c1-1 1-3 0-4s-3-1-4 0l-10 10c-.5.5-.5 1.5 0 2s1.5.5 2 0l8-8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                          Anhänge {taskAttachments.length > 0 && `(${taskAttachments.length})`}
+                          {de ? "Anhänge" : "Attachments"} {taskAttachments.length > 0 && `(${taskAttachments.length})`}
                         </span>
                         <motion.span whileTap={{ scale: 0.95 }}
                           onClick={() => setShowAttachInput(!showAttachInput)}
                           style={{ fontSize: 14, fontWeight: 400, color: theme.accent, cursor: "pointer" }}
-                        >+ Link hinzufügen</motion.span>
+                        >{de ? "+ Link hinzufügen" : "+ Add link"}</motion.span>
                       </div>
                       {showAttachInput && (
                         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
                           <input value={attachmentUrl} onChange={e => setAttachmentUrl(e.target.value)}
-                            placeholder="URL einfügen..." autoFocus
+                            placeholder={de ? "URL einfügen..." : "Paste URL..."} autoFocus
                             onKeyDown={e => { if (e.key === "Enter") addAttachment(); }}
                             style={{
                               flex: 1, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
@@ -4574,7 +4575,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                           color: taskForm.title.trim() ? "#fff" : theme.textFaint,
                           transition: "background 0.18s ease",
                         }}
-                      >{editingTask ? "Speichern" : t("task.create")}</motion.button>
+                      >{editingTask ? (de ? "Speichern" : "Save") : t("task.create")}</motion.button>
                     </div>
                   </div>
                 </div>
@@ -4587,13 +4588,13 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                   }}>
                     <div style={{ padding: "14px 16px", borderBottom: `1px solid ${theme.border}`, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, display: "flex", alignItems: "center", gap: 6 }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 12c0 5-4.5 9-9.9 9a10.5 10.5 0 01-4.2-.9L3 21l.9-3.9A9.3 9.3 0 013 12c0-5 4.5-9 9-9s9 4 9 9z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      Kommentare {taskComments.length > 0 && <span style={{ color: theme.textFaint, fontWeight: 400 }}>({taskComments.length})</span>}
+                      {de ? "Kommentare" : "Comments"} {taskComments.length > 0 && <span style={{ color: theme.textFaint, fontWeight: 400 }}>({taskComments.length})</span>}
                     </div>
                     {/* Comment list */}
                     <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
                       {taskComments.length === 0 && (
                         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
-                          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>Noch keine Kommentare</div>
+                          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>{de ? "Noch keine Kommentare" : "No comments yet"}</div>
                         </div>
                       )}
                       {taskComments.map(c => {
@@ -4630,7 +4631,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                         <input
                           value={commentText}
                           onChange={e => setCommentText(e.target.value)}
-                          placeholder="Kommentar schreiben..."
+                          placeholder={de ? "Kommentar schreiben..." : "Write a comment..."}
                           onKeyDown={e => { if (e.key === "Enter" && commentText.trim()) addComment(); }}
                           style={{
                             flex: 1, minWidth: 0, background: "none", border: "none", outline: "none",
@@ -4785,7 +4786,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
               }}
             >
               {logo && <img src={logo} alt="" style={{ width: 17, height: 17, borderRadius: "50%", objectFit: "cover" }} />}
-              {p === "all" ? "All projects" : p}
+              {p === "all" ? (de ? "Alle Projekte" : "All projects") : p}
             </motion.button>
           );
         })}
@@ -4826,7 +4827,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                   <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-                Alle
+                {de ? "Alle" : "All"}
               </>
             )}
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ marginLeft: -2 }}>
@@ -4864,7 +4865,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                     }}
                     className={memberFilter === "all" ? "" : "hover-row"}
                   >
-                    <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontFamily: FONT, fontWeight: memberFilter === "all" ? 600 : 500, color: theme.text }}>Alle Mitglieder</div>
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontFamily: FONT, fontWeight: memberFilter === "all" ? 600 : 500, color: theme.text }}>{de ? "Alle Mitglieder" : "All members"}</div>
                     {memberFilter === "all" && (
                       <span style={{ width: 18, height: 18, borderRadius: "50%", background: "#15151c", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -5007,7 +5008,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                                   whileHover={{ scale: 1.08 }}
                                   whileTap={{ scale: 0.9 }}
                                   onClick={(e) => { e.stopPropagation(); requestDelete(task.id); }}
-                                  title="Löschen"
+                                  title={de ? "Löschen" : "Delete"}
                                   style={{
                                     cursor: "pointer", width: 20, height: 20, borderRadius: 7, flexShrink: 0,
                                     background: darkMode ? "rgba(255,255,255,0.09)" : "#fff",
@@ -5044,7 +5045,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                                     {task.project_name && <span style={{ fontWeight: 600, color: theme.textSub, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{task.project_name}</span>}
                                     {task.project_name && dateStr && <span style={{ opacity: 0.4, flexShrink: 0 }}>·</span>}
                                     {dateStr && <span style={{ flexShrink: 0 }}>{dateStr}</span>}
-                                    {task.priority === "high" && <div title="Hohe Priorität" style={{ width: 6, height: 6, borderRadius: "50%", background: priColors.high, flexShrink: 0, marginLeft: 1 }} />}
+                                    {task.priority === "high" && <div title={de ? "Hohe Priorität" : "High priority"} style={{ width: 6, height: 6, borderRadius: "50%", background: priColors.high, flexShrink: 0, marginLeft: 1 }} />}
                                   </div>
                                 </div>
                               );
@@ -5064,7 +5065,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                           minHeight: 80, transition: "all 0.2s",
                         }}
                       >
-                        {dragOverCol === col.key ? "Hier ablegen" : "Drop here"}
+                        {de ? "Hier ablegen" : "Drop here"}
                       </div>
                     )}
                   </>
@@ -5117,10 +5118,10 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                 </svg>
               </div>
               <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>
-                Task löschen?
+                {de ? "Task löschen?" : "Delete task?"}
               </div>
               <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 24, lineHeight: 1.5 }}>
-                „{confirmDelete.title}" wird unwiderruflich gelöscht.
+                {de ? <>„{confirmDelete.title}“ wird unwiderruflich gelöscht.</> : <>“{confirmDelete.title}” will be permanently deleted.</>}
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <motion.button
@@ -5169,7 +5170,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-                  {editingProject ? "Projekt bearbeiten" : "Projekte verwalten"}
+                  {editingProject ? (de ? "Projekt bearbeiten" : "Edit project") : (de ? "Projekte verwalten" : "Manage projects")}
                 </div>
                 <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => { setShowProjectEditor(false); setEditingProject(null); setLogoPreview(null); }}
                   style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 16 }}
@@ -5198,7 +5199,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                         <motion.div whileTap={{ scale: 0.9 }}
                           onClick={() => { setEditingProject(p); setProjectForm({ name: p.name, logo_url: p.logo_url || "", color: p.color || "#8B7AFF" }); setLogoPreview(p.logo_url || null); }}
                           style={{ padding: "4px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.textDim, border: `1px solid ${theme.borderFaint}` }}
-                        >Bearbeiten</motion.div>
+                        >{de ? "Bearbeiten" : "Edit"}</motion.div>
                       )}
                       {canManageProjectRow(p) && (
                         <motion.div whileTap={{ scale: 0.9 }}
@@ -5210,7 +5211,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                   ))}
                   {projects.length === 0 && (
                     <div style={{ textAlign: "center", padding: "24px 0", fontSize: 13, fontFamily: FONT, color: theme.textFaint }}>
-                      Noch keine Projekte angelegt
+                      {de ? "Noch keine Projekte angelegt" : "No projects yet"}
                     </div>
                   )}
                 </div>
@@ -5220,12 +5221,12 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
               {(editingProject || canCreateProjectsK) && (
               <div style={{ display: "flex", flexDirection: "column", gap: 12, borderTop: editingProject ? "none" : `1px solid ${theme.borderFaint}`, paddingTop: editingProject ? 0 : 16 }}>
                 <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}>
-                  {editingProject ? "" : "Neues Projekt"}
+                  {editingProject ? "" : (de ? "Neues Projekt" : "New project")}
                 </div>
                 <input
                   value={projectForm.name}
                   onChange={e => setProjectForm(p => ({ ...p, name: e.target.value }))}
-                  placeholder="Projektname..."
+                  placeholder={de ? "Projektname..." : "Project name..."}
                   autoFocus
                   style={{
                     background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`,
@@ -5275,7 +5276,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       Logo
                     </div>
                     <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 2 }}>
-                      {logoUploading ? "Wird hochgeladen..." : (logoPreview || projectForm.logo_url) ? "Bild hochgeladen" : "Bild hochladen (PNG, JPG)"}
+                      {logoUploading ? (de ? "Wird hochgeladen..." : "Uploading...") : (logoPreview || projectForm.logo_url) ? (de ? "Bild hochgeladen" : "Image uploaded") : (de ? "Bild hochladen (PNG, JPG)" : "Upload image (PNG, JPG)")}
                     </div>
                     {!(logoPreview || projectForm.logo_url) && (
                       <motion.button whileTap={{ scale: 0.97 }}
@@ -5287,7 +5288,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                           border: `1px solid ${theme.borderFaint}`,
                           fontSize: 11, fontFamily: FONT, color: theme.textSub,
                         }}
-                      >Datei auswählen</motion.button>
+                      >{de ? "Datei auswählen" : "Choose file"}</motion.button>
                     )}
                   </div>
                 </div>
@@ -5308,7 +5309,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                           background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`,
                           fontSize: 13, fontFamily: FONT, color: theme.textSub,
                         }}
-                      >Zurück</motion.button>
+                      >{de ? "Zurück" : "Back"}</motion.button>
                     )}
                   </div>
                   <motion.button whileTap={{ scale: 0.97 }}
@@ -5320,7 +5321,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, openTaskId, triggerN
                       fontSize: 13, fontFamily: FONT, fontWeight: 500,
                       color: projectForm.name.trim() ? theme.accent : theme.textFaint,
                     }}
-                  >{editingProject ? "Speichern" : "Erstellen"}</motion.button>
+                  >{editingProject ? (de ? "Speichern" : "Save") : (de ? "Erstellen" : "Create")}</motion.button>
                 </div>
               </div>
               )}
@@ -5351,6 +5352,11 @@ const TL_STATUS_LABEL = {
   active:  "Aktiv",
   done:    "Erledigt",
 };
+const TL_STATUS_LABEL_EN = {
+  planned: "Planned",
+  active:  "Active",
+  done:    "Done",
+};
 
 // ── Date helpers (no external lib) ─────────────────────
 function tlAddDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
@@ -5371,14 +5377,19 @@ function tlStartOfWeek(d) {
   return tlAddDays(x, diff);
 }
 function tlStartOfMonth(d) { const r = tlStartOfDay(d); r.setDate(1); return r; }
-function tlMonthLabel(d, short = false) {
-  const months = short
-    ? ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"]
-    : ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+function tlMonthLabel(d, short = false, de = true) {
+  const months = de
+    ? (short
+      ? ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"]
+      : ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"])
+    : (short
+      ? ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+      : ["January","February","March","April","May","June","July","August","September","October","November","December"]);
   return `${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMode, t, openTaskInKanban }) {
+function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMode, t, appLanguage = "de", openTaskInKanban }) {
+  const de = appLanguage === "de";
   // Admins see all projects; everyone else only the projects they belong to.
   // Kept as a primitive so the data-load effect can depend on it without churn.
   const amTlAdmin = useMemo(() => (orgMembers || []).find(m => m.user_id === session?.user?.id)?.role === "admin", [orgMembers, session?.user?.id]);
@@ -5509,7 +5520,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
         }
       } catch (e) {
         console.error("timeline load failed", e);
-        setError(e.message || "Fehler beim Laden");
+        setError(e.message || (de ? "Fehler beim Laden" : "Could not load"));
       } finally {
         if (alive) setLoading(false);
       }
@@ -5774,7 +5785,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
     const { data, error: e } = await supabase.from("timeline_items").insert(row).select().single();
     if (e) {
       console.error("[Timeline] insert failed", e);
-      setError(`Sprint konnte nicht erstellt werden: ${e.message || "Unbekannter Fehler"}`);
+      setError(de ? `Sprint konnte nicht erstellt werden: ${e.message || "Unbekannter Fehler"}` : `Could not create the sprint: ${e.message || "unknown error"}`);
       setTimeout(() => setError(null), 4000);
       return null;
     }
@@ -5955,10 +5966,10 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
 
   const visibleProjects = projects.filter(p => visibleProjectIds === null || visibleProjectIds.includes(p.id));
   const activeFilterLabel = visibleProjectIds === null
-    ? "Alle Projekte"
+    ? (de ? "Alle Projekte" : "All projects")
     : visibleProjectIds.length === 1
-      ? projectById[visibleProjectIds[0]]?.name || "1 Projekt"
-      : `${visibleProjectIds.length} Projekte`;
+      ? projectById[visibleProjectIds[0]]?.name || (de ? "1 Projekt" : "1 project")
+      : (de ? `${visibleProjectIds.length} Projekte` : `${visibleProjectIds.length} projects`);
 
   const rowHeight = 68; // height of one lane (bigger card)
   const bandPadding = 22; // bottom padding inside band
@@ -6026,20 +6037,20 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{userOrg?.name || "Workspace"}</div>
-              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 1 }}>Team-Workspace</div>
+              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 1 }}>{de ? "Team-Workspace" : "Team workspace"}</div>
             </div>
           </div>
         </div>
 
         {/* Quick filters */}
         <div style={{ padding: "12px 10px" }}>
-          <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 2, textTransform: "uppercase", padding: "4px 10px 8px", fontWeight: 600 }}>Ansicht</div>
+          <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 2, textTransform: "uppercase", padding: "4px 10px 8px", fontWeight: 600 }}>{de ? "Ansicht" : "View"}</div>
           <motion.div onClick={() => { setVisibleProjectIds(null); setShowNoProject(true); }} whileTap={{ scale: 0.99 }}
             style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 10px", borderRadius: 8, cursor: "pointer", background: visibleProjectIds === null && showNoProject ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") : "transparent" }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-              <span style={{ fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Alle Items</span>
+              <span style={{ fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{de ? "Alle Items" : "All items"}</span>
             </div>
             <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, fontWeight: 600 }}>{items.length}</span>
           </motion.div>
@@ -6047,7 +6058,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
 
         {/* Projects — checkbox to toggle visibility per project */}
         <div style={{ padding: "0 10px 12px" }}>
-          <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 2, textTransform: "uppercase", padding: "8px 10px 8px", fontWeight: 600 }}>Projekte</div>
+          <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, letterSpacing: 2, textTransform: "uppercase", padding: "8px 10px 8px", fontWeight: 600 }}>{de ? "Projekte" : "Projects"}</div>
           {projects.map(p => {
             const count = itemsByProject[p.id] || 0;
             const isChecked = visibleProjectIds === null || visibleProjectIds.includes(p.id);
@@ -6100,7 +6111,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             );
           })}
           {projects.length === 0 && (
-            <div style={{ padding: "8px 12px", fontSize: 11, fontFamily: FONT, color: theme.textFaint, fontStyle: "italic" }}>Noch keine Projekte</div>
+            <div style={{ padding: "8px 12px", fontSize: 11, fontFamily: FONT, color: theme.textFaint, fontStyle: "italic" }}>{de ? "Noch keine Projekte" : "No projects yet"}</div>
           )}
         </div>
 
@@ -6113,7 +6124,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ fontSize: 22, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.3 }}>Timeline</div>
           <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginLeft: 4 }}>
-            {tlMonthLabel(centerDate)}
+            {tlMonthLabel(centerDate, false, de)}
           </div>
         </div>
 
@@ -6152,7 +6163,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                       <span style={{ width: 14, height: 14, borderRadius: 4, border: `1.5px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "center", background: visibleProjectIds === null ? theme.accent : "transparent" }}>
                         {visibleProjectIds === null && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                       </span>
-                      <span style={{ fontWeight: 600 }}>Alle Projekte</span>
+                      <span style={{ fontWeight: 600 }}>{de ? "Alle Projekte" : "All projects"}</span>
                     </div>
                     {projects.map(p => {
                       const active = visibleProjectIds === null || visibleProjectIds.includes(p.id);
@@ -6178,7 +6189,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                       <span style={{ width: 14, height: 14, borderRadius: 4, border: `1.5px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", justifyContent: "center", background: showNoProject ? "#15151c" : "transparent" }}>
                         {showNoProject && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                       </span>
-                      <span style={{ fontStyle: "italic" }}>Ohne Projekt</span>
+                      <span style={{ fontStyle: "italic" }}>{de ? "Ohne Projekt" : "No project"}</span>
                     </div>
                   </motion.div>
                 </>
@@ -6196,8 +6207,8 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           {/* Zoom switcher */}
           <div style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: 3, borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}` }}>
             {[
-              { id: "week",    label: "Woche" },
-              { id: "month",   label: "Monat" },
+              { id: "week",    label: de ? "Woche" : "Week" },
+              { id: "month",   label: de ? "Monat" : "Month" },
             ].map(z => {
               const active = zoom === z.id;
               return (
@@ -6219,7 +6230,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             style={{ padding: "6px 13px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(21,21,28,0.07)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(21,21,28,0.14)"}`, fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
-            Heute
+            {de ? "Heute" : "Today"}
           </motion.div>
           {/* Settings cog */}
           <div style={{ position: "relative" }}>
@@ -6235,8 +6246,8 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                   <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}
                     style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 10, minWidth: 240, background: theme.cardBg, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, boxShadow: "0 14px 40px rgba(0,0,0,0.25)", padding: 14 }}
                   >
-                    <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>Timeline-Einstellungen</div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 10 }}>Sprint-Länge (Standard für neue Sprints)</div>
+                    <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{de ? "Timeline-Einstellungen" : "Timeline settings"}</div>
+                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 10 }}>{de ? "Sprint-Länge (Standard für neue Sprints)" : "Sprint length (default for new sprints)"}</div>
                     <div style={{ display: "flex", gap: 4, padding: 3, borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}` }}>
                       {[
                         { v: 7,  label: "1 Wo" },
@@ -6261,9 +6272,9 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                       <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${showHolidays ? "#15151c" : theme.borderFaint}`, background: showHolidays ? "#15151c" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s" }}>
                         {showHolidays && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                       </div>
-                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.text, flex: 1 }}>Feiertage anzeigen</div>
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.text, flex: 1 }}>{de ? "Feiertage anzeigen" : "Show holidays"}</div>
                     </motion.div>
-                    <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 4, marginLeft: 26 }}>Deutsche Feiertage werden farblich markiert.</div>
+                    <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 4, marginLeft: 26 }}>{de ? "Deutsche Feiertage werden farblich markiert." : "German public holidays are highlighted."}</div>
                   </motion.div>
                 </>
               )}
@@ -6276,7 +6287,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             style={{ padding: "8px 17px 9px 11px", borderRadius: 999, background: "#23232b", border: "none", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Neuer Sprint
+            {de ? "Neuer Sprint" : "New sprint"}
           </motion.button>
           )}
         </div>
@@ -6285,7 +6296,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
       {/* Scrollable timeline body */}
       <div ref={scrollRef} onScroll={handleTlScroll} style={{ flex: 1, overflow: "auto", marginTop: 14, padding: "0 28px 32px" }}>
         {loading ? (
-          <div style={{ padding: 60, textAlign: "center", color: theme.textDim, fontFamily: FONT, fontSize: 13 }}>Lädt…</div>
+          <div style={{ padding: 60, textAlign: "center", color: theme.textDim, fontFamily: FONT, fontSize: 13 }}>{de ? "Lädt…" : "Loading…"}</div>
         ) : (
           <div style={{ position: "relative", width: totalWidth, minHeight: gridHeight }}>
             {/* Axis header */}
@@ -6305,7 +6316,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                 });
                 return months.map(m => (
                   <div key={m.key} style={{ position: "absolute", left: m.left, top: 6, width: m.width, padding: "4px 8px", fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1, fontWeight: 600 }}>
-                    {tlMonthLabel(m.d, true).toUpperCase()}
+                    {tlMonthLabel(m.d, true, de).toUpperCase()}
                   </div>
                 ));
               })()}
@@ -6316,7 +6327,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                 return (
                   <div key={i} style={{ position: "absolute", left: c.left, top: 26, width: c.width, height: headerHeight - 26, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", borderLeft: `1px solid ${theme.borderFaint}`, opacity: isWeekend ? 0.55 : 1 }}>
                     <div style={{ fontSize: 9, fontFamily: FONT, color: isToday ? theme.accent : theme.textFaint, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                      {["S","M","D","M","D","F","S"][c.d.getDay()]}
+                      {(de ? ["S","M","D","M","D","F","S"] : ["S","M","T","W","T","F","S"])[c.d.getDay()]}
                     </div>
                     <div style={{ fontSize: 12, fontFamily: FONT, color: isToday ? theme.accent : theme.textSub, fontWeight: isToday ? 700 : 500 }}>
                       {c.d.getDate()}
@@ -6327,7 +6338,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
               {/* Month/Quarter cells */}
               {(zoom === "month" || zoom === "quarter") && axis.map((c, i) => (
                 <div key={i} style={{ position: "absolute", left: c.left, top: 0, width: c.width, height: headerHeight, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", borderLeft: `1px solid ${theme.borderFaint}` }}>
-                  <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textSub, fontWeight: 600 }}>{tlMonthLabel(c.d, true)}</div>
+                  <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textSub, fontWeight: 600 }}>{tlMonthLabel(c.d, true, de)}</div>
                 </div>
               ))}
             </div>
@@ -6343,7 +6354,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                 ? (darkMode ? "rgba(232, 67, 147, 0.08)" : "rgba(232, 67, 147, 0.07)")
                 : (darkMode ? "rgba(255,255,255,0.018)" : "rgba(0,0,0,0.018)");
               return (
-                <div key={`bg${i}`} title={isHoliday ? "Feiertag" : "Wochenende"} style={{ position: "absolute", left: c.left, top: headerHeight, bottom: 0, width: c.width, background: bg, pointerEvents: "none" }} />
+                <div key={`bg${i}`} title={isHoliday ? (de ? "Feiertag" : "Holiday") : (de ? "Wochenende" : "Weekend")} style={{ position: "absolute", left: c.left, top: headerHeight, bottom: 0, width: c.width, background: bg, pointerEvents: "none" }} />
               );
             })}
 
@@ -6499,8 +6510,8 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
             {/* Empty state */}
             {!loading && visibleItems.length === 0 && (
               <div style={{ position: "absolute", top: headerHeight + 60, left: "50%", transform: "translateX(-50%)", color: theme.textFaint, fontFamily: FONT, fontSize: 13, textAlign: "center" }}>
-                Noch keine Sprints.<br/>
-                <span style={{ fontSize: 12, color: theme.textFaint }}>Klick <strong style={{ color: theme.accent }}>+ Neuer Sprint</strong> oben rechts.</span>
+                {de ? "Noch keine Sprints." : "No sprints yet."}<br/>
+                <span style={{ fontSize: 12, color: theme.textFaint }}>{de ? "Klick " : "Click "}<strong style={{ color: theme.accent }}>{de ? "+ Neuer Sprint" : "+ New sprint"}</strong>{de ? " oben rechts." : " at the top right."}</span>
               </div>
             )}
           </div>
@@ -6512,6 +6523,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
         {(creating || selectedItem) && (
           <TimelineItemModal
             t={t}
+            appLanguage={appLanguage}
             // The key forces a REMOUNT whenever the modal's subject changes — the
             // modal seeds all its state from props in useState initializers, which
             // only run on mount. Without the key, "Nächsten Sprint verketten"
@@ -6577,7 +6589,8 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
   );
 }
 
-function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14, defaultProjectId = null, defaultPredecessorId = null, defaultGroupId = null, defaultStartDate = null, defaultEndDate = null, projects, sprintGroups = [], orgMembers = [], tasks = [], allItems = [], initialAssigneeIds = [], initialLinkedTaskIds = [], initialChecklist = [], onOpenTask, onChainNext, theme, darkMode, onClose, onSave, onDelete }) {
+function TimelineItemModal({ t, appLanguage = "de", item, creating, canEdit = true, sprintDays = 14, defaultProjectId = null, defaultPredecessorId = null, defaultGroupId = null, defaultStartDate = null, defaultEndDate = null, projects, sprintGroups = [], orgMembers = [], tasks = [], allItems = [], initialAssigneeIds = [], initialLinkedTaskIds = [], initialChecklist = [], onOpenTask, onChainNext, theme, darkMode, onClose, onSave, onDelete }) {
+  const de = appLanguage === "de";
   const today = tlIsoDate(new Date());
   const defaultEnd = tlIsoDate(tlAddDays(new Date(), sprintDays - 1));
   const [title, setTitle] = useState(item?.title || "");
@@ -6625,10 +6638,10 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
   const [isRecording, setIsRecording] = useState(false);
   const startDictation = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { alert("Spracherkennung wird in diesem Browser nicht unterstützt. Bitte Chrome oder Safari verwenden."); return; }
+    if (!SR) { alert(de ? "Spracherkennung wird in diesem Browser nicht unterstützt. Bitte Chrome oder Safari verwenden." : "Speech recognition is not supported in this browser. Please use Chrome or Safari."); return; }
     if (isRecording) { stopDictation(); return; }
     const recognition = new SR();
-    recognition.lang = "de-DE";
+    recognition.lang = de ? "de-DE" : "en-US";
     recognition.continuous = true;
     recognition.interimResults = true;
     let finalTranscript = description || "";
@@ -6732,10 +6745,10 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 16px 22px", borderBottom: `1px solid ${theme.borderFaint}`, gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap" }}>{creating ? "Neuer Sprint" : "Sprint bearbeiten"}</div>
-            <div title="Status wird automatisch aus den Daten berechnet" style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 999, background: TL_STATUS_COLORS[status] + "15", border: `1px solid ${TL_STATUS_COLORS[status]}30`, color: TL_STATUS_COLORS[status], fontSize: 11, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap" }}>
+            <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap" }}>{creating ? (de ? "Neuer Sprint" : "New sprint") : (de ? "Sprint bearbeiten" : "Edit sprint")}</div>
+            <div title={de ? "Status wird automatisch aus den Daten berechnet" : "The status is worked out from the dates"} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 999, background: TL_STATUS_COLORS[status] + "15", border: `1px solid ${TL_STATUS_COLORS[status]}30`, color: TL_STATUS_COLORS[status], fontSize: 11, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap" }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: TL_STATUS_COLORS[status] }} />
-              {TL_STATUS_LABEL[status]}
+              {(de ? TL_STATUS_LABEL : TL_STATUS_LABEL_EN)[status]}
             </div>
           </div>
           <motion.div onClick={onClose} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.9 }} style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}>
@@ -6747,7 +6760,7 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
         <div>
         {/* 1. Projekt (full width) */}
         <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Projekt</label>
+          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>{de ? "Projekt" : "Project"}</label>
           <Dropdown
             value={projectId}
             onChange={v => setProjectId(v)}
@@ -6766,13 +6779,13 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
         {/* 2. Sprintgruppe + Sprinttitel (+ chain button) */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
           <div>
-            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Sprintgruppe</label>
+            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>{de ? "Sprintgruppe" : "Sprint group"}</label>
             {groupId === "__new__" ? (
               <div style={{ display: "flex", gap: 4 }}>
-                <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} autoFocus placeholder="Neue Gruppe…"
+                <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} autoFocus placeholder={de ? "Neue Gruppe…" : "New group…"}
                   style={{ flex: 1, minWidth: 0, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.text }}
                 />
-                <motion.div whileTap={{ scale: 0.92 }} onClick={() => { setGroupId(""); setNewGroupName(""); }} title="Abbrechen"
+                <motion.div whileTap={{ scale: 0.92 }} onClick={() => { setGroupId(""); setNewGroupName(""); }} title={de ? "Abbrechen" : "Cancel"}
                   style={{ width: 32, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 10, background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.textDim, cursor: "pointer", flexShrink: 0 }}
                 >
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -6783,18 +6796,18 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
                 value={groupId}
                 onChange={v => { setGroupId(v); setNewGroupName(""); }}
                 options={[
-                  { value: "", label: "Keine Gruppe" },
+                  { value: "", label: de ? "Keine Gruppe" : "No group" },
                   ...availableGroups.map(g => ({ value: g.id, label: g.name })),
-                  { value: "__new__", label: "+ Neue Gruppe…" },
+                  { value: "__new__", label: de ? "+ Neue Gruppe…" : "+ New group…" },
                 ]}
-                placeholder="Keine Gruppe" theme={theme} darkMode={darkMode} minWidth={220}
+                placeholder={de ? "Keine Gruppe" : "No group"} theme={theme} darkMode={darkMode} minWidth={220}
                 triggerStyle={{ width: "100%", justifyContent: "space-between", borderRadius: 10, padding: "10px 14px", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}
               />
             )}
           </div>
           <div>
-            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>Sprinttitel</label>
-            <input value={title} onChange={e => setTitle(e.target.value)} autoFocus placeholder="Sprinttitel"
+            <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "block" }}>{de ? "Sprinttitel" : "Sprint title"}</label>
+            <input value={title} onChange={e => setTitle(e.target.value)} autoFocus placeholder={de ? "Sprinttitel" : "Sprint title"}
               style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.text }}
             />
           </div>
@@ -6802,11 +6815,11 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
 
         {/* 4. Description */}
         <div style={{ position: "relative", marginBottom: 14 }}>
-          <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Beschreibung (optional)" rows={7}
+          <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder={de ? "Beschreibung (optional)" : "Description (optional)"} rows={7}
             style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${isRecording ? "#EF444450" : theme.borderFaint}`, borderRadius: 12, padding: "10px 44px 10px 14px", fontSize: 13, fontFamily: FONT, color: theme.text, outline: "none", caretColor: theme.text, resize: "vertical", lineHeight: 1.55, display: "block" }}
           />
           <motion.div onClick={startDictation} whileTap={{ scale: 0.92 }}
-            title={isRecording ? "Diktat stoppen" : "Diktieren"}
+            title={isRecording ? (de ? "Diktat stoppen" : "Stop dictation") : (de ? "Diktieren" : "Dictate")}
             style={{ position: "absolute", right: 8, top: 8, width: 30, height: 30, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: isRecording ? "#EF4444" : "#15151c", color: "#fff", transition: "background 0.15s", animation: isRecording ? "pulse 1.4s ease-in-out infinite" : "none" }}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -6828,12 +6841,12 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
           </div>
           <div>
             <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 4, display: "flex", justifyContent: "space-between" }}>
-              <span>Ende</span>
+              <span>{de ? "Ende" : "End"}</span>
               {creating && (
                 <motion.span onClick={() => setAutoEnd(v => !v)} whileTap={{ scale: 0.96 }}
                   style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: autoEnd ? theme.textSub : theme.textFaint, textTransform: "none", letterSpacing: 0, fontWeight: 500 }}
                 >
-                  {autoEnd ? `Auto (${sprintDays} Tage)` : "Manuell"}
+                  {autoEnd ? (de ? `Auto (${sprintDays} Tage)` : `Auto (${sprintDays} days)`) : (de ? "Manuell" : "Manual")}
                 </motion.span>
               )}
             </label>
@@ -6848,7 +6861,7 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
 
         {/* 5. Linked Kanban tasks */}
         <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 8, display: "block" }}>Verknüpfte Tasks ({linkedTaskIds.length + pendingNewTasks.length})</label>
+          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 8, display: "block" }}>{de ? "Verknüpfte Tasks" : "Linked tasks"} ({linkedTaskIds.length + pendingNewTasks.length})</label>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {linkedTaskIds.map(tid => {
               const tk = tasks.find(x => x.id === tid);
@@ -6865,7 +6878,7 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
                     <div style={{ fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tk.title}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
                       {tk.project_name && <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim }}>{tk.project_name}</div>}
-                      {tk.column_key && <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, padding: "1px 6px", borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>{tk.column_key === "todo" ? "To Do" : tk.column_key === "progress" || tk.column_key === "in_progress" ? "In Arbeit" : tk.column_key === "review" ? "Review" : tk.column_key}</div>}
+                      {tk.column_key && <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint, padding: "1px 6px", borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>{tk.column_key === "todo" ? "To Do" : tk.column_key === "progress" || tk.column_key === "in_progress" ? (de ? "In Arbeit" : "In progress") : tk.column_key === "review" ? "Review" : tk.column_key}</div>}
                     </div>
                   </div>
                   {onOpenTask && (
@@ -6885,7 +6898,7 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: theme.textDim, flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nt.title}</div>
-                  <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textDim, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>Wird erstellt</div>
+                  <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textDim, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>{de ? "Wird erstellt" : "Being created"}</div>
                 </div>
                 <motion.div whileTap={{ scale: 0.9 }} onClick={() => setPendingNewTasks(prev => prev.filter(x => x.tempId !== nt.tempId))} style={{ cursor: "pointer", color: theme.textDim, fontSize: 12, padding: 4 }}>✕</motion.div>
               </div>
@@ -6901,7 +6914,7 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
                     setNewTaskText("");
                   }
                 }}
-                placeholder="Task erstellen (Enter)…"
+                placeholder={de ? "Task erstellen (Enter)…" : "Create task (Enter)…"}
                 style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: FONT, color: theme.text, caretColor: theme.text }}
               />
               {newTaskText.trim() && (
@@ -6910,7 +6923,7 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
                   setNewTaskText("");
                 }}
                   style={{ cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.text, fontWeight: 600, padding: "2px 8px" }}
-                >+ Erstellen</motion.div>
+                >{de ? "+ Erstellen" : "+ Create"}</motion.div>
               )}
             </div>
             <div style={{ position: "relative" }}>
@@ -6918,7 +6931,7 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
                 style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 12px", borderRadius: 10, background: "transparent", border: `1px dashed ${theme.borderFaint}`, cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}
               >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Kanban-Task verknüpfen
+                {de ? "Kanban-Task verknüpfen" : "Link a Kanban task"}
               </motion.div>
               <AnimatePresence>
                 {taskMenuOpen && (
@@ -6927,11 +6940,11 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
                     <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}
                       style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0, zIndex: 10, maxHeight: 320, overflow: "auto", background: theme.cardBg, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, boxShadow: "0 10px 30px rgba(0,0,0,0.20)", padding: 4 }}
                     >
-                      <input autoFocus value={taskSearch} onChange={e => setTaskSearch(e.target.value)} placeholder="Task suchen…"
+                      <input autoFocus value={taskSearch} onChange={e => setTaskSearch(e.target.value)} placeholder={de ? "Task suchen…" : "Search tasks…"}
                         style={{ width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "none", borderBottom: `1px solid ${theme.borderFaint}`, padding: "10px 12px", fontSize: 12, fontFamily: FONT, color: theme.text, outline: "none", marginBottom: 4 }}
                       />
                       {visibleTasks.length === 0 && (
-                        <div style={{ padding: 12, fontSize: 11, fontFamily: FONT, color: theme.textFaint, textAlign: "center" }}>Keine Tasks gefunden</div>
+                        <div style={{ padding: 12, fontSize: 11, fontFamily: FONT, color: theme.textFaint, textAlign: "center" }}>{de ? "Keine Tasks gefunden" : "No tasks found"}</div>
                       )}
                       {visibleTasks.filter(tk => !linkedTaskIds.includes(tk.id)).map(tk => (
                         <motion.div key={tk.id} onClick={() => { setLinkedTaskIds(prev => [...prev, tk.id]); setTaskMenuOpen(false); setTaskSearch(""); }}
@@ -6955,7 +6968,7 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
 
         {/* 6. Checklist */}
         <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 8, display: "block" }}>Checkliste ({checklist.filter(c => c.done).length}/{checklist.length})</label>
+          <label style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 8, display: "block" }}>{de ? "Checkliste" : "Checklist"} ({checklist.filter(c => c.done).length}/{checklist.length})</label>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {checklist.map((c, idx) => (
               <div key={c.id || `new-${idx}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }}>
@@ -6980,7 +6993,7 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
                     setNewChecklistText("");
                   }
                 }}
-                placeholder="Eintrag hinzufügen (Enter)…"
+                placeholder={de ? "Eintrag hinzufügen (Enter)…" : "Add item (Enter)…"}
                 style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: FONT, color: theme.text, caretColor: theme.text }}
               />
               {newChecklistText.trim() && (
@@ -6989,7 +7002,7 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
                   setNewChecklistText("");
                 }}
                   style={{ cursor: "pointer", fontSize: 11, fontFamily: FONT, color: theme.text, fontWeight: 600, padding: "2px 8px" }}
-                >+ Hinzufügen</motion.div>
+                >{de ? "+ Hinzufügen" : "+ Add"}</motion.div>
               )}
             </div>
           </div>
@@ -7020,7 +7033,7 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 15px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px dashed ${theme.borderFaint}`, cursor: "pointer", fontSize: 12, fontFamily: FONT, color: theme.textDim, fontWeight: 500 }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Person hinzufügen
+                {de ? "Person hinzufügen" : "Add person"}
               </motion.div>
               <AnimatePresence>
                 {assigneeMenuOpen && (
@@ -7030,7 +7043,7 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
                       style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, zIndex: 10, minWidth: 240, maxHeight: 280, overflow: "auto", background: theme.cardBg, border: `1px solid ${theme.borderFaint}`, borderRadius: 12, boxShadow: "0 10px 30px rgba(0,0,0,0.20)", padding: 4 }}
                     >
                       {orgMembers.length === 0 && (
-                        <div style={{ padding: 12, fontSize: 11, fontFamily: FONT, color: theme.textFaint, textAlign: "center" }}>Keine Team-Mitglieder</div>
+                        <div style={{ padding: 12, fontSize: 11, fontFamily: FONT, color: theme.textFaint, textAlign: "center" }}>{de ? "Keine Team-Mitglieder" : "No team members"}</div>
                       )}
                       {orgMembers.filter(m => !assigneeIds.includes(m.user_id || m.id)).map(m => {
                         const uid = m.user_id || m.id;
@@ -7064,16 +7077,16 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
           {onDelete && canEdit && !confirmDel && (
             <motion.button onClick={() => setConfirmDel(true)} whileTap={{ scale: 0.97 }}
               style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}
-            >Löschen</motion.button>
+            >{de ? "Löschen" : "Delete"}</motion.button>
           )}
           {onDelete && canEdit && confirmDel && (
             <div style={{ display: "flex", gap: 8 }}>
               <motion.button onClick={() => setConfirmDel(false)} whileTap={{ scale: 0.97 }}
                 style={{ padding: "11px 20px 12px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}
-              >Abbrechen</motion.button>
+              >{de ? "Abbrechen" : "Cancel"}</motion.button>
               <motion.button onClick={() => { onDelete(); onClose(); }} whileTap={{ scale: 0.97 }}
                 style={{ padding: "11px 22px 12px", borderRadius: 999, cursor: "pointer", background: "#EF4444", border: "none", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600 }}
-              >Wirklich löschen</motion.button>
+              >{de ? "Wirklich löschen" : "Really delete"}</motion.button>
             </div>
           )}
           {!confirmDel && <div style={{ flex: 1 }} />}
@@ -7081,12 +7094,12 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
             {canEdit && (
             <motion.button onClick={save} whileHover={title.trim() && !saving ? { scale: 1.03 } : {}} whileTap={{ scale: 0.97 }} disabled={!title.trim() || saving}
               style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: (!title.trim() || saving) ? "not-allowed" : "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", border: "none", background: title.trim() && !saving ? "#15151c" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"), color: title.trim() && !saving ? "#fff" : theme.textFaint, fontSize: 13, fontFamily: FONT, fontWeight: 600, transition: "background 0.18s ease" }}
-            >{saving ? "Speichert…" : creating ? "Erstellen" : "Speichern"}</motion.button>
+            >{saving ? (de ? "Speichert…" : "Saving…") : creating ? (de ? "Erstellen" : "Create") : (de ? "Speichern" : "Save")}</motion.button>
             )}
             {!canEdit && (
             <motion.button onClick={onClose} whileTap={{ scale: 0.97 }}
               style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.border}`, background: "transparent", color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600 }}
-            >Schließen</motion.button>
+            >{de ? "Schließen" : "Close"}</motion.button>
             )}
           </div>
         </div>
@@ -7098,6 +7111,8 @@ function TimelineItemModal({ t, item, creating, canEdit = true, sprintDays = 14,
 // ──── Calendar View ────
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+const WEEKDAYS_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const MONTH_NAMES_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 // ──── Whiteboard / Brainstorm — FigJam-style infinite canvas ────
 // Elements live in whiteboard_items (one row each) so Supabase realtime keeps
@@ -10759,7 +10774,11 @@ function ToggleSwitch({ on, onClick, darkMode, disabled = false, style = {} }) {
   );
 }
 
-function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReLogin, ensureValidToken, theme, darkMode, t, userOrg }) {
+function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReLogin, ensureValidToken, theme, darkMode, t, appLanguage = "de", userOrg }) {
+  const de = appLanguage === "de";
+  const MONTHS = de ? MONTH_NAMES : MONTH_NAMES_EN;
+  const DAYS = de ? WEEKDAYS : WEEKDAYS_EN;
+  const loc = de ? "de-DE" : "en-GB";
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const [viewMode, setViewMode] = useState("week"); // "month" | "week" | "day"
@@ -10802,17 +10821,17 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
     const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
     return {
-      [fmt(new Date(y, 0, 1))]: "Neujahr",
-      [fmt(easterOffset(-2))]: "Karfreitag",
-      [fmt(easterOffset(0))]: "Ostersonntag",
-      [fmt(easterOffset(1))]: "Ostermontag",
-      [fmt(new Date(y, 4, 1))]: "Tag der Arbeit",
-      [fmt(easterOffset(39))]: "Christi Himmelfahrt",
-      [fmt(easterOffset(49))]: "Pfingstsonntag",
-      [fmt(easterOffset(50))]: "Pfingstmontag",
-      [fmt(new Date(y, 9, 3))]: "Tag der Deutschen Einheit",
-      [fmt(new Date(y, 11, 25))]: "1. Weihnachtstag",
-      [fmt(new Date(y, 11, 26))]: "2. Weihnachtstag",
+      [fmt(new Date(y, 0, 1))]: (de ? "Neujahr" : "New Year’s Day"),
+      [fmt(easterOffset(-2))]: (de ? "Karfreitag" : "Good Friday"),
+      [fmt(easterOffset(0))]: (de ? "Ostersonntag" : "Easter Sunday"),
+      [fmt(easterOffset(1))]: (de ? "Ostermontag" : "Easter Monday"),
+      [fmt(new Date(y, 4, 1))]: (de ? "Tag der Arbeit" : "Labour Day"),
+      [fmt(easterOffset(39))]: (de ? "Christi Himmelfahrt" : "Ascension Day"),
+      [fmt(easterOffset(49))]: (de ? "Pfingstsonntag" : "Whit Sunday"),
+      [fmt(easterOffset(50))]: (de ? "Pfingstmontag" : "Whit Monday"),
+      [fmt(new Date(y, 9, 3))]: (de ? "Tag der Deutschen Einheit" : "German Unity Day"),
+      [fmt(new Date(y, 11, 25))]: (de ? "1. Weihnachtstag" : "Christmas Day"),
+      [fmt(new Date(y, 11, 26))]: (de ? "2. Weihnachtstag" : "Boxing Day"),
     };
   };
   const holidays = getGermanHolidays(year);
@@ -10874,7 +10893,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             const data = await res.json();
             setGoogleEvents((data.items || []).map(e => ({
               id: e.id,
-              title: e.summary || "Kein Titel",
+              title: e.summary || (de ? "Kein Titel" : "No title"),
               start: e.start?.dateTime || e.start?.date,
               end: e.end?.dateTime || e.end?.date,
               allDay: !!e.start?.date,
@@ -10895,7 +10914,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 if (retryRes.ok) {
                   const data = await retryRes.json();
                   setGoogleEvents((data.items || []).map(e => ({
-                    id: e.id, title: e.summary || "Kein Titel",
+                    id: e.id, title: e.summary || (de ? "Kein Titel" : "No title"),
                     start: e.start?.dateTime || e.start?.date, end: e.end?.dateTime || e.end?.date,
                     allDay: !!e.start?.date,
                     color: e.colorId ? ["#7986CB","#33B679","#8E24AA","#E67C73","#F6BF26","#F4511E","#039BE5","#616161","#3F51B5","#0B8043","#D50000"][parseInt(e.colorId)] : "#5B8DEF",
@@ -10920,7 +10939,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             if (retryRes.ok) {
               const data = await retryRes.json();
               setGoogleEvents((data.items || []).map(e => ({
-                id: e.id, title: e.summary || "Kein Titel",
+                id: e.id, title: e.summary || (de ? "Kein Titel" : "No title"),
                 start: e.start?.dateTime || e.start?.date, end: e.end?.dateTime || e.end?.date,
                 allDay: !!e.start?.date,
                 color: e.colorId ? ["#7986CB","#33B679","#8E24AA","#E67C73","#F6BF26","#F4511E","#039BE5","#616161","#3F51B5","#0B8043","#D50000"][parseInt(e.colorId)] : "#5B8DEF",
@@ -11104,15 +11123,20 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
 
   // Navigation label
   const getNavLabel = () => {
-    if (viewMode === "month") return `${MONTH_NAMES[month]} ${year}`;
+    if (viewMode === "month") return `${MONTHS[month]} ${year}`;
     if (viewMode === "week") {
       const days = getWeekDays();
       const s = days[0], e = days[6];
-      if (s.getMonth() === e.getMonth()) return `${s.getDate()}. – ${e.getDate()}. ${MONTH_NAMES[s.getMonth()]} ${s.getFullYear()}`;
-      return `${s.getDate()}. ${MONTH_NAMES[s.getMonth()]} – ${e.getDate()}. ${MONTH_NAMES[e.getMonth()]} ${e.getFullYear()}`;
+      if (!de) {
+        if (s.getMonth() === e.getMonth()) return `${MONTHS[s.getMonth()]} ${s.getDate()} – ${e.getDate()}, ${s.getFullYear()}`;
+        return `${MONTHS[s.getMonth()]} ${s.getDate()} – ${MONTHS[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
+      }
+      if (s.getMonth() === e.getMonth()) return `${s.getDate()}. – ${e.getDate()}. ${MONTHS[s.getMonth()]} ${s.getFullYear()}`;
+      return `${s.getDate()}. ${MONTHS[s.getMonth()]} – ${e.getDate()}. ${MONTHS[e.getMonth()]} ${e.getFullYear()}`;
     }
-    const DAYFULL = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
-    return `${DAYFULL[currentDate.getDay()]}, ${currentDate.getDate()}. ${MONTH_NAMES[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+    const DAYFULL = de ? ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"] : ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    if (!de) return `${DAYFULL[currentDate.getDay()]}, ${MONTHS[currentDate.getMonth()]} ${currentDate.getDate()}, ${currentDate.getFullYear()}`;
+    return `${DAYFULL[currentDate.getDay()]}, ${currentDate.getDate()}. ${MONTHS[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
   };
 
   const selectedEvents = selectedDay ? getEventsForDay(selectedDay) : [];
@@ -11153,7 +11177,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
         const date = eventForm.date || new Date().toISOString().split("T")[0];
         const tempBody = {
-          summary: eventForm.title || "Neues Meeting",
+          summary: eventForm.title || (de ? "Neues Meeting" : "New meeting"),
           start: { dateTime: `${date}T${eventForm.startTime}:00`, timeZone: tz },
           end: { dateTime: `${date}T${eventForm.endTime}:00`, timeZone: tz },
           conferenceData: {
@@ -11277,8 +11301,8 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
   };
 
   const createGoogleEvent = async () => {
-    if (!eventForm.title.trim()) { alert("Bitte einen Titel eingeben."); return; }
-    if (!eventForm.date) { alert("Bitte ein Datum auswählen."); return; }
+    if (!eventForm.title.trim()) { alert((de ? "Bitte einen Titel eingeben." : "Please enter a title.")); return; }
+    if (!eventForm.date) { alert((de ? "Bitte ein Datum auswählen." : "Please choose a date.")); return; }
     // Client-side validation for timed events
     if (!eventForm.allDay) {
       const startISO = `${eventForm.date}T${eventForm.startTime}:00`;
@@ -11286,21 +11310,21 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
       const startMs = new Date(startISO).getTime();
       const endMs = new Date(endISO).getTime();
       if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
-        alert("Ungültige Uhrzeit. Bitte Start- und Endzeit prüfen.");
+        alert((de ? "Ungültige Uhrzeit. Bitte Start- und Endzeit prüfen." : "Invalid time. Please check the start and end time."));
         return;
       }
       if (endMs <= startMs) {
-        alert("Die Endzeit muss nach der Startzeit liegen.");
+        alert((de ? "Die Endzeit muss nach der Startzeit liegen." : "The end time has to be after the start time."));
         return;
       }
       // Warn (but don't block) if start is in the past
       if (startMs < Date.now() - 60_000) {
-        const ok = confirm("Die Startzeit liegt in der Vergangenheit. Trotzdem erstellen?");
+        const ok = confirm((de ? "Die Startzeit liegt in der Vergangenheit. Trotzdem erstellen?" : "The start time is in the past. Create it anyway?"));
         if (!ok) return;
       }
     }
     const providerToken = ensureValidToken ? await ensureValidToken() : (getProviderToken ? getProviderToken() : session?.provider_token);
-    if (!providerToken) { alert("Kein Google Zugriff. Bitte neu einloggen."); return; }
+    if (!providerToken) { alert((de ? "Kein Google-Zugriff. Bitte neu einloggen." : "No Google access. Please sign in again.")); return; }
     setSavingEvent(true);
     try {
       const body = { summary: eventForm.title.trim(), description: eventForm.description };
@@ -11364,7 +11388,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
         if (evRes.ok) {
           const data = await evRes.json();
           setGoogleEvents((data.items || []).map(e => ({
-            id: e.id, title: e.summary || "Kein Titel",
+            id: e.id, title: e.summary || (de ? "Kein Titel" : "No title"),
             start: e.start?.dateTime || e.start?.date, end: e.end?.dateTime || e.end?.date,
             allDay: !!e.start?.date,
             color: e.colorId ? ["#7986CB","#33B679","#8E24AA","#E67C73","#F6BF26","#F4511E","#039BE5","#616161","#3F51B5","#0B8043","#D50000"][parseInt(e.colorId)] : "#5B8DEF",
@@ -11375,11 +11399,11 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
         const err = await res.json().catch(() => ({}));
         console.error("Create event error:", res.status, err);
         if (res.status === 401 && autoReLogin) { autoReLogin(); return; }
-        alert("Fehler beim Erstellen: " + (err.error?.message || "Unbekannter Fehler"));
+        alert((de ? "Fehler beim Erstellen: " : "Could not create it: ") + (err.error?.message || (de ? "Unbekannter Fehler" : "unknown error")));
       }
     } catch (err) {
       console.error("Create event error:", err);
-      alert("Fehler beim Erstellen: " + (err.message || "Verbindungsfehler"));
+      alert((de ? "Fehler beim Erstellen: " : "Could not create it: ") + (err.message || (de ? "Verbindungsfehler" : "connection error")));
     }
     setSavingEvent(false);
   };
@@ -11397,9 +11421,9 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
         <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={onBack}
           style={{ width: 32, height: 32, borderRadius: "50%", cursor: "pointer", border: `1px solid ${theme.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: theme.textDim, fontFamily: FONT }}>←</motion.div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 22, fontWeight: 500, color: theme.text, fontFamily: FONT, letterSpacing: -0.5 }}>Calendar</div>
+          <div style={{ fontSize: 22, fontWeight: 500, color: theme.text, fontFamily: FONT, letterSpacing: -0.5 }}>{de ? "Kalender" : "Calendar"}</div>
           <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, marginTop: 2 }}>
-            {loading ? "Loading..." : `${googleEvents.length + teamEvents.length} Events · ${tasks.length} Tasks`}
+            {loading ? (de ? "Lädt..." : "Loading...") : de ? `${googleEvents.length + teamEvents.length} Termine · ${tasks.length} Tasks` : `${googleEvents.length + teamEvents.length} events · ${tasks.length} tasks`}
           </div>
         </div>
         <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
@@ -11426,7 +11450,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
         <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={navigateNext}
           style={{ cursor: "pointer", color: theme.textDim, fontSize: 18, fontFamily: FONT, padding: "4px 8px" }}>›</motion.div>
         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={goToday}
-          style={{ marginLeft: 8, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 500, color: theme.text, padding: "6px 14px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(21,21,28,0.07)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(21,21,28,0.14)"}` }}>Heute</motion.div>
+          style={{ marginLeft: 8, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 500, color: theme.text, padding: "6px 14px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(21,21,28,0.07)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(21,21,28,0.14)"}` }}>{de ? "Heute" : "Today"}</motion.div>
         <div style={{ flex: 1 }} />
         {/* View mode switcher — same clean white-pill style as the Timeline switch */}
         <div style={{ display: "inline-flex", alignItems: "center", gap: 2, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", borderRadius: 999, padding: 3, border: `1px solid ${theme.borderFaint}` }}>
@@ -11462,7 +11486,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
           >
             {/* Weekday headers */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 2, marginBottom: 4, background: darkMode ? "rgba(20,18,30,0.5)" : "rgba(0,0,0,0.03)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "2px 0" }}>
-              {WEEKDAYS.map((d, di) => (
+              {DAYS.map((d, di) => (
                 <div key={d} style={{ textAlign: "center", fontSize: 13, fontFamily: FONT, color: di >= 5 ? theme.textFaint : theme.textDim, padding: "6px 0", fontWeight: 500 }}>{d}</div>
               ))}
             </div>
@@ -11542,7 +11566,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 const isTd = d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
                 return (
                   <div key={di} style={{ textAlign: "center", fontFamily: FONT }}>
-                    <div style={{ fontSize: 10, color: di >= 5 ? theme.textFaint : theme.textDim, fontWeight: 500 }}>{WEEKDAYS[di]}</div>
+                    <div style={{ fontSize: 10, color: di >= 5 ? theme.textFaint : theme.textDim, fontWeight: 500 }}>{DAYS[di]}</div>
                     <div style={{ fontSize: 16, fontWeight: isTd ? 700 : 500, color: isTd ? theme.text : di >= 5 ? theme.textFaint : theme.text, marginTop: 2 }}>{d.getDate()}</div>
                   </div>
                 );
@@ -11584,11 +11608,11 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                         <div style={{ fontSize: 11, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 2 }}>{e.title}</div>
                         {e.start && !e.allDay && (
                           <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textDim }}>
-                            {new Date(e.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
-                            {e.end && ` – ${new Date(e.end).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`}
+                            {new Date(e.start).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })}
+                            {e.end && ` – ${new Date(e.end).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })}`}
                           </div>
                         )}
-                        {e.allDay && <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint }}>Ganztägig</div>}
+                        {e.allDay && <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint }}>{(de ? "Ganztägig" : "All day")}</div>}
                         {e.hangoutLink && (
                           <div onClick={(ev) => { ev.stopPropagation(); openMeetCall(e.hangoutLink, e.title); }}
                             style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, fontFamily: FONT, color: "#00B894", cursor: "pointer", marginTop: 2 }}>
@@ -11629,7 +11653,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                       </div>
                     )}
                     {isWe && (
-                      <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, padding: "5px 12px", borderRadius: 8, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }}>Wochenende</span>
+                      <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, padding: "5px 12px", borderRadius: 8, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }}>{(de ? "Wochenende" : "Weekend")}</span>
                     )}
                     <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
                       {dayEvents.length === 0 ? t("cal.noEvents") : `${dayEvents.length} ${dayEvents.length === 1 ? t("cal.event") : t("cal.events")}`}
@@ -11643,7 +11667,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                           <rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>
                         </svg>
                       </div>
-                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textFaint }}>Freier Tag</div>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textFaint }}>{(de ? "Freier Tag" : "Free day")}</div>
                     </div>
                   )}
 
@@ -11665,16 +11689,16 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                         {e.start && !e.allDay ? (
                           <>
                             <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-                              {new Date(e.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                              {new Date(e.start).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })}
                             </div>
                             {e.end && (
                               <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 2 }}>
-                                {new Date(e.end).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                                {new Date(e.end).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })}
                               </div>
                             )}
                           </>
                         ) : (
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, padding: "3px 8px", borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", display: "inline-block" }}>Ganztägig</div>
+                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, padding: "3px 8px", borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", display: "inline-block" }}>{(de ? "Ganztägig" : "All day")}</div>
                         )}
                       </div>
                       {/* Details */}
@@ -11688,7 +11712,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                             <span style={{ fontSize: 10, fontFamily: FONT, color: "#64748B", padding: "2px 8px", borderRadius: 4, background: "rgba(100,116,139,0.12)" }}>Team</span>
                           )}
                           {e.type === "task" && (
-                            <span style={{ fontSize: 10, fontFamily: FONT, color: "#64748B", padding: "2px 8px", borderRadius: 4, background: "rgba(100,116,139,0.12)" }}>Aufgabe</span>
+                            <span style={{ fontSize: 10, fontFamily: FONT, color: "#64748B", padding: "2px 8px", borderRadius: 4, background: "rgba(100,116,139,0.12)" }}>{(de ? "Aufgabe" : "Task")}</span>
                           )}
                           {e.project && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>{e.project}</span>}
                           {e.location && (
@@ -11706,7 +11730,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                           >
                             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                              Google Meet beitreten
+                              {(de ? "Google Meet beitreten" : "Join Google Meet")}
                             </span>
                           </motion.div>
                         )}
@@ -11721,7 +11745,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                           // row would drag the time column down beside a long
                           // description. Only this moves.
                           style={{ cursor: "pointer", width: 28, height: 28, borderRadius: 8, alignSelf: "center", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textFaint, flexShrink: 0, transition: "all 0.15s" }}
-                          title="Event absagen"
+                          title={(de ? "Event absagen" : "Cancel event")}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                         </motion.div>
@@ -11751,7 +11775,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               <div style={{ padding: "16px 18px 12px", borderBottom: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
                 <div>
                   <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-                    {selectedDay.day}. {MONTH_NAMES[month]}
+                    {de ? `${selectedDay.day}. ${MONTHS[month]}` : `${MONTHS[month]} ${selectedDay.day}`}
                   </div>
                 <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
                   {selectedEvents.length === 0 ? t("cal.noEvents") : `${selectedEvents.length} ${selectedEvents.length === 1 ? t("cal.event") : t("cal.events")}`}
@@ -11773,7 +11797,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               <div style={{ flex: 1, overflowY: "auto", padding: "8px 10px" }}>
                 {selectedEvents.length === 0 && (
                   <div style={{ padding: "24px 8px", textAlign: "center", fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>
-                    Freier Tag
+                    {(de ? "Freier Tag" : "Free day")}
                   </div>
                 )}
                 {selectedEvents.map((e, i) => (
@@ -11795,23 +11819,23 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                           whileTap={{ scale: 0.9 }}
                           onClick={() => setConfirmDeleteEvent(e)}
                           style={{ cursor: "pointer", width: 22, height: 22, borderRadius: 6, alignSelf: "center", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textFaint, flexShrink: 0, transition: "all 0.15s" }}
-                          title="Event absagen"
+                          title={(de ? "Event absagen" : "Cancel event")}
                         ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></motion.div>
                       )}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       {e.start && !e.allDay && (
                         <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>
-                          {new Date(e.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
-                          {e.end && ` – ${new Date(e.end).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`}
+                          {new Date(e.start).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })}
+                          {e.end && ` – ${new Date(e.end).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })}`}
                         </span>
                       )}
-                      {e.allDay && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, padding: "1px 6px", borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>Ganztägig</span>}
+                      {e.allDay && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, padding: "1px 6px", borderRadius: 4, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>{(de ? "Ganztägig" : "All day")}</span>}
                       {e.type === "google" && (
                         <span style={{ fontSize: 9, fontFamily: FONT, color: "#5B8DEF", padding: "1px 6px", borderRadius: 4, background: "rgba(91,141,239,0.1)" }}>Google</span>
                       )}
                       {e.type === "task" && (
-                        <span style={{ fontSize: 9, fontFamily: FONT, color: "#64748B", padding: "1px 6px", borderRadius: 4, background: "rgba(100,116,139,0.12)" }}>Aufgabe</span>
+                        <span style={{ fontSize: 9, fontFamily: FONT, color: "#64748B", padding: "1px 6px", borderRadius: 4, background: "rgba(100,116,139,0.12)" }}>{(de ? "Aufgabe" : "Task")}</span>
                       )}
                       {e.project && (
                         <span style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint }}>{e.project}</span>
@@ -11825,7 +11849,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                         whileHover={{ scale: 1.02 }}
                         onClick={() => openMeetCall(e.hangoutLink, e.title)}
                         style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontFamily: FONT, color: "#00B894", marginTop: 6, cursor: "pointer", padding: "3px 10px", borderRadius: 6, background: "rgba(0,184,148,0.08)", border: "1px solid rgba(0,184,148,0.15)" }}
-                      ><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Google Meet beitreten</motion.div>
+                      ><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>{(de ? "Google Meet beitreten" : "Join Google Meet")}</motion.div>
                     )}
                   </motion.div>
                 ))}
@@ -11881,8 +11905,8 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 14 }}>
                 <ToggleSwitch on={eventForm.isTeamEvent} darkMode={darkMode}
                   onClick={() => setEventForm(f => ({ ...f, isTeamEvent: !f.isTeamEvent, withMeet: f.isTeamEvent ? f.withMeet : false }))} />
-                <span style={{ fontSize: 14, fontFamily: FONT, color: theme.text }}>Team-Termin</span>
-                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{eventForm.isTeamEvent ? "Sichtbar für alle" : "Nur Google Calendar"}</span>
+                <span style={{ fontSize: 14, fontFamily: FONT, color: theme.text }}>{(de ? "Team-Termin" : "Team event")}</span>
+                <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{eventForm.isTeamEvent ? (de ? "Sichtbar für alle" : "Visible to everyone") : (de ? "Nur Google Calendar" : "Google Calendar only")}</span>
               </div>
             )}
 
@@ -11892,7 +11916,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
                 <ToggleSwitch on={eventForm.allDay} darkMode={darkMode}
                   onClick={() => setEventForm(f => ({ ...f, allDay: !f.allDay }))} />
-                <span style={{ fontSize: 14, fontFamily: FONT, color: theme.text }}>Ganztägig</span>
+                <span style={{ fontSize: 14, fontFamily: FONT, color: theme.text }}>{(de ? "Ganztägig" : "All day")}</span>
               </div>
 
               {/* Google Meet toggle (only for Google events) */}
@@ -11902,7 +11926,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                   style={{ cursor: meetLoading ? "wait" : "pointer" }}
                   onClick={() => toggleMeet(!eventForm.withMeet)} />
                 <span style={{ fontSize: 14, fontFamily: FONT, color: theme.text }}>Google Meet</span>
-                {meetLoading && <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>Erstelle Link...</span>}
+                {meetLoading && <span style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{(de ? "Erstelle Link..." : "Creating link...")}</span>}
               </div>
               )}
             </div>
@@ -11931,9 +11955,9 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                   {linkCopied ? (
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-                      Kopiert
+                      {(de ? "Kopiert" : "Copied")}
                     </span>
-                  ) : "Kopieren"}
+                  ) : (de ? "Kopieren" : "Copy")}
                 </motion.div>
               </motion.div>
             )}
@@ -11945,7 +11969,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                 animate={{ opacity: 1, height: "auto" }}
                 style={{ marginBottom: 12 }}
               >
-                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 7 }}>Teilnehmer</div>
+                <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 7 }}>{(de ? "Teilnehmer" : "Guests")}</div>
                 {/* Attendee chips */}
                 {attendees.length > 0 && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
@@ -11995,7 +12019,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                     }}
                     style={{ cursor: "pointer", padding: "10px 16px", borderRadius: 12, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", border: `1px solid ${theme.borderFaint}`, whiteSpace: "nowrap" }}
                   >
-                    Hinzufügen
+                    {(de ? "Hinzufügen" : "Add")}
                   </motion.div>
                 </div>
               </motion.div>
@@ -12005,7 +12029,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             {!eventForm.allDay && (
               <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 5 }}>Von</div>
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 5 }}>{(de ? "Von" : "From")}</div>
                   <input
                     type="time"
                     value={eventForm.startTime}
@@ -12014,7 +12038,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                   />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 5 }}>Bis</div>
+                  <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginBottom: 5 }}>{(de ? "Bis" : "To")}</div>
                   <input
                     type="time"
                     value={eventForm.endTime}
@@ -12073,7 +12097,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
             <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8, letterSpacing: -0.3 }}>{t("cal.cancelEvent")}</div>
 
             <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, marginBottom: 6, lineHeight: 1.5 }}>
-              Möchtest du dieses Event wirklich löschen?
+              {(de ? "Möchtest du dieses Event wirklich löschen?" : "Do you really want to delete this event?")}
             </div>
 
             {/* Event preview */}
@@ -12081,17 +12105,17 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{confirmDeleteEvent.title}</div>
               {confirmDeleteEvent.start && !confirmDeleteEvent.allDay && (
                 <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
-                  {new Date(confirmDeleteEvent.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
-                  {confirmDeleteEvent.end && ` – ${new Date(confirmDeleteEvent.end).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`}
+                  {new Date(confirmDeleteEvent.start).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })}
+                  {confirmDeleteEvent.end && ` – ${new Date(confirmDeleteEvent.end).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })}`}
                 </div>
               )}
               {confirmDeleteEvent.allDay && (
-                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 3 }}>Ganztägig</div>
+                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 3 }}>{(de ? "Ganztägig" : "All day")}</div>
               )}
             </div>
 
             <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 16 }}>
-              Alle Teilnehmer werden per E-Mail benachrichtigt.
+              {(de ? "Alle Teilnehmer werden per E-Mail benachrichtigt." : "All guests will be notified by email.")}
             </div>
 
             {/* Buttons */}
@@ -12099,7 +12123,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                 onClick={() => !deletingEvent && setConfirmDeleteEvent(null)}
                 style={{ cursor: "pointer", padding: "9px 20px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}>
-                Behalten
+                {(de ? "Behalten" : "Keep")}
               </motion.div>
               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                 onClick={() => deleteGoogleEvent(confirmDeleteEvent)}
@@ -50867,6 +50891,9 @@ export default function CircularMenu() {
     try { return localStorage.getItem("agencyos-language") || detectLanguage(); }
     catch (_) { return detectLanguage(); }
   });
+  // The root's own language flag, for the strings written in the root itself.
+  // Named apart from the `de` a dozen helpers below declare for themselves.
+  const deRoot = appLanguage === "de";
   // The session, mirrored into a ref. chooseLanguage is defined ABOVE the
   // session state, so naming it in a dependency array would read it before its
   // initialiser runs. The same trick openBrainstormRef uses a few hundred lines
@@ -51463,7 +51490,7 @@ export default function CircularMenu() {
       setUserOrgs(prev => prev.map(o => o.id === userOrg.id ? { ...o, logo_url: newUrl } : o));
     } catch (err) {
       console.error("Workspace-Logo upload failed:", err);
-      alert("Logo-Upload fehlgeschlagen: " + (err.message || ""));
+      alert((deRoot ? "Logo-Upload fehlgeschlagen: " : "Logo upload failed: ") + (err.message || ""));
     } finally {
       setOrgLogoUploading(false);
       if (orgLogoInputRef.current) orgLogoInputRef.current.value = "";
@@ -51845,7 +51872,7 @@ export default function CircularMenu() {
     setDriveConnecting(true);
     try {
       const token = await ensureValidToken();
-      if (!token) { alert("Bitte zuerst mit Google neu einloggen."); return; }
+      if (!token) { alert((deRoot ? "Bitte zuerst mit Google neu einloggen." : "Please sign in with Google again first.")); return; }
       const picked = await openGoogleFolderPicker({
         accessToken: token,
         locale: appLanguage === "de" ? "de" : "en",
@@ -51860,7 +51887,7 @@ export default function CircularMenu() {
       }).eq("id", session.user.id);
       setDriveFolder(picked);
     } catch (e) {
-      alert("Picker fehlgeschlagen: " + (e.message || ""));
+      alert((deRoot ? "Picker fehlgeschlagen: " : "Picker failed: ") + (e.message || ""));
     } finally {
       setDriveConnecting(false);
     }
@@ -51893,7 +51920,7 @@ export default function CircularMenu() {
     setDriveConnecting(true);
     try {
       const token = await ensureValidToken();
-      if (!token) { alert("Bitte zuerst mit Google neu einloggen."); return; }
+      if (!token) { alert((deRoot ? "Bitte zuerst mit Google neu einloggen." : "Please sign in with Google again first.")); return; }
       const picked = await openGoogleFolderPicker({
         accessToken: token,
         locale: appLanguage === "de" ? "de" : "en",
@@ -51907,7 +51934,7 @@ export default function CircularMenu() {
       }).eq("id", userOrg.id);
       setOrgDriveFolder(picked);
     } catch (e) {
-      alert("Picker fehlgeschlagen: " + (e.message || ""));
+      alert((deRoot ? "Picker fehlgeschlagen: " : "Picker failed: ") + (e.message || ""));
     } finally {
       setDriveConnecting(false);
     }
@@ -52324,7 +52351,7 @@ export default function CircularMenu() {
       if (error) throw error;
       setMagicSent(true);
     } catch (e) {
-      setAuthError(e.message || "Konnte den Login-Link nicht senden.");
+      setAuthError(e.message || (deRoot ? "Konnte den Login-Link nicht senden." : "Could not send the login link."));
     } finally {
       setMagicSending(false);
     }
@@ -53720,8 +53747,8 @@ export default function CircularMenu() {
           const notif = {
             id: "cal-" + ev.id,
             type: "calendar_reminder",
-            title: ev.isMeet ? "Google Meet" : "Termin",
-            body: `${ev.title} — in ${mins} Min`,
+            title: ev.isMeet ? "Google Meet" : (deRoot ? "Termin" : "Appointment"),
+            body: deRoot ? `${ev.title}, in ${mins} Min.` : `${ev.title}, in ${mins} min`,
             metadata: { hangoutLink: ev.hangoutLink },
             read: false,
             created_at: new Date().toISOString(),
@@ -53753,7 +53780,7 @@ export default function CircularMenu() {
           const notif = {
             id: "rem-" + rem.id,
             type: "reminder",
-            title: "Erinnerung",
+            title: (deRoot ? "Erinnerung" : "Reminder"),
             body: rem.title,
             metadata: { reminder_id: rem.id },
             read: false,
@@ -53802,10 +53829,10 @@ export default function CircularMenu() {
   // ── Push setup: actual subscription flow (used by overlay button) ──
   // Uses one-time setup token from email URL — works without login on the phone
   const performPushSubscribe = useCallback(async () => {
-    setPushSetupOverlay({ status: "working", message: "Aktiviere Benachrichtigungen..." });
+    setPushSetupOverlay({ status: "working", message: deRoot ? "Aktiviere Benachrichtigungen..." : "Turning on notifications..." });
     try {
       if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-        setPushSetupOverlay({ status: "error", message: "Dieser Browser unterstützt keine Push-Benachrichtigungen. Nutze Chrome (Android) oder Safari (iOS 16.4+)." });
+        setPushSetupOverlay({ status: "error", message: (deRoot ? "Dieser Browser unterstützt keine Push-Benachrichtigungen. Nutze Chrome (Android) oder Safari (iOS 16.4+)." : "This browser does not support push notifications. Use Chrome (Android) or Safari (iOS 16.4+).") });
         return;
       }
 
@@ -53819,7 +53846,7 @@ export default function CircularMenu() {
       const permission = await Notification.requestPermission();
       console.log("[Push] Permission:", permission);
       if (permission !== "granted") {
-        setPushSetupOverlay({ status: "error", message: "Benachrichtigungen wurden nicht erlaubt. Bitte in den Browser- / Geräteeinstellungen aktivieren." });
+        setPushSetupOverlay({ status: "error", message: (deRoot ? "Benachrichtigungen wurden nicht erlaubt. Bitte in den Browser- / Geräteeinstellungen aktivieren." : "Notifications were not allowed. Please turn them on in your browser or device settings.") });
         return;
       }
 
@@ -53841,7 +53868,7 @@ export default function CircularMenu() {
           p_auth: subJson.keys.auth,
         });
         if (error) throw new Error("Token redemption failed: " + error.message);
-        if (!data?.success) throw new Error(data?.error || "Token ungültig");
+        if (!data?.success) throw new Error(data?.error || (deRoot ? "Token ungültig" : "Invalid token"));
         console.log("[Push] Subscription saved via token, user_id:", data.user_id);
         localStorage.removeItem("agencyos-push-setup-token");
         localStorage.removeItem("agencyos-push-setup-pending");
@@ -53855,7 +53882,7 @@ export default function CircularMenu() {
         if (dbErr) throw new Error("DB save failed: " + dbErr.message);
         console.log("[Push] Subscription saved (logged-in user)");
       } else {
-        throw new Error("Kein Setup-Token und nicht eingeloggt. Bitte den Link aus der E-Mail neu öffnen.");
+        throw new Error((deRoot ? "Kein Setup-Token und nicht eingeloggt. Bitte den Link aus der E-Mail neu öffnen." : "No setup token and not signed in. Please open the link from the email again."));
       }
 
       setPushSubExists(true);
@@ -53878,13 +53905,13 @@ export default function CircularMenu() {
           const errBody = await testRes.text().catch(() => "");
           throw new Error(`Test push failed (${testRes.status}): ${errBody.slice(0, 200)}`);
         }
-        setPushSetupOverlay({ status: "success", message: "Du hast jetzt eine Test-Benachrichtigung erhalten. Ab sofort kommen alle Reminder auf dieses Gerät." });
+        setPushSetupOverlay({ status: "success", message: (deRoot ? "Du hast jetzt eine Test-Benachrichtigung erhalten. Ab sofort kommen alle Reminder auf dieses Gerät." : "You just received a test notification. From now on all reminders come to this device.") });
       } catch (testErr) {
-        setPushSetupOverlay({ status: "partial", message: "Subscription gespeichert, aber Test-Push fehlgeschlagen: " + testErr.message + ". VAPID Keys auf Vercel gesetzt?" });
+        setPushSetupOverlay({ status: "partial", message: (deRoot ? "Gerät registriert, aber der Test-Push ist fehlgeschlagen: " : "Device registered, but the test push failed: ") + testErr.message });
       }
     } catch (e) {
       console.error("[Push] Setup error:", e);
-      setPushSetupOverlay({ status: "error", message: "Setup fehlgeschlagen: " + e.message });
+      setPushSetupOverlay({ status: "error", message: (deRoot ? "Setup fehlgeschlagen: " : "Setup failed: ") + e.message });
     }
   }, [session?.user?.id]);
 
@@ -53912,13 +53939,13 @@ export default function CircularMenu() {
           setNotifications(prev => [{
             id: "proj-invite-ok-" + Date.now(),
             type: "member_joined",
-            title: "Projekt beigetreten",
-            body: "Du bist jetzt Mitglied des Projekts.",
+            title: (deRoot ? "Projekt beigetreten" : "Joined the project"),
+            body: (deRoot ? "Du bist jetzt Mitglied des Projekts." : "You are now a member of the project."),
             read: false, created_at: new Date().toISOString(),
           }, ...prev]);
         } else {
           localStorage.removeItem("agencyos-project-invite-token");
-          alert(data?.error || "Einladung konnte nicht eingelöst werden");
+          alert(data?.error || (deRoot ? "Einladung konnte nicht eingelöst werden" : "The invitation could not be redeemed"));
         }
       } catch (e) {
         console.error("Project invite accept failed:", e);
@@ -54011,7 +54038,7 @@ export default function CircularMenu() {
     const supported = "serviceWorker" in navigator && "PushManager" in window;
 
     if (!supported) {
-      setPushSetupOverlay({ status: "error", message: "Dieser Browser unterstützt keine Push-Benachrichtigungen. Nutze Chrome (Android) oder Safari (iOS 16.4+)." });
+      setPushSetupOverlay({ status: "error", message: (deRoot ? "Dieser Browser unterstützt keine Push-Benachrichtigungen. Nutze Chrome (Android) oder Safari (iOS 16.4+)." : "This browser does not support push notifications. Use Chrome (Android) or Safari (iOS 16.4+).") });
       localStorage.removeItem("agencyos-push-setup-pending");
       localStorage.removeItem("agencyos-push-setup-token");
       return;
@@ -54026,7 +54053,7 @@ export default function CircularMenu() {
     // Have token OR logged in → ready to activate
     const hasToken = !!(urlToken || storedToken);
     if (!hasToken && !session?.user?.id) {
-      setPushSetupOverlay({ status: "error", message: "Setup-Link ist unvollständig. Bitte erneut von der App aus 'Aktivieren' klicken." });
+      setPushSetupOverlay({ status: "error", message: deRoot ? "Setup-Link ist unvollständig. Bitte erneut in der App auf „Aktivieren“ klicken." : "The setup link is incomplete. Please click “Activate” in the app again." });
       return;
     }
 
@@ -55848,13 +55875,13 @@ export default function CircularMenu() {
   // so the user copies a clean `https://app.i7os.com/i/<slug>` URL instead of a
   // 300-char Supabase Storage URL.
   const uploadImageToStorage = async (dataUrl) => {
-    if (!userOrg?.id) throw new Error("kein Workspace");
+    if (!userOrg?.id) throw new Error((deRoot ? "kein Workspace" : "no workspace"));
     const blob = dataUrl.startsWith("data:") ? dataUrlToBlob(dataUrl) : await (await fetch(dataUrl)).blob();
     if (!blob) throw new Error("decode failed");
     const ext = (blob.type.split("/")[1] || "png").replace("jpeg", "jpg");
     const path = `ai-images/${userOrg.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const room = await checkStorageRoom(userOrg?.id, blob.size, { userId: session?.user?.id, email: session?.user?.email });
-    if (!room.ok) throw new Error(`Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.`);
+    if (!room.ok) throw new Error(deRoot ? `Speicher voll (${formatBytesGB(room.limit)}). Bitte upgraden.` : `Storage full (${formatBytesGB(room.limit)}). Please upgrade.`);
     const { error } = await supabase.storage.from("chat-attachments").upload(path, blob, { cacheControl: UPLOAD_CACHE_IMMUTABLE, contentType: blob.type, upsert: false });
     if (error) throw new Error(error.message);
     trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "chat-attachments", path, sizeBytes: blob.size });
@@ -55927,7 +55954,7 @@ export default function CircularMenu() {
 
     let token = await resolveToken();
     if (!token) {
-      throw new Error("Kein Google-Token vorhanden — bitte unten rechts auf das Profil klicken und Google-Login erneuern.");
+      throw new Error((deRoot ? "Kein Google-Token vorhanden. Bitte in den Einstellungen den Google-Login erneuern." : "No Google token. Please renew the Google login in the settings."));
     }
     let r = await attempt(token);
 
@@ -55946,10 +55973,10 @@ export default function CircularMenu() {
       const err = await r.json().catch(() => ({}));
       const msg = err.error?.message || `HTTP ${r.status}`;
       if (r.status === 401) {
-        throw new Error("Google-Token abgelaufen. Bitte oben rechts auf den Avatar → Logout → erneut mit Google einloggen.");
+        throw new Error((deRoot ? "Google-Token abgelaufen. Bitte abmelden und erneut mit Google anmelden." : "Google token expired. Please sign out and sign in with Google again."));
       }
       if (r.status === 403) {
-        throw new Error("Keine Drive-Berechtigung. Beim Google-Login musst du den Drive-Zugriff zustimmen.");
+        throw new Error((deRoot ? "Keine Drive-Berechtigung. Beim Google-Login musst du dem Drive-Zugriff zustimmen." : "No Drive permission. When signing in with Google, you need to allow Drive access."));
       }
       throw new Error(msg);
     }
@@ -56064,10 +56091,10 @@ export default function CircularMenu() {
         const providerName = data.provider ? data.provider.charAt(0).toUpperCase() + data.provider.slice(1) : "KI";
         setDialogMessages(prev => [...prev, { role: "assistant", content: `${providerName}: ${data.error}`, timestamp: Date.now(), error: true }]);
       } else {
-        setDialogMessages(prev => [...prev, { role: "assistant", content: t("ai.fallback") || "Konnte gerade nicht antworten.", timestamp: Date.now(), error: true }]);
+        setDialogMessages(prev => [...prev, { role: "assistant", content: t("ai.fallback") || (deRoot ? "Konnte gerade nicht antworten." : "Could not answer just now."), timestamp: Date.now(), error: true }]);
       }
     } catch (e) {
-      setDialogMessages(prev => [...prev, { role: "assistant", content: `Netzwerk-Fehler: ${e.message || "unbekannt"}`, timestamp: Date.now(), error: true }]);
+      setDialogMessages(prev => [...prev, { role: "assistant", content: deRoot ? `Netzwerk-Fehler: ${e.message || "unbekannt"}` : `Network error: ${e.message || "unknown"}`, timestamp: Date.now(), error: true }]);
     } finally {
       setDialogSending(false);
     }
@@ -56573,7 +56600,7 @@ export default function CircularMenu() {
     const { data, error } = await supabase.from("whiteboards")
       .insert({ org_id: userOrg.id, name: "Brainstorm", created_by: session?.user?.id })
       .select().single();
-    if (error) { alert("Board konnte nicht erstellt werden: " + error.message); return; }
+    if (error) { alert((deRoot ? "Board konnte nicht erstellt werden: " : "Could not create the board: ") + error.message); return; }
     setWhiteboardId(data.id);
     setWhiteboardReturn("dashboard");
     setCurrentView("whiteboard");
@@ -57421,13 +57448,13 @@ export default function CircularMenu() {
                         <motion.div whileTap={{ scale: 0.95 }}
                           onClick={markAllNotifsRead}
                           style={{ fontSize: 11, fontFamily: FONT, color: theme.accent, cursor: "pointer" }}
-                        >Alle gelesen</motion.div>
+                        >{(deRoot ? "Alle gelesen" : "Mark all read")}</motion.div>
                       )}
                     </div>
                     <div style={{ overflowY: "auto", maxHeight: 380 }}>
                       {notifications.length === 0 ? (
                         <div style={{ padding: "40px 20px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textFaint }}>
-                          Keine Benachrichtigungen
+                          {(deRoot ? "Keine Benachrichtigungen" : "No notifications")}
                         </div>
                       ) : notifications.map(n => {
                         const { title: nTitle, body: nBody } = notifLines(n, appLanguage === "de");
@@ -57442,11 +57469,11 @@ export default function CircularMenu() {
                         const timeAgo = (() => {
                           const diff = Date.now() - new Date(n.created_at).getTime();
                           const mins = Math.floor(diff / 60000);
-                          if (mins < 1) return "gerade eben";
-                          if (mins < 60) return `${mins} Min`;
+                          if (mins < 1) return deRoot ? "gerade eben" : "just now";
+                          if (mins < 60) return deRoot ? `${mins} Min` : `${mins} min`;
                           const hrs = Math.floor(mins / 60);
-                          if (hrs < 24) return `${hrs} Std`;
-                          return `${Math.floor(hrs / 24)} T`;
+                          if (hrs < 24) return deRoot ? `${hrs} Std` : `${hrs} h`;
+                          return deRoot ? `${Math.floor(hrs / 24)} T` : `${Math.floor(hrs / 24)} d`;
                         })();
                         return (
                           <motion.div key={n.id}
@@ -57525,21 +57552,21 @@ export default function CircularMenu() {
         {/* KANBAN VIEW */}
         <AnimatePresence>
           {currentView === "kanban" && (
-            <KanbanBoard session={session} onBack={() => { setOpenTaskId(null); setTriggerNewTask(false); setCurrentView("dashboard"); }} theme={theme} darkMode={darkMode} t={t} openTaskId={openTaskId} triggerNewTask={triggerNewTask} onNewTaskTriggered={() => setTriggerNewTask(false)} userOrg={userOrg} orgMembers={orgMembers} createNotification={createNotification} myProjectNames={myProjectNames} />
+            <KanbanBoard appLanguage={appLanguage} session={session} onBack={() => { setOpenTaskId(null); setTriggerNewTask(false); setCurrentView("dashboard"); }} theme={theme} darkMode={darkMode} t={t} openTaskId={openTaskId} triggerNewTask={triggerNewTask} onNewTaskTriggered={() => setTriggerNewTask(false)} userOrg={userOrg} orgMembers={orgMembers} createNotification={createNotification} myProjectNames={myProjectNames} />
           )}
         </AnimatePresence>
 
         {/* CALENDAR VIEW */}
         <AnimatePresence>
           {currentView === "calendar" && (
-            <CalendarView session={session} getProviderToken={getProviderToken} openMeetCall={openMeetCall} autoReLogin={autoReLogin} ensureValidToken={ensureValidToken} onBack={() => setCurrentView("dashboard")} theme={theme} darkMode={darkMode} t={t} userOrg={userOrg} />
+            <CalendarView appLanguage={appLanguage} session={session} getProviderToken={getProviderToken} openMeetCall={openMeetCall} autoReLogin={autoReLogin} ensureValidToken={ensureValidToken} onBack={() => setCurrentView("dashboard")} theme={theme} darkMode={darkMode} t={t} userOrg={userOrg} />
           )}
         </AnimatePresence>
 
         {/* TIMELINE VIEW */}
         <AnimatePresence>
           {currentView === "timeline" && (
-            <TimelineView session={session} userOrg={userOrg} orgMembers={orgMembers} theme={theme} darkMode={darkMode} t={t}
+            <TimelineView appLanguage={appLanguage} session={session} userOrg={userOrg} orgMembers={orgMembers} theme={theme} darkMode={darkMode} t={t}
               onBack={() => setCurrentView("dashboard")}
               openTaskInKanban={(taskId) => { setOpenTaskId(taskId); setCurrentView("kanban"); }}
             />
@@ -58592,7 +58619,7 @@ export default function CircularMenu() {
                     const { data, error } = await supabase.from("brand_documents")
                       .insert({ org_id: userOrg.id, project_id: null, title: "Unbenanntes Dokument", content: "", created_by: session?.user?.id, visibility })
                       .select().single();
-                    if (error) { alert("Dokument konnte nicht erstellt werden: " + error.message); return; }
+                    if (error) { alert((deRoot ? "Dokument konnte nicht erstellt werden: " : "Could not create the document: ") + error.message); return; }
                     setDocDeepLink({ documentId: data.id, blockId: null, ts: Date.now() });
                     setCurrentView("assets");
                   })();
@@ -59409,7 +59436,7 @@ export default function CircularMenu() {
               whileTap={{ scale: 0.95 }}
               onClick={focusMeetCall}
               style={{ cursor: "pointer", padding: "3px 10px", borderRadius: 8, fontSize: 11, fontFamily: "Inter, system-ui, sans-serif", color: "#ffffffcc", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}
-            >Öffnen</motion.div>
+            >{(deRoot ? "Öffnen" : "Open")}</motion.div>
             <motion.div
               whileHover={{ scale: 1.05, background: "rgba(232,67,67,0.2)" }}
               whileTap={{ scale: 0.95 }}
@@ -61516,7 +61543,7 @@ export default function CircularMenu() {
                   style={{ marginTop: 24 }}
                 >
                   <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
-                    Google-Verbindung
+                    {(deRoot ? "Google-Verbindung" : "Google connection")}
                   </div>
                   <div style={{
                     borderRadius: 20,
@@ -61534,10 +61561,10 @@ export default function CircularMenu() {
                       }}>⚠️</div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>
-                          Verbindung unterbrochen
+                          {(deRoot ? "Verbindung unterbrochen" : "Connection lost")}
                         </div>
                         <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, lineHeight: 1.4 }}>
-                          Calendar & Drive funktionieren nicht. Bitte neu verbinden — danach läuft alles automatisch.
+                          {(deRoot ? "Calendar und Drive funktionieren nicht. Bitte neu verbinden, danach läuft alles automatisch." : "Calendar and Drive are not working. Please reconnect, then everything runs on its own again.")}
                         </div>
                       </div>
                       <motion.button
@@ -61549,7 +61576,7 @@ export default function CircularMenu() {
                           color: "#fff", fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: "pointer",
                           whiteSpace: "nowrap",
                         }}
-                      >Neu verbinden</motion.button>
+                      >{(deRoot ? "Neu verbinden" : "Reconnect")}</motion.button>
                     </div>
                   </div>
                 </motion.div>
@@ -62696,24 +62723,31 @@ export default function CircularMenu() {
 
               {/* Title */}
               <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, textAlign: "center", marginBottom: 12 }}>
-                {pushSetupOverlay.status === "ready" ? "Benachrichtigungen aktivieren" :
-                 pushSetupOverlay.status === "working" ? "Aktiviere..." :
-                 pushSetupOverlay.status === "success" ? "Aktiviert!" :
-                 pushSetupOverlay.status === "partial" ? "Fast geschafft" :
-                 pushSetupOverlay.status === "needsPwa" ? "App zum Home-Bildschirm hinzufügen" :
-                 "Setup fehlgeschlagen"}
+                {pushSetupOverlay.status === "ready" ? (deRoot ? "Benachrichtigungen aktivieren" : "Turn on notifications") :
+                 pushSetupOverlay.status === "working" ? (deRoot ? "Aktiviere..." : "Activating...") :
+                 pushSetupOverlay.status === "success" ? (deRoot ? "Aktiviert!" : "Activated!") :
+                 pushSetupOverlay.status === "partial" ? (deRoot ? "Fast geschafft" : "Almost there") :
+                 pushSetupOverlay.status === "needsPwa" ? (deRoot ? "App zum Home-Bildschirm hinzufügen" : "Add the app to your home screen") :
+                 (deRoot ? "Setup fehlgeschlagen" : "Setup failed")}
               </div>
 
               {/* Body */}
               {pushSetupOverlay.status === "needsPwa" ? (
                 <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 20 }}>
-                  Auf iPhone funktionieren Push-Benachrichtigungen nur, wenn i7OS zum Home-Bildschirm hinzugefügt ist.
+                  {(deRoot ? "Auf dem iPhone funktionieren Push-Benachrichtigungen nur, wenn i7OS zum Home-Bildschirm hinzugefügt ist." : "On iPhone, push notifications only work once i7OS has been added to the home screen.")}
                   <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", fontSize: 12 }}>
-                    <div style={{ fontWeight: 600, color: theme.text, marginBottom: 6 }}>So geht's:</div>
+                    <div style={{ fontWeight: 600, color: theme.text, marginBottom: 6 }}>{deRoot ? "So geht’s:" : "Here is how:"}</div>
+                    {deRoot ? (<>
                     <div style={{ marginBottom: 4 }}>1. Tippe unten auf <strong>Teilen</strong> (das Symbol mit dem Pfeil nach oben ↑)</div>
-                    <div style={{ marginBottom: 4 }}>2. Scrolle und wähle <strong>"Zum Home-Bildschirm"</strong></div>
-                    <div style={{ marginBottom: 4 }}>3. Tippe <strong>"Hinzufügen"</strong></div>
+                    <div style={{ marginBottom: 4 }}>2. Scrolle und wähle <strong>„Zum Home-Bildschirm“</strong></div>
+                    <div style={{ marginBottom: 4 }}>3. Tippe <strong>„Hinzufügen“</strong></div>
                     <div>4. Öffne i7OS vom <strong>Home-Bildschirm</strong> und aktiviere die Benachrichtigungen dort</div>
+                    </>) : (<>
+                    <div style={{ marginBottom: 4 }}>1. Tap <strong>Share</strong> at the bottom (the icon with the arrow pointing up ↑)</div>
+                    <div style={{ marginBottom: 4 }}>2. Scroll and choose <strong>“Add to Home Screen”</strong></div>
+                    <div style={{ marginBottom: 4 }}>3. Tap <strong>“Add”</strong></div>
+                    <div>4. Open i7OS from the <strong>home screen</strong> and turn on notifications there</div>
+                    </>)}
                   </div>
                 </div>
               ) : pushSetupOverlay.message ? (
@@ -62722,7 +62756,7 @@ export default function CircularMenu() {
                 </div>
               ) : (
                 <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 20, textAlign: "center" }}>
-                  Klicke auf "Aktivieren" und erlaube die Benachrichtigungen. Anschließend bekommst du sofort eine Test-Benachrichtigung.
+                  {(deRoot ? "Klicke auf „Aktivieren“ und erlaube die Benachrichtigungen. Anschließend bekommst du sofort eine Test-Benachrichtigung." : "Click “Activate” and allow notifications. You will get a test notification straight away.")}
                 </div>
               )}
 
@@ -62736,7 +62770,7 @@ export default function CircularMenu() {
                       background: theme.accent + "22", border: `1px solid ${theme.accent}40`,
                       fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.accent,
                     }}
-                  >🔔 Aktivieren</motion.button>
+                  >{(deRoot ? "Aktivieren" : "Activate")}</motion.button>
                 )}
                 {(pushSetupOverlay.status === "success" || pushSetupOverlay.status === "error" || pushSetupOverlay.status === "partial" || pushSetupOverlay.status === "needsPwa") && (
                   <motion.button whileTap={{ scale: 0.97 }}
@@ -62747,7 +62781,7 @@ export default function CircularMenu() {
                       border: `1px solid ${theme.borderFaint}`,
                       fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text,
                     }}
-                  >Schließen</motion.button>
+                  >{deRoot ? "Schließen" : "Close"}</motion.button>
                 )}
                 {pushSetupOverlay.status === "error" && (
                   <motion.button whileTap={{ scale: 0.97 }}
@@ -62757,7 +62791,7 @@ export default function CircularMenu() {
                       background: theme.accent + "22", border: `1px solid ${theme.accent}40`,
                       fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.accent,
                     }}
-                  >Erneut versuchen</motion.button>
+                  >{(deRoot ? "Erneut versuchen" : "Try again")}</motion.button>
                 )}
               </div>
             </motion.div>
@@ -62780,13 +62814,13 @@ export default function CircularMenu() {
             const [saving, setSaving] = useState(false);
 
             const handleSaveReminder = async () => {
-              if (!remTitle.trim()) { alert("Bitte einen Titel eingeben."); return; }
-              if (!remDate) { alert("Bitte ein Datum auswählen."); return; }
-              if (!remTime) { alert("Bitte eine Uhrzeit auswählen."); return; }
+              if (!remTitle.trim()) { alert((deRoot ? "Bitte einen Titel eingeben." : "Please enter a title.")); return; }
+              if (!remDate) { alert((deRoot ? "Bitte ein Datum auswählen." : "Please choose a date.")); return; }
+              if (!remTime) { alert((deRoot ? "Bitte eine Uhrzeit auswählen." : "Please choose a time.")); return; }
               const eventTime = new Date(`${remDate}T${remTime}`);
-              if (Number.isNaN(eventTime.getTime())) { alert("Ungültige Uhrzeit. Bitte prüfen."); return; }
+              if (Number.isNaN(eventTime.getTime())) { alert((deRoot ? "Ungültige Uhrzeit. Bitte prüfen." : "Invalid time. Please check it.")); return; }
               if (eventTime.getTime() < Date.now() - 60_000) {
-                const ok = confirm("Die Erinnerungszeit liegt in der Vergangenheit. Trotzdem erstellen?");
+                const ok = confirm((deRoot ? "Die Erinnerungszeit liegt in der Vergangenheit. Trotzdem erstellen?" : "The reminder time is in the past. Create it anyway?"));
                 if (!ok) return;
               }
               setSaving(true);
@@ -62801,7 +62835,7 @@ export default function CircularMenu() {
                 const providerToken = await ensureValidToken();
                 console.log("[Reminder] Token result:", providerToken ? `got token (${providerToken.slice(0, 20)}...)` : "NULL — refresh failed");
                 if (!providerToken) {
-                  calendarError = "Kein Google-Zugriff. Bitte in Settings → Google-Verbindung auf 'Neu verbinden' klicken.";
+                  calendarError = deRoot ? "Kein Google-Zugriff. Bitte in den Einstellungen unter Google-Verbindung auf „Neu verbinden“ klicken." : "No Google access. Please click “Reconnect” under Google connection in the settings.";
                   setGoogleConnectionBroken(true);
                 } else {
                   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -62862,8 +62896,8 @@ export default function CircularMenu() {
                 setNotifications(prev => [{
                   id: "rem-calendar-error-" + Date.now(),
                   type: "reminder",
-                  title: "⚠️ Reminder ohne Handy-Notification",
-                  body: "Reminder gespeichert, aber Google Calendar Sync fehlgeschlagen: " + calendarError,
+                  title: (deRoot ? "Reminder ohne Handy-Benachrichtigung" : "Reminder without phone notification"),
+                  body: (deRoot ? "Reminder gespeichert, aber der Google-Calendar-Sync ist fehlgeschlagen: " : "Reminder saved, but the Google Calendar sync failed: ") + calendarError,
                   read: false,
                   created_at: new Date().toISOString(),
                 }, ...prev]);
@@ -62891,7 +62925,7 @@ export default function CircularMenu() {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: `1px solid ${theme.border}` }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={theme.textDim} strokeWidth="1.5"/><path d="M12 7v5l3 3" stroke={theme.textDim} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Neue Erinnerung</span>
+                      <span style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{(deRoot ? "Neue Erinnerung" : "New reminder")}</span>
                     </div>
                     <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => setShowReminderModal(false)}
                       style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, fontSize: 16 }}
@@ -62902,10 +62936,10 @@ export default function CircularMenu() {
                   <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18 }}>
                     {/* Title */}
                     <div>
-                      <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Woran möchtest du erinnert werden?</label>
+                      <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>{(deRoot ? "Woran möchtest du erinnert werden?" : "What should we remind you of?")}</label>
                       <input
                         value={remTitle} onChange={e => setRemTitle(e.target.value)}
-                        placeholder="z.B. Kundenpräsentation vorbereiten"
+                        placeholder={(deRoot ? "z.B. Kundenpräsentation vorbereiten" : "e.g. Prepare the client presentation")}
                         autoFocus
                         style={{
                           width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
@@ -62921,7 +62955,7 @@ export default function CircularMenu() {
                     {/* Date + Time row */}
                     <div style={{ display: "flex", gap: 12 }}>
                       <div style={{ flex: 1 }}>
-                        <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Datum</label>
+                        <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>{(deRoot ? "Datum" : "Date")}</label>
                         <input type="date" value={remDate} onChange={e => setRemDate(e.target.value)}
                           style={{
                             width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
@@ -62932,7 +62966,7 @@ export default function CircularMenu() {
                         />
                       </div>
                       <div style={{ flex: 1 }}>
-                        <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Uhrzeit</label>
+                        <label style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>{(deRoot ? "Uhrzeit" : "Time")}</label>
                         <input type="time" value={remTime} onChange={e => setRemTime(e.target.value)}
                           style={{
                             width: "100%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
@@ -62954,7 +62988,7 @@ export default function CircularMenu() {
                     }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><path d="M3 9l9-6 9 6v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke="#00B894" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 22V12h6v10" stroke="#00B894" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
-                        Wird auch als Google Calendar Event angelegt — du erhältst eine native Notification auf deinem Handy zum richtigen Zeitpunkt.
+                        {(deRoot ? "Wird auch als Google-Calendar-Termin angelegt. Du bekommst zur richtigen Zeit eine Benachrichtigung auf dein Handy." : "Also created as a Google Calendar event. You get a notification on your phone at the right time.")}
                       </div>
                     </div>
 
@@ -62971,7 +63005,7 @@ export default function CircularMenu() {
                         opacity: saving ? 0.6 : 1,
                         transition: "all 0.2s ease",
                       }}
-                    >{saving ? "Speichern..." : "Erinnerung erstellen"}</motion.button>
+                    >{saving ? (deRoot ? "Speichern..." : "Saving...") : (deRoot ? "Erinnerung erstellen" : "Create reminder")}</motion.button>
                   </div>
                 </motion.div>
               </motion.div>
