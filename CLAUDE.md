@@ -434,6 +434,7 @@ FigJam-style infinite canvas (`WhiteboardView`), reachable via Erstellen → Bra
 
 ## Known pitfalls checklist (quick reference)
 
+- **Never force a Supabase token refresh on a timer or on tab focus.** Fourteen effects in the App root and the views depend on `session?.access_token`, and most of them call one of our functions. A refresh forced every five minutes (and on every tab switch) re-ran all of them: a burst of function calls per open tab, day and night, which used up 75% of Vercel's free Fluid Active CPU (warning mail 2026-09-19). The refresh now only happens with under ten minutes left. A new effect that talks to `api/` should depend on the user id, not the token. Cheap `?check=1` answers carry `s-maxage` so the CDN answers them (the cache is per deployment).
 - `pre-wrap` + auto-fit text box → clipped words. Use `pre` + `overflow: visible`.
 - Canvas `measureText()` vs DOM rendering → use the DOM mirror.
 - Framer Motion clobbers your positioning `transform` → plain wrapper div.
