@@ -2237,28 +2237,56 @@ const TOUR_ROUND = { sphere: true, messenger: true, home: true, menu: true, bell
 // there is not enough room below it is pulled up into the element's lower
 // edge rather than flipped over the top.
 const TOUR_BELOW = { tasks: true };
-// How far the light reaches past the element, and how soft its edge is. The
-// edge is a Gaussian blur of the hole, so it fades out over about twice
-// TOUR_FEATHER on either side of the line; the padding keeps the element
-// itself fully in the light while the fade happens around it.
+// How far the light reaches past the element, and how soft its edge is: the
+// light fades out over TOUR_FEATHER on either side of the hole's edge, and the
+// padding keeps the element itself fully in the light while it does.
 const TOUR_PAD = 16;
-const TOUR_FEATHER = 12;
+const TOUR_FEATHER = 24;
+// A smooth step from veiled (1) to lit (0), in five stops. A straight ramp
+// shows where it starts and where it ends; this one does not.
+const TOUR_RAMP = [1, 0.844, 0.5, 0.156, 0];
 
 // The veil over everything but the element is a tint AND a blur of what lies
 // behind it, with a hole. SVG fills cannot blur what is behind them, so the
-// veil is a plain div with backdrop-filter and the hole is its mask: an SVG
-// image with the hole's edge run through a Gaussian blur, which is what makes
-// the light fade out instead of ending on a line.
-function tourMask(vw, vh, hole, dot) {
+// veil is a plain div with backdrop-filter and the hole is its MASK.
+//
+// The mask is CSS gradients, never an image. It was an SVG data url, redrawn
+// every frame while the light travelled, and a browser decodes a new image
+// asynchronously: for the frame or two before it is ready the mask is
+// missing, and the veil blinks. That was the flicker on every "Next". A
+// gradient is drawn in the same frame it is set.
+//
+// A box of light is two bands, one across and one down; the veil is wherever
+// either band is not (mask-composite add), which fades the corners round by
+// itself. A circle is one radial gradient. The sphere's own light is cut out
+// of all that (intersect), and must be the TOP layer, because the bottom
+// layer has nothing beneath it to intersect with and would hide everything.
+function tourMask(hole, round, dot) {
   const n = (v) => Math.round(v * 10) / 10;
-  const shapes =
-    (hole.w > 0.5 ? `<rect x="${n(hole.x)}" y="${n(hole.y)}" width="${n(hole.w)}" height="${n(hole.h)}" rx="${n(hole.r)}" fill="#000"/>` : "")
-    + (dot ? `<circle cx="${n(dot.x)}" cy="${n(dot.y)}" r="${n(dot.r)}" fill="#000"/>` : "");
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${vw}" height="${vh}" viewBox="0 0 ${vw} ${vh}">`
-    + `<defs><filter id="f" filterUnits="userSpaceOnUse" x="0" y="0" width="${vw}" height="${vh}"><feGaussianBlur stdDeviation="${TOUR_FEATHER}"/></filter>`
-    + `<mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="${vw}" height="${vh}"><rect width="${vw}" height="${vh}" fill="#fff"/><g filter="url(#f)">${shapes}</g></mask></defs>`
-    + `<rect width="${vw}" height="${vh}" fill="#000" mask="url(#m)"/></svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  const F = TOUR_FEATHER;
+  // Veiled up to `a`, lit from `a + 2F`; `lit` flips the direction.
+  const ramp = (a, litFirst) => TOUR_RAMP.map((al, i) =>
+    `rgba(0,0,0,${litFirst ? TOUR_RAMP[4 - i] : al}) ${n(a + (F * i) / 2)}px`);
+  const band = (dir, a, b) => {
+    // Narrower than two feathers: both ramps meet in the middle.
+    const m = (a + b) / 2;
+    const lo = Math.min(a - F, m - 2 * F), hi = Math.max(b - F, m);
+    return `linear-gradient(${dir}, ${ramp(lo, false).join(", ")}, ${ramp(hi, true).join(", ")})`;
+  };
+  const circle = (cx, cy, r) =>
+    `radial-gradient(circle at ${n(cx)}px ${n(cy)}px, ${ramp(Math.max(0, r - F), true).join(", ")})`;
+  const layers = [];
+  if (hole.w > 0.5) {
+    if (round) layers.push(circle(hole.x + hole.w / 2, hole.y + hole.h / 2, Math.min(hole.w, hole.h) / 2));
+    else layers.push(band("to bottom", hole.y, hole.y + hole.h), band("to right", hole.x, hole.x + hole.w));
+  }
+  const ops = layers.map(() => "add");
+  if (dot) {
+    layers.unshift(circle(dot.x, dot.y, dot.r));
+    ops.unshift(layers.length > 1 ? "intersect" : "add");
+  }
+  if (!layers.length) { layers.push("linear-gradient(#000, #000)"); ops.push("add"); }
+  return { image: layers.join(", "), ops };
 }
 
 // Where the light should be for a step: the element plus padding, a circle
@@ -2348,14 +2376,22 @@ function DashboardTour({ appLanguage = "de", darkMode = false, onClose }) {
       cur = cur || goal;
       cur = { x: cur.x + (goal.x - cur.x) * k, y: cur.y + (goal.y - cur.y) * k,
         w: cur.w + (goal.w - cur.w) * k, h: cur.h + (goal.h - cur.h) * k, r: cur.r + (goal.r - cur.r) * k };
-      // The sphere stays lit throughout: it is the one talking.
-      const dot = sphere && s.target !== "sphere"
-        ? { x: sphere.x + sphere.w / 2, y: sphere.y + sphere.h / 2, r: Math.min(sphere.w, sphere.h) / 2 + 6 } : null;
-      const mask = tourMask(vw, vh, cur, dot);
-      if (mask !== lastMask && veilRef.current) {
-        lastMask = mask;
-        veilRef.current.style.maskImage = mask;
-        veilRef.current.style.webkitMaskImage = mask;
+      // The sphere stays lit throughout: it is the one talking. On its own
+      // step too, where the hole lands on it anyway; dropping it there would
+      // darken the sphere for as long as the light takes to travel over.
+      const dot = sphere
+        ? { x: sphere.x + sphere.w / 2, y: sphere.y + sphere.h / 2, r: Math.min(sphere.w, sphere.h) / 2 + TOUR_PAD } : null;
+      const mask = tourMask(cur, !!TOUR_ROUND[s.target], dot);
+      const key = mask.image + mask.ops.join();
+      if (key !== lastMask && veilRef.current) {
+        lastMask = key;
+        const st = veilRef.current.style;
+        // The prefixed pair first, then the standard one: where a browser
+        // treats them as one property, the standard keywords are what stays.
+        st.webkitMaskImage = mask.image;
+        st.webkitMaskComposite = mask.ops.map(o => (o === "intersect" ? "source-in" : "source-over")).join(", ");
+        st.maskImage = mask.image;
+        st.maskComposite = mask.ops.join(", ");
       }
       raf = requestAnimationFrame(tick);
     };
