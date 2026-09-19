@@ -2231,6 +2231,11 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
 // Rounded to a circle rather than to a box: the round buttons of the bar and
 // the sphere read wrong inside a square of light.
 const TOUR_ROUND = { sphere: true, messenger: true, home: true, menu: true, bell: true };
+// The card goes UNDER these, whatever side has more room: above the task list
+// it covered the greeting and read as a lid on the thing it explains. When
+// there is not enough room below it is pulled up into the element's lower
+// edge rather than flipped over the top.
+const TOUR_BELOW = { tasks: true };
 // How far the light reaches past the element, and how soft its edge is. The
 // edge is a Gaussian blur of the hole, so it fades out over about twice
 // TOUR_FEATHER on either side of the line; the padding keeps the element
@@ -2464,7 +2469,8 @@ function DashboardTour({ appLanguage = "de", darkMode = false, onClose }) {
     const above = hole.y - GAP - cardH;
     const below = hole.y + hole.h + GAP;
     const preferAbove = t.y + t.h / 2 > vh / 2;
-    if (preferAbove) top = above >= 16 ? above : (below + cardH <= vh - 16 ? below : 16);
+    if (TOUR_BELOW[step.target]) top = Math.max(16, Math.min(below, vh - cardH - 16));
+    else if (preferAbove) top = above >= 16 ? above : (below + cardH <= vh - 16 ? below : 16);
     else top = below + cardH <= vh - 16 ? below : (above >= 16 ? above : 16);
   } else {
     left = (vw - W) / 2;
