@@ -47,6 +47,16 @@ export const NOTIF_TEXT = {
   },
   // The body is the message somebody typed. Translating that would be absurd,
   // so only the line above it is rendered and the body is left alone.
+  // No actor: nobody DID this, the workspace crossed 90% of its storage.
+  // `ready` says which metadata the text needs instead.
+  storage_warning: {
+    noActor: true,
+    ready: (m) => typeof m.pct === "number",
+    title: (de) => (de ? "Speicher fast voll" : "Storage almost full"),
+    body: (de, m) => (de
+      ? `Dein Workspace nutzt ${m.pct}% des Speichers. Upgrade, um weiter Dateien hochladen zu können.`
+      : `Your workspace uses ${m.pct}% of its storage. Upgrade to keep uploading files.`),
+  },
   chat_message: {
     subjectless: true,
     title: (de, m) => (de ? `Neue Nachricht von ${m.actor}` : `New message from ${m.actor}`),
@@ -58,7 +68,12 @@ export const notifLines = (n, de) => {
   const stored = { title: n?.title || "", body: n?.body || "" };
   const spec = NOTIF_TEXT[n?.type];
   const m = n?.metadata || {};
-  if (!spec || !m.actor) return stored;
+  if (!spec) return stored;
+  if (spec.noActor) {
+    if (spec.ready && !spec.ready(m)) return stored;
+    return { title: spec.title(de, m), body: spec.body ? spec.body(de, m) : stored.body };
+  }
+  if (!m.actor) return stored;
   if (!spec.subjectless && !m.subject) return stored;
   return {
     title: spec.title(de, m),

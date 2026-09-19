@@ -212,7 +212,7 @@ export class AppErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         <div style={{ background: "#111117", color: "#ff6b6b", padding: 40, fontFamily: "monospace", height: "100vh", overflow: "auto" }}>
-          <h2 style={{ color: "#fff", marginBottom: 16 }}>Agency OS — Runtime Error</h2>
+          <h2 style={{ color: "#fff", marginBottom: 16 }}>i7OS · Runtime Error</h2>
           <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.6 }}>
             {this.state.error?.toString()}
             {"\n\n"}
@@ -34204,7 +34204,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                         <line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
                       </svg>
-                      {dictating ? "Stopp" : (de ? "Diktieren" : "Dictate")}
+                      {dictating ? (de ? "Stopp" : "Stop") : (de ? "Diktieren" : "Dictate")}
                     </motion.div>
                     {/* Only while the assistant's write is the last thing that
                         happened to this field. */}
@@ -44710,7 +44710,7 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
                   style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", flexShrink: 0,
                     color: listening ? "#EF4444" : theme.textDim, fontSize: 12, fontFamily: FONT, fontWeight: 500 }}>
                   {listening ? (
-                    <><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="6" y="6" width="12" height="12" rx="2" fill="#EF4444"/></svg> Stopp</>
+                    <><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="6" y="6" width="12" height="12" rx="2" fill="#EF4444"/></svg> {de ? "Stopp" : "Stop"}</>
                   ) : (
                     <><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M5 10a7 7 0 0014 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 17v4M8 21h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> {de ? "Diktieren" : "Dictate"}</>
                   )}
@@ -45837,7 +45837,7 @@ function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMod
               <div key={i}>{row(`Akzent ${i + 1}`, a, v => update({ ...draft, accents: draft.accents.map((x, j) => j === i ? v : x) }), () => update({ ...draft, accents: draft.accents.filter((_, j) => j !== i) }))}</div>
             ))}
             <button onClick={() => update({ ...draft, accents: [...(draft.accents || []), "#888888"] })}
-              style={{ alignSelf: "flex-start", padding: "8px 13px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>+ Akzentfarbe</button>
+              style={{ alignSelf: "flex-start", padding: "8px 13px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>{(de ? "+ Akzentfarbe" : "+ Accent colour")}</button>
 
             {/* Discovery, nested inside the editor: three ready suggestions
                 derived from the current base colour, with the full catalogue one
@@ -45878,7 +45878,7 @@ function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMod
                   <button type="button" onClick={() => setDiscoverOpen(true)}
                     style={{ marginTop: 11, padding: "6px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`,
                       background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>
-                    Mehr entdecken
+                    {(de ? "Mehr entdecken" : "Discover more")}
                   </button>
                 </div>
               );
@@ -45907,7 +45907,7 @@ function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMod
           shade ramp is open, since that view has its own header. */}
       {!openColor && (
         <div style={{ fontSize: 11, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: 1.6, textTransform: "uppercase", marginBottom: -12 }}>
-          Farbpaletten
+          {(de ? "Farbpaletten" : "Colour palettes")}
         </div>
       )}
 
@@ -46093,7 +46093,7 @@ function GradientEditor({ gradient, theme, darkMode, norm, onChange }) {
         <button onClick={addMiddle}
           style={{ alignSelf: "flex-start", padding: "6px 11px", borderRadius: 8, border: `1px dashed ${theme.borderFaint}`,
             background: "transparent", color: theme.textSub, fontSize: 11.5, fontFamily: FONT, cursor: "pointer" }}>
-          + Zwischenton
+          {uiDe() ? "+ Zwischenton" : "+ Middle stop"}
         </button>
       )}
 
@@ -47116,7 +47116,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
           <motion.div initial={{ opacity: 0, scale: 0.95, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} onClick={e => e.stopPropagation()}
             style={{ width: "100%", maxWidth: 360, padding: 20, borderRadius: 18, background: darkMode ? "rgba(24,24,32,0.99)" : "#fff", border: `1px solid ${theme.border}`, boxShadow: "0 24px 60px rgba(0,0,0,0.35)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-              <div style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Hintergrundfarbe</div>
+              <div style={{ fontSize: 14.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{(de ? "Hintergrundfarbe" : "Background colour")}</div>
               <motion.div whileTap={{ scale: 0.9 }} onClick={() => setColorCellId(null)} style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
               </motion.div>
@@ -53847,7 +53847,7 @@ export default function CircularMenu() {
                   body: JSON.stringify({
                     mode: "push",
                     subscription: { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-                    title: "⏰ Erinnerung",
+                    title: (deRoot ? "Erinnerung" : "Reminder"),
                     body: rem.title,
                     tag: "reminder-" + rem.id,
                   }),
@@ -53944,8 +53944,8 @@ export default function CircularMenu() {
           body: JSON.stringify({
             mode: "push",
             subscription: { endpoint: subJson.endpoint, keys: { p256dh: subJson.keys.p256dh, auth: subJson.keys.auth } },
-            title: "✓ Push aktiviert",
-            body: "Du erhältst ab jetzt Erinnerungen auf diesem Gerät.",
+            title: (deRoot ? "Push aktiviert" : "Push is on"),
+            body: (deRoot ? "Du erhältst ab jetzt Erinnerungen auf diesem Gerät." : "From now on you get reminders on this device."),
             tag: "push-setup-ok",
           }),
         });
@@ -58666,7 +58666,7 @@ export default function CircularMenu() {
                     let pref = "workspace"; try { pref = localStorage.getItem("agencyos-doc-default-visibility") || "workspace"; } catch (_) {}
                     const visibility = pref === "private" ? "restricted" : "workspace";
                     const { data, error } = await supabase.from("brand_documents")
-                      .insert({ org_id: userOrg.id, project_id: null, title: "Unbenanntes Dokument", content: "", created_by: session?.user?.id, visibility })
+                      .insert({ org_id: userOrg.id, project_id: null, title: (deRoot ? "Unbenanntes Dokument" : "Untitled document"), content: "", created_by: session?.user?.id, visibility })
                       .select().single();
                     if (error) { alert((deRoot ? "Dokument konnte nicht erstellt werden: " : "Could not create the document: ") + error.message); return; }
                     setDocDeepLink({ documentId: data.id, blockId: null, ts: Date.now() });
@@ -59491,7 +59491,7 @@ export default function CircularMenu() {
               whileTap={{ scale: 0.95 }}
               onClick={endMeetCall}
               style={{ cursor: "pointer", padding: "3px 10px", borderRadius: 8, fontSize: 11, fontFamily: "Inter, system-ui, sans-serif", color: "#E84363", background: "rgba(232,67,67,0.08)", border: "1px solid rgba(232,67,67,0.15)", transition: "all 0.15s" }}
-            >Beenden</motion.div>
+            >{(deRoot ? "Beenden" : "End")}</motion.div>
           </motion.div>
         )}
       </AnimatePresence>
