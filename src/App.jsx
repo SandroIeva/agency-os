@@ -15152,10 +15152,9 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     // no key stored, Gemini goes through the Google sign-in. Without this the
     // request reached the server carrying no credential of any kind and came
     // back 400 — which then got posted into the thread as the agent's reply.
+    // No Google-token detour for Gemini: the sign-in token cannot reach it
+    // (see aiReady), and trying only turned a missing key into a failed call.
     let oauthToken = null;
-    if ((llmProvider || "gemini") === "gemini" && !apiKey && ensureValidToken) {
-      try { oauthToken = await ensureValidToken(); } catch (_) {}
-    }
     // No dialog here: ChatView already renders <AiNotConnected> when no key is
     // stored, and the failure path names Settings. The guard itself stays,
     // because sending anyway posted the server's 400 into the thread as if the
@@ -39909,7 +39908,6 @@ function MoodboardItemDetail({ item, items = [], containers = [], currentContain
     if (item.type !== "image" || genLoading) return;
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
     let oauthToken = null;
-    if (llmProvider === "gemini" && !apiKey && ensureValidToken) { try { oauthToken = await ensureValidToken(); } catch (_) {} }
     // The UI already says so where the button would have been; this is the
     // backstop for a key removed while the panel is open.
     if (!apiKey && !oauthToken) { openAiSettings(); return; }
@@ -43609,7 +43607,6 @@ function DocsTab({ session, userOrg, theme, darkMode, accent: _themeAccent, t, a
     if (!skillInput.trim()) { alert(de ? "Bitte gib ein paar Informationen ein." : "Please enter some information."); return; }
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
     let oauthToken = null;
-    if (llmProvider === "gemini" && !apiKey && ensureValidToken) { try { oauthToken = await ensureValidToken(); } catch (_) {} }
     if (!apiKey && !oauthToken) { openAiSettings(); return; }
     setSkillBusy(true);
     try {
@@ -47331,7 +47328,6 @@ function BrandImagery({ value, editing, onChange, uploadFile, llmProvider, llmKe
   const generatePrompt = async (item) => {
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
     let oauthToken = null;
-    if (llmProvider === "gemini" && !apiKey && ensureValidToken) { try { oauthToken = await ensureValidToken(); } catch (_) {} }
     // Returned silently, so the button simply did nothing.
     if (!apiKey && !oauthToken) { openAiKeyIntro?.(); return; }
     setGenIds(g => [...g, item.id]);
@@ -48171,7 +48167,6 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
     if (!canGenImage) { setErr(de ? "Bildgenerierung benötigt OpenAI oder Gemini (Settings → KI & Modelle)." : "Image generation needs OpenAI or Gemini (Settings → AI)."); return; }
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
     let oauthToken = null;
-    if (llmProvider === "gemini" && !apiKey && ensureValidToken) { try { oauthToken = await ensureValidToken(); } catch (_) {} }
     if (!apiKey && !oauthToken) { openAiKeyIntro?.(); return; }
     setBusy(true);
     const promptStr = buildPrompt() + (variation ? `, ${variation}` : "");
@@ -49132,7 +49127,7 @@ function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, dar
 {"name":"","age":"","role":"","gender":"","location":"","consumer_behavior":"","quote":"","motivations":[{"label":"","value":70}],"goals":[""],"pains":[""],"product_expectation":""}
 Rules: include 3-4 motivations each with an integer value 0-100; exactly 3 goals; exactly 3 pains; a realistic first-person quote; "role" is a short job/role title; "gender" is one of "Weiblich", "Männlich" or "Divers" (in German) inferred from the name/description; "consumer_behavior" is 1-3 words (e.g. "Fast Pace-Buyer"). Infer realistic content from the description. Write all values in the SAME language as the description.`;
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
-    const oauthToken = (llmProvider === "gemini" && !apiKey && ensureValidToken) ? await ensureValidToken() : null;
+    const oauthToken = null; // a Google sign-in is not a Gemini key, see aiReady
     if (!apiKey && !oauthToken) { openAiKeyIntro?.(); return; }
     const resp = await fetch("/api/chat-multi", {
       method: "POST",
@@ -49213,7 +49208,7 @@ Rules:
 - "ceo" is the company's current CEO/founder: "name" plus "info" (1-2 sentences about their background). Leave empty if unknown.
 If you don't know a field, infer a plausible value. Write all text values in the SAME language as the input.`;
     const apiKey = (llmKeys && llmProvider) ? llmKeys[llmProvider] : null;
-    const oauthToken = (llmProvider === "gemini" && !apiKey && ensureValidToken) ? await ensureValidToken() : null;
+    const oauthToken = null; // a Google sign-in is not a Gemini key, see aiReady
     if (!apiKey && !oauthToken) { openAiKeyIntro?.(); return; }
 
     const domainFromInput = (() => {
@@ -55080,13 +55075,12 @@ export default function CircularMenu() {
     }
     setAiIntroOpen(true);
   }, [session, onDashboard, onboardingStep, dashTourOpen, llmKeys, llmProvider]); // eslint-disable-line
-  // Gemini also works through the Google OAuth token, so a missing pasted key
-  // is not the same as no provider. Asked here exactly as the two send paths
-  // ask it, or the dialog would appear in front of somebody it works for.
-  const hasAiProvider = () => {
-    const key = llmKeys?.[llmProvider];
-    return !!key || (llmProvider === "gemini" && !!getProviderToken?.());
-  };
+  // A stored key for the chosen provider, and nothing else (aiReady). This
+  // used to let a Google sign-in count for Gemini, so an account that signed
+  // in with Google never saw the key dialog: the sphere opened and every
+  // answer failed, because the sign-in asks Google for Drive and Calendar only
+  // and that token cannot reach Gemini.
+  const hasAiProvider = () => aiReady(llmProvider, llmKeys);
   // Called at the moment somebody reaches for AI. Returns false and opens the
   // dialog when there is nothing to reach with, so the answer arrives where the
   // question was asked instead of on the next visit to the dashboard.
@@ -57035,7 +57029,7 @@ export default function CircularMenu() {
         viewActions: readViewActionDocs(),
       });
       const activeKey = llmKeys[llmProvider];
-      const googleToken = llmProvider === "gemini" && !activeKey ? getProviderToken() : null;
+      const googleToken = null; // a Google sign-in is not a Gemini key, see aiReady
 
       if (!activeKey && !googleToken) {
         // A sentence saying to go to Settings, when the thing that fixes it can
@@ -57147,7 +57141,7 @@ export default function CircularMenu() {
       let data;
 
       const activeKey = llmKeys[llmProvider];
-      const googleToken = llmProvider === "gemini" && !activeKey ? getProviderToken() : null;
+      const googleToken = null; // a Google sign-in is not a Gemini key, see aiReady
 
       if (activeKey || googleToken) {
         // User has their own key or Google OAuth token
