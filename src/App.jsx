@@ -52210,6 +52210,29 @@ export default function CircularMenu() {
   // ends on the dashboard all the same, because the tour's second half IS the
   // dashboard: the light moving over the logo, the bell, the sphere and the bar.
   const replayTour = () => setOnboardingStep("tour");
+  // Replaying the tour is for the operator only (the owner, 2026-09-19): the
+  // accounts in ADMIN_USER_IDS, the same list that guards /?admin. The browser
+  // cannot know that list, so it asks once per person, and only when Settings
+  // is actually opened. Anything but a clear yes hides the row.
+  const [isOperator, setIsOperator] = useState(false);
+  const operatorAskedRef = useRef(null);
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid) { operatorAskedRef.current = null; setIsOperator(false); return; }
+    if (currentView !== "settings" || operatorAskedRef.current === uid) return;
+    operatorAskedRef.current = uid;
+    (async () => {
+      try {
+        const r = await fetch("/api/admin-stats", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+          body: JSON.stringify({ mode: "whoami" }),
+        });
+        const j = r.ok ? await r.json() : null;
+        if (operatorAskedRef.current === uid) setIsOperator(j?.admin === true);
+      } catch (_) { /* no answer, no row */ }
+    })();
+  }, [session?.user?.id, currentView]);
   const closeTour = () => {
     // Only the tour is marked seen. It used to mark the key dialog seen as
     // well, because its last slide WAS that dialog; that slide is gone, so
@@ -61538,11 +61561,10 @@ export default function CircularMenu() {
                       background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)", color: theme.textDim }}>{appLanguage === "de" ? "Bald verfügbar" : "Coming soon"}</div>
                   </div>
 
-                  {/* The tour, again. It is shown once on the way into a first
-                      workspace and then never, which is right for a tour and
-                      wrong for anybody who wants a second look: what the app
-                      can do is exactly what somebody goes hunting for later.
-                      It also means nobody has to be reset to see it again. */}
+                  {/* The tour, again: for the operator only (see isOperator).
+                      Everybody else sees it once, on the way into a first
+                      workspace, and that is all. */}
+                  {isOperator && (
                   <motion.div
                     whileHover={{ backgroundColor: theme.hoverBg }}
                     onClick={replayTour}
@@ -61576,6 +61598,7 @@ export default function CircularMenu() {
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim}
                       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
                   </motion.div>
+                  )}
                 </div>
               </motion.div>
               )}
@@ -61716,42 +61739,6 @@ export default function CircularMenu() {
                   />
                 </div>
 
-                {/* The introduction runs by itself the first time somebody opens
-                    the sphere, and then never again, which left no way to hear
-                    it a second time short of clearing a browser key by hand.
-                    Nobody should have to open a console to use their own app.
-                    Calling it straight from here skips the once-only gate on
-                    purpose: the gate belongs to the orb, not to a deliberate
-                    press of "play it again". */}
-                <div style={{ marginTop: 12, borderRadius: 20, background: theme.cardBg,
-                  border: `1px solid ${theme.border}`, padding: "14px 18px",
-                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
-                      {appLanguage === "de" ? "Vorstellung" : "Introduction"}
-                    </div>
-                    <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
-                      {appLanguage === "de"
-                        ? "Was i7OS ist, gesprochen. Läuft beim allerersten Öffnen der Sphere von selbst."
-                        : "What i7OS is, spoken. It runs by itself the first time the sphere is opened."}
-                    </div>
-                  </div>
-                  <motion.button whileTap={{ scale: 0.97 }}
-                    onClick={() => {
-                      // Home first: the sphere owns the dashboard and draws
-                      // itself as a corner panel over anything else, and the
-                      // settings page is the one screen it must not sit on.
-                      setCurrentView("dashboard");
-                      // One frame for the dashboard to be there before the orb
-                      // drops out of its corner.
-                      setTimeout(introduceAssistant, 60);
-                    }}
-                    style={{ padding: "9px 18px", borderRadius: 999, cursor: "pointer", flexShrink: 0,
-                      border: `1px solid ${theme.border}`, background: "transparent",
-                      color: theme.text, fontFamily: FONT, fontSize: 13, fontWeight: 500 }}>
-                    {appLanguage === "de" ? "Nochmal anhören" : "Play again"}
-                  </motion.button>
-                </div>
               </motion.div>
               )}
 

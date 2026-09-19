@@ -43,6 +43,12 @@ export default async function handler(req) {
   const { data: userData, error: userErr } = await authClient.auth.getUser(token);
   if (userErr || !userData?.user) return json({ error: "Invalid session", code: "unauthorized" }, 401);
 
+  // "Am I the operator?", for the few controls in the app that only the
+  // operator should see (replaying the onboarding tour). It answers for the
+  // caller's own session and nothing else, and reads no data.
+  const body = await req.json().catch(() => ({}));
+  if (body?.mode === "whoami") return json({ admin: admins.includes(userData.user.id) });
+
   // Deliberately the same 403 and wording for "logged in but not an admin" as a
   // stranger would get — no hint that the page exists or who may use it.
   if (!admins.includes(userData.user.id)) return json({ error: "Forbidden", code: "forbidden" }, 403);
