@@ -18,10 +18,10 @@
 //   POST { mode: "search",     orgId, query?, cursor? } → pages it can see, newest first
 //   POST { mode: "tree",       orgId } → every page and database it can see, with parents, for the picker's tree
 //   POST { mode: "tasks",      orgId, dataSourceId } → a database's entries as Kanban tasks (status → column, due, priority)
-//   POST { mode: "task-bodies", orgId, pageIds } → up to five entries' page text, for the task descriptions
+//   POST { mode: "task-bodies", orgId, pageIds } → up to five entries' page text and checklists
 //   POST { mode: "page",       orgId, pageId } → { title, html } ready for the document import
 import { createClient } from "@supabase/supabase-js";
-import { blocksToHtml, pageTitle, plain, notionTaskFields, notionTaskOf, notionBlocksToText } from "../server/notion.js";
+import { blocksToHtml, pageTitle, plain, notionTaskFields, notionTaskOf, notionTaskContent } from "../server/notion.js";
 
 export const config = { runtime: "edge" };
 
@@ -381,17 +381,21 @@ export default async function handler(req) {
     // Edge function has.
     if (body.mode === "task-bodies") {
       const ids = (Array.isArray(body.pageIds) ? body.pageIds : []).map(String).filter(id => /^[0-9a-f-]{32,36}$/i.test(id)).slice(0, 5);
-      const bodies = {};
+      const bodies = {}, checklists = {};
       for (const id of ids) {
         try {
           const blocks = await readBlocks(ctx, id, 0, { calls: 8, truncated: false });
-          bodies[id] = notionBlocksToText(blocks).slice(0, 4000);
+          // To-do items go to the task's checklist, the rest to its description.
+          const { text, checklist } = notionTaskContent(blocks);
+          bodies[id] = text.slice(0, 4000);
+          checklists[id] = checklist;
         } catch (e) {
           if (e instanceof Reconnect) throw e;
           bodies[id] = "";
+          checklists[id] = [];
         }
       }
-      return json({ bodies });
+      return json({ bodies, checklists });
     }
 
     if (body.mode === "page") {

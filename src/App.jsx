@@ -4020,8 +4020,9 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, appLanguage = "de", 
   }, []);
   const importNotionTasks = async (list, projectName) => {
     if (!list?.length || !session?.user?.id) return { added: 0 };
-    // The page text becomes the description, fetched five entries at a time.
-    const bodies = {};
+    // The page text becomes the description and its to-do items the task's
+    // checklist, fetched five entries at a time.
+    const bodies = {}, checklists = {};
     for (let i = 0; i < list.length; i += 5) {
       try {
         const r = await fetch("/api/notion", {
@@ -4031,6 +4032,7 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, appLanguage = "de", 
         });
         const j = await r.json().catch(() => ({}));
         Object.assign(bodies, j.bodies || {});
+        Object.assign(checklists, j.checklists || {});
       } catch (_) { /* a task without its description is still a task */ }
     }
     const next = {};
@@ -4051,6 +4053,20 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, appLanguage = "de", 
         source_ref: `notion:${t.id}`,
       };
     });
+    // The checklist rows, the same shape createTask writes for a new task's
+    // pending checklist: task_id, text, checked, position.
+    const addChecklists = async (created) => {
+      const items = [];
+      for (const task of created || []) {
+        const pageId = String(task.source_ref || "").replace(/^notion:/, "");
+        (checklists[pageId] || []).forEach((it, idx) => {
+          if (it?.text) items.push({ task_id: task.id, text: it.text, checked: !!it.checked, position: idx });
+        });
+      }
+      for (let i = 0; i < items.length; i += 500) {
+        await supabase.from("task_checklist_items").insert(items.slice(i, i + 500)).then(() => {});
+      }
+    };
     const { data, error } = await supabase.from("tasks").insert(rows).select();
     if (error) {
       // Some arrived in the meantime (another tab, a second click): take the
@@ -4062,11 +4078,13 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, appLanguage = "de", 
           if (!e && d) added.push(d);
         }
         if (added.length) setTasks(prev => [...prev, ...added.filter(a => !prev.some(p => p.id === a.id))]);
+        await addChecklists(added);
         return { added: added.length };
       }
       return { error: planLimitError(error, de) || error.message };
     }
     if (data?.length) setTasks(prev => [...prev, ...data.filter(a => !prev.some(p => p.id === a.id))]);
+    await addChecklists(data);
     return { added: data?.length || 0 };
   };
 

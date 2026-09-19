@@ -1,6 +1,6 @@
 // The Notion → HTML conversion, against the shipped code (server/notion.js).
 // Run: node scripts/test-notion-html.mjs
-import { blocksToHtml, pageTitle, rich, notionTree, notionPath, notionTaskFields, notionTaskOf, notionBlocksToText } from "../server/notion.js";
+import { blocksToHtml, pageTitle, rich, notionTree, notionPath, notionTaskFields, notionTaskOf, notionBlocksToText, notionTaskContent } from "../server/notion.js";
 
 let failed = 0;
 const eq = (name, got, want) => {
@@ -100,6 +100,23 @@ eq("unknown block with text still reads", blocksToHtml([blk("something_new", { r
     { type: "to_do", to_do: { rich_text: [rt("Farben")], checked: true } },
     { type: "bulleted_list_item", bulleted_list_item: { rich_text: [rt("a")] }, _children: [{ type: "bulleted_list_item", bulleted_list_item: { rich_text: [rt("b")] } }] },
   ]), "Kontext\n[x] Farben\n- a\n  - b");
+}
+
+
+// ── A task page split into description and checklist ──
+{
+  const c = notionTaskContent([
+    { type: "paragraph", paragraph: { rich_text: [rt("Briefing lesen")] } },
+    { type: "to_do", to_do: { rich_text: [rt("Farben")], checked: true } },
+    { type: "to_do", to_do: { rich_text: [rt("Schrift")], checked: false }, _children: [
+      { type: "to_do", to_do: { rich_text: [rt("Headline")], checked: false } },
+      { type: "paragraph", paragraph: { rich_text: [rt("Notiz zur Schrift")] } } ] },
+    { type: "to_do", to_do: { rich_text: [rt("  ")], checked: false } },
+    { type: "bulleted_list_item", bulleted_list_item: { rich_text: [rt("Punkt")] } },
+  ]);
+  eq("checklist from to-dos, nested flattened, empty dropped",
+    c.checklist.map(i => (i.checked ? "x " : "o ") + i.text).join(" | "), "x Farben | o Schrift | o Headline");
+  eq("description keeps only the rest", c.text, "Briefing lesen\nNotiz zur Schrift\n- Punkt");
 }
 
 console.log(failed ? `\n${failed} failed` : "\nall passed");

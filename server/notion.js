@@ -287,3 +287,26 @@ export function notionBlocksToText(blocks, depth = 0) {
   }
   return out.join("\n");
 }
+
+// A task's page split in two: its to-do items become the task's CHECKLIST
+// (the Kanban has one, right under the description), everything else becomes
+// the description text. A to-do nested under another is flattened into the
+// same list; anything else nested under a to-do stays in the text.
+export function notionTaskContent(blocks) {
+  const checklist = [];
+  const strip = (arr) => {
+    const out = [];
+    for (const b of arr || []) {
+      if (b?.type === "to_do") {
+        const t = plain(b.to_do?.rich_text).trim();
+        if (t) checklist.push({ text: t.slice(0, 500), checked: !!b.to_do?.checked });
+        if (b._children) out.push(...strip(b._children));
+        continue;
+      }
+      out.push(b?._children ? { ...b, _children: strip(b._children) } : b);
+    }
+    return out;
+  };
+  const rest = strip(blocks);
+  return { text: notionBlocksToText(rest), checklist: checklist.slice(0, 100) };
+}
