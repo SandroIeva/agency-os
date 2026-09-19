@@ -19353,7 +19353,7 @@ const RESERVED_SLUGS = new Set([
   // Added BEFORE /tiktok/callback shipped, which is the order that matters:
   // once a workspace owns the name, taking it back means renaming somebody's
   // workspace.
-  "figma", "instagram", "threads", "tiktok",
+  "figma", "instagram", "threads", "tiktok", "notion",
   // Kept free for pages this domain may want later. A workspace called `login`
   // is only a problem on the day somebody builds /login, and by then it is
   // somebody's workspace and cannot be taken away.
@@ -36503,6 +36503,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const [docsAddOpen, setDocsAddOpen] = useState(false); // "Hinzufügen" dropdown (docs tab)
   const [docsImporting, setDocsImporting] = useState(false); // Google-Docs import in progress
   const docsImport = useRef(null); // DocsTab registers its "import from Drive" fn here
+  const docsNotion = useRef(null); // …and its "import from Notion" picker here
   const docsSkills = useRef(null); // DocsTab registers its "open skills" fn here
   // The "Hinzufügen" dropdown inside an open board. It is portalled to the
   // body, so where it goes has to be measured rather than inherited: this holds
@@ -37763,6 +37764,10 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             sub: appLanguage === "de" ? "Google-Docs und PDFs übernehmen" : "Bring in Google Docs and PDFs",
                             icon: <><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="15" x2="12" y2="21"/></>,
                             onClick: () => { setDocsAddOpen(false); docsImport.current?.(); } },
+                          { key: "notion", label: appLanguage === "de" ? "Aus Notion importieren" : "Import from Notion",
+                            sub: appLanguage === "de" ? "Notion-Seiten als Dokumente übernehmen" : "Bring in Notion pages as documents",
+                            icon: <><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M9 16.5v-9l6 9v-9"/></>,
+                            onClick: () => { setDocsAddOpen(false); docsNotion.current?.(); } },
                           { key: "skills", label: appLanguage === "de" ? "Dokument mit Skills erstellen" : "Create document with Skills",
                             sub: appLanguage === "de" ? "Mit einem KI-Skill generieren" : "Generate with an AI skill",
                             icon: <><path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z"/><path d="M19 14l.9 2.2L22 17l-2.1.8L19 20l-.9-2.2L16 17l2.1-.8z"/></>,
@@ -37994,7 +37999,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 
           {/* ── DOCS tab ── */}
           {tab === "docs" && (
-            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} orgMembers={orgMembers} createNotification={createNotification} projectId={projectId} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} uploadPdfRef={docsUploadPdf} importRef={docsImport} onImportingChange={setDocsImporting} skillsRef={docsSkills} newFolderRef={docsNewFolder} llmProvider={llmProvider} llmKeys={llmKeys} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onOpenChange={setDocOpen} />
+            <DocsTab session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} accent={accent} t={t} appLanguage={appLanguage} orgMembers={orgMembers} createNotification={createNotification} projectId={projectId} deepLink={docDeepLink} fullscreen={docFullscreen} setFullscreen={setDocFullscreen} createRef={docsCreate} uploadPdfRef={docsUploadPdf} importRef={docsImport} notionRef={docsNotion} onImportingChange={setDocsImporting} skillsRef={docsSkills} newFolderRef={docsNewFolder} llmProvider={llmProvider} llmKeys={llmKeys} getProviderToken={getProviderToken} ensureValidToken={ensureValidToken} autoReLogin={autoReLogin} onOpenChange={setDocOpen} />
           )}
 
           {/* ── LINKS tab ── */}
@@ -42307,7 +42312,202 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
   );
 }
 
-function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "de", orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, uploadPdfRef, importRef, onImportingChange, skillsRef, newFolderRef, llmProvider, llmKeys, getProviderToken, ensureValidToken, autoReLogin, onOpenChange, projectId = null }) {
+// ── Import from Notion ──────────────────────────────────────────────────────
+// Lists the pages the workspace's Notion connection can see and hands the
+// chosen ones back to DocsTab, which imports them the same way it imports a
+// Google Doc (HTML → images copied into our storage → BlockNote blocks).
+// Not connected yet, it offers the connection instead; Notion's own consent
+// screen is where somebody picks which pages i7OS may see.
+function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode, onClose, onImport }) {
+  const de = appLanguage === "de";
+  const [status, setStatus] = useState(null);   // null = loading, else { connected, workspace_name, needs_reconnect }
+  const [query, setQuery] = useState("");
+  const [pages, setPages] = useState([]);
+  const [cursor, setCursor] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [picked, setPicked] = useState([]);     // [{ id, title }]
+  const [connecting, setConnecting] = useState(false);
+  const reqRef = useRef(0);
+
+  const call = async (body) => {
+    const r = await fetch("/api/notion", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+      body: JSON.stringify({ ...body, orgId }),
+    });
+    const j = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, ...j };
+  };
+
+  useEffect(() => {
+    let alive = true;
+    call({ mode: "status" }).then(j => { if (alive) setStatus(j.ok ? j : { connected: false }); });
+    return () => { alive = false; };
+  }, [orgId]); // eslint-disable-line
+
+  // The newest pages first; typing narrows them, with a short pause so every
+  // keystroke is not a request.
+  const load = async (q, after = null) => {
+    const token = ++reqRef.current;
+    setLoading(true); setErr("");
+    const j = await call({ mode: "search", query: q, cursor: after });
+    if (token !== reqRef.current) return;
+    setLoading(false);
+    if (!j.ok) {
+      if (j.code === "reconnect_required") setStatus(s => ({ ...(s || {}), connected: true, needs_reconnect: true }));
+      else setErr(de ? "Notion hat nicht geantwortet. Versuch es gleich noch einmal." : "Notion did not answer. Try again in a moment.");
+      return;
+    }
+    setPages(prev => after ? [...prev, ...(j.pages || [])] : (j.pages || []));
+    setCursor(j.cursor || null);
+  };
+  useEffect(() => {
+    if (!status?.connected || status.needs_reconnect) return;
+    const t = setTimeout(() => load(query.trim()), query ? 350 : 0);
+    return () => clearTimeout(t);
+  }, [query, status?.connected, status?.needs_reconnect]); // eslint-disable-line
+
+  const connect = async () => {
+    setConnecting(true); setErr("");
+    try { await startNotionOAuth({ orgId, appLanguage, returnTo: "docs" }); }
+    catch (_) {
+      setErr(de ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection.");
+      setConnecting(false);
+    }
+  };
+  const toggle = (p) => setPicked(prev => prev.some(x => x.id === p.id) ? prev.filter(x => x.id !== p.id) : [...prev, { id: p.id, title: p.title }]);
+  const when = (iso) => { try { return new Date(iso).toLocaleDateString(de ? "de-DE" : "en-GB", { day: "2-digit", month: "short", year: "numeric" }); } catch { return ""; } };
+
+  const btn = (primary) => ({
+    padding: "10px 18px", borderRadius: 999, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: FONT,
+    ...(primary ? { background: "#15151c", border: "none", color: "#fff" } : { background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.text }),
+  });
+  const needsConnect = status && (!status.connected || status.needs_reconnect);
+
+  return createPortal(
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 100003, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <motion.div
+        initial={{ scale: 0.96, y: 12, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }}
+        transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1.0] }}
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 520, maxHeight: "82vh", display: "flex", flexDirection: "column",
+          background: darkMode ? "#1c1c26" : "#fff",
+          border: `1px solid ${theme.borderFaint}`, borderRadius: 20, overflow: "hidden",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.32)",
+        }}>
+        <div style={{ padding: "18px 22px 14px", borderBottom: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "flex-start", gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? "Aus Notion importieren" : "Import from Notion"}</div>
+            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
+              {status?.connected && !status.needs_reconnect && status.workspace_name
+                ? (de ? `Seiten aus ${status.workspace_name}, als Kopie in deine Dokumente.` : `Pages from ${status.workspace_name}, copied into your documents.`)
+                : (de ? "Notion-Seiten werden als Kopie zu Dokumenten." : "Notion pages become documents, as a copy.")}
+            </div>
+          </div>
+          <motion.div whileTap={{ scale: 0.9 }} onClick={onClose} title={de ? "Schließen" : "Close"}
+            style={{ cursor: "pointer", color: theme.textDim, padding: 4, display: "flex" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </motion.div>
+        </div>
+
+        {!status ? (
+          <div style={{ padding: 40, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Lädt…" : "Loading…"}</div>
+        ) : needsConnect ? (
+          <div style={{ padding: "28px 26px 26px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 14 }}>
+            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, lineHeight: 1.55, maxWidth: 380 }}>
+              {status.needs_reconnect
+                ? (de ? "Die Verbindung zu Notion ist abgelaufen. Verbinde sie einmal neu." : "The Notion connection has expired. Connect it once more.")
+                : (de ? "Verbinde Notion einmal für diesen Workspace. Du wählst dabei selbst, welche Seiten i7OS sehen darf." : "Connect Notion once for this workspace. You choose which pages i7OS may see.")}
+            </div>
+            <motion.button whileTap={{ scale: 0.97 }} onClick={connecting ? undefined : connect}
+              style={{ ...btn(true), opacity: connecting ? 0.6 : 1, cursor: connecting ? "wait" : "pointer" }}>
+              {status.needs_reconnect ? (de ? "Neu verbinden" : "Reconnect") : (de ? "Notion verbinden" : "Connect Notion")}
+            </motion.button>
+            {err && <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767" }}>{err}</div>}
+          </div>
+        ) : (
+          <>
+            <div style={{ padding: "14px 22px 8px" }}>
+              <input value={query} onChange={e => setQuery(e.target.value)} autoFocus
+                placeholder={de ? "Seiten durchsuchen…" : "Search pages…"}
+                style={{
+                  width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 12,
+                  background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
+                  border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+                  color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none",
+                }} />
+            </div>
+            <div style={{ flex: 1, minHeight: 160, overflowY: "auto", padding: "4px 12px 8px" }}>
+              {pages.length === 0 && !loading && (
+                <div style={{ padding: "28px 16px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
+                  {query.trim()
+                    ? (de ? "Keine Seite gefunden." : "No page found.")
+                    : (de ? "i7OS sieht noch keine Seiten." : "i7OS cannot see any pages yet.")}
+                </div>
+              )}
+              {pages.map(p => {
+                const sel = picked.some(x => x.id === p.id);
+                return (
+                  <div key={p.id} onClick={() => toggle(p)} className="hover-row"
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 10px", borderRadius: 12, cursor: "pointer" }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {p.title || (de ? "Ohne Titel" : "Untitled")}
+                      </div>
+                      {p.lastEdited && <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{(de ? "Bearbeitet " : "Edited ") + when(p.lastEdited)}</div>}
+                    </div>
+                    <div style={{
+                      width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                      background: sel ? "#15151c" : "transparent",
+                      border: `1.5px solid ${sel ? "#15151c" : (darkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.25)")}`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      {sel && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>}
+                    </div>
+                  </div>
+                );
+              })}
+              {loading && <div style={{ padding: 16, textAlign: "center", fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>{de ? "Lädt…" : "Loading…"}</div>}
+              {cursor && !loading && (
+                <div onClick={() => load(query.trim(), cursor)} className="hover-row"
+                  style={{ padding: "10px", textAlign: "center", fontSize: 12.5, fontFamily: FONT, color: theme.textSub, borderRadius: 10, cursor: "pointer" }}>
+                  {de ? "Mehr laden" : "Load more"}
+                </div>
+              )}
+              {err && <div style={{ padding: "8px 10px", fontSize: 12, fontFamily: FONT, color: "#E86767" }}>{err}</div>}
+            </div>
+            <div style={{ padding: "12px 22px 14px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ flex: 1, fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.45 }}>
+                {de
+                  ? "Seite fehlt? In Notion auf der Seite oben rechts „…“, dann Verbindungen, i7OS hinzufügen."
+                  : "Page missing? In Notion, open the page’s “…” menu at the top right, then Connections, and add i7OS."}
+              </div>
+              <motion.button whileTap={{ scale: 0.97 }} disabled={!picked.length}
+                onClick={() => { if (picked.length) onImport(picked); }}
+                style={{ ...btn(true), opacity: picked.length ? 1 : 0.4, cursor: picked.length ? "pointer" : "default", flexShrink: 0 }}>
+                {picked.length
+                  ? (de ? `Importieren (${picked.length})` : `Import (${picked.length})`)
+                  : (de ? "Importieren" : "Import")}
+              </motion.button>
+            </div>
+          </>
+        )}
+      </motion.div>
+    </motion.div>,
+    document.body,
+  );
+}
+
+function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "de", orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, uploadPdfRef, importRef, notionRef = null, onImportingChange, skillsRef, newFolderRef, llmProvider, llmKeys, getProviderToken, ensureValidToken, autoReLogin, onOpenChange, projectId = null }) {
   // Component-level language flag. The three `const de` further down sit inside
   // nested functions, so anything at this level could not see them — which is
   // exactly how the PDF upload shipped a ReferenceError.
@@ -42316,6 +42516,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   // Folders (document_folders) — same principle as the Assets/Creations tab.
   const [folders, setFolders] = useState([]);
   const [currentFolder, setCurrentFolder] = useState(null); // null = root
+  const [notionPickOpen, setNotionPickOpen] = useState(false);
   const [folderMenu, setFolderMenu] = useState(null);       // folder id whose kebab is open
   const [moveMenuFor, setMoveMenuFor] = useState(null);     // doc id whose move-to-folder menu is open
   const [folderModalOpen, setFolderModalOpen] = useState(false);
@@ -42641,8 +42842,11 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
       for (const img of imgs) {
         const src = img.getAttribute("src");
         try {
-          const res = await fetch(src);
-          if (!res.ok) continue;
+          // Straight first; hosts that send no CORS headers (Notion's signed S3
+          // links among them) go through our own image proxy instead.
+          let res = await fetch(src).catch(() => null);
+          if (!res || !res.ok) res = await fetch(`/api/img-proxy?url=${encodeURIComponent(src)}`).catch(() => null);
+          if (!res || !res.ok) continue;
           const blob = await res.blob();
           if (!blob || blob.size === 0 || !(blob.type || "").startsWith("image/")) continue;
           const ext = (blob.type.split("/")[1] || "png").split("+")[0];
@@ -42757,6 +42961,60 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
       alert((de ? "Konnte nicht importieren:\n" : "Couldn't import:\n") + failures.map(f => "•  " + f).join("\n"));
     }
   };
+
+  // Notion pages. The server turns each one into HTML, and from there it is
+  // the Google Docs route above: images copied into our storage, HTML parsed
+  // into blocks, saved as a native document. A copy, not a live link.
+  const importFromNotion = async (list) => {
+    if (!userOrg?.id || !session?.user?.id || !list?.length) return;
+    const de = appLanguage === "de";
+    setNotionPickOpen(false);
+    onImportingChange?.(true);
+    let parser = null;
+    try { parser = BlockNoteEditor.create(); } catch (_) {}
+    const added = [], failures = [];
+    let cut = false;
+    for (const p of list) {
+      const label = p.title || (de ? "Notion-Seite" : "Notion page");
+      try {
+        const r = await fetch("/api/notion", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+          body: JSON.stringify({ mode: "page", orgId: userOrg.id, pageId: p.id }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          failures.push(j.code === "not_shared" ? `${label} (${de ? "nicht freigegeben" : "not shared"})` : label);
+          continue;
+        }
+        if (j.truncated) cut = true;
+        const html = await rehostDocImages(j.html || "");
+        let blocks = [];
+        if (parser && html) { try { blocks = await parser.tryParseHTMLToBlocks(html); } catch (e) { console.error("[notion-import] HTML parse failed", e); } }
+        const content = (Array.isArray(blocks) && blocks.length) ? JSON.stringify(blocks) : "";
+        const { data, error } = await supabase.from("brand_documents")
+          .insert({ org_id: userOrg.id, project_id: projectId || null, folder_id: currentFolder || null, title: j.title || label, content, created_by: session.user.id, visibility: "workspace" })
+          .select().single();
+        if (error) { console.error("[notion-import]", label, "insert failed", error); failures.push(label); continue; }
+        if (data) { added.push(data); recordActivity("created", data.id); }
+      } catch (e) { console.error("[notion-import]", label, e); failures.push(label); }
+    }
+    if (added.length) setDocs(prev => [...added, ...prev]);
+    onImportingChange?.(false);
+    if (added.length === 1) { setOpenDoc(added[0]); setTitle(added[0].title || ""); }
+    const notes = [];
+    if (failures.length) notes.push((de ? "Konnte nicht importieren:\n" : "Couldn't import:\n") + failures.map(f => "•  " + f).join("\n"));
+    if (cut) notes.push(de ? "Eine sehr lange Seite wurde nur zum Teil übernommen." : "A very long page was only partly imported.");
+    if (notes.length) alert(notes.join("\n\n"));
+  };
+  useEffect(() => { if (notionRef) notionRef.current = () => setNotionPickOpen(true); }, [notionRef]);
+  // Coming back from Notion's consent screen, the picker opens by itself: the
+  // connection was only ever a step on the way to importing a page.
+  useEffect(() => {
+    let again = false;
+    try { again = localStorage.getItem(NOTION_REOPEN_KEY) === "1"; localStorage.removeItem(NOTION_REOPEN_KEY); } catch (_) {}
+    if (again) setNotionPickOpen(true);
+  }, []);
   const importFromDriveRef = useRef(null);
   importFromDriveRef.current = importFromDrive;
   useEffect(() => { if (importRef) importRef.current = () => importFromDriveRef.current?.(); }, [importRef]);
@@ -43413,6 +43671,11 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
             )}
           </motion.div>
         </motion.div>, document.body)}
+
+      {notionPickOpen && (
+        <NotionImportModal orgId={userOrg?.id} session={session} appLanguage={appLanguage} theme={theme} darkMode={darkMode}
+          onClose={() => setNotionPickOpen(false)} onImport={importFromNotion} />
+      )}
 
       {confirmDeleteDoc && createPortal(
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setConfirmDeleteDoc(null)}
@@ -50623,6 +50886,22 @@ function CreationsEmpty({ theme, darkMode, image, imageWidth = 384, imageGap = n
 // is minted by Postgres and carries a user and a workspace, not a screen. It is
 // read once when Pinterest sends the person back.
 const PINTEREST_RETURN_KEY = "agencyos-pinterest-return";
+
+// Notion, the same round trip as Pinterest: a one-time token that carries the
+// workspace, a full-page visit to Notion's consent screen, and a note of where
+// to come back to.
+const NOTION_RETURN_KEY = "agencyos-notion-return";
+// Set on the way back from Notion when somebody started from the document
+// import; DocsTab reads it once and opens the page picker again.
+const NOTION_REOPEN_KEY = "agencyos-notion-open-picker";
+async function startNotionOAuth({ orgId, appLanguage, returnTo = "settings" }) {
+  const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
+    p_org: orgId || null, p_kind: "notion", p_lang: appLanguage === "en" ? "en" : "de",
+  });
+  if (error || !token) throw error || new Error("token");
+  try { localStorage.setItem(NOTION_RETURN_KEY, returnTo); } catch (_) {}
+  window.location.href = `/api/notion?mode=install&state=${encodeURIComponent(token)}`;
+}
 async function startPinterestOAuth({ orgId, appLanguage, returnTo = "settings" }) {
   const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
     p_org: orgId || null, p_kind: "pinterest", p_lang: appLanguage === "en" ? "en" : "de",
@@ -53260,6 +53539,96 @@ export default function CircularMenu() {
     })();
     return () => { alive = false; };
   }, [readPinterest]);
+
+  // ── Notion ────────────────────────────────────────────────────────────────
+  // Read-only: pages come in as documents. Like Pinterest, the connection
+  // belongs to the workspace and reloads when the workspace changes.
+  const [notionReady, setNotionReady] = useState(false);
+  const [notionConn, setNotionConn] = useState(null);   // { connected, workspace_name, needs_reconnect }
+  const [notionBusy, setNotionBusy] = useState(false);
+  const [notionErr, setNotionErr] = useState("");
+  const readNotion = useCallback(async () => {
+    if (!userOrg?.id) return null;
+    try {
+      const r = await fetch("/api/notion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ mode: "status", orgId: userOrg.id }),
+      });
+      if (!r.ok) return null;
+      const j = await r.json().catch(() => null);
+      return j?.connected ? j : null;
+    } catch { return null; }
+  }, [userOrg?.id, session?.access_token]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/notion?check=1");
+        const info = r.ok ? await r.json().catch(() => null) : null;
+        if (alive) setNotionReady(!!info?.configured);
+      } catch { if (alive) setNotionReady(false); }
+      const row = await readNotion();
+      if (alive) setNotionConn(row);
+    })();
+    return () => { alive = false; };
+  }, [readNotion]);
+  // Notion sends people back to /?notion=<status>, read once like Pinterest.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("notion");
+    if (!status) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("notion");
+    window.history.replaceState({}, "", url.pathname + (url.search || ""));
+    let back = "settings";
+    try { back = localStorage.getItem(NOTION_RETURN_KEY) || "settings"; localStorage.removeItem(NOTION_RETURN_KEY); } catch (_) {}
+    if (status === "connected") {
+      readNotion().then(setNotionConn);
+      if (back === "docs") {
+        try { localStorage.setItem(NOTION_REOPEN_KEY, "1"); } catch (_) {}
+        setAssetsOpenTab({ tab: "docs", ts: Date.now() });
+        setCurrentView("assets");
+      } else {
+        setSettingsTab("account");
+        setCurrentView("settings");
+      }
+    } else if (status !== "cancelled") {
+      setNotionErr(
+        status === "forbidden"
+          ? (appLanguage === "de"
+              ? "Du gehörst nicht mehr zu diesem Workspace, deshalb wurde die Verbindung nicht hergestellt."
+              : "You are no longer a member of that workspace, so the connection was not made.")
+          : (appLanguage === "de"
+              ? "Die Verbindung zu Notion ist nicht zustande gekommen. Versuch es noch einmal."
+              : "The Notion connection did not go through. Try again."));
+      setSettingsTab("account");
+      setCurrentView("settings");
+    }
+  }, []); // eslint-disable-line
+  const startNotionConnect = async () => {
+    setNotionBusy(true); setNotionErr("");
+    try { await startNotionOAuth({ orgId: userOrg?.id, appLanguage, returnTo: "settings" }); }
+    catch (e) {
+      setNotionErr(appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection.");
+      setNotionBusy(false);
+    }
+  };
+  const disconnectNotion = async () => {
+    if (!userOrg?.id) return;
+    setNotionBusy(true); setNotionErr("");
+    try {
+      await fetch("/api/notion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+        body: JSON.stringify({ mode: "disconnect", orgId: userOrg.id }),
+      });
+      setNotionConn(null);
+    } catch (e) {
+      setNotionErr(appLanguage === "de" ? "Trennen hat nicht funktioniert." : "Disconnecting did not work.");
+    }
+    setNotionBusy(false);
+  };
 
   // Pinterest sends people back to /?pinterest=<status>. Read once, then taken
   // out of the URL so a reload does not replay it.
@@ -61229,6 +61598,55 @@ export default function CircularMenu() {
                   )}
                   {pinErr && (
                     <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{pinErr}</div>
+                  )}
+                  {/* Notion. Read-only, and like Pinterest it belongs to the
+                      workspace: whoever connects picks the pages on Notion's
+                      own screen, and the team imports from those. */}
+                  {notionReady && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px", borderTop: `1px solid ${theme.borderFaint}`,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center", color: theme.text,
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="4" y="3" width="16" height="18" rx="2.5" /><path d="M9 16.5v-9l6 9v-9" />
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Notion</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {notionConn
+                          ? (notionConn.needs_reconnect
+                              ? (appLanguage === "de" ? "Die Verbindung ist abgelaufen. Einmal neu verbinden." : "The connection expired. Connect again.")
+                              : (appLanguage === "de"
+                                  ? `Verbunden${notionConn.workspace_name ? ` mit ${notionConn.workspace_name}` : ""}. Gilt für diesen Workspace.`
+                                  : `Connected${notionConn.workspace_name ? ` to ${notionConn.workspace_name}` : ""}. Applies to this workspace.`))
+                          : (appLanguage === "de"
+                              ? "Notion-Seiten als Dokumente übernehmen."
+                              : "Bring Notion pages in as documents.")}
+                      </div>
+                    </div>
+                    <motion.button whileTap={{ scale: 0.97 }}
+                      onClick={notionBusy ? undefined : ((notionConn && !notionConn.needs_reconnect) ? disconnectNotion : startNotionConnect)}
+                      style={{ padding: "8px 14px", borderRadius: 10, cursor: notionBusy ? "wait" : "pointer",
+                        border: `1px solid ${(notionConn && !notionConn.needs_reconnect) ? theme.borderFaint : "transparent"}`,
+                        background: (notionConn && !notionConn.needs_reconnect) ? "transparent" : "#15151c",
+                        color: (notionConn && !notionConn.needs_reconnect) ? theme.text : "#fff",
+                        fontFamily: FONT, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0,
+                        opacity: notionBusy ? 0.6 : 1 }}>
+                      {(notionConn && !notionConn.needs_reconnect)
+                        ? (appLanguage === "de" ? "Trennen" : "Disconnect")
+                        : notionConn ? (appLanguage === "de" ? "Neu verbinden" : "Reconnect")
+                        : (appLanguage === "de" ? "Verbinden" : "Connect")}
+                    </motion.button>
+                  </div>
+                  )}
+                  {notionErr && (
+                    <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{notionErr}</div>
                   )}
                   {/* Instagram, straight through Meta rather than through
                       Zernio. Only shown where the server says this workspace is

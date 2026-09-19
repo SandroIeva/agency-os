@@ -20,6 +20,10 @@
       "destination": "/api/pinterest?mode=callback"
     },
     {
+      "source": "/notion/callback",
+      "destination": "/api/notion?mode=callback"
+    },
+    {
       "source": "/figma/callback",
       "destination": "/api/figma?mode=callback"
     },
