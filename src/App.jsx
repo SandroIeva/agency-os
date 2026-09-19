@@ -42264,6 +42264,28 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
   );
 }
 
+// A Notion database in the import picker gets the glyph of what it holds,
+// read off its name, so "Projekte" looks like projects and not like one more
+// table. Every glyph is one the app already draws for that thing: the document
+// from the Documents list, the briefcase from the brand preview, the people
+// from the members filter, the ticked box from the checklist. Anything else
+// stays a plain table.
+const NOTION_DB_ICON = {
+  docs: <g><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M8 13h8M8 17h6" /></g>,
+  projects: <g><rect x="2" y="7" width="20" height="14" rx="2" /><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" /></g>,
+  meetings: <g><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></g>,
+  tasks: <g><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M8 12l3 3 5-5" /></g>,
+  table: <g><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M9 10v10" /></g>,
+};
+const notionDbIconKey = (title) => {
+  const t = String(title || "").toLowerCase();
+  if (/aufgabe|task|to-?do|to do/.test(t)) return "tasks";
+  if (/projekt|project/.test(t)) return "projects";
+  if (/meeting|besprechung|termin|protokoll|call/.test(t)) return "meetings";
+  if (/dokument|document|docs|wiki|notiz|notes/.test(t)) return "docs";
+  return "table";
+};
+
 // ── The one "connect this service" dialog ───────────────────────────────────
 // Every integration that is reached for before it is connected asks with THIS,
 // so they all look and read the same: the service's logo top left on a white
@@ -42467,11 +42489,11 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
     );
   }
 
-  const tile = (kind) => (
+  const tile = (kind, title = "") => (
     <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
       background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
       {kind === "db"
-        ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg>
+        ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{NOTION_DB_ICON[notionDbIconKey(title)]}</svg>
         : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
     </div>
   );
@@ -42506,7 +42528,7 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
               style={{ transform: isOpen ? "rotate(90deg)" : "none", transition: "transform .15s ease" }}><polyline points="9 6 15 12 9 18" /></svg>
           </div>
-          {tile(n.kind)}
+          {tile(n.kind, n.title)}
           <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 8 }}>
             <span style={{ fontSize: 13.5, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: isPage ? 400 : 500 }}>
               {nameOf(n)}
