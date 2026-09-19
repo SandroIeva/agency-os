@@ -40563,11 +40563,11 @@ function docTimeAgo(ts) {
   } catch { return ""; }
 }
 
-function DocAvatar({ profile, accent }) {
+function DocAvatar({ profile, accent, darkMode = false }) {
   const name = profile?.display_name || profile?.email || "?";
   const initials = profile?.initials || name.split(" ").map(w => w[0]).filter(Boolean).join("").slice(0, 2).toUpperCase();
   if (profile?.avatar_url) return <img src={profile.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />;
-  return <div style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0, background: accent, color: "#fff", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{initials}</div>;
+  return <div style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0, background: accent, color: (darkMode ? "#15151c" : "#fff"), fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{initials}</div>;
 }
 
 // Comment thread + composer for a single block. Supports @mentions of teammates
@@ -40670,7 +40670,7 @@ function CommentPopover({ block, comments, memberById, mentionables, currentUser
             const author = memberById[c.author_id] || {};
             return (
               <div key={c.id} style={{ display: "flex", gap: 9, padding: "8px 0", borderTop: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}` }}>
-                <DocAvatar profile={author} accent={accent} />
+                <DocAvatar profile={author} accent={accent} darkMode={darkMode} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
                     <span style={{ fontSize: 12.5, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{author.display_name || (de ? "Unbekannt" : "Unknown")}</span>
@@ -40693,7 +40693,7 @@ function CommentPopover({ block, comments, memberById, mentionables, currentUser
           placeholder={(de ? "Kommentar schreiben… @ für Erwähnung" : "Write a comment… @ to mention")}
           style={{ width: "100%", boxSizing: "border-box", resize: "none", minHeight: 60, border: "none", outline: "none", background: inputBg, borderRadius: 10, padding: "10px 38px 10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }} />
         <button onClick={startRec} title={isRecording ? (de ? "Diktat stoppen" : "Stop dictation") : (de ? "Diktieren" : "Dictate")}
-          style={{ position: "absolute", right: 22, top: 16, border: "none", background: isRecording ? accent : "transparent", color: isRecording ? "#fff" : theme.textDim, cursor: "pointer", borderRadius: 8, padding: 5, lineHeight: 0, display: "flex" }}>
+          style={{ position: "absolute", right: 22, top: 16, border: "none", background: isRecording ? accent : "transparent", color: isRecording ? (darkMode ? "#15151c" : "#fff") : theme.textDim, cursor: "pointer", borderRadius: 8, padding: 5, lineHeight: 0, display: "flex" }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.6"/><path d="M5 10a7 7 0 0014 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><path d="M12 17v4M8 21h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
         </button>
         {mentionState && filtered.length > 0 && (
@@ -40701,7 +40701,7 @@ function CommentPopover({ block, comments, memberById, mentionables, currentUser
             {filtered.map((m, i) => (
               <div key={m.user_id} onMouseDown={(e) => { e.preventDefault(); insertMention(m); }}
                 style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, cursor: "pointer", background: i === pickIdx ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent" }}>
-                <DocAvatar profile={m} accent={accent} />
+                <DocAvatar profile={m} accent={accent} darkMode={darkMode} />
                 <span style={{ fontSize: 13, color: theme.text, fontFamily: FONT }}>{m.display_name}</span>
               </div>
             ))}
@@ -40709,7 +40709,7 @@ function CommentPopover({ block, comments, memberById, mentionables, currentUser
         )}
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
           <button onClick={submit} disabled={!text.trim()}
-            style={{ border: "none", background: text.trim() ? accent : (darkMode ? "rgba(255,255,255,0.1)" : "#e6e7eb"), color: text.trim() ? "#fff" : theme.textDim, cursor: text.trim() ? "pointer" : "default", borderRadius: 9, padding: "7px 16px", fontSize: 12.5, fontWeight: 600, fontFamily: FONT }}>
+            style={{ border: "none", background: text.trim() ? accent : (darkMode ? "rgba(255,255,255,0.1)" : "#e6e7eb"), color: text.trim() ? (darkMode ? "#15151c" : "#fff") : theme.textDim, cursor: text.trim() ? "pointer" : "default", borderRadius: 9, padding: "7px 16px", fontSize: 12.5, fontWeight: 600, fontFamily: FONT }}>
             {(de ? "Kommentieren" : "Comment")}
           </button>
         </div>
@@ -40724,8 +40724,11 @@ function CommentPopover({ block, comments, memberById, mentionables, currentUser
 //   • Hochladen — pick a file from disk (reuses the editor's uploadFile)
 //   • URL       — paste an image URL
 // All of them resolve to a URL and call onPick(url) → inserted as an image block.
-function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadFile, theme, darkMode, accent, onPick, onClose, multiple = false, maxSelection = 10, onPickMany }) {
+function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadFile, theme, darkMode, accent: _themeAccent, onPick, onClose, multiple = false, maxSelection = 10, onPickMany }) {
   const de = appLanguage === "de";
+  // Anthracite, inverted on dark, whatever accent the caller passes: several
+  // still hand in the violet theme accent, and this picker opens from all of them.
+  const accent = darkMode ? "#F4F4F7" : "#15151c";
   const [selectedUrls, setSelectedUrls] = useState([]);
   const pick = (url) => {
     if (!multiple) { onPick(url); return; }
@@ -40912,7 +40915,7 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
                   style={{ width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 11, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, outline: "none" }} />
                 <motion.button whileTap={{ scale: 0.98 }} onClick={submitUrl} disabled={!url.trim()}
                   style={{ marginTop: 12, width: "100%", padding: "11px 0", borderRadius: 11, border: "none", cursor: url.trim() ? "pointer" : "default",
-                    background: url.trim() ? accent : (darkMode ? "rgba(255,255,255,0.1)" : "#e6e7eb"), color: url.trim() ? "#fff" : theme.textDim, fontSize: 13.5, fontFamily: FONT, fontWeight: 600 }}>
+                    background: url.trim() ? accent : (darkMode ? "rgba(255,255,255,0.1)" : "#e6e7eb"), color: url.trim() ? (darkMode ? "#15151c" : "#fff") : theme.textDim, fontSize: 13.5, fontFamily: FONT, fontWeight: 600 }}>
                   {(de ? "Hinzufügen" : "Add")}
                 </motion.button>
               </div>
@@ -41184,8 +41187,8 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
       </BlockNoteView>
       {dictating && (
         <button onClick={stopEditorDictation}
-          style={{ position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)", zIndex: 1000, display: "flex", alignItems: "center", gap: 9, padding: "10px 16px", borderRadius: 999, border: "none", cursor: "pointer", background: accent, color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT, boxShadow: "0 8px 30px rgba(0,0,0,0.25)" }}>
-          <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#fff", animation: "docpulse 1s ease-in-out infinite" }} />
+          style={{ position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)", zIndex: 1000, display: "flex", alignItems: "center", gap: 9, padding: "10px 16px", borderRadius: 999, border: "none", cursor: "pointer", background: accent, color: (darkMode ? "#15151c" : "#fff"), fontSize: 13, fontWeight: 600, fontFamily: FONT, boxShadow: "0 8px 30px rgba(0,0,0,0.25)" }}>
+          <span style={{ width: 9, height: 9, borderRadius: "50%", background: (darkMode ? "#15151c" : "#fff"), animation: "docpulse 1s ease-in-out infinite" }} />
           {(de ? "Diktat läuft, stoppen" : "Dictating, stop")}
         </button>
       )}
@@ -41477,7 +41480,7 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, canShare =
 
       {canShare && tab === "share" && (<>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px 10px", borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}` }}>
-          <DocAvatar profile={ownerProfile} accent={accent} />
+          <DocAvatar profile={ownerProfile} accent={accent} darkMode={darkMode} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{ownerProfile?.display_name || (de ? "Unbekannt" : "Unknown")}</div>
             <div style={{ fontSize: 11, color: theme.textDim, fontFamily: FONT }}>{(de ? "Ersteller" : "Owner")}</div>
@@ -41494,10 +41497,10 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, canShare =
                 const on = shares.includes(m.user_id);
                 return (
                   <button key={m.user_id} onClick={() => onToggleShare(m.user_id)} style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", padding: "6px 12px", border: "none", borderRadius: 8, cursor: "pointer", background: "transparent" }}>
-                    <DocAvatar profile={m} accent={accent} />
+                    <DocAvatar profile={m} accent={accent} darkMode={darkMode} />
                     <span style={{ flex: 1, fontSize: 13, color: theme.text, fontFamily: FONT }}>{m.display_name}</span>
                     <span style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? accent : theme.borderFaint}`, background: on ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
+                      {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={(darkMode ? "#15151c" : "#fff")} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
                     </span>
                   </button>
                 );
@@ -41584,7 +41587,7 @@ function InfoPopover({ doc, memberById, activity, projectName, theme, darkMode, 
           const p = memberById[a.user_id] || {};
           return (
             <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 14px" }}>
-              <DocAvatar profile={p} accent={accent} />
+              <DocAvatar profile={p} accent={accent} darkMode={darkMode} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12.5, color: theme.text, fontFamily: FONT, lineHeight: 1.35 }}>
                   <span style={{ fontWeight: 600 }}>{p.display_name || (de ? "Jemand" : "Someone")}</span> {(de ? DOC_ACTIVITY_LABEL : DOC_ACTIVITY_LABEL_EN)[a.type] || (de ? "hat etwas geändert" : "changed something")}
@@ -42658,7 +42661,12 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
   );
 }
 
-function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "de", orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, uploadPdfRef, importRef, notionRef = null, onImportingChange, skillsRef, newFolderRef, llmProvider, llmKeys, getProviderToken, ensureValidToken, autoReLogin, onOpenChange, projectId = null }) {
+function DocsTab({ session, userOrg, theme, darkMode, accent: _themeAccent, t, appLanguage = "de", orgMembers, createNotification, deepLink, fullscreen, setFullscreen, createRef, uploadPdfRef, importRef, notionRef = null, onImportingChange, skillsRef, newFolderRef, llmProvider, llmKeys, getProviderToken, ensureValidToken, autoReLogin, onOpenChange, projectId = null }) {
+  // No purple anywhere in the documents: the accent here is the house
+  // anthracite, inverted on a dark ground, exactly as the whiteboard's share
+  // menu does it. The theme's accent is violet and used to reach every
+  // popover below (share, info, comments, image picker) through this prop.
+  const accent = darkMode ? "#F4F4F7" : "#15151c";
   // Component-level language flag. The three `const de` further down sit inside
   // nested functions, so anything at this level could not see them — which is
   // exactly how the PDF upload shipped a ReferenceError.
@@ -43814,7 +43822,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => { if (!skillBusy) setSkillsOpen(false); }}
                   style={{ padding: "10px 18px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 13, fontWeight: 500, fontFamily: FONT }}>{appLanguage === "de" ? "Abbrechen" : "Cancel"}</motion.button>
                 <motion.button whileTap={{ scale: 0.97 }} onClick={runSkill} disabled={skillBusy || !skillInput.trim() || !aiConnected}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 22px", borderRadius: 999, cursor: (skillBusy || !skillInput.trim() || !aiConnected) ? "not-allowed" : "pointer", background: (skillBusy || !skillInput.trim() || !aiConnected) ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)") : accent, border: "none", color: (skillBusy || !skillInput.trim() || !aiConnected) ? theme.textDim : "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 22px", borderRadius: 999, cursor: (skillBusy || !skillInput.trim() || !aiConnected) ? "not-allowed" : "pointer", background: (skillBusy || !skillInput.trim() || !aiConnected) ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)") : accent, border: "none", color: (skillBusy || !skillInput.trim() || !aiConnected) ? theme.textDim : (darkMode ? "#15151c" : "#fff"), fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
                   {skillBusy && <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }} style={{ width: 13, height: 13, borderRadius: "50%", border: "2px solid currentColor", borderTopColor: "transparent" }} />}
                   {skillBusy ? (appLanguage === "de" ? "Erstellt…" : "Creating…") : (appLanguage === "de" ? "Erstellen" : "Create")}
                 </motion.button>
