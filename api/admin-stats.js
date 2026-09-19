@@ -23,7 +23,10 @@ export const config = { runtime: "edge" };
 // is deleted and signed up again to walk through onboarding from scratch, and
 // comes back with a new id every time. This grants NO data: everything below
 // stays behind ADMIN_USER_IDS.
-const TOUR_OPERATOR_EMAILS = ["sandro.ieva@googlemail.com", "sandro@minddraft.com"];
+// googlemail.com and gmail.com are one mailbox; Google reports this account
+// as googlemail.com, and both are listed so a change on their side cannot lock
+// the owner out of his own button.
+const TOUR_OPERATOR_EMAILS = ["sandro.ieva@googlemail.com", "sandro.ieva@gmail.com", "sandro@minddraft.com"];
 
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
