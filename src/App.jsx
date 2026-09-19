@@ -42422,18 +42422,19 @@ function CreateMenu({ items, onClose, theme, darkMode, minWidth = 300 }) {
 }
 
 // ── Tasks from a Notion database ────────────────────────────────────────────
-// Two steps in one dialog: which database, then which of its entries. The
-// entries arrive already mapped (status → column, due date, priority, see
-// notionTaskOf in server/notion.js); what was imported before is shown and
-// cannot be ticked again, found by tasks.source_ref = "notion:<page id>".
+// Opened from the Kanban board, so it shows TASKS and nothing else: every
+// shared database whose name says it holds tasks (Aufgaben, Tasks, To-dos,
+// see notionDbIconKey) is read straight away and its entries listed, with no
+// step for choosing a database. Projects, meetings and documents never appear
+// here. The entries arrive already mapped (status → column, due date,
+// priority, see notionTaskOf in server/notion.js); what was imported before is
+// shown and cannot be ticked again, found by tasks.source_ref.
 // Not connected, it is the same ConnectPrompt every integration asks with.
 function NotionTaskImportModal({ orgId, session, appLanguage = "de", theme, darkMode, projects = [], onClose, onImport }) {
   const de = appLanguage === "de";
   const [status, setStatus] = useState(null);
-  const [dbs, setDbs] = useState(null);           // null = loading
-  const [treeAll, setTreeAll] = useState(null);
-  const [db, setDb] = useState(null);             // { id, title }
-  const [data, setData] = useState(null);         // null = loading, { tasks, fields, truncated }
+  const [sources, setSources] = useState(null);   // null = loading; the task databases found
+  const [data, setData] = useState(null);         // null = loading, { tasks, truncated }
   const [existing, setExisting] = useState(() => new Set());
   const [picked, setPicked] = useState(() => new Set());
   const [project, setProject] = useState("");
@@ -42461,38 +42462,40 @@ function NotionTaskImportModal({ orgId, session, appLanguage = "de", theme, dark
     return () => { alive = false; };
   }, [orgId]); // eslint-disable-line
 
-  // The databases, task-like ones first, each with where it lives.
+  // Find the task databases, then read all of their entries at once.
   useEffect(() => {
     if (!status?.connected || status.needs_reconnect) return;
     let alive = true;
-    call({ mode: "tree" }).then(j => {
+    (async () => {
+      const t = await call({ mode: "tree" });
       if (!alive) return;
-      if (!j.ok) { failed(j); setDbs([]); return; }
-      const tree = notionTree(j.items || []);
-      setTreeAll(tree);
-      const list = [...tree.byId.values()].filter(n => n.kind === "db");
-      list.sort((a, b) => (notionDbIconKey(a.title) === "tasks" ? 0 : 1) - (notionDbIconKey(b.title) === "tasks" ? 0 : 1)
-        || (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" }));
-      setDbs(list);
-    });
+      if (!t.ok) { failed(t); setSources([]); setData({ tasks: [] }); return; }
+      const dbs = (t.items || []).filter(n => n.kind === "db" && notionDbIconKey(n.title) === "tasks");
+      setSources(dbs);
+      if (!dbs.length) { setData({ tasks: [] }); return; }
+      const answers = await Promise.all(dbs.map(d => call({ mode: "tasks", dataSourceId: d.id })));
+      if (!alive) return;
+      const tasks = [];
+      let truncated = false;
+      answers.forEach((j, i) => {
+        if (!j.ok) { failed(j); return; }
+        truncated = truncated || !!j.truncated;
+        (j.tasks || []).forEach(task => tasks.push({ ...task, source: dbs[i].title || "" }));
+      });
+      const refs = tasks.map(x => `notion:${x.id}`);
+      const have = new Set();
+      for (let i = 0; i < refs.length; i += 200) {
+        const { data: rows } = await supabase.from("tasks").select("source_ref").eq("org_id", orgId).in("source_ref", refs.slice(i, i + 200));
+        (rows || []).forEach(r => have.add(r.source_ref));
+      }
+      if (!alive) return;
+      setExisting(have);
+      setData({ tasks, truncated });
+      // Everything new is ticked: importing a task list is usually all of it.
+      setPicked(new Set(tasks.filter(x => !have.has(`notion:${x.id}`)).map(x => x.id)));
+    })();
     return () => { alive = false; };
   }, [status?.connected, status?.needs_reconnect]); // eslint-disable-line
-
-  const openDb = async (n) => {
-    setDb({ id: n.id, title: n.title }); setData(null); setPicked(new Set()); setErr("");
-    const j = await call({ mode: "tasks", dataSourceId: n.id });
-    if (!j.ok) { failed(j); setData({ tasks: [], fields: {} }); return; }
-    const refs = (j.tasks || []).map(t => `notion:${t.id}`);
-    let have = new Set();
-    for (let i = 0; i < refs.length; i += 200) {
-      const { data: rows } = await supabase.from("tasks").select("source_ref").eq("org_id", orgId).in("source_ref", refs.slice(i, i + 200));
-      (rows || []).forEach(r => have.add(r.source_ref));
-    }
-    setExisting(have);
-    setData({ tasks: j.tasks || [], fields: j.fields || {}, truncated: !!j.truncated });
-    // Everything new is ticked: importing a task list is usually all of it.
-    setPicked(new Set((j.tasks || []).filter(t => !have.has(`notion:${t.id}`)).map(t => t.id)));
-  };
 
   const connect = async () => {
     setConnecting(true); setErr("");
@@ -42508,14 +42511,14 @@ function NotionTaskImportModal({ orgId, session, appLanguage = "de", theme, dark
         title={de ? "Notion verbinden" : "Connect Notion"}
         body={status.needs_reconnect
           ? (de ? "Die Verbindung zu Notion ist abgelaufen. Einmal neu verbinden, danach geht es weiter wie vorher." : "The Notion connection has expired. Connect once more and carry on where you left off.")
-          : (de ? "Um Aufgaben aus Notion zu übernehmen, braucht dieser Workspace eine Notion-Verbindung. Du wählst dabei selbst, welche Seiten und Datenbanken i7OS sehen darf."
-                : "To bring tasks in from Notion, this workspace needs a Notion connection. You choose which pages and databases i7OS may see.")}
+          : (de ? "Um Aufgaben aus Notion zu übernehmen, braucht dieser Workspace eine Notion-Verbindung. Gib dabei deine Aufgaben-Datenbank für i7OS frei."
+                : "To bring tasks in from Notion, this workspace needs a Notion connection. Share your task database with i7OS while connecting.")}
         error={err} busy={connecting} onLater={onClose} onConnect={connect}
         appLanguage={appLanguage} theme={theme} darkMode={darkMode} zIndex={100003} />
     );
   }
 
-  const COL_LABEL = { todo: de ? "To Do" : "To Do", progress: de ? "In Arbeit" : "In progress", review: "Review", done: de ? "Erledigt" : "Done" };
+  const COL_LABEL = { todo: "To Do", progress: de ? "In Arbeit" : "In progress", review: "Review", done: de ? "Erledigt" : "Done" };
   const when = (iso) => { try { return new Date(iso).toLocaleDateString(de ? "de-DE" : "en-GB", { day: "2-digit", month: "short" }); } catch { return ""; } };
   const box = (sel, disabled) => (
     <div style={{
@@ -42531,10 +42534,12 @@ function NotionTaskImportModal({ orgId, session, appLanguage = "de", theme, dark
     <span style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, padding: "2px 7px", borderRadius: 6,
       background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", whiteSpace: "nowrap" }}>{text}</span>
   );
-  const fresh = (data?.tasks || []).filter(t => !existing.has(`notion:${t.id}`));
+  const tasks = data?.tasks || [];
+  const fresh = tasks.filter(t => !existing.has(`notion:${t.id}`));
   const allOn = fresh.length > 0 && fresh.every(t => picked.has(t.id));
+  const several = (sources || []).length > 1;
   const doImport = async () => {
-    const list = (data?.tasks || []).filter(t => picked.has(t.id));
+    const list = tasks.filter(t => picked.has(t.id));
     if (!list.length || busy) return;
     setBusy(true); setErr("");
     const res = await onImport(list, project || null);
@@ -42557,8 +42562,10 @@ function NotionTaskImportModal({ orgId, session, appLanguage = "de", theme, dark
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? "Aufgaben aus Notion" : "Tasks from Notion"}</div>
             <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {db ? (db.title || (de ? "Datenbank" : "Database"))
-                : (de ? "Wähle die Notion-Datenbank mit deinen Aufgaben." : "Pick the Notion database that holds your tasks.")}
+              {data === null
+                ? (de ? "Lädt deine Aufgaben…" : "Loading your tasks…")
+                : (de ? `${tasks.length} ${tasks.length === 1 ? "Aufgabe" : "Aufgaben"}` : `${tasks.length} ${tasks.length === 1 ? "task" : "tasks"}`)
+                  + ((sources || []).length === 1 && sources[0].title ? ` · ${sources[0].title}` : "")}
             </div>
           </div>
           <motion.div whileTap={{ scale: 0.9 }} onClick={() => { if (!busy) onClose(); }} title={de ? "Schließen" : "Close"}
@@ -42567,102 +42574,76 @@ function NotionTaskImportModal({ orgId, session, appLanguage = "de", theme, dark
           </motion.div>
         </div>
 
-        {!db ? (
-          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "10px 12px" }}>
-            {dbs === null && <div style={{ padding: 28, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Lädt…" : "Loading…"}</div>}
-            {dbs !== null && dbs.length === 0 && !err && (
-              <div style={{ padding: "28px 16px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
-                {de ? "i7OS sieht noch keine Notion-Datenbank. Gib deine Aufgaben-Datenbank in Notion für i7OS frei." : "i7OS cannot see a Notion database yet. Share your task database with i7OS in Notion."}
+        {tasks.length > 0 && (
+          <div style={{ padding: "12px 22px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${theme.borderFaint}` }}>
+            <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>{de ? "Ins Projekt" : "Into project"}</span>
+            <Dropdown value={project} onChange={setProject} theme={theme} darkMode={darkMode} minWidth={200}
+              options={[{ value: "", label: de ? "Ohne Projekt" : "No project" }, ...projects.map(p => ({ value: p.name, label: p.name }))]} />
+            <div style={{ flex: 1 }} />
+            {fresh.length > 0 && (
+              <div onClick={() => setPicked(allOn ? new Set() : new Set(fresh.map(t => t.id)))}
+                style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textSub, cursor: "pointer", whiteSpace: "nowrap" }}>
+                {allOn ? (de ? "Keine auswählen" : "Select none") : (de ? "Alle auswählen" : "Select all")}
               </div>
             )}
-            {(dbs || []).map(n => {
-              const path = treeAll ? notionPath(treeAll.byId, n.id) : [];
-              return (
-                <div key={n.id} onClick={() => openDb(n)} className="hover-row"
-                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 10px", borderRadius: 12, cursor: "pointer" }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                    background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{NOTION_DB_ICON[notionDbIconKey(n.title)]}</svg>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{n.title || (de ? "Ohne Titel" : "Untitled")}</div>
-                    <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
-                      {(path.length ? path.join(" › ") + " · " : "") + (de ? `${n.children.length} ${n.children.length === 1 ? "Eintrag" : "Einträge"}` : `${n.children.length} ${n.children.length === 1 ? "entry" : "entries"}`)}
-                    </div>
-                  </div>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 6 15 12 9 18" /></svg>
-                </div>
-              );
-            })}
-            {err && <div style={{ padding: "8px 10px", fontSize: 12, fontFamily: FONT, color: "#E86767" }}>{err}</div>}
           </div>
-        ) : (
-          <>
-            <div style={{ padding: "12px 22px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${theme.borderFaint}` }}>
-              <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>{de ? "Ins Projekt" : "Into project"}</span>
-              <Dropdown value={project} onChange={setProject} theme={theme} darkMode={darkMode} minWidth={200}
-                options={[{ value: "", label: de ? "Ohne Projekt" : "No project" }, ...projects.map(p => ({ value: p.name, label: p.name }))]} />
-              <div style={{ flex: 1 }} />
-              {fresh.length > 0 && (
-                <div onClick={() => setPicked(allOn ? new Set() : new Set(fresh.map(t => t.id)))}
-                  style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textSub, cursor: "pointer", whiteSpace: "nowrap" }}>
-                  {allOn ? (de ? "Keine auswählen" : "Select none") : (de ? "Alle auswählen" : "Select all")}
-                </div>
-              )}
-            </div>
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "6px 12px 8px" }}>
-              {data === null && <div style={{ padding: 28, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Lädt…" : "Loading…"}</div>}
-              {data !== null && data.tasks.length === 0 && !err && (
-                <div style={{ padding: "28px 16px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Diese Datenbank ist leer." : "This database is empty."}</div>
-              )}
-              {(data?.tasks || []).map(t => {
-                const had = existing.has(`notion:${t.id}`);
-                const sel = !had && picked.has(t.id);
-                return (
-                  <div key={t.id} onClick={() => { if (had) return; setPicked(prev => { const n = new Set(prev); n.has(t.id) ? n.delete(t.id) : n.add(t.id); return n; }); }}
-                    className={had ? undefined : "hover-row"}
-                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 10px", borderRadius: 12, cursor: had ? "default" : "pointer", opacity: had ? 0.55 : 1 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title || (de ? "Ohne Titel" : "Untitled")}</div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-                        {chip(COL_LABEL[t.column] || t.column)}
-                        {t.due && chip((de ? "Frist " : "Due ") + when(t.due))}
-                        {t.priority === "high" && chip(de ? "Hohe Priorität" : "High priority")}
-                        {had && chip(de ? "Schon importiert" : "Already imported")}
-                      </div>
-                    </div>
-                    {box(sel || had, had)}
-                  </div>
-                );
-              })}
-              {data?.truncated && (
-                <div style={{ padding: 10, fontSize: 11.5, fontFamily: FONT, color: theme.textDim, textAlign: "center" }}>
-                  {de ? "Gezeigt werden die ersten 500 Einträge." : "Showing the first 500 entries."}
-                </div>
-              )}
-              {err && <div style={{ padding: "8px 10px", fontSize: 12, fontFamily: FONT, color: "#E86767" }}>{err}</div>}
-            </div>
-            <div style={{ padding: "12px 22px 14px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", gap: 12 }}>
-              <div onClick={() => { if (!busy) { setDb(null); setData(null); setErr(""); } }}
-                style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, cursor: busy ? "default" : "pointer" }}>
-                {de ? "‹ Andere Datenbank" : "‹ Other database"}
-              </div>
-              <div style={{ flex: 1 }} />
-              <motion.button whileTap={{ scale: 0.97 }} disabled={!picked.size || busy} onClick={doImport}
-                style={{ ...primaryBtn(darkMode), border: "none", padding: "10px 18px", borderRadius: 999, fontSize: 13, fontWeight: 600, fontFamily: FONT,
-                  opacity: picked.size && !busy ? 1 : 0.4, cursor: picked.size && !busy ? "pointer" : "default", flexShrink: 0 }}>
-                {busy ? (de ? "Importiere…" : "Importing…")
-                  : picked.size ? (de ? `${picked.size} importieren` : `Import ${picked.size}`) : (de ? "Importieren" : "Import")}
-              </motion.button>
-            </div>
-          </>
         )}
+
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "6px 12px 8px" }}>
+          {data === null && <div style={{ padding: 28, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Lädt…" : "Loading…"}</div>}
+          {data !== null && tasks.length === 0 && !err && (
+            <div style={{ padding: "32px 20px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+              {(sources || []).length
+                ? (de ? "Deine Aufgaben-Datenbank in Notion ist leer." : "Your task database in Notion is empty.")
+                : (de ? "i7OS findet in Notion keine Aufgaben-Datenbank. Gib eine Datenbank mit dem Namen „Aufgaben“ oder „Tasks“ für i7OS frei."
+                      : "i7OS cannot find a task database in Notion. Share a database named “Tasks” with i7OS.")}
+            </div>
+          )}
+          {tasks.map(t => {
+            const had = existing.has(`notion:${t.id}`);
+            const sel = !had && picked.has(t.id);
+            return (
+              <div key={t.id} onClick={() => { if (had) return; setPicked(prev => { const n = new Set(prev); n.has(t.id) ? n.delete(t.id) : n.add(t.id); return n; }); }}
+                className={had ? undefined : "hover-row"}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 10px", borderRadius: 12, cursor: had ? "default" : "pointer", opacity: had ? 0.55 : 1 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title || (de ? "Ohne Titel" : "Untitled")}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                    {chip(COL_LABEL[t.column] || t.column)}
+                    {t.due && chip((de ? "Frist " : "Due ") + when(t.due))}
+                    {t.priority === "high" && chip(de ? "Hohe Priorität" : "High priority")}
+                    {several && t.source && chip(t.source)}
+                    {had && chip(de ? "Schon importiert" : "Already imported")}
+                  </div>
+                </div>
+                {box(sel || had, had)}
+              </div>
+            );
+          })}
+          {data?.truncated && (
+            <div style={{ padding: 10, fontSize: 11.5, fontFamily: FONT, color: theme.textDim, textAlign: "center" }}>
+              {de ? "Gezeigt werden die ersten 500 Aufgaben." : "Showing the first 500 tasks."}
+            </div>
+          )}
+          {err && <div style={{ padding: "8px 10px", fontSize: 12, fontFamily: FONT, color: "#E86767" }}>{err}</div>}
+        </div>
+
+        <div style={{ padding: "12px 22px 14px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ flex: 1, fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.45 }}>
+            {de ? "Einmalige Kopie. Schon importierte Aufgaben kommen nicht doppelt." : "A one-time copy. Tasks imported before never come in twice."}
+          </div>
+          <motion.button whileTap={{ scale: 0.97 }} disabled={!picked.size || busy} onClick={doImport}
+            style={{ ...primaryBtn(darkMode), border: "none", padding: "10px 18px", borderRadius: 999, fontSize: 13, fontWeight: 600, fontFamily: FONT,
+              opacity: picked.size && !busy ? 1 : 0.4, cursor: picked.size && !busy ? "pointer" : "default", flexShrink: 0 }}>
+            {busy ? (de ? "Importiere…" : "Importing…")
+              : picked.size ? (de ? `${picked.size} importieren` : `Import ${picked.size}`) : (de ? "Importieren" : "Import")}
+          </motion.button>
+        </div>
       </motion.div>
     </motion.div>,
     document.body,
   );
 }
-
 // ── The one "connect this service" dialog ───────────────────────────────────
 // Every integration that is reached for before it is connected asks with THIS,
 // so they all look and read the same: the service's logo top left on a white
