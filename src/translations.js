@@ -399,7 +399,7 @@ const translations = {
 
   // Step 0
   "brand.hero.title": { de: "Lass uns deine Brand definieren", en: "Let’s define your brand" },
-  "brand.hero.subtitle": { de: "Ein paar Minuten jetzt, und alles, was i7OS danach für dich erstellt, trifft deine Marke: Posts, Designs, Texte. Was du noch nicht hast, überspringst du einfach.", en: "A few minutes now, and everything i7OS creates for you afterwards fits your brand: posts, designs, copy. Skip anything you don’t have yet." },
+  "brand.hero.subtitle": { de: "Erzähl uns einmal, wer du bist. Ab dann kennt deine KI deine Marke, und jeder Post, jedes Design und jeder Text klingt nach dir.", en: "Tell us once who you are. From then on your AI knows your brand, and every post, design and text sounds like you." },
   "brand.hero.brandNameLabel": { de: "Brand-Name", en: "Brand name" },
   "brand.hero.brandNamePlaceholder": { de: "z.B. Agency OS", en: "e.g. Agency OS" },
 
