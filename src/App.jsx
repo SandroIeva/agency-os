@@ -1718,7 +1718,7 @@ function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de
           ? (de ? "Das Suchkontingent ist gerade erschöpft. Bitte kurz warten." : "The search quota is exhausted right now. Please wait a moment.")
           : j.code === "not_configured"
             ? (de ? "Die Bildsuche ist noch nicht eingerichtet." : "Image search is not set up yet.")
-            : (j.error || "Fehler"));
+            : (j.error || (de ? "Fehler" : "Error")));
         if (!append) setItems([]);
         setHasMore(false);
         return;
@@ -1735,7 +1735,7 @@ function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de
       setPage(pageNum);
     } catch (e) {
       if (reqRef.current === token) {
-        setError(e?.message || "Fehler");
+        setError(e?.message || (de ? "Fehler" : "Error"));
         if (!append) setItems([]);
       }
     } finally {
@@ -1876,7 +1876,15 @@ const VOICE_SPEEDS = [
   { value: 1.5,  de: "Sehr schnell", en: "Very fast" },
 ];
 
-function Dropdown({ value, onChange, options = [], placeholder = "Auswählen", theme, darkMode,
+// The app language, mirrored for code that has no appLanguage prop to read:
+// module-level helpers (docTimeAgo, defaultGradients) and small leaf components
+// (Dropdown's default placeholder, the palette picker). The App root writes it
+// on every render, BEFORE its children render, so a child always reads the
+// language of the pass it is part of. Same shape as currentEntitlements.
+let uiLanguage = "de";
+const uiDe = () => uiLanguage !== "en";
+
+function Dropdown({ value, onChange, options = [], placeholder = uiDe() ? "Auswählen" : "Select", theme, darkMode,
   leadingIcon = null, minWidth = 200, align = "left", maxTriggerWidth, disabled = false, triggerStyle = {}, footer = null, maxHeight = 280 }) {
   const [open, setOpen] = useState(false);
   const sel = options.find(o => String(o.value) === String(value));
@@ -3113,7 +3121,7 @@ function ImageLightbox({ url, onClose, onUploadStorage, onUploadDrive, theme, da
     try {
       let publicUrl = linkUrl;
       if (!publicUrl) {
-        if (!onUploadStorage) throw new Error("upload nicht verfügbar");
+        if (!onUploadStorage) throw new Error((uiDe() ? "Upload nicht verfügbar" : "Upload not available"));
         setBusy("link");
         publicUrl = await onUploadStorage(url);
         setLinkUrl(publicUrl);
@@ -10731,6 +10739,7 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
             separate assets panel and stock overlay. */}
         {imgMenuOpen && (
           <ImageInsertModal
+            appLanguage={appLanguage}
             orgId={userOrg?.id}
             session={session}
             userOrg={userOrg}
@@ -14688,6 +14697,7 @@ const MSG_LABEL_H = 13;
 const MSG_LABEL_GAP = 9;
 
 function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t, session, userOrg, orgMembers, darkMode, theme, createNotification, notifications = [], markNotifRead, appLanguage = "en", llmProvider, llmKeys, onOpenAiSettings, getProviderToken, ensureValidToken }) {
+  const de = appLanguage === "de";
   // An agent without a model is a name that will never answer. Two ways to have
   // one: a key stored for the chosen provider, or a Google sign-in, which is
   // what Gemini authenticates with.
@@ -14727,10 +14737,10 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
   // ── Dictation: voice-to-text for the message input ──
   const startChatDictation = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { alert("Spracherkennung wird in diesem Browser nicht unterstützt. Bitte Chrome oder Safari verwenden."); return; }
+    if (!SpeechRecognition) { alert((de ? "Spracherkennung wird in diesem Browser nicht unterstützt. Bitte Chrome oder Safari verwenden." : "Speech recognition is not supported in this browser. Please use Chrome or Safari.")); return; }
     if (isRecording) { stopChatDictation(); return; }
     const recognition = new SpeechRecognition();
-    recognition.lang = "de-DE";
+    recognition.lang = de ? "de-DE" : "en-US";
     recognition.continuous = true;
     recognition.interimResults = true;
     let baseText = msgInput;
@@ -14824,7 +14834,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       // member row — there is no auth.users behind it.
       const agent = c.agent_id ? AGENT_BY_KEY[c.agent_id] : null;
       const name = agent ? agent.name[appLanguage === "de" ? "de" : "en"]
-        : c.is_group ? (c.name || "Gruppenchat") : (other?.display_name || "Unbekannt");
+        : c.is_group ? (c.name || (de ? "Gruppenchat" : "Group chat")) : (other?.display_name || (de ? "Unbekannt" : "Unknown"));
       const avatar_url = agent ? agent.avatar : (!c.is_group ? other?.avatar_url : null);
       const color = agent ? agent.color : !c.is_group
         ? (other?.color || "#5B6CFF")
@@ -14927,7 +14937,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     try {
       const file = pendingAttachment.file;
       const safeName = file.name.replace(/[^\w.-]/g, "_");
-      if (!userOrg?.id) { alert("Kein Workspace aktiv."); setUploadingAttachment(false); return null; }
+      if (!userOrg?.id) { alert((de ? "Kein Workspace aktiv." : "No active workspace.")); setUploadingAttachment(false); return null; }
       // user-files, not chat-attachments. That bucket is PUBLIC, so an
       // attachment was openable by anybody who had the link and no account at
       // all. It cannot simply be made private: the ai-images in it are share
@@ -14940,9 +14950,9 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       // sender and by nobody else.
       const path = `chat/${userOrg.id}/${myId}/${Date.now()}_${safeName}`;
       const room = await checkStorageRoom(userOrg?.id, file.size, { userId: session?.user?.id, email: session?.user?.email });
-      if (!room.ok) { alert(`Speicher voll (${formatBytesGB(room.limit)}) — bitte upgraden.`); setUploadingAttachment(false); return null; }
+      if (!room.ok) { alert(de ? `Speicher voll (${formatBytesGB(room.limit)}). Bitte upgraden.` : `Storage full (${formatBytesGB(room.limit)}). Please upgrade.`); setUploadingAttachment(false); return null; }
       const { data: up, error } = await supabase.storage.from("user-files").upload(path, file, { cacheControl: UPLOAD_CACHE_IMMUTABLE, contentType: file.type });
-      if (error) { console.error("Upload error:", error); alert("Upload fehlgeschlagen: " + error.message); setUploadingAttachment(false); return null; }
+      if (error) { console.error("Upload error:", error); alert((de ? "Upload fehlgeschlagen: " : "Upload failed: ") + error.message); setUploadingAttachment(false); return null; }
       trackStorageUpload({ orgId: userOrg?.id, userId: session?.user?.id, bucket: "user-files", path, sizeBytes: file.size });
       // A signed link, and the PATH is kept beside it: signatures expire, and a
       // stored url alone would mean the picture quietly disappearing out of an
@@ -15150,19 +15160,19 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     try {
       // Create new conversation
       const { data: conv, error: convErr } = await supabase.from("chat_conversations").insert({ org_id: userOrg.id, is_group: false }).select().single();
-      if (convErr || !conv) { console.error("[Chat] create conversation failed:", convErr); alert("Chat konnte nicht erstellt werden" + (convErr ? ": " + convErr.message : "")); return; }
+      if (convErr || !conv) { console.error("[Chat] create conversation failed:", convErr); alert((de ? "Chat konnte nicht erstellt werden" : "Could not create the chat") + (convErr ? ": " + convErr.message : "")); return; }
       // Add both participants
       const { error: partErr } = await supabase.from("chat_participants").insert([
         { conversation_id: conv.id, user_id: myId },
         { conversation_id: conv.id, user_id: otherUserId },
       ]);
-      if (partErr) { console.error("[Chat] add participants failed:", partErr); alert("Teilnehmer konnten nicht hinzugefügt werden: " + partErr.message); return; }
+      if (partErr) { console.error("[Chat] add participants failed:", partErr); alert((de ? "Teilnehmer konnten nicht hinzugefügt werden: " : "Could not add the participants: ") + partErr.message); return; }
       // Optimistically add to the list so the chat panel opens immediately
       // (activeConv is looked up from this list — otherwise it stays on the empty state).
       const other = memberMap[otherUserId];
       setConversations(prev => [
         {
-          id: conv.id, name: other?.display_name || "Unbekannt", avatar_url: other?.avatar_url || null,
+          id: conv.id, name: other?.display_name || (de ? "Unbekannt" : "Unknown"), avatar_url: other?.avatar_url || null,
           color: other?.color || "#64748B", initials: other?.initials || "?", is_group: false,
           lastMsg: "", time: "", lastMsgAt: conv.created_at,
           participants: [myId, otherUserId], otherIds: [otherUserId],
@@ -15173,7 +15183,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       loadConversations(); // refresh in the background
     } catch (err) {
       console.error("startConversation failed:", err);
-      alert("Fehler beim Starten des Chats: " + (err.message || err));
+      alert((de ? "Fehler beim Starten des Chats: " : "Could not start the chat: ") + (err.message || err));
     }
   };
 
@@ -15187,12 +15197,12 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     try {
       const { data: conv, error: convErr } = await supabase
         .from("chat_conversations").insert({ org_id: userOrg.id, is_group: true, name, created_by: myId, color: groupColor }).select().single();
-      if (convErr || !conv) { console.error("[Chat] create group failed:", convErr); alert("Gruppe konnte nicht erstellt werden" + (convErr ? ": " + convErr.message : "")); setCreatingGroup(false); return; }
+      if (convErr || !conv) { console.error("[Chat] create group failed:", convErr); alert((de ? "Gruppe konnte nicht erstellt werden" : "Could not create the group") + (convErr ? ": " + convErr.message : "")); setCreatingGroup(false); return; }
       const memberIds = [myId, ...groupSelected.filter(id => id !== myId)];
       const { error: partErr } = await supabase.from("chat_participants").insert(
         memberIds.map(uid => ({ conversation_id: conv.id, user_id: uid }))
       );
-      if (partErr) { console.error("[Chat] add group participants failed:", partErr); alert("Mitglieder konnten nicht hinzugefügt werden: " + partErr.message); setCreatingGroup(false); return; }
+      if (partErr) { console.error("[Chat] add group participants failed:", partErr); alert((de ? "Mitglieder konnten nicht hinzugefügt werden: " : "Could not add the members: ") + partErr.message); setCreatingGroup(false); return; }
       // Optimistically surface the new group so the panel opens right away.
       setConversations(prev => [
         {
@@ -15211,7 +15221,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
       loadConversations();
     } catch (err) {
       console.error("createGroupConversation failed:", err);
-      alert("Fehler beim Erstellen der Gruppe: " + (err.message || err));
+      alert((de ? "Fehler beim Erstellen der Gruppe: " : "Could not create the group: ") + (err.message || err));
       setCreatingGroup(false);
     }
   };
@@ -15224,7 +15234,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     if (current && current.name === name) return;
     setSavingName(true);
     const { error } = await supabase.from("chat_conversations").update({ name }).eq("id", convId);
-    if (error) { console.error("[Chat] rename group failed:", error); alert("Umbenennen fehlgeschlagen: " + error.message); setSavingName(false); return; }
+    if (error) { console.error("[Chat] rename group failed:", error); alert((de ? "Umbenennen fehlgeschlagen: " : "Rename failed: ") + error.message); setSavingName(false); return; }
     setConversations(prev => prev.map(c => c.id === convId ? { ...c, name, initials: name.slice(0, 2).toUpperCase() } : c));
     setSavingName(false);
   };
@@ -15234,7 +15244,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     if (!convId || !userId || memberBusy) return;
     setMemberBusy(true);
     const { error } = await supabase.from("chat_participants").insert({ conversation_id: convId, user_id: userId });
-    if (error) { console.error("[Chat] add member failed:", error); alert("Mitglied konnte nicht hinzugefügt werden: " + error.message); setMemberBusy(false); return; }
+    if (error) { console.error("[Chat] add member failed:", error); alert((de ? "Mitglied konnte nicht hinzugefügt werden: " : "Could not add the member: ") + error.message); setMemberBusy(false); return; }
     setConversations(prev => prev.map(c => {
       if (c.id !== convId) return c;
       const participants = [...new Set([...(c.participants || []), userId])];
@@ -15248,7 +15258,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
     if (!convId || !userId || memberBusy) return;
     setMemberBusy(true);
     const { error } = await supabase.from("chat_participants").delete().eq("conversation_id", convId).eq("user_id", userId);
-    if (error) { console.error("[Chat] remove member failed:", error); alert("Mitglied konnte nicht entfernt werden: " + error.message); setMemberBusy(false); return; }
+    if (error) { console.error("[Chat] remove member failed:", error); alert((de ? "Mitglied konnte nicht entfernt werden: " : "Could not remove the member: ") + error.message); setMemberBusy(false); return; }
     setConversations(prev => prev.map(c => {
       if (c.id !== convId) return c;
       const participants = (c.participants || []).filter(id => id !== userId);
@@ -15260,10 +15270,10 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
   // Leave the current group (remove myself, drop it from the list)
   const leaveGroup = async (convId) => {
     if (!convId || !myId || memberBusy) return;
-    if (!window.confirm("Diese Gruppe wirklich verlassen?")) return;
+    if (!window.confirm((de ? "Diese Gruppe wirklich verlassen?" : "Really leave this group?"))) return;
     setMemberBusy(true);
     const { error } = await supabase.from("chat_participants").delete().eq("conversation_id", convId).eq("user_id", myId);
-    if (error) { console.error("[Chat] leave group failed:", error); alert("Verlassen fehlgeschlagen: " + error.message); setMemberBusy(false); return; }
+    if (error) { console.error("[Chat] leave group failed:", error); alert((de ? "Verlassen fehlgeschlagen: " : "Leaving failed: ") + error.message); setMemberBusy(false); return; }
     setManageOpen(false);
     setActiveConvId(null);
     setConversations(prev => prev.filter(c => c.id !== convId));
@@ -15273,10 +15283,10 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
   // Delete the whole group (creator only). Cascades to participants + messages.
   const deleteGroup = async (convId) => {
     if (!convId || memberBusy) return;
-    if (!window.confirm("Diese Gruppe für alle löschen? Das kann nicht rückgängig gemacht werden.")) return;
+    if (!window.confirm((de ? "Diese Gruppe für alle löschen? Das kann nicht rückgängig gemacht werden." : "Delete this group for everyone? This cannot be undone."))) return;
     setMemberBusy(true);
     const { error } = await supabase.from("chat_conversations").delete().eq("id", convId);
-    if (error) { console.error("[Chat] delete group failed:", error); alert("Löschen fehlgeschlagen: " + error.message); setMemberBusy(false); return; }
+    if (error) { console.error("[Chat] delete group failed:", error); alert((de ? "Löschen fehlgeschlagen: " : "Delete failed: ") + error.message); setMemberBusy(false); return; }
     setManageOpen(false);
     setActiveConvId(null);
     setConversations(prev => prev.filter(c => c.id !== convId));
@@ -15341,7 +15351,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               </svg>
               <input
                 value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Suchen..."
+                placeholder={(de ? "Suchen..." : "Search...")}
                 style={{
                   flex: 1, background: "none", border: "none", outline: "none",
                   fontSize: 13, fontFamily: FONT, color: theme.text, caretColor: theme.text,
@@ -15398,7 +15408,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-              Neue Gruppe
+              {(de ? "Neue Gruppe" : "New group")}
             </motion.div>}
           </div>
 
@@ -15408,7 +15418,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
             padding: "4px 8px", display: "flex", flexDirection: "column", gap: 2,
           }}>
             {loadingConvs ? (
-              <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Laden...</div>
+              <div style={{ padding: 32, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{(de ? "Laden..." : "Loading...")}</div>
             ) : (() => {
               // Build unified list: existing conversations + team members without conversations
               const membersWithConv = new Set();
@@ -15505,7 +15515,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                               fontSize: 12, fontFamily: FONT, color: unreadN > 0 ? theme.text : theme.textDim, marginTop: 2,
                               fontWeight: unreadN > 0 ? 500 : 400,
                               whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                            }}>{item.lastMsg || "Noch keine Nachrichten"}</div>
+                            }}>{item.lastMsg || (de ? "Noch keine Nachrichten" : "No messages yet")}</div>
                           </div>
                         );
                       })()}
@@ -15538,7 +15548,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                       <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{item.display_name}</div>
                       <div style={{
                         fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3,
-                      }}>Nachricht schreiben…</div>
+                      }}>{(de ? "Nachricht schreiben…" : "Write a message…")}</div>
                     </div>
                   </motion.div>
                 );
@@ -15566,7 +15576,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 <motion.div
                   whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                   onClick={() => { setRenameValue(activeConv.name || ""); setManageOpen(true); }}
-                  title="Gruppe verwalten"
+                  title={(de ? "Gruppe verwalten" : "Manage group")}
                   style={{
                     flexShrink: 0, width: 34, height: 34, borderRadius: 10, cursor: "pointer",
                     display: "flex", alignItems: "center", justifyContent: "center",
@@ -15645,7 +15655,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                         color: theme.textDim,
                         textAlign: isMe ? "right" : "left",
                       }}>
-                        {isMe ? "Du" : sender.display_name} · {msgTime}
+                        {isMe ? (de ? "Du" : "You") : sender.display_name} · {msgTime}
                       </div>
                       <div style={{
                         padding: msg.attachment_url && !msg.text ? 4 : "10px 16px",
@@ -15753,7 +15763,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 <motion.div
                   whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
                   onClick={() => fileInputRef.current?.click()}
-                  title="Datei anhängen"
+                  title={(de ? "Datei anhängen" : "Attach file")}
                   style={{
                     width: 36, height: 36, borderRadius: "50%",
                     background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
@@ -15769,7 +15779,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                   animate={isRecording ? { scale: [1, 1.08, 1] } : { scale: 1 }}
                   transition={isRecording ? { repeat: Infinity, duration: 1.2 } : { duration: 0.2 }}
                   onClick={startChatDictation}
-                  title={isRecording ? "Aufnahme stoppen" : "Diktieren"}
+                  title={isRecording ? (de ? "Aufnahme stoppen" : "Stop recording") : (de ? "Diktieren" : "Dictate")}
                   style={{
                     width: 36, height: 36, borderRadius: "50%",
                     background: isRecording ? "rgba(239, 68, 68, 0.15)" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"),
@@ -15783,7 +15793,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 </motion.div>
                 <input
                   value={msgInput} onChange={e => setMsgInput(e.target.value)}
-                  placeholder={isRecording ? "Spricht..." : "Nachricht schreiben..."}
+                  placeholder={isRecording ? (de ? "Spricht..." : "Listening...") : (de ? "Nachricht schreiben..." : "Write a message...")}
                   onKeyDown={e => { if (e.key === "Enter" && msgInput.trim()) sendMessage(); }}
                   style={{
                     flex: 1, background: "none", border: "none", outline: "none",
@@ -15903,7 +15913,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
             color: theme.textDim, fontSize: 14, fontFamily: FONT,
           }}>
             <div style={{ fontSize: 40, opacity: 0.15 }}>💬</div>
-            <div>Wähle ein Gespräch oder starte ein neues</div>
+            <div>{(de ? "Wähle ein Gespräch oder starte ein neues" : "Pick a conversation or start a new one")}</div>
           </div>
         )}
 
@@ -16101,14 +16111,14 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
             }}>
             {/* Header */}
             <div style={{ padding: "18px 22px 14px", borderBottom: `1px solid ${theme.borderFaint}` }}>
-              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>Neue Gruppe</div>
-              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>Name vergeben und Mitglieder auswählen</div>
+              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{(de ? "Neue Gruppe" : "New group")}</div>
+              <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>{(de ? "Name vergeben und Mitglieder auswählen" : "Give it a name and pick members")}</div>
             </div>
             {/* Name */}
             <div style={{ padding: "16px 22px 8px" }}>
               <input
                 value={groupName} onChange={e => setGroupName(e.target.value)} autoFocus
-                placeholder="Gruppenname…"
+                placeholder={(de ? "Gruppenname…" : "Group name…")}
                 style={{
                   width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 12,
                   background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
@@ -16119,7 +16129,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
             </div>
             {/* Avatar colour — pick from a cool palette; preview on the left */}
             <div style={{ padding: "8px 22px 4px" }}>
-              <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>Farbe</span>
+              <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>{(de ? "Farbe" : "Colour")}</span>
               <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10 }}>
                 <InitialsAvatar color={groupColor} initials={(groupName.trim() || "G").slice(0, 2).toUpperCase()} size={40} fontSize={14} />
                 <div style={{ display: "flex", flexWrap: "nowrap", gap: 9, flex: 1 }}>
@@ -16137,12 +16147,12 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
             </div>
             {/* Members */}
             <div style={{ padding: "8px 22px 4px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>Mitglieder</span>
-              <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textSub }}>{groupSelected.length} ausgewählt</span>
+              <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>{(de ? "Mitglieder" : "Members")}</span>
+              <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textSub }}>{groupSelected.length} {de ? "ausgewählt" : "selected"}</span>
             </div>
             <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "4px 14px 8px" }}>
               {otherMembers.length === 0 ? (
-                <div style={{ padding: 24, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Keine weiteren Mitglieder im Workspace</div>
+                <div style={{ padding: 24, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{(de ? "Keine weiteren Mitglieder im Workspace" : "No other members in the workspace")}</div>
               ) : otherMembers.map(m => {
                 const sel = groupSelected.includes(m.user_id);
                 return (
@@ -16172,7 +16182,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
             <div style={{ padding: "14px 22px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => !creatingGroup && setGroupModalOpen(false)}
                 style={{ padding: "10px 18px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 13, fontWeight: 500, fontFamily: FONT }}>
-                Abbrechen
+                {(de ? "Abbrechen" : "Cancel")}
               </motion.button>
               <motion.button whileTap={{ scale: 0.97 }} onClick={createGroupConversation}
                 disabled={!groupName.trim() || groupSelected.length === 0 || creatingGroup}
@@ -16183,7 +16193,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                   border: "none", color: (!groupName.trim() || groupSelected.length === 0) ? theme.textDim : "#fff",
                   fontSize: 13, fontWeight: 600, fontFamily: FONT, opacity: creatingGroup ? 0.7 : 1,
                 }}>
-                {creatingGroup ? "Erstelle…" : "Gruppe erstellen"}
+                {creatingGroup ? (de ? "Erstelle…" : "Creating…") : (de ? "Gruppe erstellen" : "Create group")}
               </motion.button>
             </div>
           </motion.div>
@@ -16210,7 +16220,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
             <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
               {/* Group name — first thing, directly editable */}
               <div style={{ padding: "20px 22px 6px" }}>
-                <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim, marginBottom: 8 }}>Gruppenname</div>
+                <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim, marginBottom: 8 }}>{(de ? "Gruppenname" : "Group name")}</div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
                     value={renameValue} onChange={e => setRenameValue(e.target.value)}
@@ -16230,17 +16240,17 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                       background: (!renameValue.trim() || renameValue.trim() === activeConv.name) ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)") : "#15151c",
                       color: (!renameValue.trim() || renameValue.trim() === activeConv.name) ? theme.textDim : "#fff",
                       fontSize: 13, fontWeight: 600, fontFamily: FONT,
-                    }}>{savingName ? "…" : "Speichern"}</motion.button>
+                    }}>{savingName ? "…" : (de ? "Speichern" : "Save")}</motion.button>
                 </div>
               </div>
 
               {/* Current members */}
               <div style={{ padding: "16px 22px 4px" }}>
-                <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim, marginBottom: 4 }}>Mitglieder · {(activeConv.participants || []).length}</div>
+                <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim, marginBottom: 4 }}>{de ? "Mitglieder" : "Members"} · {(activeConv.participants || []).length}</div>
               </div>
               <div style={{ padding: "0 14px" }}>
                 {(activeConv.participants || []).map(id => {
-                  const m = id === myId ? { display_name: "Du", color: "#64748B", initials: "Du", avatar_url: null } : (memberMap[id] || { display_name: "Unbekannt", color: "#888", initials: "?" });
+                  const m = id === myId ? { display_name: (de ? "Du" : "You"), color: "#64748B", initials: (de ? "Du" : "Me"), avatar_url: null } : (memberMap[id] || { display_name: (de ? "Unbekannt" : "Unknown"), color: "#888", initials: "?" });
                   return (
                     <div key={id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 10px", borderRadius: 12 }}>
                       {m.avatar_url ? (
@@ -16251,7 +16261,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                       <div style={{ flex: 1, fontSize: 13.5, fontFamily: FONT, color: theme.text, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.display_name}</div>
                       {id !== myId && (
                         <motion.div whileTap={{ scale: 0.9 }} onClick={() => removeGroupMember(activeConv.id, id)}
-                          title="Entfernen"
+                          title={(de ? "Entfernen" : "Remove")}
                           style={{ flexShrink: 0, cursor: memberBusy ? "wait" : "pointer", color: theme.textDim, padding: 6, borderRadius: 8, display: "flex" }}>
                           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
                         </motion.div>
@@ -16268,7 +16278,7 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                 return (
                   <>
                     <div style={{ padding: "16px 22px 4px" }}>
-                      <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>Hinzufügen</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>{(de ? "Hinzufügen" : "Add")}</div>
                     </div>
                     <div style={{ padding: "0 14px 8px" }}>
                       {addable.map(m => (
@@ -16296,17 +16306,17 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
               {activeConv.created_by === myId ? (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => deleteGroup(activeConv.id)} disabled={memberBusy}
                   style={{ padding: "10px 18px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${darkMode ? "rgba(232,67,67,0.4)" : "rgba(232,67,67,0.35)"}`, color: "#E84343", fontSize: 13, fontWeight: 500, fontFamily: FONT }}>
-                  Gruppe löschen
+                  {(de ? "Gruppe löschen" : "Delete group")}
                 </motion.button>
               ) : (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => leaveGroup(activeConv.id)} disabled={memberBusy}
                   style={{ padding: "10px 18px", borderRadius: 999, cursor: "pointer", background: "transparent", border: `1px solid ${darkMode ? "rgba(232,67,67,0.4)" : "rgba(232,67,67,0.35)"}`, color: "#E84343", fontSize: 13, fontWeight: 500, fontFamily: FONT }}>
-                  Gruppe verlassen
+                  {(de ? "Gruppe verlassen" : "Leave group")}
                 </motion.button>
               )}
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setManageOpen(false)}
                 style={{ padding: "10px 22px", borderRadius: 999, cursor: "pointer", background: "#15151c", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
-                Fertig
+                {(de ? "Fertig" : "Done")}
               </motion.button>
             </div>
           </motion.div>
@@ -16332,6 +16342,7 @@ const NOTE_COLORS = {
 };
 
 function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", ensureValidToken, llmKeys, llmProvider }) {
+  const de = appLanguage === "de";
   const [notes, setNotes] = useState([]);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -16410,7 +16421,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
   // ── Dictation with optional AI grammar polish ──
   const startDictation = (noteId) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { alert("Spracherkennung wird in diesem Browser nicht unterstützt. Bitte Chrome oder Safari verwenden."); return; }
+    if (!SpeechRecognition) { alert((de ? "Spracherkennung wird in diesem Browser nicht unterstützt. Bitte Chrome oder Safari verwenden." : "Speech recognition is not supported in this browser. Please use Chrome or Safari.")); return; }
     if (isRecording) { stopDictation(); return; }
 
     const note = notes.find(n => n.id === noteId);
@@ -16418,7 +16429,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
 
     dictationStartContentRef.current = note.content || "";
     const recognition = new SpeechRecognition();
-    recognition.lang = "de-DE";
+    recognition.lang = de ? "de-DE" : "en-US";
     recognition.continuous = true;
     recognition.interimResults = true;
 
@@ -16686,7 +16697,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
           textOverflow: "ellipsis",
           flexShrink: 0,
         }}>
-          {title || <span style={{ color: darkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.28)", fontWeight: 400, fontStyle: "italic" }}>Leere Notiz</span>}
+          {title || <span style={{ color: darkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.28)", fontWeight: 400, fontStyle: "italic" }}>{(de ? "Leere Notiz" : "Empty note")}</span>}
         </div>
         {body && (
           <div style={{
@@ -16715,15 +16726,15 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => togglePin(note.id)} title={note.pinned ? "Entpinnen" : "Pinnen"}
+              <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => togglePin(note.id)} title={note.pinned ? (de ? "Entpinnen" : "Unpin") : (de ? "Pinnen" : "Pin")}
                 style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, color: darkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={note.pinned ? "2" : "1.6"} strokeLinecap="round" strokeLinejoin="round"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z"/></svg>
               </motion.button>
-              <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => setColorPickerId(showColorPicker ? null : note.id)} title="Farbe"
+              <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => setColorPickerId(showColorPicker ? null : note.id)} title={(de ? "Farbe" : "Colour")}
                 style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, lineHeight: 1, width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <div style={{ width: 12, height: 12, borderRadius: "50%", background: accent }} />
               </motion.button>
-              <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => setConfirmDelete(note)} title="Löschen"
+              <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => setConfirmDelete(note)} title={(de ? "Löschen" : "Delete")}
                 style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, color: darkMode ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.5)", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </motion.button>
@@ -16774,8 +16785,8 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
 
   // Filter chips config — project-based (mirrors Kanban brands) + Privat + Gepinnt
   const filterChips = [
-    { id: "all", label: "Alle", count: notes.length },
-    { id: "pinned", label: "Gepinnt", count: notes.filter(n => n.pinned).length, icon: "pin" },
+    { id: "all", label: (de ? "Alle" : "All"), count: notes.length },
+    { id: "pinned", label: (de ? "Gepinnt" : "Pinned"), count: notes.filter(n => n.pinned).length, icon: "pin" },
     ...projects.map(p => ({
       id: "project:" + p.name,
       label: p.name,
@@ -16783,7 +16794,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
       logo: p.logo_url,
       color: p.color,
     })),
-    { id: "private", label: "Privat", count: notes.filter(n => !n.project_name).length, icon: "lock" },
+    { id: "private", label: (de ? "Privat" : "Private"), count: notes.filter(n => !n.project_name).length, icon: "lock" },
   ].filter(c => c.id === "all" || c.id === "private" || c.id.startsWith("project:") || c.count > 0);
 
   return (
@@ -16852,7 +16863,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
               display: "flex", alignItems: "center", justifyContent: "center",
               color: theme.textSub, background: sortMenuOpen ? (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.035)"),
             }}
-            title="Sortieren"
+            title={(de ? "Sortieren" : "Sort")}
           >
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M6 12h12M10 18h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
           </motion.div>
@@ -16870,8 +16881,8 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                 }}
               >
                 {[
-                  { id: "updated", label: "Zuletzt bearbeitet" },
-                  { id: "created", label: "Erstellt" },
+                  { id: "updated", label: (de ? "Zuletzt bearbeitet" : "Last edited") },
+                  { id: "created", label: (de ? "Erstellt" : "Created") },
                   { id: "alpha", label: "A → Z" },
                 ].map(s => (
                   <motion.div key={s.id} whileHover={{ background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
@@ -16924,7 +16935,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onBlur={() => { if (!search.trim()) setSearchOpen(false); }}
-                placeholder="Suchen..."
+                placeholder={(de ? "Suchen..." : "Search...")}
                 autoFocus
                 style={{
                   flex: 1, height: 32, background: "transparent", border: "none", outline: "none",
@@ -16949,7 +16960,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Neue Notiz
+          {(de ? "Neue Notiz" : "New note")}
         </motion.button>
       </div>
 
@@ -16973,10 +16984,10 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
             style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", minHeight: "68vh", padding: "20px" }}
           >
             <div style={{ fontSize: 16, fontFamily: FONT, color: theme.text, marginBottom: 6 }}>
-              {search ? "Keine Treffer" : filterMode !== "all" ? "Hier ist noch leer" : "Noch keine Notizen"}
+              {search ? (de ? "Keine Treffer" : "No matches") : filterMode !== "all" ? (de ? "Hier ist noch leer" : "Nothing here yet") : (de ? "Noch keine Notizen" : "No notes yet")}
             </div>
             <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 24 }}>
-              {search ? "Versuche einen anderen Suchbegriff" : 'Klicke auf "Neue Notiz" — oder doppelklicke irgendwo'}
+              {search ? (de ? "Versuche einen anderen Suchbegriff" : "Try a different search term") : (de ? "Klicke auf „Neue Notiz“ oder doppelklicke irgendwo" : "Click “New note” or double-click anywhere")}
             </div>
             {!search && filterMode === "all" && (
               <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => createNote()}
@@ -16985,7 +16996,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                   background: "#15151c", border: "none",
                   color: "#fff", fontSize: 13.5, fontWeight: 500, fontFamily: FONT, cursor: "pointer",
                 }}
-              >Erste Notiz erstellen</motion.button>
+              >{(de ? "Erste Notiz erstellen" : "Create your first note")}</motion.button>
             )}
           </motion.div>
         ) : (
@@ -17036,7 +17047,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <motion.button whileTap={{ scale: 0.9 }} onClick={() => togglePin(expandedNote.id)}
-                    title={expandedNote.pinned ? "Entpinnen" : "Pinnen"}
+                    title={expandedNote.pinned ? (de ? "Entpinnen" : "Unpin") : (de ? "Pinnen" : "Pin")}
                     style={{
                       width: 32, height: 32, borderRadius: 10, cursor: "pointer",
                       background: expandedNote.pinned ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)") : "transparent",
@@ -17050,7 +17061,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                   {/* Project chooser */}
                   <div style={{ position: "relative" }}>
                     <motion.button whileTap={{ scale: 0.95 }} onClick={() => setProjectMenuOpenFor(projectMenuOpenFor === expandedNote.id ? null : expandedNote.id)}
-                      title="Projekt"
+                      title={(de ? "Projekt" : "Project")}
                       style={{
                         height: 32, padding: "0 12px", borderRadius: 10, cursor: "pointer",
                         background: expandedNote.project_name ? expandedPalette.accent + "15" : "transparent",
@@ -17070,7 +17081,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                       })() : (
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                       )}
-                      {expandedNote.project_name || "Privat"}
+                      {expandedNote.project_name || (de ? "Privat" : "Private")}
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.6 }}><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </motion.button>
                     <AnimatePresence>
@@ -17091,7 +17102,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                             style={{ padding: "8px 10px", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: FONT, color: !expandedNote.project_name ? theme.accent : theme.text, fontWeight: !expandedNote.project_name ? 600 : 400 }}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                            Privat
+                            {(de ? "Privat" : "Private")}
                             {!expandedNote.project_name && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ marginLeft: "auto" }}><path d="M5 13l4 4L19 7" stroke={theme.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                           </motion.div>
                           {projects.map(p => (
@@ -17153,7 +17164,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                   </div>
                   {/* Dictation button */}
                   <motion.button whileTap={{ scale: 0.9 }} onClick={() => startDictation(expandedNote.id)}
-                    title={isRecording ? "Aufnahme stoppen" : "Diktieren"}
+                    title={isRecording ? (de ? "Aufnahme stoppen" : "Stop recording") : (de ? "Diktieren" : "Dictate")}
                     animate={isRecording ? { scale: [1, 1.06, 1] } : { scale: 1 }}
                     transition={isRecording ? { repeat: Infinity, duration: 1.2 } : { duration: 0.2 }}
                     style={{
@@ -17173,7 +17184,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                     )}
                   </motion.button>
                   <motion.button whileTap={{ scale: 0.9 }} onClick={() => setConfirmDelete(expandedNote)}
-                    title="Löschen"
+                    title={(de ? "Löschen" : "Delete")}
                     style={{
                       width: 32, height: 32, borderRadius: 10, cursor: "pointer",
                       background: "transparent",
@@ -17204,7 +17215,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
               <textarea
                 value={expandedNote.content}
                 onChange={(e) => updateContent(expandedNote.id, e.target.value)}
-                placeholder={"Titel der Notiz...\n\nDann hier weiterschreiben."}
+                placeholder={de ? "Titel der Notiz...\n\nDann hier weiterschreiben." : "Note title...\n\nThen keep writing here."}
                 autoFocus
                 style={{
                   flex: 1, minHeight: 200, maxHeight: "70vh",
@@ -17241,17 +17252,17 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
               <div style={{ width: 48, height: 48, borderRadius: 14, margin: "0 auto 16px", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </div>
-              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>Notiz löschen?</div>
+              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{(de ? "Notiz löschen?" : "Delete note?")}</div>
               <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 24, lineHeight: 1.5 }}>
-                Diese Aktion kann nicht rückgängig gemacht werden.
+                {(de ? "Diese Aktion kann nicht rückgängig gemacht werden." : "This cannot be undone.")}
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => setConfirmDelete(null)}
                   style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, fontWeight: 500 }}
-                >Abbrechen</motion.button>
+                >{(de ? "Abbrechen" : "Cancel")}</motion.button>
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => deleteNote(confirmDelete.id)}
                   style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", fontSize: 13, fontFamily: FONT, color: "#EF4444", fontWeight: 600 }}
-                >Löschen</motion.button>
+                >{(de ? "Löschen" : "Delete")}</motion.button>
               </div>
             </motion.div>
           </motion.div>
@@ -17961,7 +17972,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                             )}
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                {p.display_name || p.email || "Unbekannt"} {isMe && <span style={{ color: theme.textFaint, fontWeight: 400 }}>(Du)</span>}
+                                {p.display_name || p.email || (de ? "Unbekannt" : "Unknown")} {isMe && <span style={{ color: theme.textFaint, fontWeight: 400 }}>({de ? "Du" : "you"})</span>}
                               </div>
                               <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>
                                 {m.role === "owner" ? "Owner" : (de ? "Mitglied" : "Member")}
@@ -18112,7 +18123,7 @@ function ProjectsView({ onBack, session, userOrg, theme, darkMode, t, appLanguag
                                               }}>{p.initials || (p.display_name || "?")[0]}</div>
                                             )}
                                             <div style={{ flex: 1, minWidth: 0 }}>
-                                              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.display_name || p.email || "Unbekannt"}</div>
+                                              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.display_name || p.email || (de ? "Unbekannt" : "Unknown")}</div>
                                               {p.email && p.display_name && (
                                                 <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.email}</div>
                                               )}
@@ -18298,11 +18309,11 @@ const BRAND_ACCENT_PALETTE = [
 
 // Predefined logo slots — user can also add custom ones
 const LOGO_SLOTS = [
-  { key: "primary",  label: "Primary",  hint: "Standard-Logo",       accept: "image/*" },
-  { key: "svg",      label: "Vektor",   hint: "SVG für skalierbares Rendering", accept: "image/svg+xml,.svg" },
-  { key: "dark",     label: "Dark Mode", hint: "Variante für dunkle Hintergründe", accept: "image/*" },
-  { key: "light",    label: "Light Mode", hint: "Variante für helle Hintergründe", accept: "image/*" },
-  { key: "icon",     label: "Icon",     hint: "Favicon / App-Icon",  accept: "image/*" },
+  { key: "primary",  label: "Primary",  hint: "Standard-Logo", hintEn: "Default logo", accept: "image/*" },
+  { key: "svg",      label: "Vektor", labelEn: "Vector", hint: "SVG für skalierbares Rendering", hintEn: "SVG for sharp scaling", accept: "image/svg+xml,.svg" },
+  { key: "dark",     label: "Dark Mode", hint: "Variante für dunkle Hintergründe", hintEn: "Variant for dark backgrounds", accept: "image/*" },
+  { key: "light",    label: "Light Mode", hint: "Variante für helle Hintergründe", hintEn: "Variant for light backgrounds", accept: "image/*" },
+  { key: "icon",     label: "Icon",     hint: "Favicon / App-Icon", hintEn: "Favicon / app icon", accept: "image/*" },
 ];
 
 // Items the user can flag for follow-up — drives the next phase of the brand build
@@ -20229,7 +20240,7 @@ const CANVAS_COMPONENTS = [
       return [
         { id: crypto.randomUUID(), type: "rect", x, y, w, h, fill: pal[0], radius: Math.round(h / 2) },
         { id: crypto.randomUUID(), type: "text", x, y: Math.round(y + (h - size * CANVAS_LH) / 2), w,
-          text: "Jetzt starten", size, weight: 600, color: "#FFFFFF", align: "center" },
+          text: (uiDe() ? "Jetzt starten" : "Get started"), size, weight: 600, color: "#FFFFFF", align: "center" },
       ];
     } },
   { key: "card", group: "basics", label: { de: "Karte", en: "Card" },
@@ -20243,7 +20254,7 @@ const CANVAS_COMPONENTS = [
         { id: crypto.randomUUID(), type: "rect", x: x + pad, y: y + pad, w: w - pad * 2,
           h: Math.round(h * 0.42), fill: pal[1] || pal[0], radius: Math.round(w * 0.03) },
         { id: crypto.randomUUID(), type: "text", x: x + pad, y: y + pad + Math.round(h * 0.5),
-          w: w - pad * 2, text: "Titel", size, weight: 600, color: pal[0], align: "left" },
+          w: w - pad * 2, text: (uiDe() ? "Titel" : "Title"), size, weight: 600, color: pal[0], align: "left" },
       ];
     } },
 
@@ -35805,7 +35816,7 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
                     <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 14 }}>{t("touchpoints.social") || "Social-Media-Kanäle"}</div>
                     {connected.length === 0 ? (
                       <div style={{ padding: "26px 18px", borderRadius: 16, border: `1px dashed ${theme.borderFaint}`, textAlign: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT, lineHeight: 1.6 }}>
-                        {canEdit ? (t("touchpoints.noneConnected") || "Noch keine Kanäle verbunden — wähle unten eine Plattform aus.") : "Noch keine Kanäle hinterlegt."}
+                        {canEdit ? (t("touchpoints.noneConnected") || "Noch keine Kanäle verbunden — wähle unten eine Plattform aus.") : (appLanguage === "de" ? "Noch keine Kanäle hinterlegt." : "No channels set up yet.")}
                       </div>
                     ) : (
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(252px, 1fr))", gap: 14 }}>
@@ -36202,7 +36213,7 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
       )}
 
       {collectionLoad.error ? <CollectionLoadError theme={theme} appLanguage={appLanguage} onRetry={load} /> : collectionLoad.pending ? (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>Lädt…</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60, color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{(de ? "Lädt…" : "Loading…")}</div>
       ) : (
       <>
         {/* Breadcrumb when inside a folder */}
@@ -39604,12 +39615,12 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
                   </div>
                   <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textFaint, flexShrink: 0, minWidth: 92, textAlign: "right", marginRight: 38 }}>{fmtDate(f.created_at)}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>
-                    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => duplicateFile(f, e)} title="Duplizieren" style={actBtnStyle}>
+                    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => duplicateFile(f, e)} title={(de ? "Duplizieren" : "Duplicate")} style={actBtnStyle}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                     </motion.div>
                     {(() => { const canDel = f.user_id === session?.user?.id; return (
                     <motion.div whileTap={canDel ? { scale: 0.9 } : undefined} onClick={(e) => { e.stopPropagation(); if (canDel) requestDelete(f, e); }}
-                      title={canDel ? "Löschen" : "Nur der Ersteller kann löschen"}
+                      title={canDel ? (de ? "Löschen" : "Delete") : (de ? "Nur der Ersteller kann löschen" : "Only the creator can delete")}
                       style={{ ...actBtnStyle, opacity: canDel ? 1 : 0.3, cursor: canDel ? "pointer" : "not-allowed" }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
                     </motion.div>
@@ -40391,7 +40402,8 @@ function MoodboardItemDetail({ item, items = [], containers = [], currentContain
 // places where the text is a short explanatory paragraph, not a document.
 // `placeholder` shows greyed hint text while the field is empty, so an empty
 // editor doesn't look like a broken box.
-function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel, simple = false, placeholder = "" }) {
+function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel, simple = false, placeholder = "", appLanguage = "de" }) {
+  const de = appLanguage === "de";
   const ref = useRef(null);
   const [empty, setEmpty] = useState(true);
   const checkEmpty = () => {
@@ -40442,20 +40454,20 @@ function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel, simple
     <div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
         {!simple && <>
-          <Btn title="Überschrift 1" onClick={() => exec("formatBlock", "H1")}>H1</Btn>
-          <Btn title="Überschrift 2" onClick={() => exec("formatBlock", "H2")}>H2</Btn>
-          <Btn title="Überschrift 3" onClick={() => exec("formatBlock", "H3")}>H3</Btn>
-          <Btn title="Absatz" onClick={() => exec("formatBlock", "P")}>¶</Btn>
-          <Btn title="Fett" onClick={() => exec("bold")}><b>B</b></Btn>
-          <Btn title="Kursiv" onClick={() => exec("italic")}><i>I</i></Btn>
-          <Btn title="Liste" onClick={() => exec("insertUnorderedList")}>• Liste</Btn>
-          <Btn title="Link einfügen" onClick={openLink}>🔗 Link</Btn>
+          <Btn title={(de ? "Überschrift 1" : "Heading 1")} onClick={() => exec("formatBlock", "H1")}>H1</Btn>
+          <Btn title={(de ? "Überschrift 2" : "Heading 2")} onClick={() => exec("formatBlock", "H2")}>H2</Btn>
+          <Btn title={(de ? "Überschrift 3" : "Heading 3")} onClick={() => exec("formatBlock", "H3")}>H3</Btn>
+          <Btn title={(de ? "Absatz" : "Paragraph")} onClick={() => exec("formatBlock", "P")}>¶</Btn>
+          <Btn title={(de ? "Fett" : "Bold")} onClick={() => exec("bold")}><b>B</b></Btn>
+          <Btn title={(de ? "Kursiv" : "Italic")} onClick={() => exec("italic")}><i>I</i></Btn>
+          <Btn title={(de ? "Liste" : "List")} onClick={() => exec("insertUnorderedList")}>• {(de ? "Liste" : "List")}</Btn>
+          <Btn title={(de ? "Link einfügen" : "Insert link")} onClick={openLink}>Link</Btn>
         </>}
         <div style={{ flex: 1 }} />
         <button type="button" onClick={() => onSave(ref.current?.innerHTML || "")}
-          style={{ padding: "6px 16px", borderRadius: 8, border: "none", ...primaryBtn(darkMode), fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Speichern</button>
+          style={{ padding: "6px 16px", borderRadius: 8, border: "none", ...primaryBtn(darkMode), fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>{(de ? "Speichern" : "Save")}</button>
         <button type="button" onClick={onCancel}
-          style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>Abbrechen</button>
+          style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>{(de ? "Abbrechen" : "Cancel")}</button>
       </div>
       {linkOpen && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, padding: 10, borderRadius: 10,
@@ -40465,14 +40477,14 @@ function RichTextEditor({ initialHTML, theme, darkMode, onSave, onCancel, simple
             value={linkUrl}
             onChange={e => setLinkUrl(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); applyLink(); } if (e.key === "Escape") setLinkOpen(false); }}
-            placeholder="beispiel.de/seite"
+            placeholder={(de ? "beispiel.de/seite" : "example.com/page")}
             style={{ flex: 1, minWidth: 0, padding: "6px 10px", borderRadius: 8, border: "none",
               background: darkMode ? "rgba(255,255,255,0.05)" : "#fff", color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none" }}
           />
           <button type="button" onClick={applyLink}
-            style={{ padding: "6px 14px", borderRadius: 8, border: "none", ...primaryBtn(darkMode), fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>Einfügen</button>
+            style={{ padding: "6px 14px", borderRadius: 8, border: "none", ...primaryBtn(darkMode), fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>{(de ? "Einfügen" : "Insert")}</button>
           <button type="button" onClick={() => setLinkOpen(false)}
-            style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>Abbrechen</button>
+            style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, fontSize: 13, fontFamily: FONT, cursor: "pointer" }}>{(de ? "Abbrechen" : "Cancel")}</button>
         </div>
       )}
 
@@ -40517,7 +40529,7 @@ const YouTubeBlock = createReactBlockSpec(
   {
     render: ({ block }) => {
       const id = ytVideoId(block.props.url);
-      if (!id) return <div contentEditable={false} style={{ padding: "10px 12px", borderRadius: 8, background: "rgba(0,0,0,0.05)", color: "#888", fontSize: 13, fontFamily: FONT }}>Ungültiger YouTube-Link</div>;
+      if (!id) return <div contentEditable={false} style={{ padding: "10px 12px", borderRadius: 8, background: "rgba(0,0,0,0.05)", color: "#888", fontSize: 13, fontFamily: FONT }}>{(uiDe() ? "Ungültiger YouTube-Link" : "Invalid YouTube link")}</div>;
       return (
         <div contentEditable={false} style={{ width: "100%", borderRadius: 12, overflow: "hidden", background: "#000" }}>
           <div style={{ position: "relative", paddingBottom: "56.25%", height: 0 }}>
@@ -40567,7 +40579,7 @@ const DOC_HIGHLIGHTS = [
 function CommentToolbarButton({ editor, onComment }) {
   const Components = useComponentsContext();
   return (
-    <Components.FormattingToolbar.Button mainTooltip="Kommentieren"
+    <Components.FormattingToolbar.Button mainTooltip={(uiDe() ? "Kommentieren" : "Comment")}
       onClick={() => {
         try {
           // Highlight the selected text so it's visible what the comment refers to.
@@ -40585,11 +40597,12 @@ function CommentToolbarButton({ editor, onComment }) {
 function docTimeAgo(ts) {
   try {
     const s = (Date.now() - new Date(ts).getTime()) / 1000;
-    if (s < 60) return "gerade eben";
-    if (s < 3600) return Math.floor(s / 60) + " Min.";
-    if (s < 86400) return Math.floor(s / 3600) + " Std.";
-    if (s < 604800) return Math.floor(s / 86400) + " T.";
-    return new Date(ts).toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
+    const de = uiDe();
+    if (s < 60) return de ? "gerade eben" : "just now";
+    if (s < 3600) return Math.floor(s / 60) + (de ? " Min." : " min");
+    if (s < 86400) return Math.floor(s / 3600) + (de ? " Std." : " h");
+    if (s < 604800) return Math.floor(s / 86400) + (de ? " T." : " d");
+    return new Date(ts).toLocaleDateString(de ? "de-DE" : "en-GB", { day: "2-digit", month: "short" });
   } catch { return ""; }
 }
 
@@ -40602,7 +40615,8 @@ function DocAvatar({ profile, accent }) {
 
 // Comment thread + composer for a single block. Supports @mentions of teammates
 // and speech-to-text dictation (same SpeechRecognition approach used elsewhere).
-function CommentPopover({ block, comments, memberById, mentionables, currentUserId, theme, darkMode, accent, onClose, onSubmit, onDelete }) {
+function CommentPopover({ block, comments, memberById, mentionables, currentUserId, theme, darkMode, accent, onClose, onSubmit, onDelete, appLanguage = "de" }) {
+  const de = appLanguage === "de";
   const [text, setText] = useState("");
   const [mentionState, setMentionState] = useState(null); // { query, start } | null
   const [pickIdx, setPickIdx] = useState(0);
@@ -40654,9 +40668,9 @@ function CommentPopover({ block, comments, memberById, mentionables, currentUser
 
   const startRec = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { alert("Spracherkennung wird in diesem Browser nicht unterstützt. Bitte verwende Chrome."); return; }
+    if (!SR) { alert((de ? "Spracherkennung wird in diesem Browser nicht unterstützt. Bitte verwende Chrome." : "Speech recognition is not supported in this browser. Please use Chrome.")); return; }
     if (isRecording) { stopRec(); return; }
-    const rec = new SR(); rec.lang = "de-DE"; rec.continuous = true; rec.interimResults = true;
+    const rec = new SR(); rec.lang = de ? "de-DE" : "en-US"; rec.continuous = true; rec.interimResults = true;
     let base = text; let needsSpace = base.length > 0 && !/\s$/.test(base);
     rec.onresult = (ev) => {
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
@@ -40688,7 +40702,7 @@ function CommentPopover({ block, comments, memberById, mentionables, currentUser
   return (
     <div className="doc-anno-pop-card" style={{ background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint || (darkMode ? "rgba(255,255,255,0.1)" : "#e6e7eb")}`, boxShadow: "0 16px 44px rgba(0,0,0,0.18)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px 8px" }}>
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: theme.text, fontFamily: FONT }}>Kommentare</span>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{(de ? "Kommentare" : "Comments")}</span>
         <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 2 }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </button>
@@ -40702,10 +40716,10 @@ function CommentPopover({ block, comments, memberById, mentionables, currentUser
                 <DocAvatar profile={author} accent={accent} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                    <span style={{ fontSize: 12.5, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{author.display_name || "Unbekannt"}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{author.display_name || (de ? "Unbekannt" : "Unknown")}</span>
                     <span style={{ fontSize: 11, color: theme.textDim, fontFamily: FONT }}>{docTimeAgo(c.created_at)}</span>
                     {c.author_id === currentUserId && (
-                      <button onClick={() => onDelete(c.id)} title="Löschen" style={{ marginLeft: "auto", border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 2 }}>
+                      <button onClick={() => onDelete(c.id)} title={(de ? "Löschen" : "Delete")} style={{ marginLeft: "auto", border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 2 }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M3 6h18M8 6V4h8v2m-9 0v14h10V6"/></svg>
                       </button>
                     )}
@@ -40719,9 +40733,9 @@ function CommentPopover({ block, comments, memberById, mentionables, currentUser
       )}
       <div style={{ position: "relative", padding: "8px 14px 12px" }}>
         <textarea ref={taRef} value={text} onChange={onChangeText} onKeyDown={onKeyDown} autoFocus
-          placeholder="Kommentar schreiben… @ für Erwähnung"
+          placeholder={(de ? "Kommentar schreiben… @ für Erwähnung" : "Write a comment… @ to mention")}
           style={{ width: "100%", boxSizing: "border-box", resize: "none", minHeight: 60, border: "none", outline: "none", background: inputBg, borderRadius: 10, padding: "10px 38px 10px 12px", fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.5 }} />
-        <button onClick={startRec} title={isRecording ? "Diktat stoppen" : "Diktieren"}
+        <button onClick={startRec} title={isRecording ? (de ? "Diktat stoppen" : "Stop dictation") : (de ? "Diktieren" : "Dictate")}
           style={{ position: "absolute", right: 22, top: 16, border: "none", background: isRecording ? accent : "transparent", color: isRecording ? "#fff" : theme.textDim, cursor: "pointer", borderRadius: 8, padding: 5, lineHeight: 0, display: "flex" }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.6"/><path d="M5 10a7 7 0 0014 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><path d="M12 17v4M8 21h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
         </button>
@@ -40739,7 +40753,7 @@ function CommentPopover({ block, comments, memberById, mentionables, currentUser
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
           <button onClick={submit} disabled={!text.trim()}
             style={{ border: "none", background: text.trim() ? accent : (darkMode ? "rgba(255,255,255,0.1)" : "#e6e7eb"), color: text.trim() ? "#fff" : theme.textDim, cursor: text.trim() ? "pointer" : "default", borderRadius: 9, padding: "7px 16px", fontSize: 12.5, fontWeight: 600, fontFamily: FONT }}>
-            Kommentieren
+            {(de ? "Kommentieren" : "Comment")}
           </button>
         </div>
       </div>
@@ -40800,11 +40814,11 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
   }, [onClose]);
 
   const handleFile = async (file) => {
-    if (!file || !file.type?.startsWith("image/")) { setErr("Bitte eine Bilddatei auswählen."); return; }
-    if (!uploadFile) { setErr("Upload ist hier nicht verfügbar."); return; }
+    if (!file || !file.type?.startsWith("image/")) { setErr((de ? "Bitte eine Bilddatei auswählen." : "Please choose an image file.")); return; }
+    if (!uploadFile) { setErr((de ? "Upload ist hier nicht verfügbar." : "Upload is not available here.")); return; }
     setErr(""); setBusy(true);
-    try { const u = await uploadFile(file); if (u) pick(u); else setErr("Upload fehlgeschlagen."); }
-    catch (e) { setErr("Upload fehlgeschlagen: " + (e?.message || "")); }
+    try { const u = await uploadFile(file); if (u) pick(u); else setErr((de ? "Upload fehlgeschlagen." : "Upload failed.")); }
+    catch (e) { setErr((de ? "Upload fehlgeschlagen: " : "Upload failed: ") + (e?.message || "")); }
     finally { setBusy(false); }
   };
   const handleFiles = async (files) => {
@@ -40857,7 +40871,7 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
           <div style={{ display: "inline-flex", gap: 3, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
             {tabBtn("creations", "Creations")}
             {tabBtn("stock", "Stock")}
-            {tabBtn("upload", "Hochladen")}
+            {tabBtn("upload", (de ? "Hochladen" : "Upload"))}
             {tabBtn("url", "URL")}
           </div>
         </div>
@@ -40866,7 +40880,7 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
           <div style={{ padding: "14px 20px 0" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-              <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Bilder durchsuchen…"
+              <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder={(de ? "Bilder durchsuchen…" : "Search images…")}
                 style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 13, fontFamily: FONT }} />
             </div>
           </div>
@@ -40875,10 +40889,10 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 20 }}>
           {tab === "creations" ? (
             imgs === null ? (
-              <div style={{ padding: 40, textAlign: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>Lädt…</div>
+              <div style={{ padding: 40, textAlign: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{(de ? "Lädt…" : "Loading…")}</div>
             ) : shown.length === 0 ? (
               <div style={{ padding: 40, textAlign: "center", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>
-                {q.trim() ? "Keine Treffer." : "Noch keine Bilder unter Creations."}
+                {q.trim() ? (de ? "Keine Treffer." : "No matches.") : (de ? "Noch keine Bilder unter Creations." : "No images in Creations yet.")}
               </div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 12 }}>
@@ -40919,13 +40933,13 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
                 style={{ width: "100%", maxWidth: 460, padding: "44px 24px", borderRadius: 16, cursor: busy ? "default" : "pointer", textAlign: "center",
                   border: `2px dashed ${dragOver ? accent : theme.borderFaint}`, background: dragOver ? accent + "12" : (darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)") }}>
                 {busy ? (
-                  <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textSub }}>Wird hochgeladen…</div>
+                  <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textSub }}>{(de ? "Wird hochgeladen…" : "Uploading…")}</div>
                 ) : (
                   <>
                     <div style={{ width: 52, height: 52, borderRadius: 14, margin: "0 auto 14px", background: accent + "1f", display: "flex", alignItems: "center", justifyContent: "center", color: accent }}>
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{UPLOAD_ICON}</svg>
                     </div>
-                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 4 }}>Datei auswählen oder hierher ziehen</div>
+                    <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 4 }}>{(de ? "Datei auswählen oder hierher ziehen" : "Choose a file or drag it here")}</div>
                     <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>PNG, JPG, GIF, WebP…</div>
                   </>
                 )}
@@ -40935,14 +40949,14 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
           ) : (
             <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
               <div style={{ width: "100%", maxWidth: 460 }}>
-                <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>Bild-URL</div>
+                <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{(de ? "Bild-URL" : "Image URL")}</div>
                 <input autoFocus value={url} onChange={e => setUrl(e.target.value)} onKeyDown={e => { if (e.key === "Enter") submitUrl(); }}
                   placeholder="https://…"
                   style={{ width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 11, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: theme.text, fontSize: 13.5, fontFamily: FONT, outline: "none" }} />
                 <motion.button whileTap={{ scale: 0.98 }} onClick={submitUrl} disabled={!url.trim()}
                   style={{ marginTop: 12, width: "100%", padding: "11px 0", borderRadius: 11, border: "none", cursor: url.trim() ? "pointer" : "default",
                     background: url.trim() ? accent : (darkMode ? "rgba(255,255,255,0.1)" : "#e6e7eb"), color: url.trim() ? "#fff" : theme.textDim, fontSize: 13.5, fontFamily: FONT, fontWeight: 600 }}>
-                  Hinzufügen
+                  {(de ? "Hinzufügen" : "Add")}
                 </motion.button>
               </div>
             </div>
@@ -40962,6 +40976,7 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
 }
 
 function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = [], memberById = {}, mentionables = [], currentUserId, onAddComment, onDeleteComment, uploadFile, orgId, focusBlockId , session, userOrg, appLanguage = "de" }) {
+  const de = appLanguage === "de";
   const timer = useRef(null);
   const wrapRef = useRef(null);
   const moveRaf = useRef(0);
@@ -41007,9 +41022,9 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
   const stopEditorDictation = useCallback(() => { if (dictRef.current) { dictRef.current.stop(); dictRef.current = null; } setDictating(false); }, []);
   const startEditorDictation = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { alert("Spracherkennung wird in diesem Browser nicht unterstützt. Bitte verwende Chrome."); return; }
+    if (!SR) { alert((de ? "Spracherkennung wird in diesem Browser nicht unterstützt. Bitte verwende Chrome." : "Speech recognition is not supported in this browser. Please use Chrome.")); return; }
     if (dictRef.current) { stopEditorDictation(); return; }
-    const rec = new SR(); rec.lang = "de-DE"; rec.continuous = true; rec.interimResults = false;
+    const rec = new SR(); rec.lang = de ? "de-DE" : "en-US"; rec.continuous = true; rec.interimResults = false;
     rec.onresult = (ev) => {
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         if (ev.results[i].isFinal) {
@@ -41030,10 +41045,10 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
     const base = getDefaultReactSlashMenuItems(ed).filter(it => it.key !== "audio" && it.key !== "file" && it.key !== "image");
     const mediaGroup = base.find(it => it.key === "video")?.group;
     const youtube = {
-      title: "YouTube", subtext: "YouTube-Video einbetten", aliases: ["youtube", "yt", "video", "embed"], group: mediaGroup, key: "youtube",
+      title: "YouTube", subtext: (de ? "YouTube-Video einbetten" : "Embed a YouTube video"), aliases: ["youtube", "yt", "video", "embed"], group: mediaGroup, key: "youtube",
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21.6 7.2a2.5 2.5 0 0 0-1.77-1.77C18.25 5 12 5 12 5s-6.25 0-7.83.43A2.5 2.5 0 0 0 2.4 7.2 26 26 0 0 0 2 12a26 26 0 0 0 .4 4.8 2.5 2.5 0 0 0 1.77 1.77C5.75 19 12 19 12 19s6.25 0 7.83-.43a2.5 2.5 0 0 0 1.77-1.77A26 26 0 0 0 22 12a26 26 0 0 0-.4-4.8zM10 15V9l5 3z"/></svg>,
       onItemClick: () => {
-        const url = window.prompt("YouTube-Link einfügen:");
+        const url = window.prompt((de ? "YouTube-Link einfügen:" : "Paste a YouTube link:"));
         if (!url || !url.trim()) return;
         const cur = ed.getTextCursorPosition().block;
         const empty = !cur.content || (Array.isArray(cur.content) && cur.content.length === 0);
@@ -41042,14 +41057,14 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
       },
     };
     const dictate = {
-      title: "Diktieren", subtext: "Text per Sprache einfügen", aliases: ["diktieren", "diktat", "sprache", "mikrofon", "voice", "mic"], group: "Aktionen", key: "dictate",
+      title: (de ? "Diktieren" : "Dictate"), subtext: (de ? "Text per Sprache einfügen" : "Insert text by voice"), aliases: ["diktieren", "diktat", "sprache", "mikrofon", "voice", "mic", "dictate"], group: (de ? "Aktionen" : "Actions"), key: "dictate",
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4M8 21h8"/></svg>,
       onItemClick: () => startEditorDictation(),
     };
     // Single "Bild" item → unified modal (Creations / Hochladen / URL), replacing
     // BlockNote's native image panel.
     const image = {
-      title: "Bild", subtext: "Aus Creations, Upload oder URL", aliases: ["bild", "image", "foto", "picture", "creations", "upload", "url"], group: mediaGroup, key: "image",
+      title: (de ? "Bild" : "Image"), subtext: (de ? "Aus Creations, Upload oder URL" : "From Creations, upload or URL"), aliases: ["bild", "image", "foto", "picture", "creations", "upload", "url"], group: mediaGroup, key: "image",
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>,
       onItemClick: () => { pickTargetRef.current = ed.getTextCursorPosition().block; setPickerOpen(true); },
     };
@@ -41064,7 +41079,7 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
     const insertAt = (base.findIndex(it => it.key === "youtube") + 1) || base.length;
     base.splice(insertAt, 0, ...(emoji ? [emoji, image] : [image]));
     return [dictate, ...base];
-  }, [startEditorDictation]);
+  }, [startEditorDictation, de]);
 
   // Insert the chosen image (from any modal tab) at the remembered cursor position.
   const handlePickImage = useCallback((url) => {
@@ -41214,7 +41229,7 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
         <button onClick={stopEditorDictation}
           style={{ position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)", zIndex: 1000, display: "flex", alignItems: "center", gap: 9, padding: "10px 16px", borderRadius: 999, border: "none", cursor: "pointer", background: accent, color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: FONT, boxShadow: "0 8px 30px rgba(0,0,0,0.25)" }}>
           <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#fff", animation: "docpulse 1s ease-in-out infinite" }} />
-          Diktat läuft – stoppen
+          {(de ? "Diktat läuft, stoppen" : "Dictating, stop")}
         </button>
       )}
       <AnimatePresence>
@@ -41233,7 +41248,7 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
           const active = openId === b.id;
           return (
             <button key={b.id} className="doc-anno-btn" onClick={(e) => { e.stopPropagation(); setOpenId(prev => prev === b.id ? null : b.id); }}
-              title={count > 0 ? "Kommentare ansehen" : "Kommentieren"}
+              title={count > 0 ? (de ? "Kommentare ansehen" : "View comments") : (de ? "Kommentieren" : "Comment")}
               style={{ top: b.centerY - 13, color: count > 0 ? accent : theme.textDim, borderColor: active ? accent : (darkMode ? "rgba(255,255,255,0.16)" : "#e0e1e6"), background: darkMode ? "#1c1c26" : "#fff" }}>
               {count > 0 ? (
                 <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
@@ -41249,7 +41264,7 @@ function DocEditor({ initialHTML, theme, darkMode, accent, onChange, comments = 
         {openBlock && (
           <div className="doc-anno-pop" style={{ top: Math.max(8, openBlock.centerY + 18) }}
             onMouseDown={(e) => e.stopPropagation()}>
-            <CommentPopover block={openBlock} comments={comments.filter(c => c.block_id === openId)}
+            <CommentPopover appLanguage={appLanguage} block={openBlock} comments={comments.filter(c => c.block_id === openId)}
               memberById={memberById} mentionables={mentionables} currentUserId={currentUserId}
               theme={theme} darkMode={darkMode} accent={accent}
               onClose={() => setOpenId(null)} onSubmit={onAddComment} onDelete={onDeleteComment} />
@@ -41368,7 +41383,7 @@ async function docLoadImage(url) {
 async function docExportPDF(title, blocks) {
   let jsPDF;
   try { ({ jsPDF } = await import("jspdf")); }
-  catch (_) { alert("PDF-Export konnte nicht geladen werden."); return; }
+  catch (_) { alert((uiDe() ? "PDF-Export konnte nicht geladen werden." : "The PDF export could not be loaded.")); return; }
   const doc = new jsPDF({ unit: "pt", format: "a4", compress: true });
   const PW = doc.internal.pageSize.getWidth(), PH = doc.internal.pageSize.getHeight();
   const M = 56, CW = PW - 2 * M; let y = M;
@@ -41426,7 +41441,8 @@ async function docExportPDF(title, blocks) {
 const docSafeName = (title) => (title || "Dokument").replace(/[^\wÀ-ɏ\- ]+/g, "").trim().slice(0, 60) || "Dokument";
 
 // Share controls for a document: workspace-wide, specific members, or a project.
-function SharePopover({ doc, ownerProfile, members, shares, projects, canShare = true, theme, darkMode, accent, onClose, onSetVisibility, onSetProject, onToggleShare }) {
+function SharePopover({ doc, ownerProfile, members, shares, projects, canShare = true, theme, darkMode, accent, onClose, onSetVisibility, onSetProject, onToggleShare, appLanguage = "de" }) {
+  const de = appLanguage === "de";
   // Non-owners can only export — open straight on the export tab.
   const [tab, setTab] = useState(canShare ? "share" : "export");
   const [linkCopied, setLinkCopied] = useState(false);
@@ -41434,7 +41450,7 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, canShare =
     try {
       await navigator.clipboard.writeText(`${window.location.origin}/?doc=${doc.id}`);
       setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1600);
-    } catch (_) { alert("Link konnte nicht kopiert werden."); }
+    } catch (_) { alert((de ? "Link konnte nicht kopiert werden." : "Could not copy the link.")); }
   };
   const vis = doc.visibility || "workspace";
   const shareables = (members || []).filter(m => m.user_id !== doc.created_by && m.display_name);
@@ -41483,8 +41499,8 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, canShare =
       {/* Tab switcher (Teilen / Exportieren) — closes on outside click */}
       <div style={{ display: "flex", alignItems: "center", padding: "10px 12px 8px" }}>
         <div style={{ flex: 1, display: "flex", gap: 4, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.05)" : "#eceef1" }}>
-          {canShare && <Tab id="share" label="Teilen" />}
-          <Tab id="export" label="Exportieren" />
+          {canShare && <Tab id="share" label={(de ? "Teilen" : "Share")} />}
+          <Tab id="export" label={(de ? "Exportieren" : "Export")} />
         </div>
       </div>
 
@@ -41497,8 +41513,8 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, canShare =
           <span style={{ color: accent, lineHeight: 0 }}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
           </span>
-          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>Link kopieren</span>
-          {linkCopied && <span style={{ fontSize: 12, color: accent, fontFamily: FONT, fontWeight: 600 }}>Kopiert ✓</span>}
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{(de ? "Link kopieren" : "Copy link")}</span>
+          {linkCopied && <span style={{ fontSize: 12, color: accent, fontFamily: FONT, fontWeight: 600 }}>{(de ? "Kopiert ✓" : "Copied ✓")}</span>}
         </button>
       </div>
 
@@ -41506,17 +41522,17 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, canShare =
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px 10px", borderBottom: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}` }}>
           <DocAvatar profile={ownerProfile} accent={accent} />
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{ownerProfile?.display_name || "Unbekannt"}</div>
-            <div style={{ fontSize: 11, color: theme.textDim, fontFamily: FONT }}>Owner</div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{ownerProfile?.display_name || (de ? "Unbekannt" : "Unknown")}</div>
+            <div style={{ fontSize: 11, color: theme.textDim, fontFamily: FONT }}>{(de ? "Ersteller" : "Owner")}</div>
           </div>
         </div>
         <div style={{ padding: 6 }}>
-          <OptBlock id="workspace" label="Ganzer Workspace" desc="Alle Mitglieder können sehen & bearbeiten"
+          <OptBlock id="workspace" label={(de ? "Ganzer Workspace" : "Whole workspace")} desc={(de ? "Alle Mitglieder können sehen & bearbeiten" : "All members can view and edit")}
             icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 0 0 18M12 3a14 14 0 0 1 0 18"/></svg>} />
-          <OptBlock id="restricted" label="Bestimmte Mitglieder" desc="Nur ausgewählte Personen"
+          <OptBlock id="restricted" label={(de ? "Bestimmte Mitglieder" : "Specific members")} desc={(de ? "Nur ausgewählte Personen" : "Only selected people")}
             icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg>}>
             <div className="no-scrollbar" style={{ maxHeight: 190, overflowY: "auto", padding: "0 0 6px" }}>
-              {shareables.length === 0 && <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, padding: "4px 12px 8px" }}>Keine weiteren Mitglieder</div>}
+              {shareables.length === 0 && <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, padding: "4px 12px 8px" }}>{(de ? "Keine weiteren Mitglieder" : "No other members")}</div>}
               {shareables.map(m => {
                 const on = shares.includes(m.user_id);
                 return (
@@ -41531,13 +41547,13 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, canShare =
               })}
             </div>
           </OptBlock>
-          <OptBlock id="project" label="Projekt" desc="Mitglieder eines Projekts erhalten Zugriff"
+          <OptBlock id="project" label={(de ? "Projekt" : "Project")} desc={(de ? "Mitglieder eines Projekts erhalten Zugriff" : "Members of a project get access")}
             icon={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>}>
             <div style={{ padding: "0 12px 12px", position: "relative" }}>
               <div style={{ position: "relative" }}>
                 <select value={doc.project_id || ""} onChange={(e) => onSetProject(e.target.value)}
                   style={{ width: "100%", padding: "9px 34px 9px 11px", borderRadius: 9, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff", color: theme.text, fontFamily: FONT, fontSize: 13, outline: "none", appearance: "none", WebkitAppearance: "none", MozAppearance: "none", cursor: "pointer" }}>
-                  <option value="">Projekt wählen…</option>
+                  <option value="">{(de ? "Projekt wählen…" : "Choose a project…")}</option>
                   {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
@@ -41571,8 +41587,16 @@ const DOC_ACTIVITY_LABEL = {
   shared: "hat die Freigabe geändert",
   renamed: "hat den Titel geändert",
 };
-function docDateTime(ts) { try { return new Date(ts).toLocaleString("de-DE", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return ""; } }
-function InfoPopover({ doc, memberById, activity, projectName, theme, darkMode, accent, onClose }) {
+const DOC_ACTIVITY_LABEL_EN = {
+  created: "created the document",
+  edited: "edited the document",
+  image_added: "added an image",
+  shared: "changed the sharing",
+  renamed: "changed the title",
+};
+function docDateTime(ts, de = true) { try { return new Date(ts).toLocaleString(de ? "de-DE" : "en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return ""; } }
+function InfoPopover({ doc, memberById, activity, projectName, theme, darkMode, accent, onClose, appLanguage = "de" }) {
+  const de = appLanguage === "de";
   const owner = memberById[doc.created_by] || {};
   const dimLabel = { fontSize: 10.5, letterSpacing: 1.2, textTransform: "uppercase", color: theme.textFaint || theme.textDim, fontFamily: FONT, padding: "13px 14px 6px", fontWeight: 600 };
   const calSvg = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>;
@@ -41591,14 +41615,14 @@ function InfoPopover({ doc, memberById, activity, projectName, theme, darkMode, 
       <div style={{ padding: "12px 14px 2px" }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>Info</span>
       </div>
-      <div style={dimLabel}>Eigenschaften</div>
-      <Row icon={calSvg} label="Erstellt" value={docDateTime(doc.created_at)} />
-      <Row icon={calSvg} label="Aktualisiert" value={docDateTime(doc.updated_at)} />
-      <Row icon={usrSvg} label="Autor" value={owner.display_name || "Unbekannt"} />
-      <Row icon={folderSvg} label="Ort" value={projectName || "Unsortiert"} />
-      <div style={{ ...dimLabel, borderTop: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}`, marginTop: 8 }}>Verlauf</div>
+      <div style={dimLabel}>{(de ? "Eigenschaften" : "Properties")}</div>
+      <Row icon={calSvg} label={(de ? "Erstellt" : "Created")} value={docDateTime(doc.created_at, de)} />
+      <Row icon={calSvg} label={(de ? "Aktualisiert" : "Updated")} value={docDateTime(doc.updated_at, de)} />
+      <Row icon={usrSvg} label={(de ? "Autor" : "Author")} value={owner.display_name || (de ? "Unbekannt" : "Unknown")} />
+      <Row icon={folderSvg} label={(de ? "Ort" : "Location")} value={projectName || (de ? "Unsortiert" : "Unsorted")} />
+      <div style={{ ...dimLabel, borderTop: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}`, marginTop: 8 }}>{(de ? "Verlauf" : "History")}</div>
       <div className="no-scrollbar" style={{ maxHeight: 240, overflowY: "auto", padding: "0 0 10px" }}>
-        {activity.length === 0 && <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, padding: "2px 14px 10px" }}>Noch keine Aktivität.</div>}
+        {activity.length === 0 && <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, padding: "2px 14px 10px" }}>{(de ? "Noch keine Aktivität." : "No activity yet.")}</div>}
         {activity.map(a => {
           const p = memberById[a.user_id] || {};
           return (
@@ -41606,7 +41630,7 @@ function InfoPopover({ doc, memberById, activity, projectName, theme, darkMode, 
               <DocAvatar profile={p} accent={accent} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12.5, color: theme.text, fontFamily: FONT, lineHeight: 1.35 }}>
-                  <span style={{ fontWeight: 600 }}>{p.display_name || "Jemand"}</span> {DOC_ACTIVITY_LABEL[a.type] || "hat etwas geändert"}
+                  <span style={{ fontWeight: 600 }}>{p.display_name || (de ? "Jemand" : "Someone")}</span> {(de ? DOC_ACTIVITY_LABEL : DOC_ACTIVITY_LABEL_EN)[a.type] || (de ? "hat etwas geändert" : "changed something")}
                 </div>
                 <div style={{ fontSize: 11, color: theme.textDim, fontFamily: FONT }}>{docTimeAgo(a.created_at)}</div>
               </div>
@@ -42372,7 +42396,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
     const { data, error } = await supabase.from("document_comments")
       .insert({ document_id: openDoc.id, block_id: blockId, author_id: session?.user?.id, body: body.trim(), mentions: mentions || [] })
       .select().single();
-    if (error) { alert("Kommentar konnte nicht gespeichert werden: " + error.message); return; }
+    if (error) { alert((de ? "Kommentar konnte nicht gespeichert werden: " : "Could not save the comment: ") + error.message); return; }
     setComments(prev => [...prev, data]);
     const myName = memberById[session?.user?.id]?.display_name || "Jemand";
     (mentions || []).forEach(uid => createNotification?.({
@@ -42492,9 +42516,9 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
     let pref = "workspace"; try { pref = localStorage.getItem("agencyos-doc-default-visibility") || "workspace"; } catch (_) {}
     const visibility = pref === "private" ? "restricted" : "workspace";
     const { data, error } = await supabase.from("brand_documents")
-      .insert({ org_id: userOrg.id, project_id: projectId || null, folder_id: currentFolder || null, title: "Unbenanntes Dokument", content: "", created_by: session?.user?.id, visibility })
+      .insert({ org_id: userOrg.id, project_id: projectId || null, folder_id: currentFolder || null, title: (de ? "Unbenanntes Dokument" : "Untitled document"), content: "", created_by: session?.user?.id, visibility })
       .select().single();
-    if (error) { alert("Dokument konnte nicht erstellt werden: " + error.message); return; }
+    if (error) { alert((de ? "Dokument konnte nicht erstellt werden: " : "Could not create the document: ") + error.message); return; }
     setDocs(prev => [data, ...prev]);
     setOpenDoc(data); setTitle(data.title || "");
     recordActivity("created", data.id);
@@ -42825,7 +42849,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   const onTitleChange = (val) => {
     setTitle(val);
     clearTimeout(titleTimer.current);
-    titleTimer.current = setTimeout(() => persist({ title: val.trim() || "Unbenanntes Dokument" }), 600);
+    titleTimer.current = setTimeout(() => persist({ title: val.trim() || (de ? "Unbenanntes Dokument" : "Untitled document") }), 600);
   };
 
   const deleteDoc = (id, e) => {
@@ -42843,9 +42867,9 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
     e?.stopPropagation?.();
     if (!userOrg?.id) return;
     const { data, error } = await supabase.from("brand_documents")
-      .insert({ org_id: userOrg.id, project_id: projectId || d.project_id || null, title: (d.title || "Unbenanntes Dokument") + " (Kopie)", content: d.content || "", created_by: session?.user?.id, visibility: d.visibility || "workspace" })
+      .insert({ org_id: userOrg.id, project_id: projectId || d.project_id || null, title: (d.title || (de ? "Unbenanntes Dokument" : "Untitled document")) + (de ? " (Kopie)" : " (copy)"), content: d.content || "", created_by: session?.user?.id, visibility: d.visibility || "workspace" })
       .select().single();
-    if (error) { alert("Dokument konnte nicht dupliziert werden: " + error.message); return; }
+    if (error) { alert((de ? "Dokument konnte nicht dupliziert werden: " : "Could not duplicate the document: ") + error.message); return; }
     setDocs(prev => [data, ...prev]);
     recordActivity("created", data.id);
   };
@@ -42863,23 +42887,23 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
             {/* Title (with arrow on the same line) + project breadcrumb */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <button onClick={() => { setFullscreen?.(false); setOpenDoc(null); load(); }} title="Zurück"
+                <button onClick={() => { setFullscreen?.(false); setOpenDoc(null); load(); }} title={(de ? "Zurück" : "Back")}
                   style={{ marginLeft: -10, border: "none", background: "transparent", cursor: "pointer", color: theme.textDim, lineHeight: 0, padding: 4, borderRadius: 8, flexShrink: 0 }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
                 </button>
-                <input value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Ohne Titel"
+                <input value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder={(de ? "Ohne Titel" : "Untitled")}
                   style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: theme.text, fontSize: 20, fontWeight: 700, fontFamily: FONT, letterSpacing: -0.2, padding: 0 }} />
               </div>
               {/* Breadcrumb: flush under the title text */}
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 1, paddingLeft: 32, color: theme.textDim }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-                <span style={{ fontSize: 13, fontFamily: FONT }}>{projects.find(p => p.id === openDoc.project_id)?.name || "Unsortiert"}</span>
+                <span style={{ fontSize: 13, fontFamily: FONT }}>{projects.find(p => p.id === openDoc.project_id)?.name || (de ? "Unsortiert" : "Unsorted")}</span>
               </div>
             </div>
             {/* Right cluster: Info · Teilen */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
               {/* Fullscreen toggle */}
-              <button title={fullscreen ? "Vollbild beenden" : "Vollbild"} onClick={(e) => { e.stopPropagation(); setInfoOpen(false); setShareOpen(false); setFullscreen?.(!fullscreen); }}
+              <button title={fullscreen ? (de ? "Vollbild beenden" : "Exit full screen") : (de ? "Vollbild" : "Full screen")} onClick={(e) => { e.stopPropagation(); setInfoOpen(false); setShareOpen(false); setFullscreen?.(!fullscreen); }}
                 style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${fullscreen ? accent : theme.borderFaint}`, background: fullscreen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: fullscreen ? accent : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 {fullscreen ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
@@ -42892,13 +42916,13 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="7.5" x2="12.01" y2="7.5"/></svg>
               </button>
               {/* Everyone with access sees this — non-owners get export only (see SharePopover) */}
-              <button className="doc-share-btn" title="Teilen" onClick={(e) => { e.stopPropagation(); setInfoOpen(false); setShareOpen(o => !o); }}
+              <button className="doc-share-btn" title={(de ? "Teilen" : "Share")} onClick={(e) => { e.stopPropagation(); setInfoOpen(false); setShareOpen(o => !o); }}
                 style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${shareOpen ? accent : theme.borderFaint}`, background: shareOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent", color: shareOpen ? accent : theme.textDim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
               </button>
             </div>
             {shareOpen && (
-              <SharePopover doc={openDoc} ownerProfile={memberById[openDoc.created_by] || {}}
+              <SharePopover appLanguage={appLanguage} doc={openDoc} ownerProfile={memberById[openDoc.created_by] || {}}
                 members={Object.values(memberById)} shares={shares} projects={projects}
                 canShare={openDoc.created_by === session?.user?.id || userOrg?.role === "admin"}
                 theme={theme} darkMode={darkMode} accent={accent}
@@ -42906,8 +42930,8 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
                 onSetVisibility={setDocVisibility} onSetProject={setDocProject} onToggleShare={toggleShareMember} />
             )}
             {infoOpen && (
-              <InfoPopover doc={openDoc} memberById={memberById} activity={activity}
-                projectName={projects.find(p => p.id === openDoc.project_id)?.name || "Unsortiert"}
+              <InfoPopover appLanguage={appLanguage} doc={openDoc} memberById={memberById} activity={activity}
+                projectName={projects.find(p => p.id === openDoc.project_id)?.name || (de ? "Unsortiert" : "Unsorted")}
                 theme={theme} darkMode={darkMode} accent={accent} onClose={() => setInfoOpen(false)} />
             )}
           </div>
@@ -42973,7 +42997,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
   );
   const actBtnStyle = { width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: darkMode ? "#e8e8ee" : "#23232b", cursor: "pointer", flexShrink: 0 };
   const dupBtn = (d) => (
-    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => duplicateDoc(d, e)} title="Duplizieren" style={actBtnStyle}>
+    <motion.div whileTap={{ scale: 0.9 }} onClick={(e) => duplicateDoc(d, e)} title={(de ? "Duplizieren" : "Duplicate")} style={actBtnStyle}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
     </motion.div>
   );
@@ -42982,7 +43006,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
     const canDel = d.created_by === session?.user?.id;
     return (
       <motion.div whileTap={canDel ? { scale: 0.9 } : undefined} onClick={(e) => { e.stopPropagation(); if (canDel) deleteDoc(d.id, e); }}
-        title={canDel ? "Löschen" : "Nur der Ersteller kann löschen"}
+        title={canDel ? (de ? "Löschen" : "Delete") : (de ? "Nur der Ersteller kann löschen" : "Only the creator can delete")}
         style={{ ...actBtnStyle, opacity: canDel ? 1 : 0.3, cursor: canDel ? "pointer" : "not-allowed" }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
       </motion.div>
@@ -43197,7 +43221,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
               style={{ position: "relative", borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)", boxShadow: "0 5px 16px rgba(0,0,0,0.06)", padding: 18, cursor: "pointer", minHeight: 116, display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div className="doc-row-icon" style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16, d)}</div>
-                <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
+                <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || (de ? "Unbenanntes Dokument" : "Untitled document")}</div>
                 {moveBtn(d)}
                 {dupBtn(d)}
               </div>
@@ -43218,7 +43242,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
             <motion.div key={d.id} className="doc-row" whileHover={{ backgroundColor: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }} onClick={() => openRow(d)}
               style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", cursor: "pointer", borderBottom: i < visibleDocs.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
               <div className="doc-row-icon" style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{docIcon(16, d)}</div>
-              <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || "Unbenanntes Dokument"}</div>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title || (de ? "Unbenanntes Dokument" : "Untitled document")}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, width: 140 }}>
                 {creator?.display_name && <>{creatorAvatar(creator)}<span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{creator.display_name}</span></>}
               </div>
@@ -43395,15 +43419,15 @@ function DocsTab({ session, userOrg, theme, darkMode, accent, t, appLanguage = "
           style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(10px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} onClick={(e) => e.stopPropagation()}
             style={{ width: "100%", maxWidth: 380, padding: 28, borderRadius: 20, background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.border}`, textAlign: "center" }}>
-            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>Dokument löschen?</div>
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{(de ? "Dokument löschen?" : "Delete document?")}</div>
             <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 24, lineHeight: 1.5 }}>
-              „{confirmDeleteDoc.title || "Unbenanntes Dokument"}" wird unwiderruflich gelöscht.
+              {de ? <>„{confirmDeleteDoc.title || "Unbenanntes Dokument"}“ wird unwiderruflich gelöscht.</> : <>“{confirmDeleteDoc.title || "Untitled document"}” will be permanently deleted.</>}
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setConfirmDeleteDoc(null)}
-                style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, fontWeight: 500 }}>Abbrechen</motion.button>
+                style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, fontWeight: 500 }}>{(de ? "Abbrechen" : "Cancel")}</motion.button>
               <motion.button whileTap={{ scale: 0.97 }} onClick={performDeleteDoc}
-                style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", fontSize: 13, fontFamily: FONT, color: "#EF4444", fontWeight: 600 }}>Löschen</motion.button>
+                style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", fontSize: 13, fontFamily: FONT, color: "#EF4444", fontWeight: 600 }}>{(de ? "Löschen" : "Delete")}</motion.button>
             </div>
           </motion.div>
         </motion.div>, document.body)}
@@ -43977,14 +44001,14 @@ function VoiceToneSection({ value, editing, theme, darkMode, t, onSave, onCancel
 // bars, goals, pains, product expectation). Edit mode = full form with sliders.
 // A fully filled example persona — "Vorlage nutzen" drops the user straight into
 // the finished detail view (with a photo) so they can see how it looks, then edit.
-const SAMPLE_PERSONA = () => ({
+const SAMPLE_PERSONA = (de = true) => ({
   id: `persona_${Date.now()}`,
   photo_url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=480&q=80",
-  name: "Lily Ng", age: "24", role: "Deutschlehrerin", gender: "Weiblich",
+  name: "Lily Ng", age: "24", role: (de ? "Deutschlehrerin" : "German teacher"), gender: (de ? "Weiblich" : "Female"),
   location: "Queens, NY", consumer_behavior: "Fast Pace-Buyer",
   quote: "Love trying new products out all the time. Hate the hassle. The city is fast and non-stop so my lifestyle has to keep up with it, too.",
   motivations: [
-    { label: "Bewertungen/Testimonials lesen", value: 70 },
+    { label: (de ? "Bewertungen/Testimonials lesen" : "Read reviews/testimonials"), value: 70 },
     { label: "See What's Popular", value: 85 },
     { label: "Get the Best Price", value: 50 },
     { label: "Check Ingredients", value: 35 },
@@ -44059,7 +44083,7 @@ function BrandPersonas({ value, onChange, generatePersona, cp, accent, theme, da
 
   const openDetail = (idx) => { setSelIdx(idx); setScreen("detail"); };
   const startTemplate = () => {
-    const sample = SAMPLE_PERSONA();
+    const sample = SAMPLE_PERSONA(de);
     const next = [...personas, sample];
     commit(next); setSelIdx(next.length - 1); setScreen("detail");
   };
@@ -44688,7 +44712,7 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
                   {listening ? (
                     <><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="6" y="6" width="12" height="12" rx="2" fill="#EF4444"/></svg> Stopp</>
                   ) : (
-                    <><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M5 10a7 7 0 0014 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 17v4M8 21h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> Diktieren</>
+                    <><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M5 10a7 7 0 0014 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 17v4M8 21h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> {de ? "Diktieren" : "Dictate"}</>
                   )}
                 </motion.div>
               )}
@@ -45522,11 +45546,11 @@ function harmonyPalettes(seedHex) {
     Math.min(96, Math.max(6, l + dl)),
   );
   return [
-    { name: "Analog", hint: "benachbarte Töne — ruhig, stimmig",
+    { name: "Analog", hint: "benachbarte Töne, ruhig und stimmig",
       colors: [seedHex, at(-30), at(30), at(-15, -18, 26), at(15, 8, -28)] },
-    { name: "Komplementär", hint: "Gegenfarbe — starker Kontrast",
+    { name: "Komplementär", hint: "Gegenfarbe, starker Kontrast",
       colors: [seedHex, at(180), at(0, -22, 30), at(180, -26, 24), at(0, 6, -30)] },
-    { name: "Triadisch", hint: "drei gleich verteilte Töne — lebendig",
+    { name: "Triadisch", hint: "drei gleich verteilte Töne, lebendig",
       colors: [seedHex, at(120), at(240), at(120, -30, 28), at(0, 4, -30)] },
     { name: "Split-komplementär", hint: "Kontrast, aber weicher",
       colors: [seedHex, at(150), at(210), at(180, -30, 28), at(0, 4, -30)] },
@@ -45534,10 +45558,31 @@ function harmonyPalettes(seedHex) {
     // duplicates when the seed is already near white or black (a white seed
     // produced #f5f5f5 twice). colorShades spreads across the full range and
     // keeps the seed among the steps.
-    { name: "Monochrom", hint: "eine Farbe, gestaffelt — sehr reduziert",
+    { name: "Monochrom", hint: "eine Farbe, gestaffelt, sehr reduziert",
       colors: colorShades(seedHex, 5).map(x => x.hex) },
   ];
 }
+
+// English names for the palettes above. The German names stay the keys (and
+// React keys), so nothing that was ever stored or keyed by them moves.
+const PALETTE_NAMES_EN = {
+  "Warm & erdig": "Warm & earthy", "Terrakotta & Salbei": "Terracotta & sage", "Wüste & Petrol": "Desert & petrol",
+  "Safran & Indigo": "Saffron & indigo", "Ocker & Olive": "Ochre & olive",
+  "Kühl & klar": "Cool & clear", "Nordlicht": "Northern lights", "Arktis & Bernstein": "Arctic & amber",
+  "Lagune & Koralle": "Lagoon & coral", "Graphit & Eisblau": "Graphite & ice blue",
+  "Kontrastreich": "High contrast", "Elektrisch": "Electric", "Neon-Nacht": "Neon night", "Primär": "Primary",
+  "Gedeckt & ruhig": "Muted & calm", "Salbei": "Sage", "Nebel": "Mist", "Leinen": "Linen", "Rauch": "Smoke",
+  "Frisch & lebendig": "Fresh & lively", "Zitrus": "Citrus", "Tropen": "Tropics", "Beere": "Berry", "Sommer": "Summer",
+  "Dunkel & edel": "Dark & refined", "Mitternacht & Gold": "Midnight & gold", "Bordeaux & Messing": "Bordeaux & brass",
+  "Tiefwald & Ocker": "Deep forest & ochre", "Nachtblau & Kupfer": "Night blue & copper",
+  "Komplementär": "Complementary", "Triadisch": "Triadic", "Split-komplementär": "Split complementary", "Monochrom": "Monochrome",
+  "benachbarte Töne, ruhig und stimmig": "neighbouring hues, calm and coherent",
+  "Gegenfarbe, starker Kontrast": "opposite colour, strong contrast",
+  "drei gleich verteilte Töne, lebendig": "three evenly spaced hues, lively",
+  "Kontrast, aber weicher": "contrast, but softer",
+  "eine Farbe, gestaffelt, sehr reduziert": "one colour in steps, very reduced",
+};
+const paletteLabel = (s) => (uiDe() ? s : (PALETTE_NAMES_EN[s] || s));
 
 // Palette picker overlay. Opened from the colour editor; applying a palette
 // fills primary / secondary / accents so the user can keep editing from there
@@ -45592,19 +45637,19 @@ function PaletteDiscovery({ open, seed, theme, darkMode, onApply, onClose }) {
           <div style={{ padding: "20px 24px 14px", borderBottom: `1px solid ${theme.borderFaint}` }}>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
               <div>
-                <div style={{ fontSize: 17, fontWeight: 600, color: theme.text }}>Farbpaletten entdecken</div>
+                <div style={{ fontSize: 17, fontWeight: 600, color: theme.text }}>{(uiDe() ? "Farbpaletten entdecken" : "Discover colour palettes")}</div>
                 <div style={{ fontSize: 12.5, color: theme.textDim, marginTop: 3 }}>
-                  Wähle eine Palette — sie wird übernommen und bleibt danach frei bearbeitbar.
+                  {(uiDe() ? "Wähle eine Palette. Sie wird übernommen und bleibt danach frei bearbeitbar." : "Pick a palette. It is applied and stays fully editable afterwards.")}
                 </div>
               </div>
-              <motion.div whileTap={{ scale: 0.9 }} onClick={onClose} title="Schließen"
+              <motion.div whileTap={{ scale: 0.9 }} onClick={onClose} title={(uiDe() ? "Schließen" : "Close")}
                 style={{ cursor: "pointer", color: theme.textDim, padding: 4, display: "flex" }}>
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </motion.div>
             </div>
             <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
-              {tabBtn("themes", "Nach Thema")}
-              {tabBtn("harmony", "Aus deiner Farbe")}
+              {tabBtn("themes", (uiDe() ? "Nach Thema" : "By theme"))}
+              {tabBtn("harmony", (uiDe() ? "Aus deiner Farbe" : "From your colour"))}
             </div>
           </div>
 
@@ -45615,12 +45660,12 @@ function PaletteDiscovery({ open, seed, theme, darkMode, onApply, onClose }) {
                   <input type="color" value={base} onChange={e => setBase(e.target.value)}
                     style={{ width: 38, height: 38, borderRadius: 10, border: `1px solid ${theme.borderFaint}`, padding: 0, background: "transparent", cursor: "pointer", flexShrink: 0 }} />
                   <div>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.text }}>Grundfarbe</div>
-                    <div style={{ fontSize: 11, color: theme.textFaint }}>Alle Vorschläge unten werden daraus berechnet</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.text }}>{(uiDe() ? "Grundfarbe" : "Base colour")}</div>
+                    <div style={{ fontSize: 11, color: theme.textFaint }}>{(uiDe() ? "Alle Vorschläge unten werden daraus berechnet" : "Every suggestion below is worked out from it")}</div>
                   </div>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
-                  {harmonies.map(p => <PaletteRow key={p.name} name={p.name} hint={p.hint} colors={p.colors} />)}
+                  {harmonies.map(p => <PaletteRow key={p.name} name={paletteLabel(p.name)} hint={paletteLabel(p.hint)} colors={p.colors} />)}
                 </div>
               </div>
             ) : (
@@ -45628,10 +45673,10 @@ function PaletteDiscovery({ open, seed, theme, darkMode, onApply, onClose }) {
                 {CURATED_PALETTES.map(group => (
                   <div key={group.theme} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: theme.text, letterSpacing: 1.6, textTransform: "uppercase" }}>
-                      {group.theme}
+                      {paletteLabel(group.theme)}
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
-                      {group.items.map(p => <PaletteRow key={p.name} name={p.name} colors={p.colors} />)}
+                      {group.items.map(p => <PaletteRow key={p.name} name={paletteLabel(p.name)} colors={p.colors} />)}
                     </div>
                   </div>
                 ))}
@@ -45660,10 +45705,10 @@ function defaultGradients(paletteHexes) {
   const at = (i) => c[i % c.length];
   const pair = (a, b) => (a === b ? [a, colorShades(a, 8)[6]?.hex || b] : [a, b]);
   const defs = [
-    { name: "Primär", stops: pair(at(0), at(1)) },
-    { name: "Akzent", stops: pair(at(1), at(2)) },
-    { name: "Tief", stops: pair(at(0), at(2)) },
-    { name: "Weich", stops: [at(0), at(1), at(2)].filter((v, i, a) => a.indexOf(v) === i) },
+    { name: (uiDe() ? "Primär" : "Primary"), stops: pair(at(0), at(1)) },
+    { name: (uiDe() ? "Akzent" : "Accent"), stops: pair(at(1), at(2)) },
+    { name: (uiDe() ? "Tief" : "Deep"), stops: pair(at(0), at(2)) },
+    { name: (uiDe() ? "Weich" : "Soft"), stops: [at(0), at(1), at(2)].filter((v, i, a) => a.indexOf(v) === i) },
   ];
   return defs.map((d, i) => ({
     id: `g${i + 1}`,
@@ -45756,7 +45801,7 @@ function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMod
     <div style={{ display: "flex", flexDirection: "column", gap: 26, minWidth: 0, maxWidth: "100%" }}>
       {/* Description */}
       {editing ? (
-        <RichTextEditor key="colors-desc" initialHTML={savedHtml || "<p></p>"} theme={theme} darkMode={darkMode} onSave={onSave} onCancel={onCancel}
+        <RichTextEditor appLanguage={appLanguage} key="colors-desc" initialHTML={savedHtml || "<p></p>"} theme={theme} darkMode={darkMode} onSave={onSave} onCancel={onCancel}
           simple
           placeholder={de ? "Wofür steht eure Farbwelt? Beschreibe, welche Farbe wofür eingesetzt wird, z. B. Primärfarbe für Flächen und Buttons, Akzentfarbe sparsam für Hervorhebungen, und was die Farben über die Marke aussagen sollen." : "What does your colour world stand for? Describe which colour is used for what, e.g. the primary colour for surfaces and buttons, the accent sparingly for highlights, and what the colours should say about the brand."} />
       ) : savedHtml ? (
@@ -45911,7 +45956,7 @@ function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMod
                         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: j * 0.045, duration: 0.32, ease: [0.22, 0.68, 0.35, 1] }}
                           whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} onClick={() => copyHex(sh)} title={de ? "Hex kopieren" : "Copy hex"}
                           style={{ width: "100%", height: 360, borderRadius: 14, background: sh, position: "relative", cursor: "pointer" }}>
-                          <div style={{ position: "absolute", bottom: 14, left: 0, right: 0, textAlign: "center", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: txt, opacity: 0.9 }}>{isCopied ? "Kopiert ✓" : sh.toUpperCase()}</div>
+                          <div style={{ position: "absolute", bottom: 14, left: 0, right: 0, textAlign: "center", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: txt, opacity: 0.9 }}>{isCopied ? (de ? "Kopiert ✓" : "Copied ✓") : sh.toUpperCase()}</div>
                         </motion.div>
                         <div style={{ height: 8, display: "flex", alignItems: "center" }}>
                           {isBase && <span style={{ width: 7, height: 7, borderRadius: "50%", background: theme.text }} />}
@@ -45926,7 +45971,7 @@ function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMod
         </div>
       ) : (
         <div style={{ padding: 18, borderRadius: 16, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px dashed ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textDim, textAlign: "center" }}>
-          Noch keine Farben hinterlegt.
+          {(de ? "Noch keine Farben hinterlegt." : "No colours yet.")}
         </div>
       )}
 
@@ -45958,14 +46003,14 @@ function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMod
                   <motion.div
                     whileHover={{ y: editing ? 0 : -5 }} whileTap={{ scale: 0.99 }}
                     onClick={() => !editing && copyText(css, key)}
-                    title={editing ? undefined : "CSS kopieren"}
+                    title={editing ? undefined : (de ? "CSS kopieren" : "Copy CSS")}
                     style={{ height: 190, borderRadius: 18, background: css, cursor: editing ? "default" : "pointer",
                       boxShadow: "0 10px 34px rgba(0,0,0,0.07)", position: "relative", overflow: "hidden" }}
                   >
                     {copied === key && (
                       <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center",
                         background: "rgba(0,0,0,0.32)", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 600 }}>
-                        CSS kopiert ✓
+                        {(de ? "CSS kopiert ✓" : "CSS copied ✓")}
                       </div>
                     )}
                   </motion.div>
@@ -45980,7 +46025,7 @@ function BrandColors({ cp, colors, gradients, editing, savedHtml, theme, darkMod
                     />
                   ) : (
                     <div>
-                      <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{g.name || `Verlauf ${i + 1}`}</div>
+                      <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{g.name || (de ? `Verlauf ${i + 1}` : `Gradient ${i + 1}`)}</div>
                       <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
                         {(g.stops || []).map(s => String(s).toUpperCase()).join(" → ")}
                       </div>
@@ -46020,7 +46065,7 @@ function GradientEditor({ gradient, theme, darkMode, norm, onChange }) {
       <input
         value={g.name || ""}
         onChange={e => onChange({ ...g, name: e.target.value })}
-        placeholder="Name"
+        placeholder={(uiDe() ? "Name" : "Name")}
         style={{ padding: "7px 9px", borderRadius: 8, border: "none", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
           color: theme.text, fontSize: 13, fontFamily: FONT, fontWeight: 600, outline: "none", width: "100%", boxSizing: "border-box" }}
       />
@@ -46032,15 +46077,15 @@ function GradientEditor({ gradient, theme, darkMode, norm, onChange }) {
 
       {hasMiddle && (
         <div style={row}>
-          <span style={label}>Mitte</span>
+          <span style={label}>{(uiDe() ? "Mitte" : "Middle")}</span>
           <input type="color" value={norm(stops[1]) || "#888888"} onChange={e => setStop(1, e.target.value)} style={swatch} />
-          <button onClick={removeMiddle} title="Zwischenton entfernen"
+          <button onClick={removeMiddle} title={(uiDe() ? "Zwischenton entfernen" : "Remove middle stop")}
             style={{ width: 26, height: 26, borderRadius: 7, border: `1px solid ${theme.borderFaint}`, background: "transparent", color: theme.textDim, cursor: "pointer", lineHeight: 1 }}>×</button>
         </div>
       )}
 
       <div style={row}>
-        <span style={label}>Ende</span>
+        <span style={label}>{(uiDe() ? "Ende" : "End")}</span>
         <input type="color" value={norm(stops[stops.length - 1]) || "#888888"} onChange={e => setStop(stops.length - 1, e.target.value)} style={swatch} />
       </div>
 
@@ -46211,7 +46256,7 @@ function GoogleFontPicker({ selectedName, onPick, theme, darkMode }) {
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <input value={open ? q : (selectedName || "")} onChange={e => { setQ(e.target.value); setOpen(true); ensureCatalog(); }} onFocus={() => { setQ(""); setOpen(true); ensureCatalog(); }}
-        placeholder={selectedName || "Google Font suchen…"} style={inp} />
+        placeholder={selectedName || (uiDe() ? "Google Font suchen…" : "Search Google Fonts…")} style={inp} />
       {open && (
         <div className="no-scrollbar" style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 40, maxHeight: 300, overflowY: "auto", borderRadius: 12, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, boxShadow: "0 16px 44px rgba(0,0,0,0.18)" }}>
           {matches.map(f => (
@@ -46222,8 +46267,8 @@ function GoogleFontPicker({ selectedName, onPick, theme, darkMode }) {
               <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>{f.cat}</span>
             </div>
           ))}
-          {ql && loading && !all && <div style={{ padding: "10px 13px", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>Lade alle Schriften…</div>}
-          {matches.length === 0 && !loading && <div style={{ padding: "12px 13px", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>Keine Treffer</div>}
+          {ql && loading && !all && <div style={{ padding: "10px 13px", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>{(uiDe() ? "Lade alle Schriften…" : "Loading all fonts…")}</div>}
+          {matches.length === 0 && !loading && <div style={{ padding: "12px 13px", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{(uiDe() ? "Keine Treffer" : "No matches")}</div>}
         </div>
       )}
     </div>
@@ -46943,7 +46988,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
         <>
           {/* Upload slots: actual logo files (SVG / PNG) */}
           <div style={{ marginBottom: 18 }}>
-            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>Logo-Dateien</div>
+            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 600 }}>{(de ? "Logo-Dateien" : "Logo files")}</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
               {LOGO_ASSET_SLOTS.map(slot => {
                 const url = assetUrl(slot.key);
@@ -47057,7 +47102,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
                   <motion.div whileTap={{ scale: 0.99 }} onClick={() => { clearCell(pickerCellId); setPickerCellId(null); }}
                     style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 12, cursor: "pointer", color: theme.textDim, fontSize: 13, fontFamily: FONT }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                    Kein Logo
+                    {(de ? "Kein Logo" : "No logo")}
                   </motion.div>
                 )}
               </div>
@@ -47094,7 +47139,7 @@ function BrandLogoLayout({ value, logos, editing, onChange, uploadFile, paletteC
                       <input type="color" value={(activeBg || "").length === 7 ? activeBg : "#ffffff"} onChange={e => setCellBg(colorCellId, e.target.value)}
                         style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
                     </span>
-                    <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>Eigene Farbe</span>
+                    <span style={{ fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{(de ? "Eigene Farbe" : "Custom colour")}</span>
                     <span style={{ marginLeft: "auto", fontSize: 12.5, fontFamily: FONT, color: theme.textDim, letterSpacing: 0.3 }}>{(activeBg || "").toUpperCase()}</span>
                   </label>
                 </>
@@ -48083,6 +48128,9 @@ function BrandAvatar({ value, onChange, canEdit = true, uploadFile, llmProvider,
 }
 
 function BrandView({ onBack, onNavigate, onOpenDoc, session, userOrg, theme, darkMode, t, appLanguage = "de", brandTab: rawBrandTab, setBrandTab, llmProvider, llmKeys, ensureValidToken, canEditBrand = true, canEditDesign = true, projectId = null, projectName = "", orgMembers = [], createNotification, onUploadStorage, onUploadDrive, getProviderToken, autoReLogin, onOpenWhiteboard = null, onViewContext = null }) {
+  // Component-wide language flag. Helpers below that declare their own `de`
+  // shadow it, which is harmless.
+  const de = appLanguage === "de";
   // Scope: null projectId = the org-level brand (unchanged). A projectId scopes
   // every load/insert/realtime to that project's own brand_profile row, and the
   // pillar switch becomes a local top-right dropdown instead of the app menu.
@@ -48812,14 +48860,14 @@ If you don't know a field, infer a plausible value. Write all text values in the
         return { ...prev, logos: next, logo_url: primary?.url || prev.logo_url };
       });
     } catch (e) {
-      alert("Upload fehlgeschlagen: " + (e.message || ""));
+      alert((de ? "Upload fehlgeschlagen: " : "Upload failed: ") + (e.message || ""));
     } finally {
       setLogoUploading(p => ({ ...p, [slotKey]: false }));
     }
   };
 
   const addCustomLogoSlot = async (file) => {
-    const label = customSlotLabel.trim() || "Variante";
+    const label = customSlotLabel.trim() || (de ? "Variante" : "Variant");
     const key = "custom-" + Date.now();
     await uploadLogoSlot(key, label, file);
     setCustomSlotLabel("");
@@ -48850,7 +48898,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
       if (type === "brandbook") analyseBrandPdf(r.url);
       if (type === "zip") analyseBrandZip(r.url);
     } catch (e) {
-      alert("Upload fehlgeschlagen: " + (e.message || ""));
+      alert((de ? "Upload fehlgeschlagen: " : "Upload failed: ") + (e.message || ""));
     } finally {
       setSourceUploading(p => ({ ...p, [type]: false }));
     }
@@ -48998,7 +49046,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
         return next;
       });
     } catch (err) {
-      setWebsiteFetchError(err.message || "Fehler beim Abrufen");
+      setWebsiteFetchError(err.message || (de ? "Fehler beim Abrufen" : "Could not fetch it"));
     } finally {
       setFetchingWebsite(false);
     }
@@ -49080,7 +49128,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
       setStep(7);
       setTimeout(() => { setEditMode(false); setStep(0); }, 1800);
     } catch (e) {
-      alert("Speichern fehlgeschlagen: " + (e.message || ""));
+      alert((de ? "Speichern fehlgeschlagen: " : "Save failed: ") + (e.message || ""));
     } finally {
       setSaving(false);
     }
@@ -49429,14 +49477,14 @@ If you don't know a field, infer a plausible value. Write all text values in the
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-                Alle Logos als ZIP hochladen
+                {(de ? "Alle Logos als ZIP hochladen" : "Upload all logos as a ZIP")}
               </div>
               <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim }}>
-                Wenn du dein komplettes Logo-Paket schon gepackt hast
+                {(de ? "Wenn du dein komplettes Logo-Paket schon gepackt hast" : "If your whole logo package is already zipped")}
               </div>
             </div>
             <div style={{ fontSize: 12, fontFamily: FONT, color: theme.accent, fontWeight: 500 }}>
-              {sourceUploading["logo-zip"] ? "Lädt..." : "ZIP wählen →"}
+              {sourceUploading["logo-zip"] ? (de ? "Lädt..." : "Loading...") : (de ? "ZIP wählen →" : "Choose ZIP →")}
             </div>
           </motion.div>
           <input ref={zipInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" style={{ display: "none" }}
@@ -49446,13 +49494,13 @@ If you don't know a field, infer a plausible value. Write all text values in the
               try {
                 const r = await uploadFile(f, "logo-zip");
                 setForm(prev => ({ ...prev, sources: [...prev.sources.filter(s => s.type !== "logo-zip"), { type: "logo-zip", ...r }] }));
-              } catch (err) { alert("Upload fehlgeschlagen: " + err.message); }
+              } catch (err) { alert((de ? "Upload fehlgeschlagen: " : "Upload failed: ") + err.message); }
               finally { setSourceUploading(p => ({ ...p, "logo-zip": false })); }
             }}
           />
 
           <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, textTransform: "uppercase", letterSpacing: 0.8, textAlign: "center", marginTop: 4 }}>
-            oder einzelne Varianten
+            {(de ? "oder einzelne Varianten" : "or single variants")}
           </div>
 
           {/* Slot grid */}
@@ -49471,8 +49519,8 @@ If you don't know a field, infer a plausible value. Write all text values in the
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{slot.label}</div>
-                    <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, lineHeight: 1.4, marginTop: 1 }}>{slot.hint}</div>
+                    <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? slot.label : (slot.labelEn || slot.label)}</div>
+                    <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, lineHeight: 1.4, marginTop: 1 }}>{de ? slot.hint : (slot.hintEn || slot.hint)}</div>
                   </div>
                   {existing ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -49497,7 +49545,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                         opacity: uploading ? 0.6 : 1,
                       }}
                     >
-                      {uploading ? "Lädt..." : "+ Hochladen"}
+                      {uploading ? (de ? "Lädt..." : "Loading...") : (de ? "+ Hochladen" : "+ Upload")}
                     </motion.div>
                   )}
                   <input ref={el => slotInputRefs.current[slot.key] = el} type="file" accept={slot.accept} style={{ display: "none" }}
@@ -49535,7 +49583,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
               }}
             >
               <input value={customSlotLabel} onChange={(e) => setCustomSlotLabel(e.target.value)}
-                placeholder="z.B. Mono, Stamp ..."
+                placeholder={(de ? "z.B. Mono, Stamp ..." : "e.g. Mono, Stamp ...")}
                 style={{
                   background: "transparent", border: "none", borderBottom: `1px solid ${theme.borderFaint}`,
                   padding: "6px 0", fontSize: 12, fontFamily: FONT, color: theme.text,
@@ -49551,7 +49599,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                   border: `1px solid ${customSlotLabel.trim() ? theme.accent + "30" : theme.borderFaint}`,
                   opacity: customSlotLabel.trim() ? 1 : 0.5,
                 }}
-              >+ Variante hinzufügen</motion.div>
+              >{(de ? "+ Variante hinzufügen" : "+ Add variant")}</motion.div>
               <input ref={customSlotInputRef} type="file" accept="image/*" style={{ display: "none" }}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f && customSlotLabel.trim()) addCustomLogoSlot(f); e.target.value = ""; }}
               />
@@ -49706,12 +49754,12 @@ If you don't know a field, infer a plausible value. Write all text values in the
               {(form.intelligence?.fonts?.google_fonts || []).length > 0 && (
                 <link rel="stylesheet" href={`https://fonts.googleapis.com/css2?${(form.intelligence.fonts.google_fonts || []).map(f => `family=${encodeURIComponent(f).replace(/%20/g, "+")}:wght@400;600`).join("&")}&display=swap`} />
               )}
-              <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 4 }}>Typografie</div>
-              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 14 }}>Aus der Website extrahiert.</div>
+              <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 4 }}>{(de ? "Typografie" : "Typography")}</div>
+              <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 14 }}>{(de ? "Aus der Website extrahiert." : "Extracted from the website.")}</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
                 {[
                   { key: "heading", label: "Headlines" },
-                  { key: "body",    label: "Fließtext" },
+                  { key: "body",    label: (de ? "Fließtext" : "Body text") },
                 ].map(slot => {
                   const fam = form.intelligence?.fonts?.[slot.key];
                   return (
@@ -49730,12 +49778,12 @@ If you don't know a field, infer a plausible value. Write all text values in the
               </div>
               {(form.intelligence?.fonts?.google_fonts || []).length > 0 && (
                 <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>
-                  Google Fonts erkannt: {(form.intelligence.fonts.google_fonts || []).join(" · ")}
+                  {(de ? "Google Fonts erkannt: " : "Google Fonts found: ")}{(form.intelligence.fonts.google_fonts || []).join(" · ")}
                 </div>
               )}
               {(form.intelligence?.fonts?.custom || []).length > 0 && (
                 <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 3 }}>
-                  Custom Faces: {(form.intelligence.fonts.custom || []).join(" · ")}
+                  {(de ? "Eigene Schriften: " : "Custom faces: ")}{(form.intelligence.fonts.custom || []).join(" · ")}
                 </div>
               )}
             </div>
@@ -49963,10 +50011,10 @@ If you don't know a field, infer a plausible value. Write all text values in the
             </svg>
           </motion.div>
           <div style={{ fontSize: 30, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.5 }}>
-            Brand ist live!
+            {(de ? "Brand ist live!" : "Your brand is live!")}
           </div>
           <div style={{ fontSize: 14, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 360 }}>
-            Wir leiten dich gleich weiter ...
+            {(de ? "Wir leiten dich gleich weiter ..." : "Taking you there in a moment ...")}
           </div>
         </motion.div>
       );
@@ -50439,7 +50487,7 @@ If you don't know a field, infer a plausible value. Write all text values in the
                       ) : k === "strategy/taglines" ? (
                         <BrandTaglines value={profile.taglines} editing={editingText} theme={theme} darkMode={darkMode} t={t} onChange={saveTaglines} appLanguage={appLanguage} />
                       ) : editingText ? (
-                        <RichTextEditor key={k} initialHTML={seed || "<p></p>"} theme={theme} darkMode={darkMode}
+                        <RichTextEditor appLanguage={appLanguage} key={k} initialHTML={seed || "<p></p>"} theme={theme} darkMode={darkMode}
                           onSave={(html) => saveSection(k, html)} onCancel={() => setEditingText(false)} />
                       ) : savedHtml ? (
                         <div className="brand-rich" dangerouslySetInnerHTML={{ __html: cleanHtml(savedHtml) }} />
@@ -50894,6 +50942,7 @@ export default function CircularMenu() {
   // The root's own language flag, for the strings written in the root itself.
   // Named apart from the `de` a dozen helpers below declare for themselves.
   const deRoot = appLanguage === "de";
+  uiLanguage = appLanguage === "en" ? "en" : "de";
   // The session, mirrored into a ref. chooseLanguage is defined ABOVE the
   // session state, so naming it in a dependency array would read it before its
   // initialiser runs. The same trick openBrainstormRef uses a few hundred lines

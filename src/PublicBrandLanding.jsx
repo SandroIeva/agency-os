@@ -36,38 +36,175 @@ function colorShades(hex, n = 8) {
   return ramp.map(r => ({ hex: r.hex, isBase: r.isBase }));
 }
 
-// Placeholders mirroring the app's Brand Strategy defaults (shown when nothing is saved).
-const DEFAULT_PVM_PUB = {
-  purpose: "Definiere hier den fundamentalen Daseinsgrund deiner Marke jenseits von Profit. Beschreibe die Wirkung, die du erzielen willst — und für wen.",
+// The placeholders the brand editor shows when nothing is saved, in both
+// languages. Copied from App.jsx (DEFAULT_PVM, DEFAULT_STORY_TIMELINE,
+// DEFAULT_VOICE_TONE and their _EN twins) rather than imported: importing
+// App.jsx would pull the whole app into this small public page.
+// German browsers get German, everyone else English, the same rule the
+// component uses.
+const PUB_DE = typeof navigator !== "undefined" && (navigator.language || "").toLowerCase().startsWith("de");
+const PUB_DEFAULT_PVM = {
+  purpose: "Definiere hier den fundamentalen Daseinsgrund deiner Marke jenseits von Profit. Beschreibe die Wirkung, die du erzielen willst, und für wen.",
   vision: "Beschreibe die Zukunft, die du erschaffen willst. Das ist dein höchstes Ziel, die langfristige Wirkung oder die ideale Welt, die du dir vorstellst.",
-  mission: "Formuliere prägnant, was deine Marke tut, für wen und wie sie Wert schafft — dein praktischer Leitfaden für tägliche Entscheidungen, verknüpft mit deiner Vision.",
+  mission: "Formuliere prägnant, was deine Marke tut, für wen und wie sie Wert schafft: dein praktischer Leitfaden für tägliche Entscheidungen, verknüpft mit deiner Vision.",
 };
-const DEFAULT_TIMELINE_PUB = [
-  { year: "2018", quarter: "Q1", title: "Gründung", desc: "Die Idee zu APPICS entsteht — Social Media, das Creator fair belohnt." },
-  { year: "2019", quarter: "Q2", title: "Token-Launch", desc: "Der APX-Token und die erste App-Version gehen live." },
-  { year: "2022", quarter: "Q3", title: "Relaunch", desc: "Neue App-Generation mit überarbeitetem Reward-System." },
+const PUB_DEFAULT_PVM_EN = {
+  purpose: "Define your brand's fundamental reason to exist beyond profit. Describe the impact you want to make, and for whom.",
+  vision: "Describe the future you want to create. It is your highest goal, the long-term impact or the ideal world you imagine.",
+  mission: "Put concisely what your brand does, for whom and how it creates value: your practical guide for daily decisions, tied to your vision.",
+};
+const PUB_DEFAULT_STORY_TIMELINE = [
+  // Neutral on purpose. It told the story of one real company, APPICS, to every
+  // brand that had none of its own yet.
+  { year: "2020", quarter: "Q1", title: "Gründung", desc: "Die Idee entsteht und das Team findet sich zusammen." },
+  { year: "2021", quarter: "Q3", title: "Erstes Produkt", desc: "Das erste Angebot geht an den Markt, die ersten Kunden kommen." },
+  { year: "2023", quarter: "Q2", title: "Neuausrichtung", desc: "Die Marke wird geschärft und das Angebot weiterentwickelt." },
 ];
-
-// Mirrors the brand editor's default Voice & Tone, shown when none is saved.
-const DEFAULT_VOICE_TONE = {
+const PUB_DEFAULT_STORY_TIMELINE_EN = [
+  { year: "2020", quarter: "Q1", title: "Founded", desc: "The idea takes shape and the team comes together." },
+  { year: "2021", quarter: "Q3", title: "First product", desc: "The first offer goes to market and the first customers arrive." },
+  { year: "2023", quarter: "Q2", title: "Repositioning", desc: "The brand is sharpened and the offer evolves." },
+];
+const PUB_DEFAULT_VOICE_TONE = {
   intro: {
-    body: "Unsere Stimme bleibt immer gleich — der Ton ist, wie wir sie situativ ausdrücken. Über Wortwahl, Schreibstil, Typografie, Satzbau und Phrasierung passen wir die Stimme an den Kontext an. Der richtige Ton schafft emotionale Verbindung und Vertrauen durch Anpassungsfähigkeit.",
+    body: "Unsere Stimme bleibt immer gleich, der Ton ist, wie wir sie situativ ausdrücken. Über Wortwahl, Schreibstil, Typografie, Satzbau und Phrasierung passen wir die Stimme an den Kontext an. Der richtige Ton schafft emotionale Verbindung und Vertrauen durch Anpassungsfähigkeit.",
     questions: ["Was soll dieser Text bewirken?", "Für welches Szenario schreiben wir?", "Mit wem sprichst du?"],
-    closing: "Wir nutzen die Customer Journey, um Momente und Ton-Leitlinien zu mappen — als Erinnerung, dass jede Interaktion einen kundenzentrierten Zweck hat.",
+    closing: "Wir nutzen die Customer Journey, um Momente und Ton-Leitlinien zu mappen, als Erinnerung, dass jede Interaktion einen kundenzentrierten Zweck hat.",
   },
   moments: [
-    { title: "First impressions", desc: "Hier wollen wir Interesse wecken und Neugier entfachen — durch mutige, clevere Sprache, die zum genaueren Hinsehen einlädt.", traits: [{ label: "To-the-point", value: 40 }, { label: "Approachable", value: 90 }, { label: "Upfront", value: 12 }], channels: ["In-app Product Flows", "Transactional Email", "Push Notifications"] },
-    { title: "Consideration", desc: "Wir haben die Aufmerksamkeit — jetzt geht es um Verständnis und Vertrauen. Wir erklären Produkte, wie sie funktionieren und welche Ergebnisse sie bringen.", traits: [{ label: "To-the-point", value: 88 }, { label: "Approachable", value: 30 }, { label: "Upfront", value: 70 }], channels: ["Product Pages", "Campaign Lander", "App Store"] },
-    { title: "Education", desc: "Wir geben Nutzer:innen die Infos, die sie für Entscheidungen brauchen. Jede Interaktion vermittelt Kontrolle, Sicherheit und Vertrauen — mit Social Proof, Metaphern und Daten.", traits: [{ label: "To-the-point", value: 80 }, { label: "Approachable", value: 95 }, { label: "Upfront", value: 45 }], channels: ["Announcement Emails", "Tooltips", "New-User States", "Half Sheets"] },
-    { title: "Support", desc: "Wenn etwas hakt, sind wir ruhig, klar und lösungsorientiert. Wir nehmen Sorgen ernst und führen Schritt für Schritt zur Lösung.", traits: [{ label: "To-the-point", value: 72 }, { label: "Approachable", value: 82 }, { label: "Upfront", value: 88 }], channels: ["Help Center", "Support Chat", "Status Updates", "FAQ"] },
+    {
+      title: "First impressions",
+      desc: "Hier wollen wir Interesse wecken und Neugier entfachen, durch mutige, clevere Sprache, die zum genaueren Hinsehen einlädt.",
+      traits: [{ label: "To-the-point", value: 40 }, { label: "Approachable", value: 90 }, { label: "Upfront", value: 12 }],
+      channels: ["In-app Product Flows", "Transactional Email", "Push Notifications"],
+    },
+    {
+      title: "Consideration",
+      desc: "Wir haben die Aufmerksamkeit, jetzt geht es um Verständnis und Vertrauen. Wir erklären Produkte, wie sie funktionieren und welche Ergebnisse sie bringen.",
+      traits: [{ label: "To-the-point", value: 88 }, { label: "Approachable", value: 30 }, { label: "Upfront", value: 70 }],
+      channels: ["Product Pages", "Campaign Lander", "App Store"],
+    },
+    {
+      title: "Education",
+      desc: "Wir geben Nutzer:innen die Infos, die sie für Entscheidungen brauchen. Jede Interaktion vermittelt Kontrolle, Sicherheit und Vertrauen, mit Social Proof, Metaphern und Daten.",
+      traits: [{ label: "To-the-point", value: 80 }, { label: "Approachable", value: 95 }, { label: "Upfront", value: 45 }],
+      channels: ["Announcement Emails", "Tooltips", "New-User States", "Half Sheets"],
+    },
+    {
+      title: "Support",
+      desc: "Wenn etwas hakt, sind wir ruhig, klar und lösungsorientiert. Wir nehmen Sorgen ernst und führen Schritt für Schritt zur Lösung.",
+      traits: [{ label: "To-the-point", value: 72 }, { label: "Approachable", value: 82 }, { label: "Upfront", value: 88 }],
+      channels: ["Help Center", "Support Chat", "Status Updates", "FAQ"],
+    },
   ],
   attributes: [
-    { name: "To-the-point", overview: "Wir sind klar in dem, was wir sagen, und bleiben dabei. Wir reißen Barrieren ein, indem wir Fachjargon übersetzen, und geben unseren Kunden Sicherheit auf ihrer Reise.", shouldBe: ["Klar", "Fokussiert", "Organisiert", "Kuratiert", "Selbstbewusst", "Befähigend"], shouldntBe: ["Spärlich", "Kalt", "Langweilig", "Leblos", "Stumpf", "Vage"], tactics: [{ title: "Never bury the lead", desc: "Wir beginnen immer mit der wichtigsten Information zuerst und respektieren die begrenzte Zeit und Aufmerksamkeit unseres Publikums." }, { title: "Clarity first (style second)", desc: "Wir fokussieren die Botschaft und strukturieren Inhalte so, dass Punkt, Zweck und Absicht unmissverständlich sind. Stil überlagert nie die Botschaft." }, { title: "Guide with confidence", desc: "Wir erklären, wie Dinge funktionieren und was zu erwarten ist — klar und prägnant, damit Kunden befähigt sind, den nächsten Schritt zu gehen." }, { title: "Build familiarity", desc: "Durch Konsistenz und Wiederholung schaffen wir Vertrautheit, die die Beziehung zu unseren Kunden vertieft." }] },
-    { name: "Approachable", overview: "Unser einladender, fantasievoller Stil macht uns nahbar und mühelos verständlich. Wir verstecken uns nicht hinter Jargon, Ego oder billigen Emotionen.", shouldBe: ["Selbstbewusst", "Gesprächig", "Reaktionsschnell", "Verlässlich", "Unterstützend", "Optimistisch"], shouldntBe: ["Übergriffig", "Geschwätzig", "Kindisch", "Distanziert", "Reißerisch", "Exklusiv"], tactics: [{ title: "Read the room", desc: "Wir berücksichtigen den Kontext, bevor wir schreiben — was Kunden wollen, brauchen und fühlen." }, { title: "Act as a translator", desc: "Wir machen Komplexes einfach und entmystifizieren Fachsprache, ohne überkonstruiert zu klingen." }, { title: "Be inventive", desc: "Wir fordern Konventionen heraus, wenn es unseren Kunden besser dient." }, { title: "Write inclusively", desc: "Unsere Inhalte sind für alle zugänglich — keine ausschließende oder herabsetzende Sprache." }] },
-    { name: "Upfront", overview: "Wir sagen, wie es ist, und stellen uns zugleich vor, wie es sein könnte. Wir vermeiden Schönfärberei und setzen klare Erwartungen — Vertrauen entsteht durch Ehrlichkeit und Transparenz.", shouldBe: ["Offen", "Aufrichtig", "Verantwortungsvoll", "Echt", "Empathisch"], shouldntBe: ["Technokratisch", "Angstmachend", "Akademisch"], tactics: [{ title: "Tell the whole truth", desc: "Wir sind ehrlich über Produkte, Prozesse und Richtlinien — der einzige Weg, echtes Vertrauen aufzubauen." }, { title: "Balance humility & confidence", desc: "Wir lassen Begeisterung und Stärken strahlen und erkennen zugleich Grenzen offen an." }, { title: "Use friction", desc: "Wenn viel auf dem Spiel steht, verlangsamen wir und sorgen dafür, dass Kunden die Kontrolle behalten." }] },
+    {
+      name: "To-the-point",
+      overview: "Wir sind klar in dem, was wir sagen, und bleiben dabei. Wir reißen Barrieren ein, indem wir Fachjargon übersetzen, und geben unseren Kunden Sicherheit auf ihrer Reise.",
+      shouldBe: ["Klar", "Fokussiert", "Organisiert", "Kuratiert", "Selbstbewusst", "Befähigend"],
+      shouldntBe: ["Spärlich", "Kalt", "Langweilig", "Leblos", "Stumpf", "Vage"],
+      tactics: [
+        { title: "Never bury the lead", desc: "Wir beginnen immer mit der wichtigsten Information zuerst und respektieren die begrenzte Zeit und Aufmerksamkeit unseres Publikums." },
+        { title: "Clarity first (style second)", desc: "Wir fokussieren die Botschaft und strukturieren Inhalte so, dass Punkt, Zweck und Absicht unmissverständlich sind. Stil überlagert nie die Botschaft." },
+        { title: "Guide with confidence", desc: "Wir erklären, wie Dinge funktionieren und was zu erwarten ist, klar und prägnant, damit Kunden befähigt sind, den nächsten Schritt zu gehen." },
+        { title: "Build familiarity", desc: "Durch Konsistenz und Wiederholung schaffen wir Vertrautheit, die die Beziehung zu unseren Kunden vertieft." },
+      ],
+    },
+    {
+      name: "Approachable",
+      overview: "Unser einladender, fantasievoller Stil macht uns nahbar und mühelos verständlich. Wir verstecken uns nicht hinter Jargon, Ego oder billigen Emotionen.",
+      shouldBe: ["Selbstbewusst", "Gesprächig", "Reaktionsschnell", "Verlässlich", "Unterstützend", "Optimistisch"],
+      shouldntBe: ["Übergriffig", "Geschwätzig", "Kindisch", "Distanziert", "Reißerisch", "Exklusiv"],
+      tactics: [
+        { title: "Read the room", desc: "Wir berücksichtigen den Kontext, bevor wir schreiben, was Kunden wollen, brauchen und fühlen." },
+        { title: "Act as a translator", desc: "Wir machen Komplexes einfach und entmystifizieren Fachsprache, ohne überkonstruiert zu klingen." },
+        { title: "Be inventive", desc: "Wir fordern Konventionen heraus, wenn es unseren Kunden besser dient." },
+        { title: "Write inclusively", desc: "Unsere Inhalte sind für alle zugänglich, keine ausschließende oder herabsetzende Sprache." },
+      ],
+    },
+    {
+      name: "Upfront",
+      overview: "Wir sagen, wie es ist, und stellen uns zugleich vor, wie es sein könnte. Wir vermeiden Schönfärberei und setzen klare Erwartungen, Vertrauen entsteht durch Ehrlichkeit und Transparenz.",
+      shouldBe: ["Offen", "Aufrichtig", "Verantwortungsvoll", "Echt", "Empathisch"],
+      shouldntBe: ["Technokratisch", "Angstmachend", "Akademisch"],
+      tactics: [
+        { title: "Tell the whole truth", desc: "Wir sind ehrlich über Produkte, Prozesse und Richtlinien, der einzige Weg, echtes Vertrauen aufzubauen." },
+        { title: "Balance humility & confidence", desc: "Wir lassen Begeisterung und Stärken strahlen und erkennen zugleich Grenzen offen an." },
+        { title: "Use friction", desc: "Wenn viel auf dem Spiel steht, verlangsamen wir und sorgen dafür, dass Kunden die Kontrolle behalten." },
+      ],
+    },
   ],
 };
-
+const PUB_DEFAULT_VOICE_TONE_EN = {
+  intro: {
+    body: "Our voice always stays the same. Tone is how we express it in a given situation. Through word choice, writing style, typography, sentence structure and phrasing we adapt the voice to the context. The right tone builds emotional connection and trust through adaptability.",
+    questions: ["What should this text achieve?", "Which scenario are we writing for?", "Who are you talking to?"],
+    closing: "We use the customer journey to map moments and tone guidelines, as a reminder that every interaction has a customer-centred purpose.",
+  },
+  moments: [
+    {
+      title: "First impressions",
+      desc: "Here we want to spark interest and curiosity with bold, clever language that invites a closer look.",
+      traits: [{ label: "To-the-point", value: 40 }, { label: "Approachable", value: 90 }, { label: "Upfront", value: 12 }],
+      channels: ["In-app Product Flows", "Transactional Email", "Push Notifications"],
+    },
+    {
+      title: "Consideration",
+      desc: "We have their attention. Now it is about understanding and trust. We explain products, how they work and what results they bring.",
+      traits: [{ label: "To-the-point", value: 88 }, { label: "Approachable", value: 30 }, { label: "Upfront", value: 70 }],
+      channels: ["Product Pages", "Campaign Lander", "App Store"],
+    },
+    {
+      title: "Education",
+      desc: "We give users the information they need to make decisions. Every interaction conveys control, security and trust, with social proof, metaphors and data.",
+      traits: [{ label: "To-the-point", value: 80 }, { label: "Approachable", value: 95 }, { label: "Upfront", value: 45 }],
+      channels: ["Announcement Emails", "Tooltips", "New-User States", "Half Sheets"],
+    },
+    {
+      title: "Support",
+      desc: "When something goes wrong, we are calm, clear and solution-oriented. We take concerns seriously and guide step by step to a solution.",
+      traits: [{ label: "To-the-point", value: 72 }, { label: "Approachable", value: 82 }, { label: "Upfront", value: 88 }],
+      channels: ["Help Center", "Support Chat", "Status Updates", "FAQ"],
+    },
+  ],
+  attributes: [
+    {
+      name: "To-the-point",
+      overview: "We are clear in what we say and stand by it. We break down barriers by translating jargon, and give our customers confidence on their journey.",
+      shouldBe: ["Clear", "Focused", "Organised", "Curated", "Confident", "Empowering"],
+      shouldntBe: ["Sparse", "Cold", "Boring", "Lifeless", "Blunt", "Vague"],
+      tactics: [
+        { title: "Never bury the lead", desc: "We always lead with the most important information and respect our audience's limited time and attention." },
+        { title: "Clarity first (style second)", desc: "We focus the message and structure content so that point, purpose and intent are unmistakable. Style never overrides the message." },
+        { title: "Guide with confidence", desc: "We explain how things work and what to expect, clearly and concisely, so customers are empowered to take the next step." },
+        { title: "Build familiarity", desc: "Through consistency and repetition we create familiarity that deepens the relationship with our customers." },
+      ],
+    },
+    {
+      name: "Approachable",
+      overview: "Our inviting, imaginative style makes us approachable and effortless to understand. We do not hide behind jargon, ego or cheap emotion.",
+      shouldBe: ["Confident", "Conversational", "Responsive", "Reliable", "Supportive", "Optimistic"],
+      shouldntBe: ["Pushy", "Chatty", "Childish", "Distant", "Sensational", "Exclusive"],
+      tactics: [
+        { title: "Read the room", desc: "We consider the context before we write: what customers want, need and feel." },
+        { title: "Act as a translator", desc: "We make the complex simple and demystify jargon without sounding over-engineered." },
+        { title: "Be inventive", desc: "We challenge conventions when it serves our customers better." },
+        { title: "Write inclusively", desc: "Our content is accessible to everyone, with no exclusionary or demeaning language." },
+      ],
+    },
+    {
+      name: "Upfront",
+      overview: "We say how it is and imagine how it could be. We avoid sugar-coating and set clear expectations. Trust comes from honesty and transparency.",
+      shouldBe: ["Open", "Sincere", "Responsible", "Genuine", "Empathetic"],
+      shouldntBe: ["Technocratic", "Fear-mongering", "Academic"],
+      tactics: [
+        { title: "Tell the whole truth", desc: "We are honest about products, processes and policies. It is the only way to build real trust." },
+        { title: "Balance humility & confidence", desc: "We let enthusiasm and strengths shine while openly acknowledging limits." },
+        { title: "Use friction", desc: "When a lot is at stake, we slow down and make sure customers stay in control." },
+      ],
+    },
+  ],
+};
 function pickBrand(row) {
   if (!row) return null;
   const pal = (row.color_palette && typeof row.color_palette === "object" && !Array.isArray(row.color_palette)) ? row.color_palette : null;
@@ -105,7 +242,7 @@ function pickBrand(row) {
     // the brand editor shows (so the landing mirrors the app).
     tone: (row.voice_tone && typeof row.voice_tone === "object" && !Array.isArray(row.voice_tone)
       && (row.voice_tone.intro || (row.voice_tone.moments || []).length || (row.voice_tone.attributes || []).length))
-      ? row.voice_tone : DEFAULT_VOICE_TONE,
+      ? row.voice_tone : (PUB_DE ? PUB_DEFAULT_VOICE_TONE : PUB_DEFAULT_VOICE_TONE_EN),
   };
 }
 
@@ -174,7 +311,7 @@ export default function PublicBrandLanding({ token }) {
     const add = (href) => { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = href; document.head.appendChild(l); links.push(l); };
     add("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
     if (brand?.typography?.kind === "google" && brand?.typography?.url) add(brand.typography.url);
-    document.title = brand?.name ? `${brand.name} — Brand` : "Brand";
+    document.title = brand?.name ? `${brand.name} · Brand` : "Brand";
     return () => links.forEach(l => l.remove());
   }, [brand]);
 
@@ -196,13 +333,13 @@ export default function PublicBrandLanding({ token }) {
   const show = (key) => hasSectionConfig ? !!sections[key] : true;
 
   if (brand === undefined) {
-    return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, color: "#888", background: "#f1f2f4" }}>Lädt…</div>;
+    return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, color: "#888", background: "#f1f2f4" }}>{PUB_DE ? "Lädt…" : "Loading…"}</div>;
   }
   if (!brand) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, fontFamily: FONT, background: "#f1f2f4", padding: 24, textAlign: "center" }}>
-        <div style={{ fontSize: 20, fontWeight: 700, color: "#111" }}>Brand nicht gefunden</div>
-        <div style={{ fontSize: 14, color: "#777" }}>Dieser Link ist ungültig oder wurde zurückgezogen.</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: "#111" }}>{PUB_DE ? "Brand nicht gefunden" : "Brand not found"}</div>
+        <div style={{ fontSize: 14, color: "#777" }}>{PUB_DE ? "Dieser Link ist ungültig oder wurde zurückgezogen." : "This link is invalid or has been withdrawn."}</div>
       </div>
     );
   }
@@ -220,8 +357,8 @@ export default function PublicBrandLanding({ token }) {
     { key: "voice", label: "Voice & Tone", has: show("voice") && !!brand.tone },
     { key: "logo", label: "Logo", has: show("logo") && brand.logos.length > 0 },
     { key: "colors", label: "Brand Colors", has: show("colors") && brand.colors.length > 0 },
-    { key: "typography", label: "Typografie", has: show("typography") && !!brand.typography },
-    { key: "imagery", label: "Bildsprache", has: show("imagery") && brand.imagery.length > 0 },
+    { key: "typography", label: (de ? "Typografie" : "Typography"), has: show("typography") && !!brand.typography },
+    { key: "imagery", label: (de ? "Bildsprache" : "Imagery"), has: show("imagery") && brand.imagery.length > 0 },
     { key: "personas", label: "Personas", has: show("personas") && brand.personas.length > 0 },
   ].filter(s => s.has);
 
@@ -244,8 +381,8 @@ export default function PublicBrandLanding({ token }) {
   // ── Section content ──
   const renderSection = () => {
     if (current === "strategy") {
-      const pvmVal = (k) => (brand.pvm?.[k] || DEFAULT_PVM_PUB[k]);
-      const timeline = brand.storyTimeline || DEFAULT_TIMELINE_PUB;
+      const pvmVal = (k) => (brand.pvm?.[k] || (de ? PUB_DEFAULT_PVM : PUB_DEFAULT_PVM_EN)[k]);
+      const timeline = brand.storyTimeline || (de ? PUB_DEFAULT_STORY_TIMELINE : PUB_DEFAULT_STORY_TIMELINE_EN);
       const sortKey = (e) => `${e.year || "0000"}-${e.quarter || "Q0"}`;
       const sorted = [...timeline].sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
       const rail = "rgba(0,0,0,0.12)";
@@ -268,7 +405,7 @@ export default function PublicBrandLanding({ token }) {
           {/* Kern-Botschaften */}
           {brand.keyMessages.length > 0 && (
             <div style={{ marginTop: 44 }}>
-              {labelEyebrow("Kern-Botschaften")}
+              {labelEyebrow((de ? "Kern-Botschaften" : "Key messages"))}
               <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
                 {brand.keyMessages.map((m, i) => (
                   <div key={i} style={{ display: "flex", gap: 11, alignItems: "center", fontSize: 14, lineHeight: 1.5 }}>
@@ -285,7 +422,7 @@ export default function PublicBrandLanding({ token }) {
           {/* Werte */}
           {brand.values.length > 0 && (
             <div style={{ marginTop: 44 }}>
-              {labelEyebrow("Werte")}
+              {labelEyebrow((de ? "Werte" : "Values"))}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 16 }}>
                 {brand.values.map((v, i) => (
                   <div key={i} style={{ borderRadius: 16, border: "1px solid #ececf0", padding: "20px 22px" }}>
@@ -516,13 +653,13 @@ export default function PublicBrandLanding({ token }) {
           </div>
           <div style={{ flex: "1 1 220px", minWidth: 220, paddingRight: 40 }}>
             <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 10 }}>{brand.name}</div>
-            <p style={{ fontSize: 14.5, lineHeight: 1.65, color: "#5a5a66" }}>{brand.description || brand.claim || "Das primäre Logo der Marke. Nutze es mit ausreichend Abstand und auf neutralem Hintergrund."}</p>
-            <div style={{ marginTop: 32 }}>{dlBtn(primaryLogo.url, `${brand.name || "logo"}.png`, "Logo herunterladen")}</div>
+            <p style={{ fontSize: 14.5, lineHeight: 1.65, color: "#5a5a66" }}>{brand.description || brand.claim || (de ? "Das primäre Logo der Marke. Nutze es mit ausreichend Abstand und auf neutralem Hintergrund." : "The brand’s primary logo. Give it enough space and use it on a neutral background.")}</p>
+            <div style={{ marginTop: 32 }}>{dlBtn(primaryLogo.url, `${brand.name || "logo"}.png`, (de ? "Logo herunterladen" : "Download logo"))}</div>
           </div>
         </div>
         {brand.logos.length > 1 && (
           <div style={{ marginTop: 30 }}>
-            {labelEyebrow("Varianten")}
+            {labelEyebrow((de ? "Varianten" : "Variants"))}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 16 }}>
               {brand.logos.map((l, i) => (
                 <div key={i} style={{ borderRadius: 16, border: "1px solid #ececf0", overflow: "hidden" }}>
@@ -531,7 +668,7 @@ export default function PublicBrandLanding({ token }) {
                   </div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 13px", borderTop: "1px solid #ececf0" }}>
                     <span style={{ fontSize: 13, fontWeight: 500, color: "#444" }}>{l.label || l.key || "Logo"}</span>
-                    <button onClick={() => download(l.url, `${(l.label || l.key || "logo")}.png`)} title="Herunterladen" style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid #ececf0", background: "#fff", cursor: "pointer", color: "#666", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <button onClick={() => download(l.url, `${(l.label || l.key || "logo")}.png`)} title={(de ? "Herunterladen" : "Download")} style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid #ececf0", background: "#fff", cursor: "pointer", color: "#666", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     </button>
                   </div>
@@ -595,9 +732,9 @@ export default function PublicBrandLanding({ token }) {
                   const txt = lum(r, g, b) > 158 ? "#1a1a2e" : "#ffffff";
                   return (
                     <div key={sh + j} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                      <div onClick={() => copyHex(sh)} title="Hex kopieren"
+                      <div onClick={() => copyHex(sh)} title={(de ? "Hex kopieren" : "Copy hex")}
                         style={{ width: "100%", height: panelH, borderRadius: 14, background: sh, position: "relative", cursor: "pointer", animation: `pbFadeUp 0.32s cubic-bezier(0.22, 0.68, 0.35, 1) ${j * 0.045}s both` }}>
-                        <div style={{ position: "absolute", bottom: 14, left: 0, right: 0, textAlign: "center", fontSize: 11, fontWeight: 600, color: txt, opacity: 0.9 }}>{copied === sh ? "Kopiert ✓" : sh.toUpperCase()}</div>
+                        <div style={{ position: "absolute", bottom: 14, left: 0, right: 0, textAlign: "center", fontSize: 11, fontWeight: 600, color: txt, opacity: 0.9 }}>{copied === sh ? (de ? "Kopiert ✓" : "Copied ✓") : sh.toUpperCase()}</div>
                       </div>
                       <div style={{ height: 8, display: "flex", alignItems: "center" }}>
                         {isBase && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#15151c" }} />}
@@ -663,7 +800,7 @@ export default function PublicBrandLanding({ token }) {
           <div style={{ width: 250, flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 480 }}>
             <div style={{ fontFamily: brandFF, fontSize: 128, fontWeight: 700, lineHeight: 1, letterSpacing: -3 }}>Aa</div>
             <div style={{ height: 1, background: "#d9d9df", margin: "28px 0 22px" }} />
-            <div style={{ fontFamily: brandFF, fontSize: 36, fontWeight: 500, letterSpacing: -0.5, overflowWrap: "break-word" }}>{fontFamily || "Systemschrift"}</div>
+            <div style={{ fontFamily: brandFF, fontSize: 36, fontWeight: 500, letterSpacing: -0.5, overflowWrap: "break-word" }}>{fontFamily || (de ? "Systemschrift" : "System font")}</div>
             <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10 }}>{de ? "Typografie für Texte." : "Typography for texts."}</div>
             {brand.typography.kind === "google" ? (
               <a href={`https://fonts.google.com/specimen/${encodeURIComponent((fontFamily || "").replace(/ /g, "+"))}`} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, fontWeight: 600, color: "#8a8a94", textDecoration: "none", marginTop: 8 }}>Google Fonts →</a>
@@ -714,7 +851,7 @@ export default function PublicBrandLanding({ token }) {
         <div style={{ flex: "1 1 480px", minWidth: 0, display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gap: isMobile ? 12 : 20 }}>
           {brand.imagery.map((img, i) => (
             <div key={img.id || i} className="pb-img-tile" style={{ position: "relative", borderRadius: 14, overflow: "hidden", aspectRatio: "1 / 1", background: "#f3f3f6" }}>
-              <img src={img.url} alt={img.name || "Bild"} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              <img src={img.url} alt={img.name || (de ? "Bild" : "Image")} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
               <div className="pb-img-overlay" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 14, background: "linear-gradient(180deg, rgba(0,0,0,0) 32%, rgba(0,0,0,0.58) 100%)" }}>
                 {img.prompt && (
                   <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.92)", lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", marginBottom: 10 }}>{img.prompt}</div>
@@ -863,13 +1000,13 @@ export default function PublicBrandLanding({ token }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 560 }}>
         {brand.logos.map((l, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 16px", borderRadius: 14, border: "1px solid #ececf0" }}>
-            <span style={{ fontSize: 14, fontWeight: 500, color: "#333" }}>Logo — {l.label || l.key || "Primary"}</span>
+            <span style={{ fontSize: 14, fontWeight: 500, color: "#333" }}>Logo · {l.label || l.key || "Primary"}</span>
             {dlBtn(l.url, `${(l.label || l.key || "logo")}.png`, "PNG")}
           </div>
         ))}
         {brand.typography && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 16px", borderRadius: 14, border: "1px solid #ececf0" }}>
-            <span style={{ fontSize: 14, fontWeight: 500, color: "#333" }}>Schrift — {fontFamily}</span>
+            <span style={{ fontSize: 14, fontWeight: 500, color: "#333" }}>{de ? "Schrift" : "Font"} · {fontFamily}</span>
             {brand.typography.kind === "google"
               ? <a href={`https://fonts.google.com/specimen/${encodeURIComponent((fontFamily || "").replace(/ /g, "+"))}`} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 600, color: uiAccent, textDecoration: "none" }}>Google Fonts →</a>
               : brand.typography.url ? dlBtn(brand.typography.url, fontFamily || "font", "Font") : <span style={{ fontSize: 13, color: "#aaa" }}>—</span>}
@@ -960,7 +1097,7 @@ export default function PublicBrandLanding({ token }) {
                 <div style={{ height: 1, background: "#e9eaee", margin: "6px 4px" }} />
                 <div onClick={() => { copyLink(); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 12px", borderRadius: 10, cursor: "pointer" }}>
                   <span style={{ color: "#9a9aa5", display: "flex" }}>{railIcon("share")}</span>
-                  <span style={{ fontSize: 14, fontWeight: 500 }}>{linkCopied ? "Link kopiert!" : "Teilen"}</span>
+                  <span style={{ fontSize: 14, fontWeight: 500 }}>{linkCopied ? (de ? "Link kopiert!" : "Link copied!") : (de ? "Teilen" : "Share")}</span>
                 </div>
               </div>
             </>
@@ -973,7 +1110,7 @@ export default function PublicBrandLanding({ token }) {
           <div style={{ flex: 1 }} />
           {NAV.map(n => railBtn(n.key, n.label, () => go(n.key), current === n.key))}
           <div style={{ flex: 1 }} />
-          {railBtn("share", linkCopied ? "Link kopiert!" : "Teilen", copyLink, false)}
+          {railBtn("share", linkCopied ? (de ? "Link kopiert!" : "Link copied!") : (de ? "Teilen" : "Share"), copyLink, false)}
           {railBtn("downloads", "Download Assets", () => go("downloads"), current === "downloads")}
         </aside>
       )}
@@ -991,7 +1128,7 @@ export default function PublicBrandLanding({ token }) {
           background: "linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.85) 45%, rgba(255,255,255,0.98) 100%)",
           backdropFilter: "blur(11px)", WebkitBackdropFilter: "blur(11px)", borderRadius: "0 0 17px 17px" }}>
           <span style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{brand.claim || "Brand Guidelines"}</span>
-          <span style={{ flexShrink: 0 }}>erstellt mit i7&nbsp;OS</span>
+          <span style={{ flexShrink: 0 }}>{de ? "erstellt mit i7OS" : "made with i7OS"}</span>
         </div>
       </main>
     </div>

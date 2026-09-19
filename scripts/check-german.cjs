@@ -71,7 +71,7 @@ function germanScore(text) {
   return score;
 }
 
-const LANG_IDS = /^(de|de2|deRoot|dl|isDe|isDE|appLanguage|lang|language|uiLang|langDe|german|isGerman|agentLang)$/;
+const LANG_IDS = /^(de|de2|deRoot|uiDe|PUB_DE|dl|isDe|isDE|appLanguage|lang|language|uiLang|langDe|german|isGerman|agentLang)$/;
 function mentionsLang(node) {
   let hit = false;
   (function walk(n) {
@@ -110,12 +110,18 @@ function guarded(path) {
     if (parent.type === "ImportDeclaration" || parent.type === "ExportNamedDeclaration" && key === "source") return true;
     if (parent.type === "ConditionalExpression" && key !== "test" && mentionsLang(parent.test)) return true;
     if (parent.type === "LogicalExpression" && key === "right" && mentionsLang(parent.left)) return true;
+    // `t("key") || "Deutsch"`: t() returns the key itself when it has no entry,
+    // never something falsy, so the right-hand side is never shown.
+    if (parent.type === "LogicalExpression" && key === "right" && parent.left.type === "CallExpression" && /^(t|tr)$/.test(calleeName(parent.left.callee))) return true;
     if (parent.type === "IfStatement" && key !== "test" && mentionsLang(parent.test)) return true;
     if (parent.type === "SwitchCase" && parent.test && mentionsLang(parent.test)) return true;
     if (parent.type === "ObjectProperty") {
       const k = parent.key && (parent.key.name || parent.key.value);
       if (key === "key") return true;
       if (k && PROP_DE.test(k)) return true;
+      // `{ label: "Deutsch", labelEn: "English" }`: the sibling is the other half.
+      const obj = p.parentPath.parentPath && p.parentPath.parentPath.node;
+      if (k && obj && obj.type === "ObjectExpression" && obj.properties.some(q => q.key && [k + "En", k + "_en", k + "EN", "en"].includes(q.key.name || q.key.value))) return true;
     }
     if (parent.type === "JSXAttribute") {
       const n = parent.name && parent.name.name;
