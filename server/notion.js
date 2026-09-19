@@ -184,3 +184,106 @@ export function notionPath(byId, id) {
   }
   return out;
 }
+
+// ── Tasks from a Notion database ────────────────────────────────────────────
+// Which of a database's fields mean status, due date and priority, read off
+// its schema (GET /data_sources/{id}), and how one entry maps onto a Kanban
+// task. Notion names are free text and often German, so fields are found by
+// TYPE first and by name only to choose between several of one type.
+const pick = (props, types, nameRe) => {
+  const all = Object.entries(props || {}).filter(([, v]) => types.includes(v?.type));
+  return (all.find(([k]) => nameRe.test(k)) || all[0] || [])[0] || null;
+};
+const pickNamed = (props, types, nameRe) => {
+  const hit = Object.entries(props || {}).find(([k, v]) => types.includes(v?.type) && nameRe.test(k));
+  return hit ? hit[0] : null;
+};
+
+// Our four columns. A Notion status belongs to one of its groups (To-do, In
+// progress, Complete by default); the first group is "todo", the last is
+// "done", anything between is "progress". A plain select is read by words.
+const COLUMN_WORDS = [
+  ["done", /(done|erledigt|fertig|complete|abgeschlossen|closed|finished|✓)/i],
+  ["review", /(review|prüfung|pruefung|freigabe|feedback)/i],
+  ["progress", /(progress|arbeit|doing|bearbeitung|läuft|laeuft|started|begonnen|active|aktiv)/i],
+];
+const PRIORITY_WORDS = [
+  ["high", /(high|hoch|urgent|dringend|kritisch|critical|wichtig|p1|p0)/i],
+  ["low", /(low|niedrig|gering|p3|p4|später|spaeter|someday)/i],
+  ["medium", /(medium|mittel|normal|p2)/i],
+];
+const byWords = (name, table) => { const s = String(name || ""); for (const [k, re] of table) if (re.test(s)) return k; return null; };
+
+export function notionTaskFields(schema) {
+  const props = schema?.properties || {};
+  const statusKey = pickNamed(props, ["status"], /status|stand|phase/i) || pick(props, ["status"], /./);
+  let groupOf = null;
+  if (statusKey) {
+    const groups = props[statusKey]?.status?.groups || [];
+    groupOf = {};
+    groups.forEach((g, i) => {
+      const col = i === 0 ? "todo" : i === groups.length - 1 ? "done" : "progress";
+      (g.option_ids || []).forEach(id => { groupOf[id] = col; });
+    });
+  }
+  return {
+    title: Object.entries(props).find(([, v]) => v?.type === "title")?.[0] || null,
+    status: statusKey,
+    statusGroupOf: groupOf,
+    selectStatus: statusKey ? null : pickNamed(props, ["select"], /status|stand|phase|spalte|column/i),
+    doneCheckbox: pickNamed(props, ["checkbox"], /done|erledigt|fertig|complete|abgeschlossen/i),
+    due: pickNamed(props, ["date"], /due|fällig|faellig|frist|deadline|termin|datum|date|bis/i) || pick(props, ["date"], /./),
+    priority: pickNamed(props, ["select", "status"], /prio/i),
+  };
+}
+
+export function notionTaskOf(page, f) {
+  const p = page?.properties || {};
+  const title = f.title ? plain(p[f.title]?.title).trim() : pageTitle(page);
+  let column = "todo", statusName = null;
+  if (f.status && p[f.status]?.status) {
+    const s = p[f.status].status;
+    statusName = s.name || null;
+    column = (f.statusGroupOf && f.statusGroupOf[s.id]) || byWords(s.name, COLUMN_WORDS) || "todo";
+  } else if (f.selectStatus && p[f.selectStatus]?.select) {
+    statusName = p[f.selectStatus].select.name || null;
+    column = byWords(statusName, COLUMN_WORDS) || "todo";
+  }
+  if (f.doneCheckbox && p[f.doneCheckbox]?.checkbox === true) column = "done";
+  const due = f.due ? (p[f.due]?.date?.start || null) : null;
+  const prRaw = f.priority ? (p[f.priority]?.select?.name || p[f.priority]?.status?.name || null) : null;
+  return {
+    id: page.id,
+    title: title || "",
+    column,
+    statusName,
+    due,
+    priority: prRaw ? (byWords(prRaw, PRIORITY_WORDS) || "medium") : null,
+    url: page.url || null,
+  };
+}
+
+// A page's content as the plain text a task description holds.
+export function notionBlocksToText(blocks, depth = 0) {
+  const out = [];
+  const pad = "  ".repeat(depth);
+  for (const b of blocks || []) {
+    const d = b?.[b?.type] || {};
+    const t = plain(d.rich_text).trim();
+    switch (b?.type) {
+      case "bulleted_list_item": if (t) out.push(`${pad}- ${t}`); break;
+      case "numbered_list_item": if (t) out.push(`${pad}1. ${t}`); break;
+      case "to_do": if (t) out.push(`${pad}[${d.checked ? "x" : " "}] ${t}`); break;
+      case "code": if (t) out.push(t); break;
+      case "divider": out.push("---"); break;
+      case "child_page": case "child_database": if (d.title) out.push(`${pad}${d.title}`); break;
+      case "table": (b._children || []).forEach(r => out.push(pad + (r.table_row?.cells || []).map(c => plain(c).trim()).join(" | "))); break;
+      default: if (t) out.push(pad + t);
+    }
+    if (b?._children && b.type !== "table") {
+      const inner = notionBlocksToText(b._children, ["bulleted_list_item", "numbered_list_item", "to_do"].includes(b.type) ? depth + 1 : depth);
+      if (inner) out.push(inner);
+    }
+  }
+  return out.join("\n");
+}

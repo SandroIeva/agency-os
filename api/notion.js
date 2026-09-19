@@ -17,9 +17,11 @@
 //   POST { mode: "disconnect", orgId } → forget the connection
 //   POST { mode: "search",     orgId, query?, cursor? } → pages it can see, newest first
 //   POST { mode: "tree",       orgId } → every page and database it can see, with parents, for the picker's tree
+//   POST { mode: "tasks",      orgId, dataSourceId } → a database's entries as Kanban tasks (status → column, due, priority)
+//   POST { mode: "task-bodies", orgId, pageIds } → up to five entries' page text, for the task descriptions
 //   POST { mode: "page",       orgId, pageId } → { title, html } ready for the document import
 import { createClient } from "@supabase/supabase-js";
-import { blocksToHtml, pageTitle, plain } from "../server/notion.js";
+import { blocksToHtml, pageTitle, plain, notionTaskFields, notionTaskOf, notionBlocksToText } from "../server/notion.js";
 
 export const config = { runtime: "edge" };
 
@@ -336,6 +338,60 @@ export default async function handler(req) {
         calls++;
       } while (cursor && calls < 10);
       return json({ items, truncated: !!cursor });
+    }
+
+    // A database's entries as tasks. The schema says which field is the status
+    // (and which of its groups each option belongs to), the due date and the
+    // priority; notionTaskOf maps every entry. Up to five pages of a hundred.
+    if (body.mode === "tasks") {
+      const dsId = String(body.dataSourceId || "");
+      if (!/^[0-9a-f-]{32,36}$/i.test(dsId)) return json({ error: "dataSourceId is required" }, 400);
+      const sr = await notion(ctx, `/data_sources/${encodeURIComponent(dsId)}`);
+      const schema = await sr.json().catch(() => null);
+      if (!sr.ok) {
+        const notShared = sr.status === 404 || schema?.code === "object_not_found";
+        return json({ error: schema?.message || `HTTP ${sr.status}`, code: notShared ? "not_shared" : "notion_error" }, notShared ? 404 : 502);
+      }
+      const fields = notionTaskFields(schema);
+      const tasks = [];
+      let cursor = null, calls = 0;
+      do {
+        const payload = { page_size: 100 };
+        if (cursor) payload.start_cursor = cursor;
+        const r = await notion(ctx, `/data_sources/${encodeURIComponent(dsId)}/query`, { method: "POST", body: JSON.stringify(payload) });
+        const j = await r.json().catch(() => null);
+        if (!r.ok) return json({ error: j?.message || `HTTP ${r.status}`, code: "notion_error" }, 502);
+        for (const pg of j.results || []) {
+          if (pg.object !== "page" || pg.in_trash || pg.archived) continue;
+          tasks.push(notionTaskOf(pg, fields));
+        }
+        cursor = j.has_more ? j.next_cursor : null;
+        calls++;
+      } while (cursor && calls < 5);
+      return json({
+        title: plain(schema.title).trim(),
+        fields: { status: fields.status || fields.selectStatus || null, due: fields.due, priority: fields.priority },
+        tasks,
+        truncated: !!cursor,
+      });
+    }
+
+    // The text of a few entries' pages, for the descriptions. Asked for in
+    // small batches by the browser, so one call stays well inside the time an
+    // Edge function has.
+    if (body.mode === "task-bodies") {
+      const ids = (Array.isArray(body.pageIds) ? body.pageIds : []).map(String).filter(id => /^[0-9a-f-]{32,36}$/i.test(id)).slice(0, 5);
+      const bodies = {};
+      for (const id of ids) {
+        try {
+          const blocks = await readBlocks(ctx, id, 0, { calls: 8, truncated: false });
+          bodies[id] = notionBlocksToText(blocks).slice(0, 4000);
+        } catch (e) {
+          if (e instanceof Reconnect) throw e;
+          bodies[id] = "";
+        }
+      }
+      return json({ bodies });
     }
 
     if (body.mode === "page") {

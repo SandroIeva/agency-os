@@ -4005,6 +4005,71 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, appLanguage = "de", 
     if (newColumnKey === "done") notifyCompleted(task, wasColumnKey);
   };
 
+  // ── Tasks from Notion ──
+  // The THIRD place a task row is written, after createTask below and
+  // createDashboardTask in the App root, so the row carries the same columns
+  // and defaults theirs do (creator is the assignee, positions appended per
+  // column). Plus source_ref: "notion:<page id>", which the database keeps
+  // unique per workspace so a second import brings only what is new.
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
+  const [notionTasksOpen, setNotionTasksOpen] = useState(false);
+  useEffect(() => {
+    let again = false;
+    try { again = localStorage.getItem(NOTION_REOPEN_KEY) === "kanban"; if (again) localStorage.removeItem(NOTION_REOPEN_KEY); } catch (_) {}
+    if (again) setNotionTasksOpen(true);
+  }, []);
+  const importNotionTasks = async (list, projectName) => {
+    if (!list?.length || !session?.user?.id) return { added: 0 };
+    // The page text becomes the description, fetched five entries at a time.
+    const bodies = {};
+    for (let i = 0; i < list.length; i += 5) {
+      try {
+        const r = await fetch("/api/notion", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+          body: JSON.stringify({ mode: "task-bodies", orgId: userOrg?.id, pageIds: list.slice(i, i + 5).map(t => t.id) }),
+        });
+        const j = await r.json().catch(() => ({}));
+        Object.assign(bodies, j.bodies || {});
+      } catch (_) { /* a task without its description is still a task */ }
+    }
+    const next = {};
+    const rows = list.map(t => {
+      const col = ["todo", "progress", "review", "done"].includes(t.column) ? t.column : "todo";
+      if (next[col] === undefined) next[col] = tasks.filter(x => x.column_key === col).length;
+      return {
+        title: (t.title || (de ? "Ohne Titel" : "Untitled")).slice(0, 500),
+        description: (bodies[t.id] || "").trim() || null,
+        priority: ["high", "medium", "low"].includes(t.priority) ? t.priority : "medium",
+        column_key: col,
+        project_name: projectName || null,
+        creator_id: session.user.id,
+        assignee_id: session.user.id,
+        due_date: t.due ? new Date(t.due).toISOString() : null,
+        position: next[col]++,
+        org_id: userOrg?.id || null,
+        source_ref: `notion:${t.id}`,
+      };
+    });
+    const { data, error } = await supabase.from("tasks").insert(rows).select();
+    if (error) {
+      // Some arrived in the meantime (another tab, a second click): take the
+      // rest one by one and let the unique index turn the doubles away.
+      if (error.code === "23505") {
+        const added = [];
+        for (const row of rows) {
+          const { data: d, error: e } = await supabase.from("tasks").insert(row).select().single();
+          if (!e && d) added.push(d);
+        }
+        if (added.length) setTasks(prev => [...prev, ...added.filter(a => !prev.some(p => p.id === a.id))]);
+        return { added: added.length };
+      }
+      return { error: planLimitError(error, de) || error.message };
+    }
+    if (data?.length) setTasks(prev => [...prev, ...data.filter(a => !prev.some(p => p.id === a.id))]);
+    return { added: data?.length || 0 };
+  };
+
   // Create new task
   const createTask = async () => {
     if (!taskForm.title.trim()) return;
@@ -4935,17 +5000,46 @@ function KanbanBoard({ onBack, session, theme, darkMode, t, appLanguage = "de", 
           </AnimatePresence>
         </div>
 
-        <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-          onClick={() => openNewTask("todo")}
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 7,
-            fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 17px 9px 11px", borderRadius: 999, cursor: "pointer",
-            background: "#23232b", border: "none", color: "#fff", marginLeft: "auto",
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          New task
-        </motion.button>
+        {/* The same "create" button and menu as Documents and Media: a new
+            task, or tasks from a Notion database. */}
+        <div style={{ position: "relative", marginLeft: "auto" }}>
+          <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+            onClick={() => setNewMenuOpen(o => !o)}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 7,
+              fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 14px 9px 11px", borderRadius: 999, cursor: "pointer",
+              background: "#23232b", border: "none", color: "#fff",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            {de ? "Neue Aufgabe" : "New task"}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 1, opacity: 0.8 }}><polyline points="6 9 12 15 18 9"/></svg>
+          </motion.button>
+          <AnimatePresence>
+            {newMenuOpen && (
+              <CreateMenu onClose={() => setNewMenuOpen(false)} theme={theme} darkMode={darkMode}
+                items={[
+                  { key: "new", label: de ? "Neue Aufgabe" : "New task",
+                    sub: de ? "Leere Aufgabe anlegen" : "Create a blank task",
+                    icon: <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
+                    onClick: () => { setNewMenuOpen(false); openNewTask("todo"); } },
+                  { key: "notion", label: de ? "Aus Notion importieren" : "Import from Notion",
+                    sub: de ? "Aufgaben aus einer Notion-Datenbank übernehmen" : "Bring in tasks from a Notion database",
+                    mark: <NotionMark size={22} invert={darkMode} />,
+                    onClick: () => { setNewMenuOpen(false); setNotionTasksOpen(true); } },
+                ]} />
+            )}
+          </AnimatePresence>
+          {notionTasksOpen && (
+            <NotionTaskImportModal orgId={userOrg?.id} session={session} appLanguage={appLanguage} theme={theme} darkMode={darkMode}
+              projects={projects} onClose={() => setNotionTasksOpen(false)}
+              onImport={async (list, projectName) => {
+                const res = await importNotionTasks(list, projectName);
+                if (!res?.error) setNotionTasksOpen(false);
+                return res;
+              }} />
+          )}
+        </div>
       </div>
 
       {/* Columns — always visible */}
@@ -37585,15 +37679,8 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                 </motion.div>
                 <AnimatePresence>
                   {addMenuOpen && (
-                    <>
-                      <div onClick={() => setAddMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
-                      <motion.div
-                        initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                        transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
-                        style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, minWidth: 230,
-                          background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
-                          boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 6 }}>
-                        {[
+                    <CreateMenu onClose={() => setAddMenuOpen(false)} minWidth={230} theme={theme} darkMode={darkMode}
+                      items={[
                           { key: "local", label: appLanguage === "de" ? "Datei hochladen" : "Upload file",
                             sub: appLanguage === "de" ? "Vom Computer" : "From your computer",
                             icon: <>{UPLOAD_ICON}</>,
@@ -37614,21 +37701,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             sub: appLanguage === "de" ? "Assets gruppieren" : "Group your assets",
                             icon: FOLDER_ICON,
                             onClick: () => { setAddMenuOpen(false); creationsNewFolder.current?.(); } },
-                        ].map(it => (
-                          <div key={it.key} onClick={it.onClick} className="hover-row"
-                            style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
-                            <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                              background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
-                              {it.mark || <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>}
-                            </div>
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{it.label}</div>
-                              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{it.sub}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </motion.div>
-                    </>
+                        ]} />
                   )}
                 </AnimatePresence>
               </div>
@@ -37647,15 +37720,8 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                 </motion.div>
                 <AnimatePresence>
                   {docsAddOpen && (
-                    <>
-                      <div onClick={() => setDocsAddOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
-                      <motion.div
-                        initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                        transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
-                        style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, minWidth: 300, whiteSpace: "nowrap",
-                          background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
-                          boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 6 }}>
-                        {[
+                    <CreateMenu onClose={() => setDocsAddOpen(false)} minWidth={300} theme={theme} darkMode={darkMode}
+                      items={[
                           { key: "new", label: appLanguage === "de" ? "Neues Dokument" : "New document",
                             sub: appLanguage === "de" ? "Leeres Dokument erstellen" : "Create a blank document",
                             icon: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></>,
@@ -37680,21 +37746,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             sub: appLanguage === "de" ? "Dokumente in Ordnern organisieren" : "Organise documents in folders",
                             icon: FOLDER_ICON,
                             onClick: () => { setDocsAddOpen(false); docsNewFolder.current?.(); } },
-                        ].map(it => (
-                          <div key={it.key} onClick={it.onClick} className="hover-row"
-                            style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
-                            <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                              background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
-                              {it.mark || <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>}
-                            </div>
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{it.label}</div>
-                              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{it.sub}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </motion.div>
-                    </>
+                        ]} />
                   )}
                 </AnimatePresence>
               </div>
@@ -42336,6 +42388,281 @@ function PublicLinkPanel({ kind, targetId, orgId, userId, slugFrom = "", canPubl
   );
 }
 
+// ── The "create new" menu ───────────────────────────────────────────────────
+// ONE menu for every "Neu erstellen / New …" button that opens a list of ways
+// to make something: Documents, Media, the Kanban board. Each item is a tile
+// with a line icon (or a service's own mark), a label and a line beneath it.
+// The caller puts it inside AnimatePresence and a position:relative wrapper.
+function CreateMenu({ items, onClose, theme, darkMode, minWidth = 300 }) {
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+      <motion.div
+        initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }}
+        transition={{ duration: 0.16, ease: [0.22, 0.68, 0.35, 1.0] }}
+        style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 41, minWidth, whiteSpace: "nowrap",
+          background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 14,
+          boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden", padding: 6 }}>
+        {items.map(it => (
+          <div key={it.key} onClick={it.onClick} className="hover-row"
+            style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer" }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+              background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
+              {it.mark || <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{it.label}</div>
+              {it.sub && <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{it.sub}</div>}
+            </div>
+          </div>
+        ))}
+      </motion.div>
+    </>
+  );
+}
+
+// ── Tasks from a Notion database ────────────────────────────────────────────
+// Two steps in one dialog: which database, then which of its entries. The
+// entries arrive already mapped (status → column, due date, priority, see
+// notionTaskOf in server/notion.js); what was imported before is shown and
+// cannot be ticked again, found by tasks.source_ref = "notion:<page id>".
+// Not connected, it is the same ConnectPrompt every integration asks with.
+function NotionTaskImportModal({ orgId, session, appLanguage = "de", theme, darkMode, projects = [], onClose, onImport }) {
+  const de = appLanguage === "de";
+  const [status, setStatus] = useState(null);
+  const [dbs, setDbs] = useState(null);           // null = loading
+  const [treeAll, setTreeAll] = useState(null);
+  const [db, setDb] = useState(null);             // { id, title }
+  const [data, setData] = useState(null);         // null = loading, { tasks, fields, truncated }
+  const [existing, setExisting] = useState(() => new Set());
+  const [picked, setPicked] = useState(() => new Set());
+  const [project, setProject] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [connecting, setConnecting] = useState(false);
+
+  const call = async (body) => {
+    const r = await fetch("/api/notion", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+      body: JSON.stringify({ ...body, orgId }),
+    });
+    const j = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, ...j };
+  };
+  const failed = (j) => {
+    if (j.code === "reconnect_required") setStatus(s => ({ ...(s || {}), connected: true, needs_reconnect: true }));
+    else setErr(de ? "Notion hat nicht geantwortet. Versuch es gleich noch einmal." : "Notion did not answer. Try again in a moment.");
+  };
+
+  useEffect(() => {
+    let alive = true;
+    call({ mode: "status" }).then(j => { if (alive) setStatus(j.ok ? j : { connected: false }); });
+    return () => { alive = false; };
+  }, [orgId]); // eslint-disable-line
+
+  // The databases, task-like ones first, each with where it lives.
+  useEffect(() => {
+    if (!status?.connected || status.needs_reconnect) return;
+    let alive = true;
+    call({ mode: "tree" }).then(j => {
+      if (!alive) return;
+      if (!j.ok) { failed(j); setDbs([]); return; }
+      const tree = notionTree(j.items || []);
+      setTreeAll(tree);
+      const list = [...tree.byId.values()].filter(n => n.kind === "db");
+      list.sort((a, b) => (notionDbIconKey(a.title) === "tasks" ? 0 : 1) - (notionDbIconKey(b.title) === "tasks" ? 0 : 1)
+        || (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" }));
+      setDbs(list);
+    });
+    return () => { alive = false; };
+  }, [status?.connected, status?.needs_reconnect]); // eslint-disable-line
+
+  const openDb = async (n) => {
+    setDb({ id: n.id, title: n.title }); setData(null); setPicked(new Set()); setErr("");
+    const j = await call({ mode: "tasks", dataSourceId: n.id });
+    if (!j.ok) { failed(j); setData({ tasks: [], fields: {} }); return; }
+    const refs = (j.tasks || []).map(t => `notion:${t.id}`);
+    let have = new Set();
+    for (let i = 0; i < refs.length; i += 200) {
+      const { data: rows } = await supabase.from("tasks").select("source_ref").eq("org_id", orgId).in("source_ref", refs.slice(i, i + 200));
+      (rows || []).forEach(r => have.add(r.source_ref));
+    }
+    setExisting(have);
+    setData({ tasks: j.tasks || [], fields: j.fields || {}, truncated: !!j.truncated });
+    // Everything new is ticked: importing a task list is usually all of it.
+    setPicked(new Set((j.tasks || []).filter(t => !have.has(`notion:${t.id}`)).map(t => t.id)));
+  };
+
+  const connect = async () => {
+    setConnecting(true); setErr("");
+    try { await startNotionOAuth({ orgId, appLanguage, returnTo: "kanban" }); }
+    catch (_) { setErr(de ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection."); setConnecting(false); }
+  };
+
+  if (!status) return null;
+  if (!status.connected || status.needs_reconnect) {
+    return (
+      <ConnectPrompt
+        logo={<NotionMark size={24} />}
+        title={de ? "Notion verbinden" : "Connect Notion"}
+        body={status.needs_reconnect
+          ? (de ? "Die Verbindung zu Notion ist abgelaufen. Einmal neu verbinden, danach geht es weiter wie vorher." : "The Notion connection has expired. Connect once more and carry on where you left off.")
+          : (de ? "Um Aufgaben aus Notion zu übernehmen, braucht dieser Workspace eine Notion-Verbindung. Du wählst dabei selbst, welche Seiten und Datenbanken i7OS sehen darf."
+                : "To bring tasks in from Notion, this workspace needs a Notion connection. You choose which pages and databases i7OS may see.")}
+        error={err} busy={connecting} onLater={onClose} onConnect={connect}
+        appLanguage={appLanguage} theme={theme} darkMode={darkMode} zIndex={100003} />
+    );
+  }
+
+  const COL_LABEL = { todo: de ? "To Do" : "To Do", progress: de ? "In Arbeit" : "In progress", review: "Review", done: de ? "Erledigt" : "Done" };
+  const when = (iso) => { try { return new Date(iso).toLocaleDateString(de ? "de-DE" : "en-GB", { day: "2-digit", month: "short" }); } catch { return ""; } };
+  const box = (sel, disabled) => (
+    <div style={{
+      width: 20, height: 20, borderRadius: 6, flexShrink: 0, opacity: disabled ? 0.35 : 1,
+      background: sel ? "#15151c" : "transparent",
+      border: `1.5px solid ${sel ? "#15151c" : (darkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.25)")}`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      {sel && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>}
+    </div>
+  );
+  const chip = (text) => (
+    <span style={{ fontSize: 10.5, fontFamily: FONT, color: theme.textDim, padding: "2px 7px", borderRadius: 6,
+      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", whiteSpace: "nowrap" }}>{text}</span>
+  );
+  const fresh = (data?.tasks || []).filter(t => !existing.has(`notion:${t.id}`));
+  const allOn = fresh.length > 0 && fresh.every(t => picked.has(t.id));
+  const doImport = async () => {
+    const list = (data?.tasks || []).filter(t => picked.has(t.id));
+    if (!list.length || busy) return;
+    setBusy(true); setErr("");
+    const res = await onImport(list, project || null);
+    setBusy(false);
+    if (res?.error) setErr(res.error);
+  };
+
+  return createPortal(
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => { if (!busy) onClose(); }}
+      style={{ position: "fixed", inset: 0, zIndex: 100003, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <motion.div initial={{ scale: 0.96, y: 12, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }}
+        transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1.0] }} onClick={e => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 560, height: "min(640px, 82vh)", display: "flex", flexDirection: "column",
+          background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 20, overflow: "hidden",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.32)" }}>
+        <div style={{ padding: "18px 22px 14px", borderBottom: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#fff", border: `1px solid ${theme.borderFaint}` }}>
+            <NotionMark size={26} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? "Aufgaben aus Notion" : "Tasks from Notion"}</div>
+            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {db ? (db.title || (de ? "Datenbank" : "Database"))
+                : (de ? "Wähle die Notion-Datenbank mit deinen Aufgaben." : "Pick the Notion database that holds your tasks.")}
+            </div>
+          </div>
+          <motion.div whileTap={{ scale: 0.9 }} onClick={() => { if (!busy) onClose(); }} title={de ? "Schließen" : "Close"}
+            style={{ cursor: "pointer", color: theme.textDim, padding: 4, display: "flex" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </motion.div>
+        </div>
+
+        {!db ? (
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "10px 12px" }}>
+            {dbs === null && <div style={{ padding: 28, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Lädt…" : "Loading…"}</div>}
+            {dbs !== null && dbs.length === 0 && !err && (
+              <div style={{ padding: "28px 16px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
+                {de ? "i7OS sieht noch keine Notion-Datenbank. Gib deine Aufgaben-Datenbank in Notion für i7OS frei." : "i7OS cannot see a Notion database yet. Share your task database with i7OS in Notion."}
+              </div>
+            )}
+            {(dbs || []).map(n => {
+              const path = treeAll ? notionPath(treeAll.byId, n.id) : [];
+              return (
+                <div key={n.id} onClick={() => openDb(n)} className="hover-row"
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 10px", borderRadius: 12, cursor: "pointer" }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                    background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{NOTION_DB_ICON[notionDbIconKey(n.title)]}</svg>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{n.title || (de ? "Ohne Titel" : "Untitled")}</div>
+                    <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
+                      {(path.length ? path.join(" › ") + " · " : "") + (de ? `${n.children.length} ${n.children.length === 1 ? "Eintrag" : "Einträge"}` : `${n.children.length} ${n.children.length === 1 ? "entry" : "entries"}`)}
+                    </div>
+                  </div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 6 15 12 9 18" /></svg>
+                </div>
+              );
+            })}
+            {err && <div style={{ padding: "8px 10px", fontSize: 12, fontFamily: FONT, color: "#E86767" }}>{err}</div>}
+          </div>
+        ) : (
+          <>
+            <div style={{ padding: "12px 22px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${theme.borderFaint}` }}>
+              <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>{de ? "Ins Projekt" : "Into project"}</span>
+              <Dropdown value={project} onChange={setProject} theme={theme} darkMode={darkMode} minWidth={200}
+                options={[{ value: "", label: de ? "Ohne Projekt" : "No project" }, ...projects.map(p => ({ value: p.name, label: p.name }))]} />
+              <div style={{ flex: 1 }} />
+              {fresh.length > 0 && (
+                <div onClick={() => setPicked(allOn ? new Set() : new Set(fresh.map(t => t.id)))}
+                  style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textSub, cursor: "pointer", whiteSpace: "nowrap" }}>
+                  {allOn ? (de ? "Keine auswählen" : "Select none") : (de ? "Alle auswählen" : "Select all")}
+                </div>
+              )}
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "6px 12px 8px" }}>
+              {data === null && <div style={{ padding: 28, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Lädt…" : "Loading…"}</div>}
+              {data !== null && data.tasks.length === 0 && !err && (
+                <div style={{ padding: "28px 16px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Diese Datenbank ist leer." : "This database is empty."}</div>
+              )}
+              {(data?.tasks || []).map(t => {
+                const had = existing.has(`notion:${t.id}`);
+                const sel = !had && picked.has(t.id);
+                return (
+                  <div key={t.id} onClick={() => { if (had) return; setPicked(prev => { const n = new Set(prev); n.has(t.id) ? n.delete(t.id) : n.add(t.id); return n; }); }}
+                    className={had ? undefined : "hover-row"}
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 10px", borderRadius: 12, cursor: had ? "default" : "pointer", opacity: had ? 0.55 : 1 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title || (de ? "Ohne Titel" : "Untitled")}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                        {chip(COL_LABEL[t.column] || t.column)}
+                        {t.due && chip((de ? "Frist " : "Due ") + when(t.due))}
+                        {t.priority === "high" && chip(de ? "Hohe Priorität" : "High priority")}
+                        {had && chip(de ? "Schon importiert" : "Already imported")}
+                      </div>
+                    </div>
+                    {box(sel || had, had)}
+                  </div>
+                );
+              })}
+              {data?.truncated && (
+                <div style={{ padding: 10, fontSize: 11.5, fontFamily: FONT, color: theme.textDim, textAlign: "center" }}>
+                  {de ? "Gezeigt werden die ersten 500 Einträge." : "Showing the first 500 entries."}
+                </div>
+              )}
+              {err && <div style={{ padding: "8px 10px", fontSize: 12, fontFamily: FONT, color: "#E86767" }}>{err}</div>}
+            </div>
+            <div style={{ padding: "12px 22px 14px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", gap: 12 }}>
+              <div onClick={() => { if (!busy) { setDb(null); setData(null); setErr(""); } }}
+                style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, cursor: busy ? "default" : "pointer" }}>
+                {de ? "‹ Andere Datenbank" : "‹ Other database"}
+              </div>
+              <div style={{ flex: 1 }} />
+              <motion.button whileTap={{ scale: 0.97 }} disabled={!picked.size || busy} onClick={doImport}
+                style={{ ...primaryBtn(darkMode), border: "none", padding: "10px 18px", borderRadius: 999, fontSize: 13, fontWeight: 600, fontFamily: FONT,
+                  opacity: picked.size && !busy ? 1 : 0.4, cursor: picked.size && !busy ? "pointer" : "default", flexShrink: 0 }}>
+                {busy ? (de ? "Importiere…" : "Importing…")
+                  : picked.size ? (de ? `${picked.size} importieren` : `Import ${picked.size}`) : (de ? "Importieren" : "Import")}
+              </motion.button>
+            </div>
+          </>
+        )}
+      </motion.div>
+    </motion.div>,
+    document.body,
+  );
+}
+
 // ── The one "connect this service" dialog ───────────────────────────────────
 // Every integration that is reached for before it is connected asks with THIS,
 // so they all look and read the same: the service's logo top left on a white
@@ -43218,7 +43545,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent: _themeAccent, t, a
   // connection was only ever a step on the way to importing a page.
   useEffect(() => {
     let again = false;
-    try { again = localStorage.getItem(NOTION_REOPEN_KEY) === "1"; localStorage.removeItem(NOTION_REOPEN_KEY); } catch (_) {}
+    try { again = localStorage.getItem(NOTION_REOPEN_KEY) === "1"; if (again) localStorage.removeItem(NOTION_REOPEN_KEY); } catch (_) {}
     if (again) setNotionPickOpen(true);
   }, []);
   const importFromDriveRef = useRef(null);
@@ -53817,6 +54144,11 @@ export default function CircularMenu() {
         try { localStorage.setItem(NOTION_REOPEN_KEY, "1"); } catch (_) {}
         setAssetsOpenTab({ tab: "docs", ts: Date.now() });
         setCurrentView("assets");
+      } else if (back === "kanban") {
+        // Started from the Kanban's "Import from Notion": back there, and the
+        // task picker opens again by itself.
+        try { localStorage.setItem(NOTION_REOPEN_KEY, "kanban"); } catch (_) {}
+        setCurrentView("kanban");
       } else {
         setSettingsTab("account");
         setCurrentView("settings");

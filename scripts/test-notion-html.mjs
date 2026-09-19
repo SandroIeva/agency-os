@@ -1,6 +1,6 @@
 // The Notion → HTML conversion, against the shipped code (server/notion.js).
 // Run: node scripts/test-notion-html.mjs
-import { blocksToHtml, pageTitle, rich, notionTree, notionPath } from "../server/notion.js";
+import { blocksToHtml, pageTitle, rich, notionTree, notionPath, notionTaskFields, notionTaskOf, notionBlocksToText } from "../server/notion.js";
 
 let failed = 0;
 const eq = (name, got, want) => {
@@ -65,6 +65,41 @@ eq("unknown block with text still reads", blocksToHtml([blk("something_new", { r
     { id: "y", kind: "page", title: "Y", parent: { type: "page_id", id: "x" } },
   ]);
   eq("a parent loop does not hang and keeps both", loop.byId.size, 2);
+}
+
+
+// ── Tasks from a database ──
+{
+  const schema = { properties: {
+    Name: { type: "title" },
+    Status: { type: "status", status: {
+      options: [{ id: "o1", name: "Nicht begonnen" }, { id: "o2", name: "In Bearbeitung" }, { id: "o3", name: "Erledigt" }],
+      groups: [{ id: "g1", name: "Zu erledigen", option_ids: ["o1"] }, { id: "g2", name: "In Bearbeitung", option_ids: ["o2"] }, { id: "g3", name: "Abgeschlossen", option_ids: ["o3"] }] } },
+    Fälligkeitsdatum: { type: "date" },
+    Erstellt: { type: "created_time" },
+    Priorität: { type: "select" },
+  } };
+  const f = notionTaskFields(schema);
+  eq("fields found by type and name", [f.title, f.status, f.due, f.priority].join(","), "Name,Status,Fälligkeitsdatum,Priorität");
+  const page = (statusId, statusName, extra = {}) => ({ id: "pg", url: "https://notion.so/pg", properties: {
+    Name: { type: "title", title: [rt("Logo finalisieren")] },
+    Status: { type: "status", status: { id: statusId, name: statusName } },
+    Fälligkeitsdatum: { type: "date", date: { start: "2026-10-01" } },
+    Priorität: { type: "select", select: { name: "Hoch" } }, ...extra } });
+  const t1 = notionTaskOf(page("o2", "In Bearbeitung"), f);
+  eq("status group -> column", t1.column, "progress");
+  eq("title, due, priority", [t1.title, t1.due, t1.priority].join(","), "Logo finalisieren,2026-10-01,high");
+  eq("last group is done", notionTaskOf(page("o3", "Erledigt"), f).column, "done");
+  eq("first group is todo", notionTaskOf(page("o1", "Nicht begonnen"), f).column, "todo");
+  const sel = notionTaskFields({ properties: { T: { type: "title" }, Stand: { type: "select" }, Done: { type: "checkbox" } } });
+  eq("select read by words", notionTaskOf({ id: "x", properties: { T: { title: [rt("a")] }, Stand: { select: { name: "Review" } } } }, sel).column, "review");
+  eq("done checkbox wins", notionTaskOf({ id: "x", properties: { T: { title: [rt("a")] }, Stand: { select: { name: "Offen" } }, Done: { checkbox: true } } }, sel).column, "done");
+  eq("no priority field -> null", notionTaskOf({ id: "x", properties: { T: { title: [rt("a")] } } }, sel).priority, null);
+  eq("page text", notionBlocksToText([
+    { type: "paragraph", paragraph: { rich_text: [rt("Kontext")] } },
+    { type: "to_do", to_do: { rich_text: [rt("Farben")], checked: true } },
+    { type: "bulleted_list_item", bulleted_list_item: { rich_text: [rt("a")] }, _children: [{ type: "bulleted_list_item", bulleted_list_item: { rich_text: [rt("b")] } }] },
+  ]), "Kontext\n[x] Farben\n- a\n  - b");
 }
 
 console.log(failed ? `\n${failed} failed` : "\nall passed");

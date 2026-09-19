@@ -41,6 +41,7 @@ Multi-tenant workspace OS for creative agencies. React 19 + Vite SPA, Supabase (
      violet and the muscle memory is worth more here than the house rule. It was
      briefly a measured teal and that was reverted. Do not "fix" it back.
    - Use the shared **`<Dropdown>`** component in App.jsx for any select/menu. Never a native `<select>`, never a one-off menu.
+   - A "Neu erstellen / New …" button that offers several ways to make something opens **`<CreateMenu>`** (Documents, Media, Kanban). Icons for Notion databases come from `NOTION_DB_ICON`.
    - **Connecting an integration from inside a feature uses `<ConnectPrompt>`** (module scope in App.jsx): the service's logo top left on a white tile, "Connect X", one line on what the connection gives you, the workspace note, then Later / Connect. Pinterest and Notion use it. A new integration uses it too and never gets a dialog of its own; the owner has asked for this more than once (2026-09-19, after Notion shipped with a different one). Logos: one component or one file per service (`PinterestMark`, `NotionMark` reading `public/notion-logo.svg`), used everywhere that service appears.
    - Primary action buttons belong in the **top-right header slot** of a view (some views expose a `headerSlotRef` portal target for embedded tabs).
    - Controls must never sit flush against a container edge — keep inner padding (esp. select chevrons).
@@ -219,7 +220,7 @@ not be created from the UI at all.
 | **Workspace invite** | inline in the Settings members panel — the "Einladen" button's `onClick`, a loop over `invitations` inserts. No named function. | App.jsx |
 | **Project invite** | `sendInvite` in `ProjectsView` | App.jsx |
 | **Invite acceptance** | onboarding: pending-invite tile + invite-code field (3 paths, all inserting `org_members`); project invites: `accept_project_invitation` RPC, called from the `?project-invite=` effect | App.jsx / Postgres |
-| **Task** | `KanbanBoard` — created inline in the column composer — **and** `createDashboardTask` in the App root (the swipe-in task panel's "+" button) | App.jsx |
+| **Task** | `KanbanBoard` — created inline in the column composer — **and** `createDashboardTask` in the App root (the swipe-in task panel's "+" button) **and** `importNotionTasks` in `KanbanBoard` ("Aus Notion importieren" in the board's create menu; rows carry `source_ref = "notion:<page id>"`, unique per workspace, so a second import adds only new entries) | App.jsx |
 | **Whiteboard** | `createBoard` in `IdeasTab`, plus `openBrainstorm` in the App root (Erstellen → Brainstorm) | App.jsx |
 | **Document** | `createDoc` | App.jsx |
 | **Pinterest connection** | `startPinterestOAuth` (module scope) — used by the Settings row AND by the connect prompt in `AssetsView`. The state token carries a user and a workspace, not a screen, so `returnTo` is stashed in localStorage and read once on the way back | App.jsx |
@@ -237,8 +238,8 @@ not be created from the UI at all.
 | **File upload** | always through `uploadTracked` — never call `supabase.storage.upload` directly, or the storage ledger drifts | App.jsx |
 
 ⚠ **Four things are created from MORE than one place**: workspaces (3),
-whiteboards (2), tasks (2) and links (2: the Browse tab and the messengers). A gate applied to only one of them is a hole.
-The two task writers must also agree on the ROW: same columns, same defaults,
+whiteboards (2), tasks (3: Kanban, dashboard panel, Notion import) and links (2: the Browse tab and the messengers). A gate applied to only one of them is a hole.
+The task writers must also agree on the ROW: same columns, same defaults,
 or a card looks different depending on where somebody happened to be standing
 when they made it.
 
