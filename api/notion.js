@@ -16,9 +16,10 @@
 //   POST { mode: "status",     orgId } → connected, and to which Notion workspace
 //   POST { mode: "disconnect", orgId } → forget the connection
 //   POST { mode: "search",     orgId, query?, cursor? } → pages it can see, newest first
+//   POST { mode: "tree",       orgId } → every page and database it can see, with parents, for the picker's tree
 //   POST { mode: "page",       orgId, pageId } → { title, html } ready for the document import
 import { createClient } from "@supabase/supabase-js";
-import { blocksToHtml, pageTitle } from "../server/notion.js";
+import { blocksToHtml, pageTitle, plain } from "../server/notion.js";
 
 export const config = { runtime: "edge" };
 
@@ -286,6 +287,46 @@ export default async function handler(req) {
           .map(p => ({ id: p.id, title: pageTitle(p), lastEdited: p.last_edited_time || null, url: p.url || null })),
         cursor: j.has_more ? j.next_cursor : null,
       });
+    }
+
+    // Everything the connection can see, pages AND databases, each with its
+    // parent, so the picker can draw it the way Notion's sidebar does instead
+    // of as one long list. Notion has no "give me the tree" call; search is
+    // the only way to list what was shared, so it is paged through here, up to
+    // ten pages of a hundred, newest first. More than that and the oldest are
+    // left out, and the answer says so.
+    if (body.mode === "tree") {
+      const ref = (p) => (p ? {
+        type: p.type || null,
+        id: p.page_id || p.data_source_id || p.database_id || p.block_id || null,
+        databaseId: p.database_id || null,
+      } : null);
+      const items = [];
+      let cursor = null, calls = 0;
+      do {
+        const payload = { page_size: 100, sort: { direction: "descending", timestamp: "last_edited_time" } };
+        if (cursor) payload.start_cursor = cursor;
+        const r = await notion(ctx, "/search", { method: "POST", body: JSON.stringify(payload) });
+        const j = await r.json().catch(() => null);
+        if (!r.ok) return json({ error: j?.message || `HTTP ${r.status}`, code: "notion_error" }, 502);
+        for (const o of j.results || []) {
+          if (o.in_trash || o.archived) continue;
+          if (o.object === "page") {
+            items.push({ id: o.id, kind: "page", title: pageTitle(o), lastEdited: o.last_edited_time || null, parent: ref(o.parent) });
+          } else if (o.object === "data_source") {
+            // A database's content. Its own parent is the database; where the
+            // database sits is database_parent.
+            items.push({ id: o.id, kind: "db", title: plain(o.title).trim(), databaseId: o.parent?.database_id || null,
+              lastEdited: o.last_edited_time || null, parent: ref(o.database_parent) });
+          } else if (o.object === "database") {
+            items.push({ id: o.id, kind: "db", title: plain(o.title).trim(), databaseId: o.id,
+              lastEdited: o.last_edited_time || null, parent: ref(o.parent) });
+          }
+        }
+        cursor = j.has_more ? j.next_cursor : null;
+        calls++;
+      } while (cursor && calls < 10);
+      return json({ items, truncated: !!cursor });
     }
 
     if (body.mode === "page") {

@@ -15,6 +15,7 @@ import { getTranslation } from "./translations";
 // sides agree about it because there is one function. Dependency-free, so it
 // loads in the bundle and on the edge alike, the way entitlements.js does.
 import { fitItems as figmaFit, svgPathToSubpaths } from "../server/figma.js";
+import { notionTree, notionPath } from "../server/notion.js";
 import { openGooglePicker, openGoogleFolderPicker } from "./googlePicker";
 import BillingSettings from "./BillingSettings";
 import PinterestBoardCount from "./PinterestBoardCount";
@@ -42373,14 +42374,13 @@ function NotionMark({ size = 22, invert = false }) {
 function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode, onClose, onImport }) {
   const de = appLanguage === "de";
   const [status, setStatus] = useState(null);   // null = loading, else { connected, workspace_name, needs_reconnect }
+  const [items, setItems] = useState(null);     // null = loading; the flat list from mode "tree"
+  const [truncated, setTruncated] = useState(false);
   const [query, setQuery] = useState("");
-  const [pages, setPages] = useState([]);
-  const [cursor, setCursor] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(() => new Set()); // expanded page / database ids
   const [err, setErr] = useState("");
   const [picked, setPicked] = useState([]);     // [{ id, title }]
   const [connecting, setConnecting] = useState(false);
-  const reqRef = useRef(0);
 
   const call = async (body) => {
     const r = await fetch("/api/notion", {
@@ -42398,27 +42398,31 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
     return () => { alive = false; };
   }, [orgId]); // eslint-disable-line
 
-  // The newest pages first; typing narrows them, with a short pause so every
-  // keystroke is not a request.
-  const load = async (q, after = null) => {
-    const token = ++reqRef.current;
-    setLoading(true); setErr("");
-    const j = await call({ mode: "search", query: q, cursor: after });
-    if (token !== reqRef.current) return;
-    setLoading(false);
-    if (!j.ok) {
-      if (j.code === "reconnect_required") setStatus(s => ({ ...(s || {}), connected: true, needs_reconnect: true }));
-      else setErr(de ? "Notion hat nicht geantwortet. Versuch es gleich noch einmal." : "Notion did not answer. Try again in a moment.");
-      return;
-    }
-    setPages(prev => after ? [...prev, ...(j.pages || [])] : (j.pages || []));
-    setCursor(j.cursor || null);
-  };
+  // Everything shared, once, with parents; the tree and the search are both
+  // drawn from it here, so typing costs no requests.
   useEffect(() => {
     if (!status?.connected || status.needs_reconnect) return;
-    const t = setTimeout(() => load(query.trim()), query ? 350 : 0);
-    return () => clearTimeout(t);
-  }, [query, status?.connected, status?.needs_reconnect]); // eslint-disable-line
+    let alive = true;
+    call({ mode: "tree" }).then(j => {
+      if (!alive) return;
+      if (!j.ok) {
+        if (j.code === "reconnect_required") setStatus(s => ({ ...(s || {}), connected: true, needs_reconnect: true }));
+        else setErr(de ? "Notion hat nicht geantwortet. Versuch es gleich noch einmal." : "Notion did not answer. Try again in a moment.");
+        setItems([]);
+        return;
+      }
+      setItems(j.items || []);
+      setTruncated(!!j.truncated);
+    });
+    return () => { alive = false; };
+  }, [status?.connected, status?.needs_reconnect]); // eslint-disable-line
+
+  const tree = useMemo(() => notionTree(items || []), [items]);
+  // One thing shared at the top usually means one workspace root: open it, so
+  // the first thing on screen is its contents rather than a single row.
+  useEffect(() => {
+    if (tree.roots.length === 1 && tree.roots[0].children.length) setOpen(new Set([tree.roots[0].id]));
+  }, [tree]);
 
   const connect = async () => {
     setConnecting(true); setErr("");
@@ -42429,7 +42433,7 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
     }
   };
   const toggle = (p) => setPicked(prev => prev.some(x => x.id === p.id) ? prev.filter(x => x.id !== p.id) : [...prev, { id: p.id, title: p.title }]);
-  const when = (iso) => { try { return new Date(iso).toLocaleDateString(de ? "de-DE" : "en-GB", { day: "2-digit", month: "short", year: "numeric" }); } catch { return ""; } };
+  const flip = (id) => setOpen(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const btn = (primary) => ({
     padding: "10px 18px", borderRadius: 999, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: FONT,
@@ -42463,6 +42467,68 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
     );
   }
 
+  const tile = (kind) => (
+    <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
+      {kind === "db"
+        ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg>
+        : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
+    </div>
+  );
+  // The checkbox the group dialog in the messenger draws, not a new one.
+  const box = (sel) => (
+    <div style={{
+      width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+      background: sel ? "#15151c" : "transparent",
+      border: `1.5px solid ${sel ? "#15151c" : (darkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.25)")}`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      {sel && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>}
+    </div>
+  );
+  const nameOf = (n) => n.title || (de ? "Ohne Titel" : "Untitled");
+
+  // One row of the tree: a chevron when there is something inside, the page
+  // or database glyph, the name, and a box to tick for pages. A database is a
+  // folder here: it opens, it is not imported as a whole.
+  const row = (n, depth) => {
+    const isPage = n.kind === "page";
+    const kids = n.children.length;
+    const isOpen = open.has(n.id);
+    const sel = isPage && picked.some(x => x.id === n.id);
+    return (
+      <Fragment key={n.id}>
+        <div onClick={() => (isPage ? toggle(n) : flip(n.id))} className="hover-row"
+          style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", paddingLeft: 6 + depth * 20, borderRadius: 10, cursor: "pointer" }}>
+          <div onClick={(e) => { e.stopPropagation(); if (kids) flip(n.id); }}
+            style={{ width: 20, height: 20, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+              color: theme.textDim, visibility: kids ? "visible" : "hidden", cursor: "pointer" }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+              style={{ transform: isOpen ? "rotate(90deg)" : "none", transition: "transform .15s ease" }}><polyline points="9 6 15 12 9 18" /></svg>
+          </div>
+          {tile(n.kind)}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{ fontSize: 13.5, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: isPage ? 400 : 500 }}>
+              {nameOf(n)}
+            </span>
+            {!isPage && (
+              <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>
+                {de ? `${kids} ${kids === 1 ? "Eintrag" : "Einträge"}` : `${kids} ${kids === 1 ? "entry" : "entries"}`}
+              </span>
+            )}
+          </div>
+          {isPage && box(sel)}
+        </div>
+        {isOpen && n.children.map(c => row(c, depth + 1))}
+      </Fragment>
+    );
+  };
+
+  const q = query.trim().toLowerCase();
+  const hits = q
+    ? [...tree.byId.values()].filter(n => n.kind === "page" && (n.title || "").toLowerCase().includes(q)).slice(0, 100)
+    : [];
+
   return createPortal(
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -42473,7 +42539,7 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
         transition={{ duration: 0.22, ease: [0.22, 0.68, 0.35, 1.0] }}
         onClick={e => e.stopPropagation()}
         style={{
-          width: "100%", maxWidth: 520, maxHeight: "82vh", display: "flex", flexDirection: "column",
+          width: "100%", maxWidth: 560, height: "min(640px, 82vh)", display: "flex", flexDirection: "column",
           background: darkMode ? "#1c1c26" : "#fff",
           border: `1px solid ${theme.borderFaint}`, borderRadius: 20, overflow: "hidden",
           boxShadow: "0 24px 64px rgba(0,0,0,0.32)",
@@ -42481,7 +42547,7 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
         <div style={{ padding: "18px 22px 14px", borderBottom: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", gap: 12 }}>
           {/* White in both themes, the ground the mark is drawn for; the
               border keeps the tile visible on the light card. Same tile the
-              Pinterest connect dialog uses. */}
+              connect dialog uses. */}
           <div style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, display: "flex",
             alignItems: "center", justifyContent: "center", background: "#fff", border: `1px solid ${theme.borderFaint}` }}>
             <NotionMark size={26} />
@@ -42489,7 +42555,7 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{de ? "Aus Notion importieren" : "Import from Notion"}</div>
             <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
-              {status?.connected && !status.needs_reconnect && status.workspace_name
+              {status.workspace_name
                 ? (de ? `Seiten aus ${status.workspace_name}, als Kopie in deine Dokumente.` : `Pages from ${status.workspace_name}, copied into your documents.`)
                 : (de ? "Notion-Seiten werden als Kopie zu Dokumenten." : "Notion pages become documents, as a copy.")}
             </div>
@@ -42500,75 +42566,70 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
           </motion.div>
         </div>
 
-        <>
-            <div style={{ padding: "14px 22px 8px" }}>
-              <input value={query} onChange={e => setQuery(e.target.value)} autoFocus
-                placeholder={de ? "Seiten durchsuchen…" : "Search pages…"}
-                style={{
-                  width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 12,
-                  background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
-                  border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
-                  color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none",
-                }} />
+        <div style={{ padding: "14px 22px 8px" }}>
+          <input value={query} onChange={e => setQuery(e.target.value)} autoFocus
+            placeholder={de ? "Seiten durchsuchen…" : "Search pages…"}
+            style={{
+              width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 12,
+              background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
+              border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+              color: theme.text, fontSize: 14, fontFamily: FONT, outline: "none",
+            }} />
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "4px 12px 8px" }}>
+          {items === null && (
+            <div style={{ padding: 28, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Lädt…" : "Loading…"}</div>
+          )}
+          {items !== null && items.length === 0 && !err && (
+            <div style={{ padding: "28px 16px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
+              {de ? "i7OS sieht noch keine Seiten." : "i7OS cannot see any pages yet."}
             </div>
-            <div style={{ flex: 1, minHeight: 160, overflowY: "auto", padding: "4px 12px 8px" }}>
-              {pages.length === 0 && !loading && (
-                <div style={{ padding: "28px 16px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
-                  {query.trim()
-                    ? (de ? "Keine Seite gefunden." : "No page found.")
-                    : (de ? "i7OS sieht noch keine Seiten." : "i7OS cannot see any pages yet.")}
+          )}
+          {items !== null && !q && tree.roots.map(n => row(n, 0))}
+          {items !== null && q && hits.length === 0 && (
+            <div style={{ padding: "28px 16px", textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Keine Seite gefunden." : "No page found."}</div>
+          )}
+          {/* Searching flattens the tree; each hit says where it lives. */}
+          {items !== null && q && hits.map(n => {
+            const sel = picked.some(x => x.id === n.id);
+            const path = notionPath(tree.byId, n.id);
+            return (
+              <div key={n.id} onClick={() => toggle(n)} className="hover-row"
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 10, cursor: "pointer" }}>
+                {tile("page")}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nameOf(n)}</div>
+                  {path.length > 0 && (
+                    <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {path.map(t => t || (de ? "Ohne Titel" : "Untitled")).join(" › ")}
+                    </div>
+                  )}
                 </div>
-              )}
-              {pages.map(p => {
-                const sel = picked.some(x => x.id === p.id);
-                return (
-                  <div key={p.id} onClick={() => toggle(p)} className="hover-row"
-                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 10px", borderRadius: 12, cursor: "pointer" }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: theme.text }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {p.title || (de ? "Ohne Titel" : "Untitled")}
-                      </div>
-                      {p.lastEdited && <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>{(de ? "Bearbeitet " : "Edited ") + when(p.lastEdited)}</div>}
-                    </div>
-                    <div style={{
-                      width: 20, height: 20, borderRadius: 6, flexShrink: 0,
-                      background: sel ? "#15151c" : "transparent",
-                      border: `1.5px solid ${sel ? "#15151c" : (darkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.25)")}`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}>
-                      {sel && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>}
-                    </div>
-                  </div>
-                );
-              })}
-              {loading && <div style={{ padding: 16, textAlign: "center", fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>{de ? "Lädt…" : "Loading…"}</div>}
-              {cursor && !loading && (
-                <div onClick={() => load(query.trim(), cursor)} className="hover-row"
-                  style={{ padding: "10px", textAlign: "center", fontSize: 12.5, fontFamily: FONT, color: theme.textSub, borderRadius: 10, cursor: "pointer" }}>
-                  {de ? "Mehr laden" : "Load more"}
-                </div>
-              )}
-              {err && <div style={{ padding: "8px 10px", fontSize: 12, fontFamily: FONT, color: "#E86767" }}>{err}</div>}
-            </div>
-            <div style={{ padding: "12px 22px 14px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ flex: 1, fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.45 }}>
-                {de
-                  ? "Seite fehlt? In Notion auf der Seite oben rechts „…“, dann Verbindungen, i7OS hinzufügen."
-                  : "Page missing? In Notion, open the page’s “…” menu at the top right, then Connections, and add i7OS."}
+                {box(sel)}
               </div>
-              <motion.button whileTap={{ scale: 0.97 }} disabled={!picked.length}
-                onClick={() => { if (picked.length) onImport(picked); }}
-                style={{ ...btn(true), opacity: picked.length ? 1 : 0.4, cursor: picked.length ? "pointer" : "default", flexShrink: 0 }}>
-                {picked.length
-                  ? (de ? `Importieren (${picked.length})` : `Import (${picked.length})`)
-                  : (de ? "Importieren" : "Import")}
-              </motion.button>
+            );
+          })}
+          {truncated && (
+            <div style={{ padding: "10px", fontSize: 11.5, fontFamily: FONT, color: theme.textDim, textAlign: "center" }}>
+              {de ? "Gezeigt werden die 1.000 zuletzt bearbeiteten Seiten." : "Showing the 1,000 most recently edited pages."}
             </div>
-        </>
+          )}
+          {err && <div style={{ padding: "8px 10px", fontSize: 12, fontFamily: FONT, color: "#E86767" }}>{err}</div>}
+        </div>
+        <div style={{ padding: "12px 22px 14px", borderTop: `1px solid ${theme.borderFaint}`, display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ flex: 1, fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.45 }}>
+            {de
+              ? "Seite fehlt? In Notion auf der Seite oben rechts „…“, dann Verbindungen, i7OS hinzufügen."
+              : "Page missing? In Notion, open the page’s “…” menu at the top right, then Connections, and add i7OS."}
+          </div>
+          <motion.button whileTap={{ scale: 0.97 }} disabled={!picked.length}
+            onClick={() => { if (picked.length) onImport(picked); }}
+            style={{ ...btn(true), opacity: picked.length ? 1 : 0.4, cursor: picked.length ? "pointer" : "default", flexShrink: 0 }}>
+            {picked.length
+              ? (de ? `Importieren (${picked.length})` : `Import (${picked.length})`)
+              : (de ? "Importieren" : "Import")}
+          </motion.button>
+        </div>
       </motion.div>
     </motion.div>,
     document.body,

@@ -123,3 +123,64 @@ export function blocksToHtml(blocks) {
   }
   return html;
 }
+
+// The picker's tree, built from what `mode: "tree"` returns: pages and
+// databases, each with its parent. Used by the browser (NotionImportModal) and
+// by scripts/test-notion-html.mjs.
+//
+// Where a parent is not in the list (a page under something that was not
+// shared, or under a block such as a column), the item goes to the top, the
+// same place Notion's own sidebar would show a page shared on its own.
+export function notionTree(items) {
+  const byId = new Map();
+  const dbByDatabaseId = new Map();
+  for (const it of items || []) {
+    if (!it?.id || byId.has(it.id)) continue;
+    byId.set(it.id, { ...it, children: [], parentId: null });
+    if (it.kind === "db" && it.databaseId) dbByDatabaseId.set(it.databaseId, it.id);
+  }
+  const parentOf = (n) => {
+    const p = n.parent;
+    if (!p || !p.id) return null;
+    if (p.type === "page_id") return byId.has(p.id) ? p.id : null;
+    if (p.type === "data_source_id") return byId.has(p.id) ? p.id : (p.databaseId && dbByDatabaseId.get(p.databaseId)) || null;
+    if (p.type === "database_id") return dbByDatabaseId.get(p.id) || (byId.has(p.id) ? p.id : null);
+    return null; // workspace, block, agent
+  };
+  const roots = [];
+  for (const n of byId.values()) {
+    const pid = parentOf(n);
+    // A parent chain that loops back on itself cannot happen in Notion; this
+    // only keeps a malformed answer from hanging the page.
+    let loop = false;
+    for (let q = pid, guard = 0; q && guard < 50; guard++) {
+      if (q === n.id) { loop = true; break; }
+      const up = byId.get(q);
+      q = up ? parentOf(up) : null;
+    }
+    if (pid && !loop) { n.parentId = pid; byId.get(pid).children.push(n); }
+    else roots.push(n);
+  }
+  const byTitle = (a, b) => (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" });
+  const byNewest = (a, b) => String(b.lastEdited || "").localeCompare(String(a.lastEdited || ""));
+  const sortAll = (arr, parent) => {
+    // A database's entries newest first (meeting notes, projects); everything
+    // else alphabetically, pages before databases, as a sidebar reads.
+    if (parent?.kind === "db") arr.sort(byNewest);
+    else arr.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "db" ? 1 : -1) || byTitle(a, b));
+    for (const x of arr) sortAll(x.children, x);
+  };
+  sortAll(roots, null);
+  return { roots, byId };
+}
+
+// The titles above an item, top first, for showing where a search hit lives.
+export function notionPath(byId, id) {
+  const out = [];
+  let n = byId.get(id);
+  for (let guard = 0; n && n.parentId && guard < 50; guard++) {
+    n = byId.get(n.parentId);
+    if (n) out.unshift(n.title || "");
+  }
+  return out;
+}
