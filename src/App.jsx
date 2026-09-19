@@ -2293,7 +2293,6 @@ function DashboardTour({ appLanguage = "de", darkMode = false, onClose }) {
   const [shown, setShown] = useState(false);
   const [geo, setGeo] = useState(() => ({ vw: window.innerWidth, vh: window.innerHeight, target: null, sphere: null }));
   const [cardH, setCardH] = useState(0);
-  const [talking, setTalking] = useState(false);
   const [clipsReady, setClipsReady] = useState(false);
   const idxRef = useRef(0);
   const clipsRef = useRef(null);
@@ -2372,16 +2371,8 @@ function DashboardTour({ appLanguage = "de", darkMode = false, onClose }) {
   useEffect(() => {
     const a = new Audio();
     a.preload = "auto";
-    const on = () => setTalking(true);
-    const off = () => setTalking(false);
-    a.addEventListener("playing", on);
-    a.addEventListener("pause", off);
-    a.addEventListener("ended", off);
     audioRef.current = a;
     return () => {
-      a.removeEventListener("playing", on);
-      a.removeEventListener("pause", off);
-      a.removeEventListener("ended", off);
       a.pause();
       audioRef.current = null;
     };
@@ -2459,11 +2450,8 @@ function DashboardTour({ appLanguage = "de", darkMode = false, onClose }) {
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
-  const { vw, vh, target: t, sphere: sp } = geo;
+  const { vw, vh, target: t } = geo;
   const hole = tourHole(t, step.target, vw, vh);
-  const sphereR = sp ? Math.min(sp.w, sp.h) / 2 + 4 : 0;
-  const spX = sp ? sp.x + sp.w / 2 : 0;
-  const spY = sp ? sp.y + sp.h / 2 : 0;
 
   // The card sits on whichever side of the element has room, above for the
   // bar at the bottom, below for the bell at the top, and in the middle when
@@ -2505,15 +2493,6 @@ function DashboardTour({ appLanguage = "de", darkMode = false, onClose }) {
         maskSize: "100% 100%", WebkitMaskSize: "100% 100%",
         maskRepeat: "no-repeat", WebkitMaskRepeat: "no-repeat",
       }} />
-      {/* Rings off the sphere while it speaks, so it is plain where the
-          voice is coming from. */}
-      <svg width={vw} height={vh} style={{ position: "absolute", inset: 0, display: "block", pointerEvents: "none" }}>
-        {sp && talking && [0, 1].map(k => (
-          <motion.circle key={k} cx={spX} cy={spY} fill="none" stroke={darkMode ? "#ffffff" : "#15151c"} strokeWidth="1.5"
-            initial={{ r: sphereR, opacity: 0.45 }} animate={{ r: sphereR + 22, opacity: 0 }}
-            transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut", delay: k * 0.8 }} />
-        ))}
-      </svg>
 
       <div ref={cardRef} style={{
         position: "absolute", left, top, width: W, boxSizing: "border-box",
@@ -2528,21 +2507,6 @@ function DashboardTour({ appLanguage = "de", darkMode = false, onClose }) {
         <AnimatePresence mode="wait" initial={false}>
           <motion.div key={idx} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.18 }}>
-            {step.key === "swipe" && (
-              <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-                {[{ up: true, label: de ? "KI" : "AI" }, { up: false, label: de ? "Übersicht" : "Overview" }].map(g => (
-                  <div key={g.label} style={{ flex: 1, display: "flex", alignItems: "center", gap: 10,
-                    padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.06)" }}>
-                    <motion.svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8"
-                      strokeLinecap="round" strokeLinejoin="round"
-                      animate={{ y: g.up ? [3, -3, 3] : [-3, 3, -3] }} transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}>
-                      {g.up ? <path d="M12 19V5M6 11l6-6 6 6" /> : <path d="M12 5v14M6 13l6 6 6-6" />}
-                    </motion.svg>
-                    <span style={{ fontSize: 13, color: "rgba(255,255,255,0.8)" }}>{g.label}</span>
-                  </div>
-                ))}
-              </div>
-            )}
             <div style={{ fontSize: 15, lineHeight: 1.55 }}>{step[lang]}</div>
           </motion.div>
         </AnimatePresence>
