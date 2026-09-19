@@ -171,6 +171,7 @@ function publicBrandSnapshot(profile, sections) {
 const ACCOUNT_LOCAL_KEYS = [
   "agencyos-llm-keys",              // the API keys somebody pays for
   "agencyos-llm-provider",
+  "agencyos-ai-key-intro",          // "seen" the key dialog: a fact about a person, not a browser
   "agencyos-google-token",          // Google access token
   "agencyos-google-token-ts",
   "agencyos-google-refresh-token",  // the long-lived one
