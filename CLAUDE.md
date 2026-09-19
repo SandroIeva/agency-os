@@ -297,7 +297,7 @@ Multi-tenant: nearly every row carries `org_id` (workspace) and often `project_i
 - **Files/Assets:** `user_files`, `user_folders`, `user_drive_files`, `file_metadata`, `moodboards`, `moodboard_items`
 - **Whiteboard:** `whiteboards`, `whiteboard_items`, `whiteboard_shares`
 - **Chat:** `chat_conversations`, `chat_participants`, `chat_messages`
-- **Public links:** `public_shares` (token → one thing in a workspace, today only `kind: moodboard`; one live link per thing, revoked not deleted; NO public read policy, the endpoint reads it with the service key so a token cannot be used to enumerate a workspace's other links)
+- **Public links:** `public_shares` (token → one thing in a workspace, `kind: moodboard` or `document`; one live link per thing, revoked not deleted; NO public read policy, the endpoint reads it with the service key so a token cannot be used to enumerate a workspace's other links). A link is LIVE, never a snapshot: it shows the thing as it is now. Publishing a document is guarded in the database (`public_shares_guard_document`, SECURITY INVOKER, on insert AND on a re-pointing update): only its author or a workspace admin, and only a document they can read, since a document can be private. Tested against production inside a rollback. The UI for every kind is ONE component, `PublicLinkPanel`; the document page is rendered by `server/docRender.js` (`npm run test:docs`).
 - **Brand:** `brand_profile`, `brand_shares`, `brand_canvases` (ONE jsonb doc
   per canvas — see the pitfall below), `brand_canvas_versions` (the previous
   doc on every change, 20 deep, written by a `before update` trigger;

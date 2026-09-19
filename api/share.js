@@ -1,4 +1,5 @@
-// A public link to one thing inside a workspace. Today that is a moodboard.
+// A public link to one thing inside a workspace: a moodboard or a document.
+// A document link is LIVE, it always shows the document as it is now.
 //
 // The point of this endpoint is that it answers with CONTENT, on a plain GET,
 // with no JavaScript. The app's own share route (?b=…) is the SPA: fetched
@@ -16,6 +17,7 @@
 //
 // Edge runtime: the Hobby plan allows 12 Node functions and all 12 exist.
 import { createClient } from "@supabase/supabase-js";
+import { docBlocksFromContent, docSharePage } from "../server/docRender.js";
 
 export const config = { runtime: "edge" };
 
@@ -35,7 +37,8 @@ const HEADERS = {
   // it to everybody: an agent fetched the json, and the next person to open
   // the link in a browser was served that json as their page. Seen live,
   // x-vercel-cache: HIT, before this line existed.
-  "vary": "accept",
+  // accept-language: a document page says "updated" in the reader's language.
+  "vary": "accept, accept-language",
 };
 
 const notFound = (format) => {
@@ -188,7 +191,27 @@ export default async function handler(req) {
   // the two it is, is nobody's business who holds neither.
   const { data: rows } = await db.rpc("public_share_open", { p_token: token });
   const share = Array.isArray(rows) ? rows[0] : rows;
-  if (!share || share.kind !== "moodboard") return notFound(format);
+  if (!share) return notFound(format);
+
+  if (share.kind === "document") {
+    const { data: doc } = await db.from("brand_documents")
+      .select("id, title, content, kind, file_url, org_id, updated_at")
+      .eq("id", share.target_id).maybeSingle();
+    // A deleted document, or a link whose target sits in another workspace,
+    // is simply gone.
+    if (!doc || doc.org_id !== share.org_id) return notFound(format);
+    const de = /^de\b/i.test((req.headers.get("accept-language") || "").trim());
+    const page = docSharePage({ share, doc, blocks: doc.kind === "pdf" ? [] : docBlocksFromContent(doc.content), de, app: APP });
+    if (format === "json") {
+      return new Response(page.json, { headers: { ...HEADERS, "content-type": "application/json; charset=utf-8" } });
+    }
+    if (format === "md") {
+      return new Response(page.md, { headers: { ...HEADERS, "content-type": "text/markdown; charset=utf-8" } });
+    }
+    return new Response(page.html, { headers: { ...HEADERS, "content-type": "text/html; charset=utf-8" } });
+  }
+
+  if (share.kind !== "moodboard") return notFound(format);
 
   const { data: board } = await db.from("moodboards")
     .select("id, title, description, color_palette, updated_at, archived, org_id")

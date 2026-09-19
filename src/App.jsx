@@ -36554,10 +36554,6 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   // What answers the link is api/share.js, which sends the board as html, json
   // or markdown, so an agent that runs no JavaScript still gets the pictures.
   const [shareOpen, setShareOpen] = useState(false);
-  const [shareToken, setShareToken] = useState(null);
-  const [shareBusy, setShareBusy] = useState(false);
-  const [shareCopied, setShareCopied] = useState(false);
-  const [shareError, setShareError] = useState("");
   const fileInputRef = useRef(null);
   const canvasRef = useRef(null);
   const accent = theme.accent || "#8B7AFF";
@@ -36595,57 +36591,13 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   const closeBoard = () => {
     activeMoodboardRef.current = { boardId: null, orgId: userOrg?.id };
     closePinPick(); setPinConnectAsk(null); setPinSync(null);
-    setBoardFullscreen(false); setZoom(1); setTagFilter(null); setColorFilter(null); setActiveBoard(null); setItems([]); setSelectedItem(null); setShareOpen(false); setShareToken(null); setShareError(""); setTitleEdit(null);
+    setBoardFullscreen(false); setZoom(1); setTagFilter(null); setColorFilter(null); setActiveBoard(null); setItems([]); setSelectedItem(null); setShareOpen(false); setTitleEdit(null);
     // The menu is portalled to the body, so closing the board no longer takes
     // it down with it. It has to be closed by hand or it hangs over the
     // overview, pointing at a button that is gone.
     setBoardAddOpen(null); loadBoards(); };
 
-  // ── The board's public link ──
-  const shareUrl = shareToken
-    ? `${typeof window !== "undefined" && window.location?.host && !/localhost|127\.0\.0\.1/i.test(window.location.host)
-        ? window.location.origin : "https://app.i7os.com"}/s/${shareToken}`
-    : null;
-  // Whether one exists is only worth asking when somebody opens the menu.
-  const loadShare = async (boardId) => {
-    const { data } = await supabase.from("public_shares")
-      .select("token").eq("kind", "moodboard").eq("target_id", boardId).is("revoked_at", null).maybeSingle();
-    setShareToken(data?.token || null);
-  };
-  const createShare = async () => {
-    if (shareBusy || !activeBoard || !userOrg?.id) return;
-    setShareBusy(true); setShareError("");
-    // No 0/O/I/l/1: these links get read aloud and typed by hand.
-    const abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-    const slug = (activeBoard.title || "moodboard").toLowerCase().normalize("NFKD")
-      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 28) || "moodboard";
-    let token = null;
-    for (let i = 0; i < 3 && !token; i++) {
-      const cand = `${slug}-${Array.from({ length: 6 }, () => abc[Math.floor(Math.random() * abc.length)]).join("")}`;
-      const { error } = await supabase.from("public_shares").insert({
-        token: cand, kind: "moodboard", target_id: activeBoard.id, org_id: userOrg.id,
-        created_by: session?.user?.id || null,
-      });
-      if (!error) { token = cand; break; }
-      // One live link per board, so a second press finds the first one rather
-      // than minting a link nobody can revoke.
-      if (error.code === "23505") { await loadShare(activeBoard.id); setShareBusy(false); return; }
-      if (i === 2) setShareError(appLanguage === "de"
-        ? "Link konnte nicht erstellt werden." : "The link could not be created.");
-    }
-    if (token) setShareToken(token);
-    setShareBusy(false);
-  };
-  const revokeShare = async () => {
-    if (!shareToken) return;
-    setShareBusy(true);
-    await supabase.from("public_shares").update({ revoked_at: new Date().toISOString() }).eq("token", shareToken);
-    setShareToken(null); setShareBusy(false); setShareCopied(false);
-  };
-  const copyShareUrl = () => {
-    try { navigator.clipboard.writeText(shareUrl); } catch (_) {}
-    setShareCopied(true); setTimeout(() => setShareCopied(false), 1600);
-  };
+  // The board's public link lives in PublicLinkPanel, shared with documents.
 
   // ── Board CRUD ──
   const createBoard = async () => {
@@ -38066,7 +38018,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                 header is not transformed. */}
             <div style={{ position: "relative" }}>
               <motion.div whileTap={{ scale: 0.92 }}
-                onClick={() => { const open = !shareOpen; setShareOpen(open); setShareError(""); if (open && activeBoard) loadShare(activeBoard.id); }}
+                onClick={() => setShareOpen(o => !o)}
                 title={appLanguage === "de" ? "Link teilen" : "Share link"}
                 style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${shareOpen ? accent : theme.borderFaint}`,
                   background: shareOpen ? (darkMode ? "rgba(255,255,255,0.08)" : "#f1f2f4") : "transparent",
@@ -38088,48 +38040,14 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                       <div style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
                         {appLanguage === "de" ? "Board teilen" : "Share this board"}
                       </div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
-                        {shareToken
-                          ? (appLanguage === "de"
-                              ? "Wer den Link hat, sieht die Bilder, ohne Konto. Der Link zeigt immer den aktuellen Stand."
-                              : "Anyone with the link sees the images, no account needed. It always shows the current state.")
-                          : (appLanguage === "de"
-                              ? "Erzeugt einen öffentlichen Link zu diesem Board, den du auch einem KI-Agenten geben kannst."
-                              : "Creates a public link to this board, one you can also hand to an AI agent.")}
-                      </div>
-                      {shareToken ? (
-                        <>
-                          <div style={{ padding: "9px 11px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`,
-                            background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", fontSize: 11.5, fontFamily: FONT,
-                            color: theme.text, wordBreak: "break-all", lineHeight: 1.45 }}>{shareUrl}</div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <motion.div whileTap={{ scale: 0.97 }} onClick={copyShareUrl}
-                              style={{ flex: 1, textAlign: "center", padding: "9px 14px", borderRadius: 10, cursor: "pointer",
-                                background: "#15151c", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
-                              {shareCopied ? (appLanguage === "de" ? "Kopiert" : "Copied") : (appLanguage === "de" ? "Link kopieren" : "Copy link")}
-                            </motion.div>
-                            <motion.div whileTap={{ scale: 0.97 }} onClick={revokeShare}
-                              style={{ padding: "9px 14px", borderRadius: 10, cursor: shareBusy ? "default" : "pointer", opacity: shareBusy ? 0.6 : 1,
-                                border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>
-                              {appLanguage === "de" ? "Widerrufen" : "Revoke"}
-                            </motion.div>
-                          </div>
-                          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
-                            {appLanguage === "de"
-                              ? "Für Agenten liefert derselbe Link auf Wunsch Daten: ?format=json oder ?format=md."
-                              : "For agents the same link also answers with data: ?format=json or ?format=md."}
-                          </div>
-                        </>
-                      ) : (
-                        <motion.div whileTap={{ scale: 0.97 }} onClick={createShare}
-                          style={{ textAlign: "center", padding: "10px 14px", borderRadius: 10, cursor: shareBusy ? "default" : "pointer",
-                            opacity: shareBusy ? 0.6 : 1, background: "#15151c", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 500 }}>
-                          {appLanguage === "de" ? "Link erstellen" : "Create link"}
-                        </motion.div>
-                      )}
-                      {shareError && (
-                        <div style={{ fontSize: 11.5, fontFamily: FONT, color: "#e0645f" }}>{shareError}</div>
-                      )}
+                      <PublicLinkPanel kind="moodboard" targetId={activeBoard?.id} orgId={userOrg?.id} userId={session?.user?.id}
+                        slugFrom={activeBoard?.title || "moodboard"} theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+                        text={{
+                          onDe: "Wer den Link hat, sieht die Bilder, ohne Konto. Der Link zeigt immer den aktuellen Stand.",
+                          onEn: "Anyone with the link sees the images, no account needed. It always shows the current state.",
+                          offDe: "Erzeugt einen öffentlichen Link zu diesem Board, den du auch einem KI-Agenten geben kannst.",
+                          offEn: "Creates a public link to this board, one you can also hand to an AI agent.",
+                        }} />
                     </motion.div>
                   </>
                 )}
@@ -41401,7 +41319,7 @@ async function docExportPDF(title, blocks) {
 const docSafeName = (title) => (title || "Dokument").replace(/[^\wÀ-ɏ\- ]+/g, "").trim().slice(0, 60) || "Dokument";
 
 // Share controls for a document: workspace-wide, specific members, or a project.
-function SharePopover({ doc, ownerProfile, members, shares, projects, canShare = true, theme, darkMode, accent, onClose, onSetVisibility, onSetProject, onToggleShare, appLanguage = "de" }) {
+function SharePopover({ doc, ownerProfile, members, shares, projects, canShare = true, theme, darkMode, accent, onClose, onSetVisibility, onSetProject, onToggleShare, appLanguage = "de", orgId = null, userId = null }) {
   const de = appLanguage === "de";
   // Non-owners can only export — open straight on the export tab.
   const [tab, setTab] = useState(canShare ? "share" : "export");
@@ -41455,7 +41373,7 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, canShare =
   };
   return (
     <div className="doc-share-card" onMouseDown={(e) => e.stopPropagation()}
-      style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 320, zIndex: 40, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflow: "hidden" }}>
+      style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 320, zIndex: 40, background: darkMode ? "#1c1c26" : "#fff", border: `1px solid ${theme.borderFaint}`, borderRadius: 16, boxShadow: "0 16px 44px rgba(0,0,0,0.18)", overflowX: "hidden", overflowY: "auto", maxHeight: "calc(100vh - 150px)" }}>
       {/* Tab switcher (Teilen / Exportieren) — closes on outside click */}
       <div style={{ display: "flex", alignItems: "center", padding: "10px 12px 8px" }}>
         <div style={{ flex: 1, display: "flex", gap: 4, padding: 3, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.05)" : "#eceef1" }}>
@@ -41524,6 +41442,34 @@ function SharePopover({ doc, ownerProfile, members, shares, projects, canShare =
           </OptBlock>
         </div>
       </>)}
+
+
+      {/* Publishing: a public, read-only page of this document at /s/<token>.
+          Live, it always shows the document as it is now. The same panel the
+          moodboards use. */}
+      {tab === "share" && (
+        <div style={{ padding: "12px 14px 14px", borderTop: `1px solid ${darkMode ? "rgba(255,255,255,0.06)" : "#f0f0f3"}`, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ color: accent, lineHeight: 0 }}>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 0 0 18M12 3a14 14 0 0 1 0 18"/></svg>
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: FONT }}>{de ? "Im Web veröffentlichen" : "Publish to the web"}</span>
+          </div>
+          <PublicLinkPanel kind="document" targetId={doc.id} orgId={orgId} userId={userId}
+            slugFrom={doc.title || "dokument"} canPublish={canShare}
+            theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+            text={{
+              offDe: "Macht das Dokument über einen Link für alle lesbar, ohne Konto. Die Seite zeigt immer den aktuellen Stand.",
+              offEn: "Makes the document readable by anyone with the link, no account needed. The page always shows the current state.",
+              onDe: "Veröffentlicht. Wer den Link hat, kann das Dokument lesen. Deine Änderungen sind dort sofort zu sehen.",
+              onEn: "Published. Anyone with the link can read the document. Your changes show up there straight away.",
+              notAllowedDe: "Nur der Autor oder ein Admin kann dieses Dokument veröffentlichen.",
+              notAllowedEn: "Only the author or an admin can publish this document.",
+              createDe: "Veröffentlichen", createEn: "Publish",
+              revokeDe: "Zurückziehen", revokeEn: "Unpublish",
+            }} />
+        </div>
+      )}
 
       {tab === "export" && (
         <div style={{ padding: 6 }}>
@@ -42288,6 +42234,107 @@ const notionDbIconKey = (title) => {
   if (/dokument|document|docs|wiki|notiz|notes/.test(t)) return "docs";
   return "table";
 };
+
+// ── A public link (/s/<token>) ──────────────────────────────────────────────
+// ONE panel for everything that can be published, moodboards and documents,
+// so publishing looks and works the same everywhere. It finds the thing's live
+// link, makes one, copies it and withdraws it. The link is a row in
+// public_shares and always shows the thing as it is NOW, not a snapshot; what
+// answers it is api/share.js, as html, json or markdown. The database decides
+// who may publish (a document: its author or an admin); this only asks.
+function publicLinkUrl(token) {
+  const own = typeof window !== "undefined" && window.location?.host && !/localhost|127\.0\.0\.1/i.test(window.location.host);
+  return `${own ? window.location.origin : "https://app.i7os.com"}/s/${token}`;
+}
+function PublicLinkPanel({ kind, targetId, orgId, userId, slugFrom = "", canPublish = true, text = {}, theme, darkMode, appLanguage = "de" }) {
+  const de = appLanguage === "de";
+  const [token, setToken] = useState(undefined);   // undefined = still asking, null = not published
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    const { data } = await supabase.from("public_shares")
+      .select("token").eq("kind", kind).eq("target_id", targetId).is("revoked_at", null).maybeSingle();
+    setToken(data?.token || null);
+  }, [kind, targetId]);
+  useEffect(() => { if (targetId) load(); }, [load, targetId]);
+
+  const create = async () => {
+    if (busy || !targetId || !orgId) return;
+    setBusy(true); setError("");
+    // No 0/O/I/l/1: these links get read aloud and typed by hand.
+    const abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+    const slug = String(slugFrom || kind).toLowerCase().normalize("NFKD")
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 28) || kind;
+    for (let i = 0; i < 3; i++) {
+      const cand = `${slug}-${Array.from({ length: 6 }, () => abc[Math.floor(Math.random() * abc.length)]).join("")}`;
+      const { error: e } = await supabase.from("public_shares").insert({
+        token: cand, kind, target_id: targetId, org_id: orgId, created_by: userId || null,
+      });
+      if (!e) { setToken(cand); setBusy(false); return; }
+      // One live link per thing: a second press finds the first one rather
+      // than minting a link nobody can withdraw.
+      if (e.code === "23505") { await load(); setBusy(false); return; }
+      if (/i7os_share_not_allowed/.test(e.message || "")) {
+        setError(de ? "Nur der Autor oder ein Admin kann das veröffentlichen." : "Only the author or an admin can publish this.");
+        setBusy(false); return;
+      }
+    }
+    setError(de ? "Link konnte nicht erstellt werden." : "The link could not be created.");
+    setBusy(false);
+  };
+  const revoke = async () => {
+    if (!token || busy) return;
+    setBusy(true);
+    await supabase.from("public_shares").update({ revoked_at: new Date().toISOString() }).eq("token", token);
+    setToken(null); setBusy(false); setCopied(false);
+  };
+  const copy = () => {
+    try { navigator.clipboard.writeText(publicLinkUrl(token)); } catch (_) {}
+    setCopied(true); setTimeout(() => setCopied(false), 1600);
+  };
+
+  const solid = { ...primaryBtn(darkMode), border: "none", textAlign: "center", padding: "9px 14px", borderRadius: 10,
+    fontSize: 12.5, fontFamily: FONT, fontWeight: 500, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 };
+  if (token === undefined) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
+        {token ? (de ? text.onDe : text.onEn) : canPublish ? (de ? text.offDe : text.offEn) : (de ? text.notAllowedDe : text.notAllowedEn)}
+      </div>
+      {token ? (
+        <>
+          <div style={{ padding: "9px 11px", borderRadius: 10, border: `1px solid ${theme.borderFaint}`,
+            background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", fontSize: 11.5, fontFamily: FONT,
+            color: theme.text, wordBreak: "break-all", lineHeight: 1.45 }}>{publicLinkUrl(token)}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <motion.div whileTap={{ scale: 0.97 }} onClick={copy} style={{ ...solid, flex: 1, cursor: "pointer", opacity: 1 }}>
+              {copied ? (de ? "Kopiert" : "Copied") : (de ? "Link kopieren" : "Copy link")}
+            </motion.div>
+            {canPublish && (
+              <motion.div whileTap={{ scale: 0.97 }} onClick={revoke}
+                style={{ padding: "9px 14px", borderRadius: 10, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
+                  border: `1px solid ${theme.borderFaint}`, color: theme.textDim, fontSize: 12.5, fontFamily: FONT, whiteSpace: "nowrap" }}>
+                {de ? (text.revokeDe || "Widerrufen") : (text.revokeEn || "Revoke")}
+              </motion.div>
+            )}
+          </div>
+          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
+            {de
+              ? "Für Agenten liefert derselbe Link auf Wunsch Daten: ?format=json oder ?format=md."
+              : "For agents the same link also answers with data: ?format=json or ?format=md."}
+          </div>
+        </>
+      ) : canPublish ? (
+        <motion.div whileTap={{ scale: 0.97 }} onClick={create} style={solid}>
+          {de ? (text.createDe || "Link erstellen") : (text.createEn || "Create link")}
+        </motion.div>
+      ) : null}
+      {error && <div style={{ fontSize: 11.5, fontFamily: FONT, color: "#e0645f" }}>{error}</div>}
+    </div>
+  );
+}
 
 // ── The one "connect this service" dialog ───────────────────────────────────
 // Every integration that is reached for before it is connected asks with THIS,
@@ -43339,7 +43386,7 @@ function DocsTab({ session, userOrg, theme, darkMode, accent: _themeAccent, t, a
               </button>
             </div>
             {shareOpen && (
-              <SharePopover appLanguage={appLanguage} doc={openDoc} ownerProfile={memberById[openDoc.created_by] || {}}
+              <SharePopover appLanguage={appLanguage} orgId={userOrg?.id} userId={session?.user?.id} doc={openDoc} ownerProfile={memberById[openDoc.created_by] || {}}
                 members={Object.values(memberById)} shares={shares} projects={projects}
                 canShare={openDoc.created_by === session?.user?.id || userOrg?.role === "admin"}
                 theme={theme} darkMode={darkMode} accent={accent}
