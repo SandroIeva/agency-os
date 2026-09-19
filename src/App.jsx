@@ -25,6 +25,7 @@ import { createPinterestImageCounter } from "./pinterestImageCounts.js";
 import ORB_WGSL from "./liquidOrb.wgsl?raw";
 import { PLAN_ENTITLEMENTS, PLAN_NAMES, PLAN_PRICES, STORAGE_GB, limitsFor, planFeatures } from "./entitlements";
 import { TOUR_STEPS } from "./dashboardTour.js";
+import { AI_DEFAULT_MODEL } from "./aiModels.js";
 import { useCreateBlockNote, getDefaultReactSlashMenuItems, SuggestionMenuController, createReactBlockSpec, FormattingToolbar, FormattingToolbarController, getFormattingToolbarItems, useComponentsContext } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { de as blockNoteDe } from "@blocknote/core/locales";
@@ -171,6 +172,7 @@ function publicBrandSnapshot(profile, sections) {
 const ACCOUNT_LOCAL_KEYS = [
   "agencyos-llm-keys",              // the API keys somebody pays for
   "agencyos-llm-provider",
+  "agencyos-llm-models",            // the model chosen per provider
   "agencyos-ai-key-intro",          // "seen" the key dialog: a fact about a person, not a browser
   "agencyos-google-token",          // Google access token
   "agencyos-google-token-ts",
@@ -51833,6 +51835,12 @@ export default function CircularMenu() {
   const [llmKeys, setLlmKeys] = useState(() => {
     try { return JSON.parse(localStorage.getItem("agencyos-llm-keys") || "{}"); } catch { return {}; }
   });
+  // The model chosen per provider; {} means the defaults in src/aiModels.js.
+  // Kept on the same user_ai_keys row as the keys, where chat-multi reads it,
+  // so none of the dozen AI call sites has to send it.
+  const [llmModels, setLlmModels] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("agencyos-llm-models") || "{}"); } catch { return {}; }
+  });
   // Auto-save every AI-generated image into the workspace's Files view.
   // ON by default — user can toggle off in Settings → AI-Modelle.
   const [autoSaveAiImages, setAutoSaveAiImages] = useState(() => {
@@ -51848,6 +51856,10 @@ export default function CircularMenu() {
   const [llmKeyInputs, setLlmKeyInputs] = useState({ claude: "", openai: "", gemini: "" });
   const [llmKeyStatus, setLlmKeyStatus] = useState({}); // { claude: "valid"|"invalid"|"checking" }
   const [editingKeyId, setEditingKeyId] = useState(null); // which provider's key is being edited
+  // The provider whose settings panel has finished opening. Only then may it
+  // stop clipping, so the model list can hang out of it; while it grows or
+  // shrinks it has to clip, or its content spills over the rows below.
+  const [aiPanelSettled, setAiPanelSettled] = useState(null);
 
   // Voice selection state
   // First is the default, so Selene leads. These are Fish Audio model ids, not
@@ -52001,22 +52013,24 @@ export default function CircularMenu() {
     let on = true;
     (async () => {
       const { data } = await supabase.from("user_ai_keys")
-        .select("keys, provider").eq("user_id", uid).maybeSingle();
+        .select("keys, provider, models").eq("user_id", uid).maybeSingle();
       if (!on) return;
       const stored = data?.keys && Object.keys(data.keys).length ? data.keys : null;
       if (stored) {
+        const models = data.models && typeof data.models === "object" ? data.models : {};
         setLlmKeys(stored);
+        setLlmModels(models);
         if (data.provider) setLlmProvider(data.provider);
-        aiKeysSaved.current = JSON.stringify({ keys: stored, provider: data.provider || llmProvider });
+        aiKeysSaved.current = JSON.stringify({ keys: stored, provider: data.provider || llmProvider, models });
       } else {
         // First run after this shipped: whatever this browser still holds
         // becomes the row, so nobody has to type a key they already typed.
         let local = {};
         try { local = JSON.parse(localStorage.getItem("agencyos-llm-keys") || "{}"); } catch (_) {}
         if (Object.keys(local).length) {
-          aiKeysSaved.current = JSON.stringify({ keys: local, provider: llmProvider });
+          aiKeysSaved.current = JSON.stringify({ keys: local, provider: llmProvider, models: llmModels });
           await supabase.from("user_ai_keys").upsert({
-            user_id: uid, keys: local, provider: llmProvider,
+            user_id: uid, keys: local, provider: llmProvider, models: llmModels,
             updated_at: new Date().toISOString(),
           }, { onConflict: "user_id" }).then(() => {});
         }
@@ -52032,18 +52046,19 @@ export default function CircularMenu() {
   useEffect(() => { localStorage.setItem("agencyos-llm-provider", llmProvider); }, [llmProvider]);
   useEffect(() => {
     try { localStorage.setItem("agencyos-llm-keys", JSON.stringify(llmKeys)); } catch (_) {}
+    try { localStorage.setItem("agencyos-llm-models", JSON.stringify(llmModels)); } catch (_) {}
     const uid = session?.user?.id;
     if (!uid || !aiKeysLoaded.current) return;
-    const body = JSON.stringify({ keys: llmKeys, provider: llmProvider });
+    const body = JSON.stringify({ keys: llmKeys, provider: llmProvider, models: llmModels });
     // The load itself sets the state, which lands here; without this the very
     // first thing after reading a row is writing the same row back.
     if (aiKeysSaved.current === body) return;
     aiKeysSaved.current = body;
     supabase.from("user_ai_keys").upsert({
-      user_id: uid, keys: llmKeys, provider: llmProvider,
+      user_id: uid, keys: llmKeys, provider: llmProvider, models: llmModels,
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id" }).then(() => {});
-  }, [llmKeys, llmProvider, session?.user?.id]);
+  }, [llmKeys, llmProvider, llmModels, session?.user?.id]);
   // Where this person is, kept current for the messenger's local-time readout.
   // Taken from the browser instead of asked for: it is already known exactly,
   // and a setting nobody remembers to change would be worse than none.
@@ -52274,6 +52289,33 @@ export default function CircularMenu() {
       } catch (_) { /* no answer, no row */ }
     })();
   }, [session?.user?.id, currentView]);
+
+  // The models each key can reach, for the picker under KI & Modelle. Asked
+  // only while that tab is open, once per provider and key, of the provider
+  // itself (through chat-multi, which holds no key of its own).
+  const [aiModelLists, setAiModelLists] = useState({});
+  useEffect(() => {
+    if (currentView !== "settings" || settingsTab !== "ai") return;
+    const prov = llmProvider;
+    const key = llmKeys?.[prov];
+    if (!key) return;
+    const tag = `${prov}:${key.length}:${key.slice(-4)}`;
+    if (aiModelLists[prov]?.tag === tag) return;
+    setAiModelLists(prev => ({ ...prev, [prov]: { tag, status: "loading", models: [] } }));
+    (async () => {
+      let next = { tag, status: "error", models: [] };
+      try {
+        const r = await fetch("/api/chat-multi", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+          body: JSON.stringify({ mode: "models", provider: prov, apiKey: key }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && Array.isArray(j.models)) next = { tag, status: "ready", models: j.models };
+      } catch (_) { /* stays "error": the default keeps working */ }
+      setAiModelLists(prev => (prev[prov]?.tag === tag ? { ...prev, [prov]: next } : prev));
+    })();
+  }, [currentView, settingsTab, llmProvider, llmKeys]); // eslint-disable-line
   const closeTour = () => {
     // Only the tour is marked seen. It used to mark the key dialog seen as
     // well, because its last slide WAS that dialog; that slide is gone, so
@@ -61791,11 +61833,13 @@ export default function CircularMenu() {
                 transition={{ delay: 0.2, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
               >
                 <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>{t("settings.aiModels")}</div>
+                {/* Not overflow: hidden, unlike its neighbours: the model picker
+                    inside opens a list that has to be able to leave the card.
+                    The one row with a hover ground rounds its own corners. */}
                 <div style={{
                   borderRadius: 20,
                   background: theme.cardBg,
                   border: `1px solid ${theme.border}`,
-                  overflow: "hidden",
                 }}>
                   {/* Auto-save toggle for AI-generated images */}
                   <motion.div
@@ -61803,7 +61847,7 @@ export default function CircularMenu() {
                     onClick={() => setAutoSaveAiImages(v => !v)}
                     style={{
                       display: "flex", alignItems: "center", gap: 14,
-                      padding: "16px 20px", cursor: "pointer",
+                      padding: "16px 20px", cursor: "pointer", borderRadius: "20px 20px 0 0",
                       borderBottom: `1px solid ${theme.borderFaint}`,
                     }}
                   >
@@ -61868,11 +61912,11 @@ export default function CircularMenu() {
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{p.name}</div>
                             <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
-                              {p.id === "gemini" && session && !hasKey ? t("settings.connectedViaGoogle") : p.sub}
+                              {p.sub}
                             </div>
                           </div>
                           {/* Status indicators */}
-                          {(hasKey || (p.id === "gemini" && session)) && (
+                          {hasKey && (
                             <div style={{
                               width: 8, height: 8, borderRadius: "50%",
                               background: status === "invalid" ? "#E84393" : "#00B894",
@@ -61901,7 +61945,12 @@ export default function CircularMenu() {
                               animate={{ height: "auto", opacity: 1 }}
                               exit={{ height: 0, opacity: 0 }}
                               transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
-                              style={{ overflow: "hidden" }}
+                              // Clipped while it moves, open once it has arrived
+                              // (see aiPanelSettled). Framer's transitionEnd was
+                              // tried for this and leaves overflow hidden.
+                              onAnimationStart={() => setAiPanelSettled(s => (s === p.id ? null : s))}
+                              onAnimationComplete={(def) => { if (def?.height === "auto") setAiPanelSettled(p.id); }}
+                              style={{ overflow: aiPanelSettled === p.id ? "visible" : "hidden" }}
                             >
                               {/* The same field as the invite row above, because
                                   it is the same thing: something you type into,
@@ -62029,6 +62078,39 @@ export default function CircularMenu() {
                                   </div>
                                 )}
                               </div>
+                              {/* Which model answers, readable and choosable. The
+                                  list is what this key can reach, asked of the
+                                  provider; the default is src/aiModels.js, the
+                                  same file chat-multi reads, so the two cannot
+                                  name different models. */}
+                              {hasKey && editingKeyId !== p.id && (() => {
+                                const list = aiModelLists[p.id];
+                                const def = AI_DEFAULT_MODEL[p.id];
+                                const labelOf = (id) => list?.models?.find(m => m.id === id)?.label || id;
+                                const chosen = llmModels[p.id] || "";
+                                const opts = [{ value: "", label: `${labelOf(def)} (${appLanguage === "de" ? "Standard" : "default"})` }];
+                                (list?.models || []).forEach(m => { if (m.id !== def) opts.push({ value: m.id, label: m.label || m.id }); });
+                                if (chosen && !opts.some(o => o.value === chosen)) opts.push({ value: chosen, label: chosen });
+                                return (
+                                  <div style={{ padding: "0 20px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                                    <div style={{ minWidth: 0 }}>
+                                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
+                                        {appLanguage === "de" ? "Modell" : "Model"}
+                                      </div>
+                                      <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 1 }}>
+                                        {list?.status === "loading"
+                                          ? (appLanguage === "de" ? "Lädt die Modelle deines Keys …" : "Loading your key's models …")
+                                          : list?.status === "error"
+                                            ? (appLanguage === "de" ? "Die Liste war nicht abrufbar. Das gewählte Modell läuft weiter." : "The list could not be loaded. The chosen model keeps working.")
+                                            : (appLanguage === "de" ? `Abgerechnet über deinen ${p.sub}-Key.` : `Billed to your ${p.sub} key.`)}
+                                      </div>
+                                    </div>
+                                    <Dropdown value={chosen}
+                                      onChange={(v) => setLlmModels(prev => { const n = { ...prev }; if (v) n[p.id] = v; else delete n[p.id]; return n; })}
+                                      options={opts} theme={theme} darkMode={darkMode} align="right" minWidth={230} maxHeight={320} />
+                                  </div>
+                                );
+                              })()}
                               {status === "invalid" && (
                                 <div style={{ padding: "0 20px 12px", fontSize: 11, fontFamily: FONT, color: "#E84393" }}>
                                   {appLanguage === "de" ? "Ungültiger API-Key. Bitte prüfen und erneut versuchen." : "Invalid API key. Please check and try again."}

@@ -4,6 +4,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { requireOrgMember, requireUser } from "../server/billing.js";
 import { readCapped, safeFetch } from "../server/safeUrl.js";
+import { AI_DEFAULT_MODEL, AI_MODEL_ID_RE } from "../src/aiModels.js";
 
 const MAX_TOKENS_DEFAULT = 2000;       // generous — full answers, not truncated
 const UPSTREAM_TIMEOUT_MS = 45_000;    // give the model time to think but bail before Vercel kills us
@@ -146,6 +147,44 @@ function hintFor(provider, statusCode, raw, lang = "de") {
   return null;
 }
 
+// The models a key can reach, for the model picker in Settings, trimmed to the
+// ones that write text: every provider's list also holds embedding, speech,
+// image and dated-snapshot entries nobody means to chat with. Newest first.
+async function listModels(provider, apiKey) {
+  const get = (url, headers = {}) => withTimeout((signal) => fetch(url, { signal, headers })
+    .then(async (r) => {
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error?.message || `HTTP ${r.status}`);
+      return j;
+    }), 15_000, provider);
+  if (provider === "claude") {
+    const j = await get("https://api.anthropic.com/v1/models?limit=100", { "x-api-key": apiKey, "anthropic-version": "2023-06-01" });
+    return (j.data || [])
+      .map(m => ({ id: m.id, label: m.display_name || m.id, at: Date.parse(m.created_at) || 0 }))
+      .sort((a, b) => b.at - a.at);
+  }
+  if (provider === "openai") {
+    const j = await get("https://api.openai.com/v1/models", { Authorization: `Bearer ${apiKey}` });
+    return (j.data || [])
+      .filter(m => /^(gpt-\d|o\d|chatgpt-)/.test(m.id)
+        && !/(audio|realtime|tts|transcribe|image|search|embedding|instruct|moderation|codex|computer|preview|-\d{4}-\d{2}-\d{2}$|-\d{4}$)/.test(m.id))
+      .map(m => ({ id: m.id, label: m.id, at: (m.created || 0) * 1000 }))
+      .sort((a, b) => b.at - a.at);
+  }
+  if (provider === "gemini") {
+    const j = await get(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(apiKey)}`);
+    const version = (id) => parseFloat((/^gemini-(\d+(?:\.\d+)?)/.exec(id) || [])[1] || "0");
+    return (j.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).includes("generateContent"))
+      .map(m => ({ id: String(m.name || "").replace(/^models\//, ""), label: m.displayName || "" }))
+      .filter(m => /^gemini-/.test(m.id)
+        && !/(embedding|image|tts|audio|live|robotics|computer|native|aqa|exp|-\d{3}$)/.test(m.id))
+      .map(m => ({ ...m, label: m.label || m.id }))
+      .sort((a, b) => version(b.id) - version(a.id) || a.id.localeCompare(b.id));
+  }
+  throw new Error(`Unknown provider ${provider}`);
+}
+
 export default async function handler(req, res) {
   // No wildcard CORS. Every caller is the app on its own origin.
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -166,6 +205,19 @@ export default async function handler(req, res) {
   const { message, messages, systemPrompt, provider = "claude", apiKey, oauthToken, model, maxTokens, wantsImage, image, imageOrientation, orgId, feature, language } = req.body || {};
   // From the session, never from the body.
   const userId = user.id;
+
+  // The model picker in Settings: what this key can reach, and the default.
+  // The key comes from the browser like every other call here, and nothing is
+  // stored or metered.
+  if (req.body?.mode === "models") {
+    if (!apiKey || !AI_DEFAULT_MODEL[provider]) return res.status(400).json({ error: "provider and apiKey required" });
+    try {
+      const models = (await listModels(provider, apiKey)).slice(0, 60).map(({ id, label }) => ({ id, label }));
+      return res.status(200).json({ models, default: AI_DEFAULT_MODEL[provider] });
+    } catch (e) {
+      return res.status(502).json({ error: e.message || "Model list failed", default: AI_DEFAULT_MODEL[provider] });
+    }
+  }
   // And the workspace has to be one this person belongs to, or nothing is
   // recorded against it. A failure here does not fail the chat: the answer is
   // what somebody asked for, the metering is our bookkeeping.
@@ -178,6 +230,24 @@ export default async function handler(req, res) {
   // Everything is BYOK today (user's own key / Google OAuth). When a managed
   // company key is added later, that path will pass byok:false to bill credits.
   const byok = Boolean(apiKey || oauthToken);
+
+  // The model for a TEXT answer: one named in the request, else the one this
+  // person chose in Settings, else the default in src/aiModels.js. The choice
+  // is read here rather than sent by each of the app's dozen call sites, so a
+  // new call site cannot forget it. Image generation keeps its own lists below.
+  const requestedModel = typeof model === "string" && AI_MODEL_ID_RE.test(model) ? model : null;
+  let chosenModel = null;
+  if (!requestedModel && !wantsImage && usageDb()) {
+    try {
+      const { data } = await usageDb().from("user_ai_keys").select("models").eq("user_id", userId).maybeSingle();
+      const m = data?.models?.[provider];
+      if (typeof m === "string" && AI_MODEL_ID_RE.test(m)) chosenModel = m;
+    } catch (_) { /* the default will do */ }
+  }
+  const textModel = requestedModel || chosenModel || AI_DEFAULT_MODEL[provider];
+  // Only the default may fall back to an older model when a provider stops
+  // knowing it. Somebody's own choice failing is reported, not quietly swapped.
+  const onDefaultModel = !requestedModel && !chosenModel;
 
   // Build a normalised conversation history: array of { role: "user" | "assistant", content: string }
   // Accept either legacy single-message format or full messages array.
@@ -232,8 +302,12 @@ export default async function handler(req, res) {
   try {
     // ── Claude (Anthropic) ─────────────────────
     if (provider === "claude") {
-      const claudeModel = model || "claude-sonnet-4-20250514";
-      const response = await withTimeout((signal) => fetch("https://api.anthropic.com/v1/messages", {
+      const claudeModel = textModel;
+      // Claude from 4.6 on thinks before it answers unless told how much, and
+      // the thinking counts against max_tokens. Low effort suits a chat reply,
+      // and the extra room keeps a long think from eating the answer.
+      const claudeThinks = /^claude-(fable|mythos|opus|sonnet)-(5|4-[678])/.test(claudeModel);
+      const sendClaude = (withEffort) => withTimeout((signal) => fetch("https://api.anthropic.com/v1/messages", {
         signal,
         method: "POST",
         headers: {
@@ -243,7 +317,8 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           model: claudeModel,
-          max_tokens: tokenLimit,
+          max_tokens: withEffort ? tokenLimit + 4000 : tokenLimit,
+          ...(withEffort ? { output_config: { effort: "low" } } : {}),
           system: systemPrompt || "",
           messages: imgPart
             ? conversation.map((m, i) => i === lastUserIdx
@@ -253,7 +328,14 @@ export default async function handler(req, res) {
         }),
       }), UPSTREAM_TIMEOUT_MS, "Claude");
 
-      const data = await response.json();
+      let response = await sendClaude(claudeThinks);
+      let data = await response.json();
+      // A model that takes no effort setting says so with a 400; ask again
+      // without it rather than fail somebody's own choice of model on it.
+      if (!response.ok && claudeThinks && response.status === 400 && /effort|output_config/i.test(JSON.stringify(data.error || ""))) {
+        response = await sendClaude(false);
+        data = await response.json();
+      }
 
       if (!response.ok) {
         const raw = data.error?.message || JSON.stringify(data.error) || "";
@@ -265,7 +347,9 @@ export default async function handler(req, res) {
         });
       }
 
-      const text = data.content?.[0]?.text || "";
+      // The answer is the TEXT blocks. A thinking model puts its thinking first,
+      // so the first block is no longer the answer.
+      const text = (data.content || []).filter(b => b.type === "text").map(b => b.text || "").join("").trim();
       if (!text) {
         return res.status(502).json({
           error: `Claude hat eine leere Antwort zurückgegeben (stop_reason: ${data.stop_reason || "unknown"}). Eventuell wurde sie blockiert.`,
@@ -365,8 +449,11 @@ export default async function handler(req, res) {
         }
       }
 
-      const openaiModel = model || "gpt-4o";
-      const response = await withTimeout((signal) => fetch("https://api.openai.com/v1/chat/completions", {
+      const openaiModel = textModel;
+      // The GPT-5 family and the o-series reason before answering, from the
+      // same token allowance.
+      const openaiReasons = /^(gpt-5|gpt-6|o\d)/.test(openaiModel);
+      const sendOpenAI = (withEffort) => withTimeout((signal) => fetch("https://api.openai.com/v1/chat/completions", {
         signal,
         method: "POST",
         headers: {
@@ -375,7 +462,10 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           model: openaiModel,
-          max_tokens: tokenLimit,
+          // max_completion_tokens: newer models refuse max_tokens, and every
+          // chat model accepts the new name.
+          max_completion_tokens: withEffort ? tokenLimit + 4000 : tokenLimit,
+          ...(withEffort ? { reasoning_effort: "low" } : {}),
           messages: [
             ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
             ...conversation.map((m, i) => (imgPart && i === lastUserIdx)
@@ -385,7 +475,14 @@ export default async function handler(req, res) {
         }),
       }), UPSTREAM_TIMEOUT_MS, "OpenAI");
 
-      const data = await response.json();
+      let response = await sendOpenAI(openaiReasons);
+      let data = await response.json();
+      // Same as Claude: a model without reasoning effort (a "chat" variant, say)
+      // answers 400 to it, and is asked again without.
+      if (!response.ok && openaiReasons && response.status === 400 && /reasoning/i.test(JSON.stringify(data.error || ""))) {
+        response = await sendOpenAI(false);
+        data = await response.json();
+      }
 
       if (!response.ok) {
         const raw = data.error?.message || JSON.stringify(data.error) || "";
@@ -582,7 +679,7 @@ export default async function handler(req, res) {
       }
 
       // ── Standard chat (text) ─────────────────────────────────────────────
-      const candidateModels = [model || "gemini-2.5-flash"];
+      const candidateModels = onDefaultModel ? [textModel, "gemini-2.5-flash"] : [textModel];
 
       let data, response, geminiModel, lastRaw = "";
       for (const candidate of candidateModels) {
@@ -604,14 +701,30 @@ export default async function handler(req, res) {
         if (systemPrompt && systemPrompt.trim()) {
           requestBody.systemInstruction = { parts: [{ text: systemPrompt.trim() }] };
         }
-
-        response = await withTimeout((signal) => fetch(url, {
-        signal,
+        // Gemini 3 thinks before answering, and the thinking counts against
+        // maxOutputTokens: ask for little of it and leave room for it.
+        const thinks = /^gemini-3/.test(candidate);
+        if (thinks) {
+          requestBody.generationConfig.thinkingConfig = { thinkingLevel: "low" };
+          requestBody.generationConfig.maxOutputTokens = tokenLimit + 4000;
+        }
+        const send = () => withTimeout((signal) => fetch(url, {
+          signal,
           method: "POST",
           headers,
           body: JSON.stringify(requestBody),
         }), UPSTREAM_TIMEOUT_MS, "Gemini");
+
+        response = await send();
         data = await response.json();
+        // A model that takes no thinking level says so with a 400. The same
+        // request without it is the answer, not an error.
+        if (!response.ok && thinks && response.status === 400 && /thinking/i.test(JSON.stringify(data.error || ""))) {
+          delete requestBody.generationConfig.thinkingConfig;
+          requestBody.generationConfig.maxOutputTokens = tokenLimit;
+          response = await send();
+          data = await response.json();
+        }
         geminiModel = candidate;
 
         if (response.ok) break;
