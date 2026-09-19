@@ -26,6 +26,15 @@ export const config = { runtime: "edge" };
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
 
+// ?check=1 is the same answer for everybody, so Vercel's CDN may keep it for
+// five minutes: every app load asks, and without this each ask was a function
+// run. The cache belongs to the deployment and is empty after every deploy, so
+// the commit it reports is still the live one.
+const cachedJson = (obj) => new Response(JSON.stringify(obj), {
+  status: 200,
+  headers: { "Content-Type": "application/json", "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
+});
+
 const API = "https://api.pinterest.com/v5";
 
 // Read what the account has, write pins into it, and know whose account it is.
@@ -133,7 +142,7 @@ export default async function handler(req) {
     const { count } = await db.from("pinterest_connections").select("org_id", { count: "exact", head: true });
     const { data: any } = await db.from("pinterest_connections").select("scopes").limit(1).maybeSingle();
     const behind = any ? scopesBehind(any.scopes) : [];
-    return json({
+    return cachedJson({
       configured: true,
       connections: count ?? 0,
       scopes_current: any ? behind.length === 0 : null,

@@ -53090,6 +53090,18 @@ export default function CircularMenu() {
       }
       // Proactively refresh the Supabase JWT (not just getSession which returns cached)
       // This prevents the Supabase session from silently expiring → random logouts
+      //
+      // But ONLY when it is close to running out. It used to be forced every
+      // five minutes, and each new token re-ran every effect that depends on
+      // session.access_token, fourteen of them, most of which call one of our
+      // functions (Pinterest, Notion, Instagram, Threads, TikTok, Slack, the
+      // Analytics numbers). One burst per open tab every five minutes, day and
+      // night: that is where Vercel's free "Fluid Active CPU" allowance went
+      // (the owner got the 75% warning on 2026-09-19). supabase-js refreshes on
+      // its own before expiry; this stays as the backstop it was meant to be.
+      const cur = sessionRef.current;
+      const left = cur?.expires_at ? cur.expires_at * 1000 - Date.now() : 0;
+      if (left > 10 * 60 * 1000) return;
       supabase.auth.refreshSession().then(({ data: { session: s } }) => {
         if (s) {
           if (s.provider_token) storeGoogleToken(s.provider_token);
@@ -53109,6 +53121,16 @@ export default function CircularMenu() {
     const handleVisibility = async () => {
       if (document.visibilityState !== "visible") return;
       try {
+        // A session with plenty of time left needs nothing. Refreshing on every
+        // tab switch handed out a new token each time, and a new token re-ran
+        // every effect that talks to our functions (see the five-minute
+        // refresh above). The client answers this from memory, no network.
+        const { data: { session: cur } } = await supabase.auth.getSession();
+        const left = cur?.expires_at ? cur.expires_at * 1000 - Date.now() : 0;
+        if (cur && left > 10 * 60 * 1000) {
+          if (cur.access_token !== sessionRef.current?.access_token) setSession(cur);
+          return;
+        }
         // First try to refresh the session
         const { data: { session: refreshed } } = await supabase.auth.refreshSession();
         if (refreshed) {
@@ -55448,10 +55470,16 @@ export default function CircularMenu() {
       }
     };
 
-    fetchTemp();
-    const id = setInterval(fetchTemp, REFRESH_INTERVAL);
+    // Only when the shared cache is old: every open tab ran this timer, and a
+    // hidden tab needs no weather at all. Each run is a function call.
+    const stale = () => {
+      try { const c = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || "null"); return !(c && Date.now() - (c.ts || 0) < REFRESH_INTERVAL - 60000); }
+      catch (_) { return true; }
+    };
+    if (stale()) fetchTemp();
+    const id = setInterval(() => { if (!document.hidden && stale()) fetchTemp(); }, REFRESH_INTERVAL);
     // Re-fetch when the tab comes back into focus — common case after laptop sleep
-    const onVis = () => { if (document.visibilityState === "visible") fetchTemp(); };
+    const onVis = () => { if (document.visibilityState === "visible" && stale()) fetchTemp(); };
     document.addEventListener("visibilitychange", onVis);
     return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
   }, []);
