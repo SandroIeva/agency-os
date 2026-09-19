@@ -18,6 +18,13 @@ import { createClient } from "@supabase/supabase-js";
 
 export const config = { runtime: "edge" };
 
+// The owner's own accounts, for "whoami" and nothing else: they may replay the
+// onboarding tour. By confirmed email rather than id, because the test account
+// is deleted and signed up again to walk through onboarding from scratch, and
+// comes back with a new id every time. This grants NO data: everything below
+// stays behind ADMIN_USER_IDS.
+const TOUR_OPERATOR_EMAILS = ["sandro.ieva@googlemail.com", "sandro@minddraft.com"];
+
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 
@@ -47,7 +54,11 @@ export default async function handler(req) {
   // operator should see (replaying the onboarding tour). It answers for the
   // caller's own session and nothing else, and reads no data.
   const body = await req.json().catch(() => ({}));
-  if (body?.mode === "whoami") return json({ admin: admins.includes(userData.user.id) });
+  if (body?.mode === "whoami") {
+    const u = userData.user;
+    const email = u.email_confirmed_at ? (u.email || "").toLowerCase() : "";
+    return json({ admin: admins.includes(u.id) || TOUR_OPERATOR_EMAILS.includes(email) });
+  }
 
   // Deliberately the same 403 and wording for "logged in but not an admin" as a
   // stranger would get — no hint that the page exists or who may use it.
