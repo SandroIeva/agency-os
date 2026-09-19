@@ -9,6 +9,13 @@ Multi-tenant workspace OS for creative agencies. React 19 + Vite SPA, Supabase (
 3. **Verify before shipping:** `npx vite build` must end with `✓ built` (cold build takes ~20–25 min on the current machine; warm cache can be seconds — both are normal), and **`npm run check` must print zero twice**. The build alone is not enough: it happily shipped a `withUrls` that was defined nowhere (every successful Figma import died on it) and three brand autosaves that built a supabase-js query and never sent it. `npm run check` is four passes for exactly those classes — `check:unbound` for identifiers that are read but bound nowhere (the `de is not defined` family, rule 7), `check:writes` for supabase writes whose value is thrown away. `check:dupkeys` is the fourth: the same key written twice in one object literal, where the later one wins in silence - it has shipped twice, once harmlessly in a size table and once undoing a mask fix completely. `check:tdz` is the third: a dependency array naming a `const` declared FURTHER DOWN the same component, which builds green and throws `Cannot access X before initialization` at load. All three exit non-zero when they find something. The build only covers the browser bundle — it says nothing about whether the `api/` functions resolve their imports (see "Verifying a deploy").
 4. **Deploy = push:** committing to `main` and pushing triggers the Vercel deploy. Commit messages end with `Co-Authored-By: Claude <model> <noreply@anthropic.com>`.
 5. **Language:** every user-visible string AND every AI-generated output must respect `appLanguage` (`de`/`en`), usually via the local `const de = appLanguage === "de"` or the `t(...)` translations helper (`src/translations.js`). Never hardcode German (or English) in new UI.
+   Code with no `appLanguage` prop in reach (module-level helpers, small leaf
+   components) reads `uiDe()`, a mirror the App root writes on every render,
+   the same shape as `currentEntitlements`. `node scripts/check-german.cjs
+   src/App.jsx` lists German-looking strings outside a language test; it is a
+   list to read, not a gate. Run it before saying "everything is translated":
+   on 2026-09-19 the owner still found Kanban, Timeline and the task dialog
+   German after several rounds of exactly that claim.
    **No emoji in the UI.** Every icon is a drawn line glyph, white on anthracite
    `#15151c`, `viewBox="0 0 24 24"`, `strokeWidth="1.8"`, round caps. An emoji
    brings its own colours and is redrawn by every OS, so a row of them never
