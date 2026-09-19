@@ -32,8 +32,8 @@ export const TOUR_VOICE_NAME = "Selene";
 // voice, because it is the sphere that says them.
 export const TOUR_STEPS = [
   { key: "logo", target: "logo",
-    de: "Hallo! Ich zeige dir kurz, wo was ist. Unten links das Logo: Ein Klick darauf öffnet die Einstellungen für Profil, Workspace und Team.",
-    en: "Hi! Let me quickly show you around. Bottom left, the logo: click it to open the settings for your profile, workspace and team." },
+    de: "Hey, ich zeige dir kurz, wo was ist. Unten links kommst du mit einem Klick auf das Logo zu den Einstellungen für Profil, Workspace und Team.",
+    en: "Hey, let me quickly show you around. On the bottom left, click the logo to get to the settings for your profile, workspace and team." },
   { key: "bell", target: "bell",
     de: "Oben rechts die Glocke. Hier landet alles, was dich betrifft: Aufgaben, Erwähnungen und Kommentare.",
     en: "Top right, the bell. Everything that concerns you lands here: tasks, mentions and comments." },
