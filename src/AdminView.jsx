@@ -17,6 +17,19 @@ const TEXT = "#ffffffDD";
 const DIM = "#ffffff8A";
 const FAINT = "#ffffff55";
 
+// "vor 3 Std." for the recent past, a date beyond a week.
+const ago = (ts) => {
+  const m = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
+  if (m < 2) return "gerade eben";
+  if (m < 60) return `vor ${m} Min.`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `vor ${h} Std.`;
+  const d = Math.round(h / 24);
+  if (d === 1) return "gestern";
+  if (d < 7) return `vor ${d} Tagen`;
+  return new Date(ts).toLocaleDateString("de-DE");
+};
+
 const fmtMB = (mb) => {
   const n = Number(mb) || 0;
   return n >= 1024 ? (n / 1024).toFixed(1) + " GB" : n.toFixed(1) + " MB";
@@ -189,6 +202,12 @@ export default function AdminView() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(168px, 1fr))", gap: 12, marginBottom: 30 }}>
         <Tile label="Nutzer" value={s.nutzer_gesamt} hint={`${s.neu_7_tage} neu in 7 Tagen`} />
         <Tile label="Aktiv (7 Tage)" value={s.aktiv_7_tage} />
+        {/* Visits (user_app_visits): the app opened, or come back to after 30
+            minutes away. last_sign_in_at cannot say this, because a session
+            stays signed in for weeks. Counted from besuche_seit on. */}
+        <Tile label="Heute in der App" value={s.nutzer_heute ?? 0} hint={`${s.besuche_heute ?? 0} Besuche`} />
+        <Tile label="Wiederkehrend (7 Tage)" value={s.wiederkehrend_7_tage ?? 0}
+          hint={`an 2+ Tagen, von ${s.nutzer_7_tage ?? 0} Nutzern`} />
         {/* The drop-off between signing up and actually starting — the number
             nothing else in the product surfaces. */}
         <Tile label="Ohne Workspace" value={s.ohne_workspace} hint={`davon ${s.nie_eingeloggt} nie eingeloggt`} />
@@ -231,10 +250,20 @@ export default function AdminView() {
             { key: "gast_in", label: "Gast in", right: true },
             { key: "speicher_mb", label: "Speicher", right: true, render: r => fmtMB(r.speicher_mb) },
             { key: "registriert", label: "Registriert", dim: true },
-            { key: "zuletzt_aktiv", label: "Zuletzt aktiv", dim: true, render: r => r.zuletzt_aktiv || "nie" },
+            { key: "besuche_7_tage", label: "Besuche 7 T", right: true },
+            { key: "besuche_30_tage", label: "Besuche 30 T", right: true },
+            { key: "aktive_tage_30", label: "Tage aktiv 30 T", right: true },
+            { key: "zuletzt_aktiv", label: "Zuletzt da", dim: true,
+              render: r => r.letzter_besuch ? ago(r.letzter_besuch) : (r.zuletzt_aktiv || "nie") },
           ]}
         />
       </div>
+      {s.besuche_seit && (
+        <div style={{ fontSize: 11, color: FAINT, marginTop: 10, lineHeight: 1.5 }}>
+          Besuche werden seit {new Date(s.besuche_seit).toLocaleDateString("de-DE")} gezählt: die App geöffnet,
+          oder nach mindestens 30 Minuten Pause zurückgekommen. Neu laden zählt nicht.
+        </div>
+      )}
 
       <div style={{ fontSize: 11, color: FAINT, marginTop: 18 }}>
         Stand: {new Date(generatedAt).toLocaleString("de-DE")}

@@ -52070,6 +52070,37 @@ export default function CircularMenu() {
     if (!tz) return;
     supabase.from("profiles").update({ timezone: tz }).eq("id", session.user.id).then(() => {});
   }, [session?.user?.id]);
+  // How often somebody comes BACK, for the operator overview (/?admin). A
+  // visit is the app opening with a session, or the tab being returned to
+  // after 30 minutes away. track_app_visit in Postgres enforces the 30 minutes
+  // too, so a reload or a double call counts once, and leaving the tab moves
+  // its clock, so "away" is measured from the leaving. Straight to Supabase:
+  // none of our functions runs for it, so it costs no Vercel CPU. Keyed on the
+  // user id, never the token, which refreshes on its own.
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid) return;
+    const AWAY = 30 * 60 * 1000;
+    supabase.rpc("track_app_visit").then(() => {});
+    let hiddenAt = null;
+    let lastLeave = 0;
+    const onVis = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        // At most one "left" every five minutes: switching tabs all day
+        // should not be a request per switch.
+        if (hiddenAt - lastLeave > 5 * 60 * 1000) {
+          lastLeave = hiddenAt;
+          supabase.rpc("track_app_visit", { p_leave: true }).then(() => {});
+        }
+      } else {
+        if (hiddenAt && Date.now() - hiddenAt >= AWAY) supabase.rpc("track_app_visit").then(() => {});
+        hiddenAt = null;
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [session?.user?.id]);
 
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
