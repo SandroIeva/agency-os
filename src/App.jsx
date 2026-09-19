@@ -37351,78 +37351,23 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           {/* Reached for Pinterest before there is an account. Says what the
               connection is for and offers the one thing missing, rather than
               sending somebody to Settings to work it out. */}
-          {pinConnectAsk && createPortal(
-            <div onClick={() => { if (!pinConnectAsk.busy) setPinConnectAsk(null); }}
-              style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
-                display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-              <div onClick={e => e.stopPropagation()}
-                style={{ width: "min(440px, 100%)", borderRadius: 22, padding: "22px 28px 26px",
-                  display: "flex", flexDirection: "column", gap: 14,
-                  background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  {/* White, in both themes. Pinterest's red on the neutral tile
-                      the other rows use came out at 3.22:1 against the dark
-                      card; on white it is 4.78:1, and it is the ground the
-                      mark is drawn for. The border keeps the tile visible on
-                      the light card, which is white too. */}
-                  <div style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, display: "flex",
-                    alignItems: "center", justifyContent: "center",
-                    background: "#fff", border: `1px solid ${theme.borderFaint}` }}>
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="#E60023" aria-hidden="true">
-                      <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146A12 12 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>
-                    </svg>
-                  </div>
-                  <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0 }}>
-                    {appLanguage === "de" ? "Pinterest verbinden" : "Connect Pinterest"}
-                  </div>
-                </div>
-                <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-                  {pinConnectAsk.then === "sync"
-                    ? (appLanguage === "de"
-                        ? "Zum Abgleichen braucht dieser Workspace ein verbundenes Pinterest-Konto. Einmal verbinden, danach holt der Abgleich neue Pins von selbst."
-                        : "Syncing needs a Pinterest account connected to this workspace. Connect once, and the sync brings in new pins from then on.")
-                    : (appLanguage === "de"
-                        ? "Um Boards und Pins zu holen, braucht dieser Workspace ein verbundenes Pinterest-Konto. Einmal verbinden, danach steht es allen hier zur Verfügung."
-                        : "To bring in boards and pins, this workspace needs a Pinterest account connected. Connect once and it is there for everybody in it.")}
-                </div>
-                <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
-                  {appLanguage === "de"
-                    ? "Die Verbindung gilt für den Workspace, nicht nur für dich. Du kannst sie jederzeit in den Einstellungen wieder trennen."
-                    : "The connection belongs to the workspace, not just to you. You can disconnect it any time in Settings."}
-                </div>
-                {pinConnectAsk.error && (
-                  <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767", lineHeight: 1.5 }}>{pinConnectAsk.error}</div>
-                )}
-                {/* Both buttons the same width, and no number decides it: a grid
-                    of two equal columns takes its width from the wider label, so
-                    it still holds when "Verbinden" becomes "Connect". Same
-                    padding on both, or equal width would still sit at unequal
-                    height. */}
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 2 }}>
-                  <div style={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: "1fr", gap: 10 }}>
-                    <motion.div whileTap={{ scale: pinConnectAsk.busy ? 1 : 0.97 }}
-                      onClick={() => { if (!pinConnectAsk.busy) setPinConnectAsk(null); }}
-                      style={{ padding: "11px 22px", borderRadius: 999, cursor: pinConnectAsk.busy ? "default" : "pointer",
-                        border: `1px solid ${theme.borderFaint}`, boxSizing: "border-box",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        color: theme.textDim, fontSize: 13, fontFamily: FONT, whiteSpace: "nowrap",
-                        opacity: pinConnectAsk.busy ? 0.5 : 1 }}>
-                      {appLanguage === "de" ? "Später" : "Later"}
-                    </motion.div>
-                    <motion.div whileTap={{ scale: pinConnectAsk.busy ? 1 : 0.97 }}
-                      onClick={pinConnectAsk.busy ? undefined : runPinterestConnect}
-                      style={{ ...primaryBtn, padding: "11px 22px", borderRadius: 999, border: "1px solid transparent",
-                        boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center",
-                        cursor: pinConnectAsk.busy ? "default" : "pointer", opacity: pinConnectAsk.busy ? 0.6 : 1,
-                        fontSize: 13, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap" }}>
-                      {pinConnectAsk.busy
-                        ? (t("common.loading") || "Lädt…")
-                        : (appLanguage === "de" ? "Verbinden" : "Connect")}
-                    </motion.div>
-                  </div>
-                </div>
-              </div>
-            </div>, document.body)}
+          {pinConnectAsk && (
+            <ConnectPrompt
+              logo={<PinterestMark size={19} />}
+              title={appLanguage === "de" ? "Pinterest verbinden" : "Connect Pinterest"}
+              body={pinConnectAsk.then === "sync"
+                ? (appLanguage === "de"
+                    ? "Zum Abgleichen braucht dieser Workspace ein verbundenes Pinterest-Konto. Einmal verbinden, danach holt der Abgleich neue Pins von selbst."
+                    : "Syncing needs a Pinterest account connected to this workspace. Connect once, and the sync brings in new pins from then on.")
+                : (appLanguage === "de"
+                    ? "Um Boards und Pins zu holen, braucht dieser Workspace ein verbundenes Pinterest-Konto. Einmal verbinden, danach steht es allen hier zur Verfügung."
+                    : "To bring in boards and pins, this workspace needs a Pinterest account connected. Connect once and it is there for everybody in it.")}
+              error={pinConnectAsk.error}
+              busy={!!pinConnectAsk.busy}
+              onLater={() => setPinConnectAsk(null)}
+              onConnect={runPinterestConnect}
+              appLanguage={appLanguage} theme={theme} darkMode={darkMode} />
+          )}
 
           {/* What the sync found, next to the button that asked for it. It goes
               away by itself: nothing here needs dismissing. */}
@@ -42312,6 +42257,86 @@ function LinksTab({ session, userOrg, theme, darkMode, t, appLanguage = "de", pr
   );
 }
 
+// ── The one "connect this service" dialog ───────────────────────────────────
+// Every integration that is reached for before it is connected asks with THIS,
+// so they all look and read the same: the service's logo top left on a white
+// tile, "Connect X", a line on what the connection is for, a line saying it
+// belongs to the workspace, then Later / Connect. Pinterest and Notion use it.
+// A new integration uses it too, rather than a dialog of its own: change it
+// here and every integration changes with it.
+function ConnectPrompt({ logo, title, body, note, error, busy = false, onLater, onConnect, appLanguage = "de", theme, darkMode, zIndex = 100002 }) {
+  const de = appLanguage === "de";
+  return createPortal(
+    <div onClick={() => { if (!busy) onLater?.(); }}
+      style={{ position: "fixed", inset: 0, zIndex, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ width: "min(440px, 100%)", borderRadius: 22, padding: "22px 28px 26px",
+          display: "flex", flexDirection: "column", gap: 14,
+          background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* White, in both themes: it is the ground a brand's mark is drawn
+              for (Pinterest's red came out at 3.22:1 on the dark card and
+              4.78:1 on white). The border keeps the tile visible on the light
+              card, which is white too. */}
+          <div style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, display: "flex",
+            alignItems: "center", justifyContent: "center",
+            background: "#fff", border: `1px solid ${theme.borderFaint}` }}>
+            {logo}
+          </div>
+          <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, flex: 1, minWidth: 0 }}>{title}</div>
+        </div>
+        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>{body}</div>
+        <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55 }}>
+          {note || (de
+            ? "Die Verbindung gilt für den Workspace, nicht nur für dich. Du kannst sie jederzeit in den Einstellungen wieder trennen."
+            : "The connection belongs to the workspace, not just to you. You can disconnect it any time in Settings.")}
+        </div>
+        {error && (
+          <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767", lineHeight: 1.5 }}>{error}</div>
+        )}
+        {/* Both buttons the same width, and no number decides it: a grid of
+            two equal columns takes its width from the wider label, so it
+            still holds when "Verbinden" becomes "Connect". */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 2 }}>
+          <div style={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: "1fr", gap: 10 }}>
+            <motion.div whileTap={{ scale: busy ? 1 : 0.97 }}
+              onClick={() => { if (!busy) onLater?.(); }}
+              style={{ padding: "11px 22px", borderRadius: 999, cursor: busy ? "default" : "pointer",
+                border: `1px solid ${theme.borderFaint}`, boxSizing: "border-box",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: theme.textDim, fontSize: 13, fontFamily: FONT, whiteSpace: "nowrap",
+                opacity: busy ? 0.5 : 1 }}>
+              {de ? "Später" : "Later"}
+            </motion.div>
+            <motion.div whileTap={{ scale: busy ? 1 : 0.97 }}
+              onClick={busy ? undefined : onConnect}
+              // The app's primary button: anthracite on light, light on dark.
+              // A fixed anthracite one vanished on the dark card.
+              style={{ ...primaryBtn(darkMode), padding: "11px 22px", borderRadius: 999, border: "1px solid transparent",
+                boxSizing: "border-box",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
+                fontSize: 13, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap" }}>
+              {busy ? (de ? "Lädt…" : "Loading…") : (de ? "Verbinden" : "Connect")}
+            </motion.div>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// Pinterest's mark, for ConnectPrompt and anywhere else that shows it.
+function PinterestMark({ size = 19 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#E60023" aria-hidden="true">
+      <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146A12 12 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>
+    </svg>
+  );
+}
+
 // Notion's mark, from the one file every place that shows it reads
 // (public/notion-logo.svg): the import dialog, the Settings row and the entry
 // in the Documents menu. The file is black; on a dark ground it is inverted
@@ -42398,6 +42423,30 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
   });
   const needsConnect = status && (!status.connected || status.needs_reconnect);
 
+  // Not connected yet (or expired): the same dialog every integration asks
+  // with. Nothing at all while the status is still on its way, so the picker
+  // does not flash up and turn into the prompt a moment later.
+  if (!status) return null;
+  if (needsConnect) {
+    return (
+      <ConnectPrompt
+        logo={<NotionMark size={24} />}
+        title={de ? "Notion verbinden" : "Connect Notion"}
+        body={status.needs_reconnect
+          ? (de
+              ? "Die Verbindung zu Notion ist abgelaufen. Einmal neu verbinden, danach geht es weiter wie vorher."
+              : "The Notion connection has expired. Connect once more and carry on where you left off.")
+          : (de
+              ? "Um Notion-Seiten als Dokumente zu übernehmen, braucht dieser Workspace eine Notion-Verbindung. Du wählst dabei selbst, welche Seiten i7OS sehen darf."
+              : "To bring Notion pages in as documents, this workspace needs a Notion connection. You choose which pages i7OS may see.")}
+        error={err}
+        busy={connecting}
+        onLater={onClose}
+        onConnect={connect}
+        appLanguage={appLanguage} theme={theme} darkMode={darkMode} zIndex={100003} />
+    );
+  }
+
   return createPortal(
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -42435,23 +42484,7 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
           </motion.div>
         </div>
 
-        {!status ? (
-          <div style={{ padding: 40, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Lädt…" : "Loading…"}</div>
-        ) : needsConnect ? (
-          <div style={{ padding: "28px 26px 26px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 14 }}>
-            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, lineHeight: 1.55, maxWidth: 380 }}>
-              {status.needs_reconnect
-                ? (de ? "Die Verbindung zu Notion ist abgelaufen. Verbinde sie einmal neu." : "The Notion connection has expired. Connect it once more.")
-                : (de ? "Verbinde Notion einmal für diesen Workspace. Du wählst dabei selbst, welche Seiten i7OS sehen darf." : "Connect Notion once for this workspace. You choose which pages i7OS may see.")}
-            </div>
-            <motion.button whileTap={{ scale: 0.97 }} onClick={connecting ? undefined : connect}
-              style={{ ...btn(true), opacity: connecting ? 0.6 : 1, cursor: connecting ? "wait" : "pointer" }}>
-              {status.needs_reconnect ? (de ? "Neu verbinden" : "Reconnect") : (de ? "Notion verbinden" : "Connect Notion")}
-            </motion.button>
-            {err && <div style={{ fontSize: 12, fontFamily: FONT, color: "#E86767" }}>{err}</div>}
-          </div>
-        ) : (
-          <>
+        <>
             <div style={{ padding: "14px 22px 8px" }}>
               <input value={query} onChange={e => setQuery(e.target.value)} autoFocus
                 placeholder={de ? "Seiten durchsuchen…" : "Search pages…"}
@@ -42519,8 +42552,7 @@ function NotionImportModal({ orgId, session, appLanguage = "de", theme, darkMode
                   : (de ? "Importieren" : "Import")}
               </motion.button>
             </div>
-          </>
-        )}
+        </>
       </motion.div>
     </motion.div>,
     document.body,

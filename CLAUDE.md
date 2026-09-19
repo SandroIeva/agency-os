@@ -41,6 +41,7 @@ Multi-tenant workspace OS for creative agencies. React 19 + Vite SPA, Supabase (
      violet and the muscle memory is worth more here than the house rule. It was
      briefly a measured teal and that was reverted. Do not "fix" it back.
    - Use the shared **`<Dropdown>`** component in App.jsx for any select/menu. Never a native `<select>`, never a one-off menu.
+   - **Connecting an integration from inside a feature uses `<ConnectPrompt>`** (module scope in App.jsx): the service's logo top left on a white tile, "Connect X", one line on what the connection gives you, the workspace note, then Later / Connect. Pinterest and Notion use it. A new integration uses it too and never gets a dialog of its own; the owner has asked for this more than once (2026-09-19, after Notion shipped with a different one). Logos: one component or one file per service (`PinterestMark`, `NotionMark` reading `public/notion-logo.svg`), used everywhere that service appears.
    - Primary action buttons belong in the **top-right header slot** of a view (some views expose a `headerSlotRef` portal target for embedded tabs).
    - Controls must never sit flush against a container edge — keep inner padding (esp. select chevrons).
    - Speech-to-text UI: a "Diktieren" link (mic icon + label) ABOVE the field, right-aligned; turns into red "Stopp" while recording.
