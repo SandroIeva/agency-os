@@ -516,6 +516,12 @@ const UPLOAD_ICON = (
   <><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></>
 );
 
+// "Create folder", in every add menu that offers it (Documents, Media). Media
+// had its own with a plus inside; one idea, one symbol.
+const FOLDER_ICON = (
+  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+);
+
 // ── Hearing an answer that was not said perfectly ─────────────────────────
 // Speech recognition mishears, and the German recogniser is rough on English
 // words in particular: "Moodboard" comes back as Mutboard, Mudboard, Mut Board.
@@ -37653,7 +37659,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             onClick: () => { setAddMenuOpen(false); creationsWebImport.current?.(); } },
                           { key: "folder", label: appLanguage === "de" ? "Ordner erstellen" : "Create folder",
                             sub: appLanguage === "de" ? "Assets gruppieren" : "Group your assets",
-                            icon: <><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></>,
+                            icon: FOLDER_ICON,
                             onClick: () => { setAddMenuOpen(false); creationsNewFolder.current?.(); } },
                         ].map(it => (
                           <div key={it.key} onClick={it.onClick} className="hover-row"
@@ -37719,7 +37725,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
                             onClick: () => { setDocsAddOpen(false); docsSkills.current?.(); } },
                           { key: "folder", label: appLanguage === "de" ? "Ordner erstellen" : "Create folder",
                             sub: appLanguage === "de" ? "Dokumente in Ordnern organisieren" : "Organise documents in folders",
-                            icon: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>,
+                            icon: FOLDER_ICON,
                             onClick: () => { setDocsAddOpen(false); docsNewFolder.current?.(); } },
                         ].map(it => (
                           <div key={it.key} onClick={it.onClick} className="hover-row"
