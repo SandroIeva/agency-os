@@ -31494,7 +31494,7 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg, 
 // promise the tab cannot keep.
 const COMMENT_PLATFORMS = ["linkedin", "instagram", "facebook", "threads", "youtube", "twitter"];
 
-function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, card, secLabel, igUserId = null, threadsUserId = null }) {
+function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, card, secLabel, igUserId = null, threadsUserId = null, onReady = null }) {
   const [recent, setRecent] = useState(null);   // null = loading
   const [error, setError] = useState(null);
   // "scope" when the Instagram connection predates comment access and has to be
@@ -31608,6 +31608,11 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
     const fromThreads = !wantsTh ? Promise.resolve(null) : askMeta("/api/threads", { mode: "replies", threadsUserId });
     Promise.all([fromZernio, fromMeta, fromThreads]).then(([z, m, t]) => {
       if (!alive) return;
+      // Einmal Bescheid geben, egal wie es ausging: die Ansicht darüber wartet
+      // darauf, damit dieser Kasten nicht eine Sekunde nach allem anderen
+      // nachrutscht. Steht direkt hier, weil darunter mehrere Wege früh
+      // zurückspringen.
+      onReady?.();
       const metaList = m && m.status === 200 && Array.isArray(m.j?.recent) ? m.j.recent : null;
       const thList = t && t.status === 200 && Array.isArray(t.j?.recent) ? t.j.recent : null;
       const direct = [...(metaList || []), ...(thList || [])];
@@ -32343,11 +32348,16 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   // a hard release after twelve seconds beside the condition rather than trust
   // that every path settles.
   //
-  // Deliberately NOT part of this: the comments panel, which fetches its own data
-  // and carries its own loading line inside a card of fixed width.
+  // Die Kommentare gehören dazu. Sie holen ihre Daten selbst und kamen deshalb
+  // immer einen Moment nach allem anderen, was aussieht, als lade die Seite
+  // zweimal. Sie melden sich jetzt, und nur beim ERSTEN Mal: `ready` fällt nie
+  // zurück, also kostet ein Wechsel der Kanal-Pille keinen zweiten Ladebalken.
+  const [commentsReady, setCommentsReady] = useState(false);
+  const showsComments = accounts != null && (accounts.length > 0 || hasDirect);
   const allLoaded = accounts != null && direct != null
     && (accounts.length === 0 || data != null)
-    && (!hasDirect || directStats != null);
+    && (!hasDirect || directStats != null)
+    && (!showsComments || commentsReady);
   const [ready, setReady] = useState(false);
   useEffect(() => { if (allLoaded) setReady(true); }, [allLoaded]);
   useEffect(() => {
@@ -32655,8 +32665,8 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            style={{ width: 22, height: 22, borderRadius: "50%",
-              border: `2px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)"}`,
+            style={{ width: 30, height: 30, borderRadius: "50%",
+              border: `2.5px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)"}`,
               borderTopColor: theme.text }}
           />
           <div style={{ color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>
@@ -32935,7 +32945,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
             )}
             <SocialCommentsPanel theme={theme} darkMode={darkMode} de={de}
               session={session} orgId={orgId} platform={platform} igUserId={igId} threadsUserId={thId}
-              card={card} secLabel={secLabel} />
+              card={card} secLabel={secLabel} onReady={() => setCommentsReady(true)} />
           </div>
         </>
       )}
