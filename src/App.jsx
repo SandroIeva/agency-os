@@ -35485,18 +35485,29 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   </span>
                   {noMediaMenu && (<>
                     <div onClick={() => setNoMediaMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 5 }} />
-                    <div style={{ position: "absolute", bottom: "calc(100% + 10px)", right: 0, zIndex: 6,
-                      minWidth: 210, padding: 8, borderRadius: 16,
+                    <div style={{ position: "absolute", bottom: "calc(100% + 24px)", right: 0, zIndex: 6,
+                      minWidth: 218, padding: 8, borderRadius: 16,
                       background: darkMode ? "#1c1c24" : "#ffffff",
                       border: `1px solid ${theme.borderFaint}`,
                       boxShadow: "0 18px 50px rgba(0,0,0,0.22)" }}>
+                      {/* Dieselben Glyphen, die die App für diese beiden Dinge
+                          schon zeichnet: der Flieger fürs Senden, die Uhr für
+                          einen Zeitpunkt. */}
                       {[
-                        [de ? "Jetzt posten" : "Post now", () => { setNoMediaMenu(false); submit("post"); }],
-                        canSchedule && [de ? "Später planen" : "Schedule", () => { setNoMediaMenu(false); setWhenOpen(true); }],
-                      ].filter(Boolean).map(([what, run]) => (
+                        [de ? "Jetzt posten" : "Post now",
+                          <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" />,
+                          () => { setNoMediaMenu(false); submit("post"); }],
+                        canSchedule && [de ? "Später planen" : "Schedule",
+                          <><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" /></>,
+                          () => { setNoMediaMenu(false); setWhenOpen(true); }],
+                      ].filter(Boolean).map(([what, glyph, run]) => (
                         <div key={what} onClick={run} className="hover-row"
-                          style={{ padding: "10px 12px", borderRadius: 11, cursor: "pointer",
+                          style={{ display: "flex", alignItems: "center", gap: 10,
+                            padding: "13px 13px", borderRadius: 12, cursor: "pointer",
                             fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: theme.text }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+                            style={{ flexShrink: 0, opacity: 0.75 }}>{glyph}</svg>
                           {what}
                         </div>
                       ))}
