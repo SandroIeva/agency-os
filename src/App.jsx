@@ -36254,7 +36254,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   );
 }
 
-function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", canEdit = true, projectId = null, projectName = "", embedded = false, initialTab = "touchpoints" }) {
+function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", canEdit = true, projectId = null, projectName = "", embedded = false, initialTab = "analytics" }) {
   const tpScope = (q) => projectId ? q.eq("project_id", projectId) : q.is("project_id", null);
   const [audTab, setAudTab] = useState(initialTab); // "touchpoints" | "people" | "analytics"
   const peopleHeaderSlot = useRef(null); // top-right header slot the People detail edit button portals into
@@ -36416,7 +36416,9 @@ function TouchpointsView({ onBack, session, userOrg, theme, darkMode, t, appLang
 
         {/* Tabs: Touchpoints · People · Analytics (embedded gets the People header slot inline) */}
         <div style={{ padding: "0 24px", display: "flex", alignItems: "center", gap: 22, borderBottom: `1px solid ${theme.borderFaint}` }}>
-          {[["touchpoints", "Touchpoints"], ["people", "People"], ["analytics", "Analytics"]].map(([k, lbl]) => {
+          {/* Analytics first, then Touchpoints, then People (owner, 2026-09-20):
+              the numbers are what somebody opens Audience for. */}
+          {[["analytics", "Analytics"], ["touchpoints", "Touchpoints"], ["people", "People"]].map(([k, lbl]) => {
             const on = audTab === k;
             return (
               <div key={k} onClick={() => setAudTab(k)}
@@ -52718,7 +52720,7 @@ export default function CircularMenu() {
   const [settingsTab, setSettingsTab] = useState("workspace"); // settings page tab: workspace | ai | appearance | account (billing lives under account)
   // Which tab the Audience view opens on. Set to "analytics" by the Zernio OAuth
   // return redirect and by the composer's "connect accounts" shortcut.
-  const [audienceInitialTab, setAudienceInitialTab] = useState("touchpoints");
+  const [audienceInitialTab, setAudienceInitialTab] = useState("analytics");
   // A visual handed over from the canvas editor, waiting for the composer.
   const [postVisual, setPostVisual] = useState(null);
   const [deleteWsOpen, setDeleteWsOpen] = useState(false);   // workspace-delete confirm modal
@@ -59331,7 +59333,7 @@ export default function CircularMenu() {
         <AnimatePresence>
           {currentView === "touchpoints" && (
             <TouchpointsView session={session} userOrg={userOrg} theme={theme} darkMode={darkMode} t={t} appLanguage={appLanguage} canEdit={canEditBrand} initialTab={audienceInitialTab}
-              onBack={() => { setAudienceInitialTab("touchpoints"); setCurrentView("dashboard"); }} />
+              onBack={() => { setAudienceInitialTab("analytics"); setCurrentView("dashboard"); }} />
           )}
         </AnimatePresence>
 
