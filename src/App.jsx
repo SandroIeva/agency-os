@@ -33916,6 +33916,30 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // Ohne Bild gibt es keinen großen Knopf, an dem "jetzt oder später" hängen
   // könnte. Also hängt es an dem stillen Link, und der fragt vorher nach.
   const [noMediaMenu, setNoMediaMenu] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
+  // Dieselben Zeilen im Zeitpunkt-Fenster und unter der Uhr oben. Einmal
+  // beschrieben, weil zwei Listen derselben Sache beim nächsten Handgriff
+  // auseinanderlaufen.
+  const queueRows = (rows) => rows.map(q => (
+    <div key={q.id} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "6px 0" }}>
+      <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap" }}>
+        {new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "short", timeStyle: "short" }).format(new Date(q.publish_at))}
+      </span>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontFamily: FONT,
+        color: q.status === "failed" ? "#E86767" : theme.textDim,
+        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {q.status === "failed" ? (q.last_error || (de ? "Fehlgeschlagen" : "Failed"))
+          : (q.targets || []).map(t => t.label).filter(Boolean).join(", ")
+            || (q.body || "").slice(0, 40)}
+      </span>
+      <span onClick={async () => {
+        await supabase.from("scheduled_posts").delete().eq("id", q.id);
+        loadQueue();
+      }} style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, cursor: "pointer", flexShrink: 0 }}>
+        {de ? "Absagen" : "Cancel"}
+      </span>
+    </div>
+  ));
   // Was noch aussteht. Eine Warteschlange, in die niemand hineinsehen kann, ist
   // schlimmer als keine: man weiß nicht, ob der Beitrag existiert.
   const [queued, setQueued] = useState([]);
@@ -34740,6 +34764,34 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           </motion.div>
           <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{brandName}</span>
           <span style={{ fontSize: 16, fontFamily: FONT, fontWeight: 400, color: theme.textDim }}>Social Media Post</span>
+
+          {/* Die Uhr erscheint nur, wenn wirklich etwas wartet. Ein Symbol, das
+              immer da steht und meistens nichts zeigt, lernt man zu übersehen. */}
+          {queued.length > 0 && (
+            <div style={{ marginLeft: "auto", position: "relative", flexShrink: 0 }}>
+              <motion.div whileTap={{ scale: 0.94 }} onClick={() => setQueueOpen(o => !o)}
+                title={de ? "Geplante Beiträge" : "Scheduled posts"}
+                style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 12px", borderRadius: 999,
+                  border: `1px solid ${theme.borderFaint}`, cursor: "pointer", color: theme.text }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" />
+                </svg>
+                <span style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600 }}>{queued.length}</span>
+              </motion.div>
+              {queueOpen && (<>
+                <div onClick={() => setQueueOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 5 }} />
+                <div style={{ position: "absolute", top: "calc(100% + 12px)", right: 0, zIndex: 6,
+                  minWidth: 340, maxHeight: 320, overflowY: "auto", padding: 16, borderRadius: 16,
+                  background: darkMode ? "#1c1c24" : "#ffffff",
+                  border: `1px solid ${theme.borderFaint}`,
+                  boxShadow: "0 18px 50px rgba(0,0,0,0.22)" }}>
+                  <div style={{ ...label, marginBottom: 10 }}>{de ? "Geplant" : "Scheduled"}</div>
+                  {queueRows(queued)}
+                </div>
+              </>)}
+            </div>
+          )}
         </div>
 
         <div style={{ flex: 1, minHeight: 0, padding: 30, display: "flex", flexDirection: "column" }}>
@@ -35425,25 +35477,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${theme.borderFaint}`,
                           maxHeight: 190, overflowY: "auto" }}>
                           <div style={{ ...label, marginBottom: 8 }}>{de ? "Wartet" : "Waiting"}</div>
-                          {queued.map(q => (
-                            <div key={q.id} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "5px 0" }}>
-                              <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap" }}>
-                                {new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "short", timeStyle: "short" }).format(new Date(q.publish_at))}
-                              </span>
-                              <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontFamily: FONT, color: theme.textDim,
-                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {q.status === "failed" ? (q.last_error || (de ? "Fehlgeschlagen" : "Failed"))
-                                  : (q.targets || []).map(t => t.label).filter(Boolean).join(", ")
-                                    || (q.body || "").slice(0, 40)}
-                              </span>
-                              <span onClick={async () => {
-                                await supabase.from("scheduled_posts").delete().eq("id", q.id);
-                                loadQueue();
-                              }} style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, cursor: "pointer", flexShrink: 0 }}>
-                                {de ? "Absagen" : "Cancel"}
-                              </span>
-                            </div>
-                          ))}
+                          {queueRows(queued)}
                         </div>
                       )}
                       <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 14 }}>
