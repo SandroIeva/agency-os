@@ -33879,13 +33879,26 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
   const mediaImportRef = useRef(false);
   const postImageLimitError = () => new Error(de ? "Ein Karussell kann bis zu 10 Bilder enthalten." : "A carousel can contain up to 10 images.");
+  // Die Ausweichspur für große Dateien: ein Zwischenspeicher auf eigenem
+  // Webspace, den api/media-host verwaltet. Einmal gefragt, ob es ihn gibt,
+  // denn davon hängt ab, wie groß eine Datei hier überhaupt sein darf.
+  const [relay, setRelay] = useState(null);   // null = noch nicht gefragt
+  useEffect(() => {
+    let on = true;
+    fetch("/api/media-host?check=1")
+      .then(r => r.json())
+      .then(j => { if (on) setRelay(j?.configured ? j : false); })
+      .catch(() => { if (on) setRelay(false); });
+    return () => { on = false; };
+  }, []);
+  const [uploadPct, setUploadPct] = useState(null);
   // Instagram und Threads holen sich die Datei selbst über eine URL, Bytes
   // nehmen sie nicht an. Also liegt sie vorher in unserem Supabase-Speicher,
   // und der steht auf dem kostenlosen Plan: 50 MB je Objekt, nicht
   // verhandelbar. Meta selbst nähme knapp ein Gigabyte. Die Grenze ist also
   // unser Umweg, nicht das Netzwerk, und sie wird hier gesagt statt nach dem
   // Hochladen von 117 MB.
-  const MEDIA_MAX_MB = 50;
+  const MEDIA_MAX_MB = relay ? Math.round((relay.maxBytes || 1073741824) / 1048576) : 50;
   const tooBigError = (f) => new Error(de
     ? `Die Datei ist ${Math.round((f.size || 0) / 1048576)} MB groß. Unser Zwischenspeicher nimmt höchstens ${MEDIA_MAX_MB} MB, dort holen Instagram und Threads sie ab.`
     : `The file is ${Math.round((f.size || 0) / 1048576)} MB. Our storage, where Instagram and Threads fetch it from, takes at most ${MEDIA_MAX_MB} MB.`);
@@ -34136,7 +34149,46 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     return () => ro.disconnect();
   }, [stepIdx, !!visual, !!reel]);
 
+  // Stückweise auf den eigenen Webspace, wenn die Datei für Supabase zu groß
+  // ist. Die Bytes gehen NICHT durch unsere Funktion: die unterschreibt nur
+  // das Ticket, hochgeladen wird von hier direkt, sonst wäre es ein Timeout
+  // mit Ansage.
+  const relayUpload = async (blob, ext) => {
+    const r = await fetch("/api/media-host", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+      body: JSON.stringify({ mode: "sign", orgId, ext }),
+    });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j?.token) throw new Error(j?.error || (de ? "Der Zwischenspeicher antwortet nicht." : "The media relay did not answer."));
+    const part = j.partBytes || 4194304;
+    const parts = Math.max(1, Math.ceil(blob.size / part));
+    let url = j.publicUrl;
+    for (let i = 0; i < parts; i++) {
+      const last = i === parts - 1;
+      const q = new URLSearchParams({ id: j.id, ext: j.ext, exp: String(j.exp), token: j.token,
+        part: String(i), last: last ? "1" : "0" });
+      const up = await fetch(`${j.uploadUrl}?${q}`, {
+        method: "POST", body: blob.slice(i * part, Math.min(blob.size, (i + 1) * part)),
+      });
+      const uj = await up.json().catch(() => null);
+      if (!up.ok) throw new Error(de
+        ? `Der Zwischenspeicher hat Teil ${i + 1} von ${parts} abgelehnt (${uj?.error || up.status}).`
+        : `The media relay refused part ${i + 1} of ${parts} (${uj?.error || up.status}).`);
+      if (last && uj?.url) url = uj.url;
+      setUploadPct(Math.round(((i + 1) / parts) * 100));
+    }
+    setUploadPct(null);
+    return { url, relayId: j.id, relayExt: j.ext };
+  };
+  // Supabase Free nimmt 50 MB je Objekt. Bei 45 ist Schluss, weil das
+  // gerenderte Bild noch wachsen kann.
+  const SUPABASE_MAX = 45 * 1048576;
   const toMetaMedia = async (blob, contentType, ext) => {
+    if ((blob.size || 0) > SUPABASE_MAX) {
+      if (!relay) throw tooBigError(blob);
+      return await relayUpload(blob, ext);
+    }
     const path = `instagram/${orgId}/${crypto.randomUUID()}.${ext}`;
     const up = await uploadTracked({
       bucket: "brand-assets", path, file: blob, orgId,
@@ -34472,6 +34524,19 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       // and the summary has to say so or somebody goes looking for a post that
       // is not there yet.
       const anyPending = parts.some(p => p.status === "pending");
+      // Was auf dem eigenen Webspace lag, ist dort fertig, sobald Meta es
+      // geholt hat. Solange noch etwas verarbeitet wird, bleibt es liegen: die
+      // Datei unter einem laufenden Container wegzuziehen bricht ihn ab. Das
+      // Skript drüben räumt nach einem Tag ohnehin auf.
+      if (!anyPending) {
+        for (const m of [metaMedia, metaReel, ...metaExtras].filter(m => m?.relayId)) {
+          fetch("/api/media-host", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+            body: JSON.stringify({ mode: "drop", orgId, id: m.relayId, ext: m.relayExt }),
+          }).catch(() => {});
+        }
+      }
       const r = {
         status: failedAll ? "failed"
           : anyPending ? "pending"
@@ -35247,7 +35312,11 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     // every state the button has.
                     minWidth: draftW || undefined,
                     cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}>
-                  {busy === "post" ? (de ? "Wird gesendet…" : "Sending…") : schedule ? (de ? "Planen" : "Schedule") : (de ? "Posten" : "Post")}
+                  {busy === "post"
+                    ? (uploadPct != null
+                        ? `${de ? "Lädt hoch" : "Uploading"} ${uploadPct}%`
+                        : (de ? "Wird gesendet…" : "Sending…"))
+                    : schedule ? (de ? "Planen" : "Schedule") : (de ? "Posten" : "Post")}
                 </motion.button>
               ) : stepIdx < LAST ? (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => setStepIdx(i => Math.min(LAST, i + 1))}
