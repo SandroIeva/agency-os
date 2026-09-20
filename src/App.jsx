@@ -34420,9 +34420,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   };
 
   const brandName = userOrg?.name || "Brand";
-  const previewAccount = selected[0] || null;
-  const previewUiKey = previewAccount ? uiKeyFor(previewAccount.platform) : null;
-  const previewMeta = previewUiKey ? TOUCHPOINT_PLATFORMS.find(p => p.key === previewUiKey) : null;
   const stepHead = (title, desc, mb = 18) => (
     <div style={{ marginBottom: mb }}>
       <div style={{ fontSize: 23, fontFamily: FONT, fontWeight: 500, letterSpacing: -0.3, color: theme.text }}>{title}</div>
@@ -34437,80 +34434,19 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
   const statusLabel = (s) => ({ published: de ? "Veröffentlicht" : "Published", scheduled: de ? "Geplant" : "Scheduled", draft: de ? "Entwurf" : "Draft", pending: de ? "In Arbeit" : "Pending", failed: de ? "Fehlgeschlagen" : "Failed" }[s] || s);
   const selectedOverlayObj = overlays.find(o => o.id === selOverlay) || null;
-  // Everything on the last step that only makes sense with an account behind
-  // it: the preview, the schedule, the two publish buttons, and the second
-  // column they live in.
+  // The last step is where a post leaves the building, and that only means
+  // anything with an account behind it.
   const canPublish = stepIdx === LAST && (accounts || []).length > 0;
-  // Both steps are split down the middle: the first holds the channels beside
-  // the text, the second the picture beside its preview.
-  const twoCol = canPublish || stepIdx === S_TEXT;
-
-  // ── Live preview card (right column, constant across steps) ──
-  const previewCard = (
-    // Bounded by the column it sits in. It used to be as tall as the picture
-    // made it, which on a portrait ran past the bottom of the box.
-    <div style={{ borderRadius: 18, background: theme.cardBg, border: `1px solid ${theme.border}`, overflow: "hidden",
-      alignSelf: "stretch", maxHeight: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
-      {/* The picture first and with the room, the way the Visual step shows
-          it. The profile bar that used to sit on top was a drawing of a header
-          nobody needed, and it pushed the picture out of a card that clips. */}
-      {(visual || reel) && (
-        /* Mini composited preview — same relative overlay coordinates as the
-           editor; cqw units (container query width) keep the text-to-image scale
-           identical at this smaller size. */
-        <div className="post-preview-media" style={{ position: "relative", flex: 1, minHeight: 0, width: "100%", containerType: "inline-size",
-          display: "flex", alignItems: "center", justifyContent: "center", background: darkMode ? "rgba(0,0,0,0.18)" : "rgba(0,0,0,0.04)" }}>
-          <style>{`
-            .post-preview-arrow { opacity: 0; pointer-events: none; transition: opacity 180ms ease; }
-            .post-preview-media:hover .post-preview-arrow,
-            .post-preview-media:has(button:focus-visible) .post-preview-arrow { opacity: 1; pointer-events: auto; }
-            @media (hover: none) { .post-preview-arrow { opacity: 1; pointer-events: auto; } }
-            @media (prefers-reduced-motion: reduce) { .post-preview-arrow { transition: none; } }
-          `}</style>
-          {/* A video previews as a video. This card drew itself only when
-              there was a `visual`, and a reel is not one, so the last step
-              showed a caption under an empty box. */}
-          {reel ? (
-            <video src={reel.url} controls playsInline preload="metadata"
-              style={{ display: "block", maxWidth: "calc(100% - 48px)", maxHeight: "calc(100% - 48px)", width: "auto", height: "auto", objectFit: "contain" }} />
-          ) : (
-            <img src={slides[slideIdx]?.url || visual.url} alt=""
-              style={{ display: "block", maxWidth: "calc(100% - 48px)", maxHeight: "calc(100% - 48px)", width: "auto", height: "auto", objectFit: "contain" }} />
-          )}
-          {slideIdx === 0 && overlays.map(o => (
-            <div key={o.id} style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500, fontSize: `${o.size * 100}cqw`, lineHeight: 1.22, whiteSpace: "pre", pointerEvents: "none" }}>{o.text}</div>
-          ))}
-          {/* The same paging as the Visual step. A carousel previewed as its
-              first slide is a preview of a third of the post. */}
-          {slides.length > 1 && ([["prev", -1, "M15 18l-6-6 6-6", "left"], ["next", 1, "M9 6l6 6-6 6", "right"]]).map(([k, step, d, side]) => (
-            <div key={k} className="post-preview-arrow"
-              style={{ position: "absolute", top: "50%", transform: "translateY(-50%)", [side]: 8 }}>
-              <motion.button type="button" whileTap={{ scale: 0.92 }}
-                aria-label={step < 0 ? (de ? "Vorheriges Bild" : "Previous image") : (de ? "Nächstes Bild" : "Next image")}
-                onClick={() => setSlideIdx(i => (i + step + slides.length) % slides.length)}
-                style={{ width: 30, height: 30, padding: 0, border: "none", borderRadius: 999,
-                  background: "rgba(21,21,28,0.66)", color: "#fff", display: "flex", alignItems: "center",
-                  justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
-              </motion.button>
-            </div>
-          ))}
-          {slides.length > 1 && (
-            <div style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)",
-              padding: "4px 10px", borderRadius: 999, background: "rgba(21,21,28,0.66)", color: "#fff",
-              fontSize: 10.5, fontFamily: FONT, fontWeight: 600, backdropFilter: "blur(6px)" }}>
-              {slideIdx + 1} / {slides.length}
-            </div>
-          )}
-        </div>
-      )}
-      <div style={{ padding: "12px 16px", fontSize: 13, fontFamily: FONT, color: text ? theme.text : theme.textFaint, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word", flexShrink: 0 }}>
-        <span style={{ fontWeight: 600, color: theme.text }}>{previewAccount?.username || previewAccount?.displayName || brandName}</span>
-        {"  "}
-        {text || (de ? "Dein Text erscheint hier …" : "Your text will appear here …")}
-      </div>
-    </div>
-  );
+  // Only the first step is split down the middle, channels beside the text.
+  // The Visual step is a stage across the full width: it had a preview card
+  // next to it for a while, and a preview of a picture beside that same
+  // picture is the picture twice.
+  const twoCol = stepIdx === S_TEXT;
+  const hasMedia = !!(visual || reel);
+  // Instagram and TikTok refuse a post with nothing in it; Threads takes text
+  // on its own, so the way out of this step cannot depend on a picture.
+  const mediaRequired = selected.some(a => a.provider === "meta" || a.provider === "tiktok");
+  const canPost = canPublish && (hasMedia || !mediaRequired);
 
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -35118,9 +35054,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 </div>
               )}
 
-              {/* The preview, on the step that publishes, once there is
-                  somewhere to publish to */}
-              {canPublish && previewCard}
             </div>
 
             {/* One footer for all three steps. The buttons had been sitting
@@ -35147,7 +35080,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   {slideIdx + 1} / {slides.length}
                 </span>
               )}
-              {canPublish && (
+              {canPost && hasMedia && (
                 <motion.button ref={draftRef} whileTap={{ scale: 0.97 }} onClick={() => submit("draft")} disabled={Boolean(busy)}
                   style={{ ...footBtn, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text,
                     cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>
@@ -35159,7 +35092,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   corner of the step above. Anchored to the footer rather than
                   fixed: this panel's root is an animating motion.div, and a
                   transformed ancestor makes `fixed` mean "inside that box". */}
-              {canPublish && (
+              {canPost && hasMedia && (
                 <div style={{ position: "relative", marginRight: 12 }}>
                   <span onClick={() => setWhenOpen(o => !o)}
                     style={{ padding: "0 10px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
@@ -35202,7 +35135,17 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   </>)}
                 </div>
               )}
-              {canPublish ? (
+              {/* Nichts ausgewählt, aber alle gewählten Kanäle nehmen reinen
+                  Text: dann ist das Veröffentlichen ein stiller Link und kein
+                  Knopf, der über den drei Einstiegen thront. */}
+              {canPost && !hasMedia && (
+                <span onClick={() => { if (!busy) submit("post"); }}
+                  style={{ padding: "0 14px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
+                    color: busy ? theme.textFaint : theme.textDim, cursor: busy ? "wait" : "pointer", whiteSpace: "nowrap" }}>
+                  {busy === "post" ? (de ? "Wird gesendet…" : "Sending…") : (de ? "Ohne Bild veröffentlichen" : "Publish without a picture")}
+                </span>
+              )}
+              {canPost && hasMedia ? (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("post")} disabled={Boolean(busy)}
                   style={{ ...footBtn, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
                     // Never narrower than the draft button beside it. Measured,
