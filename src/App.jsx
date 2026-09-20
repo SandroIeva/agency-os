@@ -35446,6 +35446,22 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // on its own, so the way out of this step cannot depend on a picture.
   const mediaRequired = selected.some(a => a.provider === "meta" || a.provider === "tiktok");
   const canPost = canPublish && (hasMedia || !mediaRequired);
+  // Was noch fehlt, in Worten, oder null. Ein Knopf, der sich drücken lässt und
+  // dann erklärt, warum es nicht ging, ist eine Falle: die Bedingungen stehen
+  // vorher fest, also sagt der Knopf vorher, dass er nicht kann.
+  const postBlocked = (() => {
+    if (!selected.length) return de ? "Wähle mindestens einen Kanal." : "Pick at least one channel.";
+    if (overLimit) return de ? `Der Text ist ${text.length - charLimit} Zeichen zu lang.`
+                             : `The text is ${text.length - charLimit} characters too long.`;
+    // Instagram und TikTok veröffentlichen nichts ohne Medien, Threads schon.
+    if (mediaRequired && !hasMedia) return de ? "Instagram und TikTok brauchen ein Bild oder ein Video."
+                                              : "Instagram and TikTok need a picture or a video.";
+    if (igStory && !hasMedia) return de ? "Eine Story braucht ein Bild oder ein Video."
+                                        : "A story needs a picture or a video.";
+    if (!hasMedia && !text.trim()) return de ? "Schreib etwas oder wähle ein Visual."
+                                             : "Write something or pick a visual.";
+    return null;
+  })();
   // Entwurf und Zeitpunkt kann nur Zernio. Instagram, Threads und TikTok
   // veröffentlichen sofort oder gar nicht, also standen dort zwei Knöpfe, die
   // nichts konnten, außer eine Fehlermeldung zu zeigen: genau das ist beim
@@ -35457,10 +35473,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // (scheduled_posts + api/publish-due), weil deren API keinen geplanten
   // Beitrag kennt.
   const canSchedule = selected.length > 0 && !selected.some(a => a.provider === "tiktok");
-  // Ohne Bild bleibt der Text das Einzige, was der Beitrag hat. Solange der
-  // leer ist, gibt es nichts zu veröffentlichen, und ein Link, der das erst
-  // nach dem Klick sagt, ist eine Falle.
-  const textReady = !!text.trim();
+
 
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -36641,18 +36654,18 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
               {/* Nichts ausgewählt, aber alle gewählten Kanäle nehmen reinen
                   Text: dann ist das Veröffentlichen ein stiller Link und kein
                   Knopf, der über den drei Einstiegen thront. */}
-              {!editing && canPost && !hasMedia && (
+              {!editing && canPublish && !hasMedia && (
                 <div style={{ position: "relative", display: "inline-flex" }}>
                   <span onClick={() => {
-                      if (!textReady || busy) return;
+                      if (postBlocked || busy) return;
                       // Steht die Zeit schon, ist die Frage beantwortet.
                       if (schedule) { submit("post"); return; }
                       setNoMediaMenu(o => !o);
                     }}
-                    title={textReady ? undefined : (de ? "Schreib zuerst eine Beschreibung." : "Write a description first.")}
+                    title={postBlocked || undefined}
                     style={{ padding: "0 14px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
-                      color: schedule ? theme.text : theme.textDim, opacity: textReady ? 1 : 0.4,
-                      cursor: !textReady ? "default" : busy ? "wait" : "pointer", whiteSpace: "nowrap" }}>
+                      color: schedule ? theme.text : theme.textDim, opacity: postBlocked ? 0.4 : 1,
+                      cursor: postBlocked ? "not-allowed" : busy ? "wait" : "pointer", whiteSpace: "nowrap" }}>
                     {busy === "post" ? (de ? "Wird gesendet…" : "Sending…")
                       : schedule
                         ? `${de ? "Für " : "For "}${new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(schedule))} ${de ? "planen" : "schedule"}`
@@ -36713,14 +36726,18 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}>
                   {busy === "save" ? (de ? "Wird gespeichert…" : "Saving…") : (de ? "Speichern" : "Save")}
                 </motion.button>
-              ) : canPost && hasMedia ? (
-                <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("post")} disabled={Boolean(busy)}
+              ) : canPublish && hasMedia ? (
+                <motion.button whileTap={postBlocked ? {} : { scale: 0.97 }}
+                  onClick={() => { if (!postBlocked && !busy) submit("post"); }}
+                  disabled={Boolean(busy) || !!postBlocked}
+                  title={postBlocked || undefined}
                   style={{ ...footBtn, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
                     // Never narrower than the draft button beside it. Measured,
                     // because the two labels differ in every language and in
                     // every state the button has.
                     minWidth: draftW || undefined,
-                    cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}>
+                    cursor: postBlocked ? "not-allowed" : busy ? "wait" : "pointer",
+                    opacity: postBlocked ? 0.4 : busy ? 0.7 : 1 }}>
                   {busy === "post"
                     ? (uploadPct != null
                         ? `${de ? "Lädt hoch" : "Uploading"} ${uploadPct}%`
