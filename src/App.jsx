@@ -33913,6 +33913,18 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     return () => { on = false; };
   }, []);
   const [uploadPct, setUploadPct] = useState(null);
+  // Was noch aussteht. Eine Warteschlange, in die niemand hineinsehen kann, ist
+  // schlimmer als keine: man weiß nicht, ob der Beitrag existiert.
+  const [queued, setQueued] = useState([]);
+  const loadQueue = useCallback(async () => {
+    if (!orgId) { setQueued([]); return; }
+    const { data } = await supabase.from("scheduled_posts")
+      .select("id, publish_at, status, body, targets, last_error")
+      .eq("org_id", orgId).in("status", ["queued", "processing", "failed"])
+      .order("publish_at", { ascending: true }).limit(20);
+    setQueued(data || []);
+  }, [orgId]);
+  useEffect(() => { loadQueue(); }, [loadQueue]);
   // Instagram und Threads holen sich die Datei selbst über eine URL, Bytes
   // nehmen sie nicht an. Also liegt sie vorher in unserem Supabase-Speicher,
   // und der steht auf dem kostenlosen Plan: 50 MB je Objekt, nicht
@@ -34251,12 +34263,23 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     const thrSel = selected.filter(a => a.provider === "threads");
     const ttSel = selected.filter(a => a.provider === "tiktok");
     const zernSel = selected.filter(a => !a.provider);
-    if ((metaSel.length || thrSel.length) && (isDraft || schedule)) {
+    // Entwurf gibt es bei Instagram und Threads nicht, auch nicht als unseren:
+    // ein Entwurf, den man nur in i7OS sieht, ist eine Notiz.
+    if ((metaSel.length || thrSel.length) && isDraft) {
       setError(new Error(de
-        ? "Die direkten Meta-Kanäle können nur sofort veröffentlichen. Nimm sie raus, oder veröffentliche jetzt."
-        : "The direct Meta channels can only publish right away. Take them out, or publish now."));
+        ? "Instagram und Threads kennen keinen Entwurf. Nimm sie raus, oder veröffentliche jetzt."
+        : "Instagram and Threads have no drafts. Take them out, or publish now."));
       return;
     }
+    if (ttSel.length && (isDraft || schedule)) {
+      setError(new Error(de
+        ? "TikTok kann nur sofort veröffentlichen. Nimm es raus, oder veröffentliche jetzt."
+        : "TikTok can only publish right away. Take it out, or publish now."));
+      return;
+    }
+    // Geplant heißt bei den direkten Kanälen: wir heben den Beitrag auf und
+    // schicken ihn zur Zeit. Die Kanäle selbst können es nicht.
+    const queueDirect = !!schedule && (metaSel.length > 0 || thrSel.length > 0);
     // Instagram fetches the media itself and refuses a post without any.
     if (metaSel.length && !imageFileRef.current && !reel) {
       setError(new Error(de ? "Instagram braucht ein Bild oder ein Video." : "Instagram needs an image or a video."));
@@ -34313,6 +34336,39 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         metaReel = await toMetaMedia(reel.file, reel.file.type, (reel.file.name.split(".").pop() || "mp4").toLowerCase());
       }
 
+      if (queueDirect) {
+        const when = new Date(schedule);
+        const queueMedia = metaReel
+          ? [{ ...metaReel, kind: "VIDEO" }, ...metaExtras]
+          : (metaMedia ? [metaMedia, ...metaExtras] : []);
+        // Der Zwischenspeicher für große Dateien hält eine Datei 24 Stunden.
+        // Ein Beitrag, der später rausgeht, fände sie nicht mehr vor, und das
+        // ist besser jetzt gesagt als in der Nacht stillschweigend gescheitert.
+        if (queueMedia.some(m => m?.relayId) && when.getTime() > Date.now() + 20 * 3600000) {
+          setError(new Error(de
+            ? "Große Videos lassen sich höchstens 20 Stunden im Voraus planen. Der Zwischenspeicher hält die Datei nur einen Tag."
+            : "Large videos can be scheduled at most 20 hours ahead: the media relay keeps a file for one day only."));
+          setBusy(null);
+          return;
+        }
+        const targets = [
+          ...metaSel.map(a => ({ provider: "meta", igUserId: a.igUserId, label: a.username || a.displayName })),
+          ...thrSel.map(a => ({ provider: "threads", threadsUserId: a.threadsUserId, label: a.username || a.displayName })),
+        ];
+        const { error: qErr } = await supabase.from("scheduled_posts").insert({
+          org_id: orgId, created_by: session?.user?.id || null,
+          publish_at: when.toISOString(),
+          body: text.trim() || null,
+          targets, media: queueMedia,
+        });
+        if (qErr) {
+          setError(new Error((de ? "Konnte nicht geplant werden: " : "Could not be scheduled: ") + qErr.message));
+          setBusy(null);
+          return;
+        }
+        loadQueue();
+      }
+
       const parts = [];
       if (zernSel.length) {
         const r = await zernioRequest(session, {
@@ -34353,7 +34409,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           : "Instagram is still working on it. Check that every slide has the same shape, between 4:5 and 1.91:1." };
       };
 
-      for (const a of metaSel) {
+      for (const a of (queueDirect ? [] : metaSel)) {
         const igUserId = a.igUserId;
         const fail = (error) => parts.push({ platform: "instagram", status: "failed", url: null, error });
         let creationId = null;
@@ -34412,7 +34468,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       // Threads, one account at a time like Instagram. It differs in one way
       // that matters here: text on its own is a post, so there is no media
       // guard above it and none needed.
-      for (const a of thrSel) {
+      for (const a of (queueDirect ? [] : thrSel)) {
         const send = (payload) => fetch("/api/threads", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
@@ -34588,6 +34644,11 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         : "TikTok is still processing the post. Check again shortly." });
       }
 
+      if (queueDirect) {
+        for (const a of [...metaSel, ...thrSel]) {
+          parts.push({ platform: a.platform, status: "scheduled", url: null, error: null });
+        }
+      }
       const failedAll = parts.length > 0 && parts.every(p => p.status === "failed");
       // A reel Instagram is still chewing on is neither published nor failed,
       // and the summary has to say so or somebody goes looking for a post that
@@ -34652,7 +34713,13 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // veröffentlichen sofort oder gar nicht, also standen dort zwei Knöpfe, die
   // nichts konnten, außer eine Fehlermeldung zu zeigen: genau das ist beim
   // Klick auf "Entwurf speichern" passiert.
-  const canQueue = selected.length > 0 && selected.every(a => !a.provider);
+  // Entwurf kann nur Zernio: Instagram und Threads kennen keinen.
+  const canDraft = selected.length > 0 && selected.every(a => !a.provider);
+  // Planen kann jetzt jeder außer TikTok. Für Zernio führt Zernio die
+  // Warteschlange, für die direkten Kanäle führen wir sie selbst
+  // (scheduled_posts + api/publish-due), weil deren API keinen geplanten
+  // Beitrag kennt.
+  const canSchedule = selected.length > 0 && !selected.some(a => a.provider === "tiktok");
   // Ohne Bild bleibt der Text das Einzige, was der Beitrag hat. Solange der
   // leer ist, gibt es nichts zu veröffentlichen, und ein Link, der das erst
   // nach dem Klick sagt, ist eine Falle.
@@ -35306,7 +35373,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   {slideIdx + 1} / {slides.length}
                 </span>
               )}
-              {canPost && hasMedia && canQueue && (
+              {canPost && hasMedia && canDraft && (
                 <motion.button ref={draftRef} whileTap={{ scale: 0.97 }} onClick={() => submit("draft")} disabled={Boolean(busy)}
                   style={{ ...footBtn, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text,
                     cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>
@@ -35318,7 +35385,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   corner of the step above. Anchored to the footer rather than
                   fixed: this panel's root is an animating motion.div, and a
                   transformed ancestor makes `fixed` mean "inside that box". */}
-              {canPost && hasMedia && canQueue && (
+              {canPost && hasMedia && canSchedule && (
                 <div style={{ position: "relative", marginRight: 12 }}>
                   <span onClick={() => setWhenOpen(o => !o)}
                     style={{ padding: "0 10px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
@@ -35344,6 +35411,33 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
                           color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none",
                           colorScheme: darkMode ? "dark" : "light" }} />
+                      {/* Was schon wartet. Ohne diese Liste wüsste niemand, ob
+                          ein geplanter Beitrag überhaupt existiert. */}
+                      {queued.length > 0 && (
+                        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${theme.borderFaint}`,
+                          maxHeight: 190, overflowY: "auto" }}>
+                          <div style={{ ...label, marginBottom: 8 }}>{de ? "Wartet" : "Waiting"}</div>
+                          {queued.map(q => (
+                            <div key={q.id} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "5px 0" }}>
+                              <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap" }}>
+                                {new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "short", timeStyle: "short" }).format(new Date(q.publish_at))}
+                              </span>
+                              <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontFamily: FONT, color: theme.textDim,
+                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {q.status === "failed" ? (q.last_error || (de ? "Fehlgeschlagen" : "Failed"))
+                                  : (q.targets || []).map(t => t.label).filter(Boolean).join(", ")
+                                    || (q.body || "").slice(0, 40)}
+                              </span>
+                              <span onClick={async () => {
+                                await supabase.from("scheduled_posts").delete().eq("id", q.id);
+                                loadQueue();
+                              }} style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, cursor: "pointer", flexShrink: 0 }}>
+                                {de ? "Absagen" : "Cancel"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 14 }}>
                         <span onClick={() => { setSchedule(""); setWhenOpen(false); }}
                           style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, cursor: "pointer" }}>

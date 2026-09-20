@@ -290,6 +290,14 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
   const orgId = body.orgId;
   if (!orgId) return json({ error: "orgId is required" }, 400);
 
+  // Der geplante Beitrag hat keine Anmeldung, weil niemand davorsitzt: er wird
+  // von api/publish-due geschickt, angestoßen von pg_cron. Der Kopf ist das
+  // Geheimnis, das nur die Datenbank und Vercel kennen, und er ersetzt NUR die
+  // Anmeldung. Die Freigabeliste unten gilt weiter.
+  const internal = !!process.env.PUBLISH_SECRET
+    && (req.headers.get("x-i7-hook-secret") || "") === process.env.PUBLISH_SECRET;
+
+  if (!internal) {
   const bearer = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   if (!bearer) return json({ error: "Not signed in", code: "unauthenticated" }, 401);
   const { data: who } = await db.auth.getUser(bearer);
@@ -298,6 +306,7 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
   const { data: member } = await db.from("org_members")
     .select("user_id").eq("org_id", orgId).eq("user_id", userId).maybeSingle();
   if (!member) return json({ error: "Not a member of this workspace", code: "forbidden" }, 403);
+  }
 
   if (!enabledOrgs().includes(orgId)) {
     return json({ enabled: false, connected: false, accounts: [], code: "not_enabled" });
