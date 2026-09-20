@@ -30952,11 +30952,16 @@ const ZERNIO_UI_PLATFORMS = ["linkedin", "instagram", "threads", "pinterest"];
 // `popup` is the composer's: a full navigation there would take the post being
 // written with it. Everywhere else the consent screen is a page like any other,
 // and a blocked popup would look like a dead button.
-async function startMetaConnect(what, orgId, lang, popup = null) {
+// Where the person was when they started. The state token is minted by
+// Postgres and carries a user and a workspace, not a screen, so the screen is
+// remembered here and read once on the way back. Same as Pinterest and Notion.
+const DIRECT_RETURN_KEY = "agencyos-direct-return";
+async function startMetaConnect(what, orgId, lang, popup = null, returnTo = "settings") {
   const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
     p_org: orgId || null, p_kind: what, p_lang: lang === "en" ? "en" : "de",
   });
   if (error || !token) throw error || new Error("token");
+  try { localStorage.setItem(DIRECT_RETURN_KEY, returnTo); } catch (_) {}
   const url = `/api/${what}?mode=install&state=${encodeURIComponent(token)}`;
   if (popup && !popup.closed) { popup.location.href = url; return; }
   window.location.href = url;
@@ -32261,7 +32266,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   const connectHere = (k) => {
     if (directOffers.includes(k)) {
       setBusyKey(k);
-      startMetaConnect(k, orgId, appLanguage).catch(() => setBusyKey(null));
+      startMetaConnect(k, orgId, appLanguage, null, "touchpoints").catch(() => setBusyKey(null));
       return;
     }
     connect(k);
@@ -33593,7 +33598,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     setConnectBusy(k); setError(null);
     let popup = null;
     try { popup = window.open("", "meta-connect", "width=680,height=760,noopener=no"); } catch (_) { popup = null; }
-    startMetaConnect(k, orgId, appLanguage, popup).catch((e) => { setError(e); setConnectBusy(null); });
+    // The popup keeps the post; the fallback (a blocked popup) navigates, and
+    // then the note below brings the person back to the composer.
+    startMetaConnect(k, orgId, appLanguage, popup, "createpost").catch((e) => { setError(e); setConnectBusy(null); });
     if (popup) {
       const watch = setInterval(() => {
         if (!popup.closed) return;
@@ -54966,6 +54973,20 @@ export default function CircularMenu() {
     setIgBusy(false);
   };
 
+  // Back where it started. Settings is the default, but somebody who connected
+  // from Analytics or from the post composer has no business landing in a
+  // settings page they never opened.
+  const afterDirectConnect = () => {
+    let back = "settings";
+    try {
+      back = localStorage.getItem(DIRECT_RETURN_KEY) || "settings";
+      localStorage.removeItem(DIRECT_RETURN_KEY);
+    } catch (_) { /* no storage, Settings then */ }
+    if (back === "touchpoints" || back === "createpost") { setCurrentView(back); return; }
+    setSettingsTab("account");
+    setCurrentView("settings");
+  };
+
   // Instagram sends people back to /?instagram=<status>. Read once, then taken
   // out of the URL so a reload does not replay it.
   useEffect(() => {
@@ -54977,8 +54998,7 @@ export default function CircularMenu() {
     window.history.replaceState({}, "", url.pathname + (url.search || ""));
     if (status === "connected") {
       readInstagram().then(st => { setIgReady(!!st?.enabled); setIgConn(st?.enabled ? st : null); });
-      setSettingsTab("account");
-      setCurrentView("settings");
+      afterDirectConnect();
     } else if (status !== "cancelled") {
       setIgErr(
         status === "not_enabled"
@@ -55095,11 +55115,7 @@ export default function CircularMenu() {
   const startTikTokConnect = async () => {
     setTtBusy(true); setTtErr("");
     try {
-      const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
-        p_org: userOrg?.id || null, p_kind: "tiktok", p_lang: appLanguage === "en" ? "en" : "de",
-      });
-      if (error || !token) throw error || new Error("token");
-      window.location.href = `/api/tiktok?mode=install&state=${encodeURIComponent(token)}`;
+      await startMetaConnect("tiktok", userOrg?.id, appLanguage);
     } catch (e) {
       setTtErr(appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection.");
       setTtBusy(false);
@@ -55131,8 +55147,7 @@ export default function CircularMenu() {
     window.history.replaceState({}, "", url.pathname + (url.search || ""));
     if (status === "connected") {
       readTikTok().then(st => { setTtReady(!!st?.enabled); setTtConn(st?.enabled ? st : null); });
-      setSettingsTab("account");
-      setCurrentView("settings");
+      afterDirectConnect();
     } else if (status !== "cancelled") {
       setTtErr(
         status === "not_enabled"
@@ -55158,8 +55173,7 @@ export default function CircularMenu() {
     window.history.replaceState({}, "", url.pathname + (url.search || ""));
     if (status === "connected") {
       readThreads().then(st => { setThReady(!!st?.enabled); setThConn(st?.enabled ? st : null); });
-      setSettingsTab("account");
-      setCurrentView("settings");
+      afterDirectConnect();
     } else if (status !== "cancelled") {
       setThErr(
         status === "not_enabled"
