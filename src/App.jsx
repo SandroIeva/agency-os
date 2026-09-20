@@ -33643,6 +33643,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   };
+  const [addMenu, setAddMenu] = useState(false);
+  const [stickerOpen, setStickerOpen] = useState(false);
   const [overlays, setOverlays] = useState([]);     // [{ id, text, x, y, size, color, bold }] — x/y/size relative to image
   const [selOverlay, setSelOverlay] = useState(null);
   // Dictation for the caption, the same SpeechRecognition the notes and the
@@ -33775,8 +33777,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     if (!el || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(() => setStageW(el.offsetWidth));
     ro.observe(el);
+    setStageW(el.offsetWidth);
     return () => ro.disconnect();
-  }, [visual, stepIdx, !!reel]);
+    // igStory gehört dazu: mit der Story wird aus dem eingepassten Bild ein
+    // hochkanter Ausschnitt, also eine andere Breite, und die Schriftgröße der
+    // platzierten Elemente rechnet in Anteilen genau dieser Breite.
+  }, [visual, stepIdx, !!reel, igStory]);
 
   const selected = (accounts || []).filter(a => selectedIds.includes(a.id));
   // One connected channel is not a choice, it is the answer. It used to start
@@ -33996,6 +34002,42 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const captionRef = useRef(null);
   // An der Schreibmarke, nicht hinten dran: in einer Beschreibung steht der
   // Smiley meistens mitten im Satz.
+  // Dasselbe Feld an zwei Stellen: unter der Beschreibung und über dem Plus im
+  // Visual. Einmal beschrieben, weil zwei Emoji-Listen im selben Programm
+  // garantiert irgendwann auseinanderlaufen.
+  const emojiPanel = (onChoose) => (
+    <div onClick={(e) => e.stopPropagation()}
+      style={{ width: 320, height: 280, borderRadius: 16, overflow: "hidden",
+        background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
+        border: `1px solid ${theme.border}`,
+        boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+        display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", borderBottom: `1px solid ${theme.borderFaint}`, padding: 4 }}>
+        {[["smileys", "\u{1F600}"], ["gestures", "\u{1F44B}"], ["hearts", "\u2764\uFE0F"], ["objects", "\u{1F389}"]].map(([id, icon]) => (
+          <motion.div key={id} whileTap={{ scale: 0.92 }} onClick={() => setEmojiTab(id)}
+            style={{ flex: 1, padding: "8px 0", borderRadius: 10, cursor: "pointer",
+              textAlign: "center", fontSize: 18,
+              background: emojiTab === id ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent" }}>
+            {icon}
+          </motion.div>
+        ))}
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 2 }}>
+          {EMOJI_GROUPS[emojiTab].map((emoji, i) => (
+            <motion.div key={emoji + i} whileTap={{ scale: 0.9 }}
+              whileHover={{ scale: 1.25, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }}
+              onClick={() => onChoose(emoji)}
+              style={{ width: 34, height: 34, borderRadius: 8, display: "flex",
+                alignItems: "center", justifyContent: "center", cursor: "pointer",
+                fontSize: 20, lineHeight: 1 }}>
+              {emoji}
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
   const insertEmoji = (emoji) => {
     const el = captionRef.current;
     if (!el) { setText(t => t + emoji); return; }
@@ -34283,10 +34325,21 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     removeExtra(slides[slideIdx].key);
     setSlideIdx(i => Math.max(0, i - 1));
   };
-  const addOverlay = () => {
+  // Text oder Emoji auf dem Bild. Beides ist dieselbe Sache: Zeichen, die beim
+  // Veröffentlichen fest ins Bild gerechnet werden. Ein Emoji ist nur ein Text
+  // mit einem Zeichen, also braucht es dafür keinen zweiten Elementtyp.
+  const addOverlay = ({ text, size = 0.065, bold = true } = {}) => {
     const id = crypto.randomUUID();
-    setOverlays(prev => [...prev, { id, text: de ? "Dein Text" : "Your text", x: 0.07, y: 0.08, size: 0.065, color: "#FFFFFF", bold: true }]);
+    setOverlays(prev => [...prev, {
+      id, text: text || (de ? "Dein Text" : "Your text"),
+      // Leicht versetzt, damit ein zweites Element nicht exakt auf dem ersten
+      // landet und unauffindbar wird.
+      x: 0.07 + Math.min(0.3, prev.length * 0.04),
+      y: 0.08 + Math.min(0.3, prev.length * 0.06),
+      size, color: "#FFFFFF", bold,
+    }]);
     setSelOverlay(id);
+    setAddMenu(false); setStickerOpen(false);
   };
   const patchOverlay = (id, patch) => setOverlays(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o));
   const removeOverlay = (id) => { setOverlays(prev => prev.filter(o => o.id !== id)); setSelOverlay(s => s === id ? null : s); };
@@ -34313,12 +34366,29 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
   // Render the composition (image + text overlays) to a JPEG at the image's
   // natural resolution. No overlays → the original file is used untouched.
+  // Text und Emoji fest ins Bild. Zweimal gebraucht, für die Story und für den
+  // normalen Beitrag, und beide Male in Anteilen der Fläche, auf der sie
+  // platziert wurden.
+  const drawOverlays = (ctx, W, H) => {
+    overlays.forEach(o => {
+      const px = Math.max(8, Math.round(o.size * W));
+      ctx.font = `${o.bold ? 700 : 500} ${px}px Geist, -apple-system, sans-serif`;
+      ctx.fillStyle = o.color;
+      ctx.textBaseline = "top";
+      String(o.text).split("\n").forEach((line, i) =>
+        ctx.fillText(line, Math.round(o.x * W), Math.round(o.y * H + i * px * 1.22)));
+    });
+  };
+
   const exportVisual = async () => {
     const file = imageFileRef.current;
     if (!file || !visual) return null;
     // Für eine Story wird beschnitten, und zwar auf denselben Ausschnitt, den
     // die Bühne zeigt: dieselbe Formel, die objectPosition benutzt.
     if (igStory) {
+      // Erst die Schrift, dann zeichnen: sonst rendert der erste Export in einer
+      // Ersatzschrift und sieht anders aus als die Bühne.
+      try { await document.fonts?.load(`700 64px Geist`); await document.fonts?.load(`500 64px Geist`); } catch (_) {}
       const bmp = await createImageBitmap(file);
       const W = 1080, H = 1920;
       const canvas = document.createElement("canvas");
@@ -34328,6 +34398,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       const scale = Math.max(W / bmp.width, H / bmp.height);
       const rw = bmp.width * scale, rh = bmp.height * scale;
       ctx.drawImage(bmp, (W - rw) * storyFocus.x, (H - rh) * storyFocus.y, rw, rh);
+      // Dieselben Anteile wie auf der Bühne, nur auf 1080 gerechnet: die
+      // Elemente liegen im Rahmen der Story, nicht im Originalbild.
+      drawOverlays(ctx, W, H);
       const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.92));
       if (!blob) throw new Error(de ? "Story konnte nicht gerendert werden." : "Could not render the story.");
       return { blob, type: "image/jpeg", name: "story.jpg" };
@@ -34339,13 +34412,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     canvas.width = bmp.width; canvas.height = bmp.height;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(bmp, 0, 0);
-    overlays.forEach(o => {
-      const px = Math.max(8, Math.round(o.size * bmp.width));
-      ctx.font = `${o.bold ? 700 : 500} ${px}px Geist, -apple-system, sans-serif`;
-      ctx.fillStyle = o.color;
-      ctx.textBaseline = "top";
-      o.text.split("\n").forEach((line, i) => ctx.fillText(line, Math.round(o.x * bmp.width), Math.round(o.y * bmp.height + i * px * 1.22)));
-    });
+    drawOverlays(ctx, bmp.width, bmp.height);
     const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.92));
     if (!blob) throw new Error(de ? "Visual konnte nicht gerendert werden." : "Could not render the visual.");
     return { blob, type: "image/jpeg", name: "post-visual.jpg" };
@@ -35642,9 +35709,66 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         </div>
                       ))}
 
+                      {/* Schwebt über der Bühne statt im Fuß zu stehen: sie gehört
+                          zu dem Element, das gerade gewählt ist, und ist weg, sobald
+                          keines mehr gewählt ist. */}
+                      {selectedOverlayObj && (
+                        <div onPointerDown={(e) => e.stopPropagation()}
+                          style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", zIndex: 4,
+                            display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 14,
+                            background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
+                            border: `1px solid ${theme.borderFaint}`, boxShadow: "0 12px 34px rgba(0,0,0,0.22)" }}>
+                          <input value={selectedOverlayObj.text}
+                            onChange={(e) => patchOverlay(selectedOverlayObj.id, { text: e.target.value })}
+                            placeholder={de ? "Text" : "Text"}
+                            style={{ width: 150, border: "none", outline: "none", background: "transparent",
+                              color: theme.text, fontSize: 12.5, fontFamily: FONT, caretColor: theme.text }} />
+                          <div style={{ width: 1, height: 20, background: theme.borderFaint }} />
+                          {[["\u2212", -0.012], ["+", 0.012]].map(([sign, step]) => (
+                            <div key={sign} onClick={() => patchOverlay(selectedOverlayObj.id,
+                              { size: Math.min(0.4, Math.max(0.02, selectedOverlayObj.size + step)) })}
+                              title={de ? "Größe" : "Size"}
+                              style={{ width: 22, height: 22, borderRadius: 7, cursor: "pointer", display: "flex",
+                                alignItems: "center", justifyContent: "center", fontFamily: FONT, fontSize: 13,
+                                fontWeight: 600, color: theme.text,
+                                background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" }}>
+                              {sign}
+                            </div>
+                          ))}
+                          <div onClick={() => patchOverlay(selectedOverlayObj.id, { bold: !selectedOverlayObj.bold })}
+                            title={de ? "Fett" : "Bold"}
+                            style={{ width: 22, height: 22, borderRadius: 7, cursor: "pointer", display: "flex",
+                              alignItems: "center", justifyContent: "center", fontFamily: FONT, fontSize: 12.5,
+                              fontWeight: 700, color: selectedOverlayObj.bold ? (darkMode ? "#15151c" : "#fff") : theme.text,
+                              background: selectedOverlayObj.bold ? (darkMode ? "#F4F4F7" : "#15151c")
+                                : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") }}>
+                            B
+                          </div>
+                          <div style={{ width: 1, height: 20, background: theme.borderFaint }} />
+                          {["#FFFFFF", "#15151c", "#E86767", "#00B894", "#F5C542"].map(c => (
+                            <div key={c} onClick={() => patchOverlay(selectedOverlayObj.id, { color: c })}
+                              style={{ width: 18, height: 18, borderRadius: 999, background: c, cursor: "pointer",
+                                border: `1px solid ${selectedOverlayObj.color === c ? theme.text : theme.borderFaint}`,
+                                boxShadow: selectedOverlayObj.color === c ? `0 0 0 2px ${darkMode ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.12)"}` : "none" }} />
+                          ))}
+                          <div style={{ width: 1, height: 20, background: theme.borderFaint }} />
+                          <div onClick={() => removeOverlay(selectedOverlayObj.id)} title={de ? "Entfernen" : "Remove"}
+                            style={{ width: 22, height: 22, borderRadius: 7, cursor: "pointer", display: "flex",
+                              alignItems: "center", justifyContent: "center", color: theme.textDim }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                          </div>
+                        </div>
+                      )}
+
                       <div ref={viewRef} style={{ position: "absolute", inset: slides.length > 1 ? "0 58px" : 0,
                         display: "flex", alignItems: "center", justifyContent: "center", minWidth: 0, minHeight: 0 }}>
-                      <div style={{ position: "relative", lineHeight: 0, flexShrink: 0,
+                      {/* stageRef sitzt hier und nicht weiter innen: die platzierten
+                          Elemente rechnen in Anteilen DIESES Rechtecks, und das ist
+                          bei einer Story der hochkante Ausschnitt und sonst das
+                          eingepasste Bild. Lagen sie innen, gäbe es sie in der Story
+                          gar nicht. */}
+                      <div ref={stageRef} onPointerDown={() => setSelOverlay(null)}
+                        style={{ position: "relative", lineHeight: 0, flexShrink: 0, userSelect: "none",
                         width: storyBox ? storyBox.w : mediaWidth, height: storyBox ? storyBox.h : mediaHeight }}>
                       {storyBox ? (
                         /* Hochkant, im Verhältnis der Story, und das Bild darin
@@ -35671,23 +35795,24 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           onLoadedMetadata={e => setLoadedMedia({ url: curSlide.url, w: e.currentTarget.videoWidth, h: e.currentTarget.videoHeight })}
                           style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 16, outline: `1px solid ${theme.borderFaint}`, outlineOffset: -1, display: "block" }} />
                       ) : (
-                        // Overlays use this fitted image rectangle as their coordinate system.
-                        <div ref={stageRef} onPointerDown={() => setSelOverlay(null)}
-                          style={{ position: "relative", width: "100%", height: "100%", userSelect: "none", touchAction: "none", lineHeight: 0 }}>
-                          <img src={currentMediaUrl} alt="" draggable={false}
-                            onLoad={e => setLoadedMedia({ url: currentMediaUrl, w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-                            style={{ display: "block", width: "100%", height: "100%", objectFit: "contain",
-                              borderRadius: 16, outline: `1px solid ${theme.borderFaint}`, outlineOffset: -1 }} />
-                          {slideIdx === 0 && overlays.map(o => (
-                            <div key={o.id} onPointerDown={(e) => onOverlayDown(e, o)}
-                              style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500,
-                                fontSize: Math.max(9, o.size * (stageW || 1)), lineHeight: 1.22, whiteSpace: "pre", cursor: "move",
-                                outline: selOverlay === o.id ? "1.5px dashed rgba(77,159,255,0.9)" : "none", outlineOffset: 3 }}>
-                              {o.text}
-                            </div>
-                          ))}
-                        </div>
+                        <img src={currentMediaUrl} alt="" draggable={false}
+                          onLoad={e => setLoadedMedia({ url: currentMediaUrl, w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+                          style={{ display: "block", width: "100%", height: "100%", objectFit: "contain",
+                            borderRadius: 16, outline: `1px solid ${theme.borderFaint}`, outlineOffset: -1 }} />
                       )}
+
+                      {/* Was auf dem Bild steht. Nur auf der ersten Folie, denn nur
+                          die setzt der Editor zusammen, und nie über einem Video:
+                          das müsste dafür neu berechnet werden. */}
+                      {slideIdx === 0 && !curSlide?.video && overlays.map(o => (
+                        <div key={o.id} onPointerDown={(e) => onOverlayDown(e, o)}
+                          style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color,
+                            fontFamily: FONT, fontWeight: o.bold ? 700 : 500, touchAction: "none",
+                            fontSize: Math.max(9, o.size * (stageW || 1)), lineHeight: 1.22, whiteSpace: "pre", cursor: "move",
+                            outline: selOverlay === o.id ? "1.5px dashed rgba(77,159,255,0.9)" : "none", outlineOffset: 3 }}>
+                          {o.text}
+                        </div>
+                      ))}
 
                       {/* Removes the slide you are looking at, or the video. */}
                       <motion.div whileTap={{ scale: 0.9 }} onClick={removeCurrentSlide}
@@ -35792,37 +35917,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       </motion.div>
                       {emojiOpen && (<>
                         <div onClick={() => setEmojiOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
-                        <div onClick={(e) => e.stopPropagation()}
-                          style={{ position: "absolute", bottom: "calc(100% + 12px)", left: 0, zIndex: 31,
-                            width: 320, height: 280, borderRadius: 16, overflow: "hidden",
-                            background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
-                            border: `1px solid ${theme.border}`,
-                            boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
-                            display: "flex", flexDirection: "column" }}>
-                          <div style={{ display: "flex", borderBottom: `1px solid ${theme.borderFaint}`, padding: 4 }}>
-                            {[["smileys", "\u{1F600}"], ["gestures", "\u{1F44B}"], ["hearts", "\u2764\uFE0F"], ["objects", "\u{1F389}"]].map(([id, icon]) => (
-                              <motion.div key={id} whileTap={{ scale: 0.92 }} onClick={() => setEmojiTab(id)}
-                                style={{ flex: 1, padding: "8px 0", borderRadius: 10, cursor: "pointer",
-                                  textAlign: "center", fontSize: 18,
-                                  background: emojiTab === id ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent" }}>
-                                {icon}
-                              </motion.div>
-                            ))}
-                          </div>
-                          <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 2 }}>
-                              {EMOJI_GROUPS[emojiTab].map((emoji, i) => (
-                                <motion.div key={emoji + i} whileTap={{ scale: 0.9 }}
-                                  whileHover={{ scale: 1.25, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }}
-                                  onClick={() => insertEmoji(emoji)}
-                                  style={{ width: 34, height: 34, borderRadius: 8, display: "flex",
-                                    alignItems: "center", justifyContent: "center", cursor: "pointer",
-                                    fontSize: 20, lineHeight: 1 }}>
-                                  {emoji}
-                                </motion.div>
-                              ))}
-                            </div>
-                          </div>
+                        <div style={{ position: "absolute", bottom: "calc(100% + 12px)", left: 0, zIndex: 31 }}>
+                          {emojiPanel(insertEmoji)}
                         </div>
                       </>)}
                     </div>
@@ -35881,14 +35977,63 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   picture: on the picture it reads as something you are doing TO
                   that picture. Here it sits opposite the button that moves you
                   on, which is the other thing you can do from this step. */}
-              {stepIdx === S_VISUAL && (visual || reel) && slides.length < 10 && (
-                <motion.button whileTap={{ scale: 0.97 }} onClick={() => extraRef.current?.click()}
-                  title={canVideo ? (de ? "Weiteres Bild oder Video" : "Another picture or video")
-                                  : (de ? "Weiteres Bild" : "Another picture")}
-                  style={{ ...footBtn, width: 42, padding: 0, border: `1px solid ${theme.border}`,
-                    background: "transparent", color: theme.text, cursor: "pointer" }}>
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                </motion.button>
+              {stepIdx === S_VISUAL && (visual || reel) && (
+                <div style={{ position: "relative", display: "flex" }}>
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => { setStickerOpen(false); setAddMenu(o => !o); }}
+                    title={de ? "Hinzufügen" : "Add"}
+                    style={{ ...footBtn, width: 42, padding: 0, border: `1px solid ${theme.border}`,
+                      background: "transparent", color: theme.text, cursor: "pointer" }}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                  </motion.button>
+                  {(addMenu || stickerOpen) && (<>
+                    <div onClick={() => { setAddMenu(false); setStickerOpen(false); }}
+                      style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+                    {stickerOpen ? (
+                      <div style={{ position: "absolute", bottom: "calc(100% + 12px)", left: 0, zIndex: 31 }}>
+                        {emojiPanel((emoji) => addOverlay({ text: emoji, size: 0.18, bold: false }))}
+                      </div>
+                    ) : (
+                      <div onClick={(e) => e.stopPropagation()}
+                        style={{ position: "absolute", bottom: "calc(100% + 12px)", left: 0, zIndex: 31,
+                          minWidth: 244, padding: 8, borderRadius: 16,
+                          background: darkMode ? "#1c1c24" : "#ffffff",
+                          border: `1px solid ${theme.borderFaint}`,
+                          boxShadow: "0 18px 50px rgba(0,0,0,0.22)" }}>
+                        {[
+                          // Eine weitere Folie gibt es nur, solange noch Platz
+                          // ist: zehn sind das Maximum eines Karussells.
+                          slides.length < 10 && [
+                            canVideo ? (de ? "Bild oder Video" : "Picture or video") : (de ? "Weiteres Bild" : "Another picture"),
+                            <><rect x="3" y="3" width="18" height="18" rx="3.5" /><circle cx="8.5" cy="8.5" r="2" /><path d="M3 16l5-5 4 4 3-3 6 6" /></>,
+                            () => { setAddMenu(false); extraRef.current?.click(); },
+                          ],
+                          // Text und Emoji gehören auf das Bild, das der Editor
+                          // zusammensetzt, also auf die erste Folie.
+                          !curSlide?.video && [
+                            de ? "Text platzieren" : "Place text",
+                            <><path d="M4 7V5h16v2" /><path d="M12 5v14" /><path d="M9 19h6" /></>,
+                            () => addOverlay(),
+                          ],
+                          !curSlide?.video && [
+                            de ? "Emoji platzieren" : "Place an emoji",
+                            <><circle cx="12" cy="12" r="9" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" /></>,
+                            () => { setAddMenu(false); setStickerOpen(true); },
+                          ],
+                        ].filter(Boolean).map(([what, glyph, run]) => (
+                          <div key={what} onClick={run} className="hover-row"
+                            style={{ display: "flex", alignItems: "center", gap: 10,
+                              padding: "12px 13px", borderRadius: 12, cursor: "pointer",
+                              fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: theme.text }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+                              style={{ flexShrink: 0, opacity: 0.75 }}>{glyph}</svg>
+                            {what}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>)}
+                </div>
               )}
               {/* Center the slide count beneath the image, independently of the footer buttons. */}
               {stepIdx === S_VISUAL && slides.length > 1 && (
