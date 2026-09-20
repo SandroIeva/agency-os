@@ -54,22 +54,50 @@ if (in_array($origin, $ORIGINS, true)) {
 }
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') { http_response_code(204); exit; }
 
-// Der Ablageordner legt sich selbst an, samt der Regel, die dafuer sorgt, dass
-// dort NIE etwas ausgefuehrt wird, was jemand hineinlegt. Sonst muesste eine
-// .htaccess in einen Ordner hochgeladen werden, den es noch nicht gibt.
-if (!is_dir($DIR)) {
-    @mkdir($DIR, 0755, true);
-    @file_put_contents($DIR . '/.htaccess', implode("\n", [
-        'php_flag engine off',
-        'RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8',
-        'RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8',
-        'AddType text/plain .php .phtml',
-        'Options -Indexes',
-        '<IfModule mod_headers.c>',
-        '  Header set X-Robots-Tag "noindex, nofollow"',
-        '</IfModule>',
-        '',
-    ]));
+// Der Ablageordner legt sich selbst an. Die Regel darin, die dafuer sorgt, dass
+// dort NIE etwas ausgefuehrt wird, kann dieser Server aber ablehnen, und eine
+// abgelehnte Direktive macht den GANZEN Ordner unerreichbar: 'php_flag engine
+// off' gilt nur unter mod_php, unter PHP-FPM antwortet Apache darauf mit 500.
+// Genau das ist am 20.09.2026 passiert, der Upload lief und die Datei war nicht
+// abrufbar.
+//
+// Deshalb wird die Regel nicht geglaubt, sondern geprueft: ?check=1 legt eine
+// Probedatei ab und ruft sie ueber HTTP auf. Kommt keine 200, faellt die
+// Absicherung eine Stufe zurueck, bis der Ordner wieder ausliefert. Das Ergebnis
+// steht in der Selbstauskunft.
+if (!is_dir($DIR)) @mkdir($DIR, 0755, true);
+
+$GUARD_LEVELS = [
+    // Vollstaendig: keine Ausfuehrung, kein Verzeichnislisting, nicht indexiert.
+    'strict' => "Options -Indexes\n"
+              . "RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8\n"
+              . "RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8\n"
+              . "AddType text/plain .php .phtml\n"
+              . "<IfModule mod_headers.c>\n  Header set X-Robots-Tag \"noindex, nofollow\"\n</IfModule>\n",
+    // Nur die Ausfuehrung, falls 'Options' hier nicht erlaubt ist.
+    'plain'  => "RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8\n"
+              . "AddType text/plain .php .phtml\n",
+    // Gar nichts. Vertretbar, weil die Endung ohnehin aus einer Liste stammt und
+    // hier nie eine .php landen kann.
+    'none'   => null,
+];
+
+function fetch_status($url) {
+    if (function_exists('curl_init')) {
+        $c = curl_init($url);
+        curl_setopt_array($c, [CURLOPT_NOBODY => true, CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 10, CURLOPT_FOLLOWLOCATION => false]);
+        curl_exec($c);
+        $code = (int) curl_getinfo($c, CURLINFO_HTTP_CODE);
+        curl_close($c);
+        return $code;
+    }
+    $ctx = stream_context_create(['http' => ['method' => 'HEAD', 'timeout' => 10, 'ignore_errors' => true]]);
+    @file_get_contents($url, false, $ctx);
+    foreach ($http_response_header ?? [] as $h) {
+        if (preg_match('#^HTTP/\S+\s+(\d{3})#', $h, $m)) return (int) $m[1];
+    }
+    return 0;
 }
 
 // Aufräumen bei jeder Anfrage: was Meta abgeholt hat, wird hier nicht gebraucht.
@@ -80,7 +108,22 @@ foreach (glob($DIR . '/*') ?: [] as $f) {
 
 // ── Selbstauskunft, ohne Geheimnis aufrufbar und ohne es zu verraten ───────
 if (isset($_GET['check'])) {
+    // Die Absicherung so scharf wie moeglich, aber nur so scharf, wie dieser
+    // Server sie auch ausliefert.
+    $probe = $DIR . '/probe.txt';
+    @file_put_contents($probe, "i7os\n");
+    $level = 'none';
+    $serves = 0;
+    foreach ($GUARD_LEVELS as $name => $rules) {
+        if ($rules === null) @unlink($DIR . '/.htaccess');
+        else @file_put_contents($DIR . '/.htaccess', $rules);
+        $serves = fetch_status($BASE . '/probe.txt?t=' . time());
+        if ($serves === 200) { $level = $name; break; }
+    }
+    @unlink($probe);
     out(200, [
+        'guard'               => $level,
+        'serves'              => $serves,
         'ok'                  => true,
         'relay'               => 'i7os-media',
         'version'             => 1,
@@ -92,7 +135,6 @@ if (isset($_GET['check'])) {
         'dir_writable'        => is_dir($DIR) && is_writable($DIR),
         'secret_set'          => (strlen($SECRET) >= 16 && strpos($SECRET, 'HIER-DAS') !== 0),
         'stored'              => count(glob($DIR . '/*') ?: []),
-        'guarded'             => is_file($DIR . '/.htaccess'),
         'base'                => $BASE,
     ]);
 }

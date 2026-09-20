@@ -58,14 +58,44 @@ Die beiden Dateien liegen in `docs/media-relay/`.
 Der Unterordner `files` legt sich selbst an, samt `.htaccess`, die dort jede
 Ausführung abschaltet.
 
+## Die Falle, die es schon gegeben hat
+
+Das Skript legt im Ablageordner eine `.htaccess` an, die dort jede Ausführung
+abschaltet. In der ersten Fassung stand darin `php_flag engine off`. Diese
+Anweisung gibt es **nur unter mod_php**; unter PHP-FPM kennt Apache sie nicht,
+und eine unbekannte Anweisung macht nicht sich selbst kaputt, sondern den
+GANZEN Ordner: alles darin antwortet mit 500. Der Upload lief dabei sauber
+durch, nur abrufen ließ sich nichts, was nach einem Rechteproblem aussieht und
+keines war (das wäre 403 gewesen).
+
+Deshalb wird die Absicherung jetzt nicht geglaubt, sondern gemessen:
+`?check=1` legt eine Probedatei ab, ruft sie über HTTP auf und nimmt die
+Absicherung so lange eine Stufe zurück (`strict` → `plain` → `none`), bis der
+Ordner wieder mit 200 antwortet. Welche Stufe gilt, steht als `guard` in der
+Auskunft, und `serves` ist der Statuscode der Probe.
+
+## Gemessen am 20.09.2026 (sandroieva.com, United Domains)
+
+PHP 8.5.10 über FPM, `post_max_size` und `upload_max_filesize` durch unsere
+`php.ini` auf 16 MB, also bequem über den 4-MB-Stücken. `guard: strict`,
+`serves: 200`.
+
+- 10 MB in drei Stücken: kommt byte-genau an (`10485760`), rund 9 Sekunden.
+- Ausgeliefert als `video/mp4` mit `accept-ranges: bytes`, ein Teilabruf
+  (`Range: bytes=0-99`) antwortet mit 206 und identischen Bytes. Genau so holt
+  Meta ein Video.
+- Ein gefälschtes Ticket: 403 `bad_token`.
+- `drop` löscht, danach 404.
+
 ## Sicherheit
 
 - **Ohne Ticket kein Upload.** Ein fremder POST hat kein gültiges HMAC.
 - **Die Endung stammt aus einer Liste** (`mp4, mov, m4v, jpg, jpeg, png, webp,
   gif`), der Name ist 32 Hex-Zeichen aus `crypto.randomUUID`. Damit ist weder
   ein Pfadwechsel noch eine `.php` im Ablageordner möglich.
-- **Der Ordner führt nichts aus.** `php_flag engine off`, `RemoveHandler`,
-  `Options -Indexes`, `X-Robots-Tag: noindex`.
+- **Der Ordner führt nichts aus.** `RemoveHandler`, `RemoveType`, `AddType
+  text/plain`, `Options -Indexes`, `X-Robots-Tag: noindex`. Niemals
+  `php_flag`, siehe die Falle oben.
 - **Grenzen:** 8 MB je Stück, 1 GB je Datei, alles älter als 24 Stunden fliegt
   bei jeder Anfrage raus.
 - **CORS** nur für `app.i7os.com` und die beiden lokalen Ports.
