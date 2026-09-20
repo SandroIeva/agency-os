@@ -2234,6 +2234,25 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
 // leaves the light on an empty patch of screen.
 // Rounded to a circle rather than to a box: the round buttons of the bar and
 // the sphere read wrong inside a square of light.
+// Show the password, hide it again. One drawing for both fields: the login
+// screen and the one in Settings ask for the same thing.
+const EYE_ICON = (off) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    {off ? (
+      <>
+        <path d="M10.6 6.2A9.8 9.8 0 0 1 12 6c6.5 0 10 6 10 6a17 17 0 0 1-3.2 3.9M6.2 7.8A17 17 0 0 0 2 12s3.5 6 10 6a9.9 9.9 0 0 0 3.5-.6" />
+        <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18" />
+      </>
+    ) : (
+      <>
+        <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+        <circle cx="12" cy="12" r="3" />
+      </>
+    )}
+  </svg>
+);
+
 const TOUR_ROUND = { sphere: true, messenger: true, home: true, menu: true, bell: true };
 // The card goes UNDER these, whatever side has more room: above the task list
 // it covered the greeting and read as a lid on the thing it explains. When
@@ -52423,6 +52442,8 @@ export default function CircularMenu() {
   // in. "Inaccessible app" fails a whole submission, not one permission.
   const [loginPassword, setLoginPassword] = useState("");
   const [passwordMode, setPasswordMode] = useState(false);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showPwNew, setShowPwNew] = useState(false);
   const [passwordBusy, setPasswordBusy] = useState(false);
   // Setting one, under Einstellungen → Account.
   const [pwNew, setPwNew] = useState("");
@@ -53708,7 +53729,9 @@ export default function CircularMenu() {
       // to give away.
       const wrong = /invalid login credentials/i.test(e?.message || "");
       setAuthError(wrong
-        ? (deRoot ? "E-Mail oder Passwort stimmt nicht." : "That email or password is not right.")
+        ? (deRoot
+            ? "E-Mail oder Passwort stimmt nicht. Wenn du noch keins gesetzt hast, nimm den Login-Link."
+            : "That email or password is not right. If you have not set one yet, use the login link.")
         : (e.message || (deRoot ? "Anmeldung fehlgeschlagen." : "Sign-in failed.")));
     } finally {
       setPasswordBusy(false);
@@ -58358,17 +58381,24 @@ export default function CircularMenu() {
                     }}
                   />
                   {passwordMode && (
-                    <input
-                      type="password" value={loginPassword} autoFocus
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") handlePasswordLogin(); }}
-                      placeholder={appLanguage === "de" ? "Passwort" : "Password"}
-                      style={{
-                        width: "100%", boxSizing: "border-box", padding: "15px 18px", borderRadius: 16,
-                        background: theme.cardBg, border: `1px solid ${theme.border}`, color: theme.text,
-                        fontSize: 15, fontFamily: FONT, outline: "none", caretColor: "#8B7AFF",
-                      }}
-                    />
+                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                      <input
+                        type={showLoginPassword ? "text" : "password"} value={loginPassword} autoFocus
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") handlePasswordLogin(); }}
+                        placeholder={appLanguage === "de" ? "Passwort" : "Password"}
+                        style={{
+                          width: "100%", boxSizing: "border-box", padding: "15px 48px 15px 18px", borderRadius: 16,
+                          background: theme.cardBg, border: `1px solid ${theme.border}`, color: theme.text,
+                          fontSize: 15, fontFamily: FONT, outline: "none", caretColor: "#8B7AFF",
+                        }}
+                      />
+                      <div onClick={() => setShowLoginPassword(v => !v)}
+                        title={showLoginPassword ? (appLanguage === "de" ? "Passwort verbergen" : "Hide password") : (appLanguage === "de" ? "Passwort anzeigen" : "Show password")}
+                        style={{ position: "absolute", right: 14, display: "flex", alignItems: "center", cursor: "pointer", color: theme.textDim }}>
+                        {EYE_ICON(showLoginPassword)}
+                      </div>
+                    </div>
                   )}
                   <motion.button
                     whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
@@ -58388,6 +58418,28 @@ export default function CircularMenu() {
                         ? (appLanguage === "de" ? "Sende Link…" : "Sending link…")
                         : (appLanguage === "de" ? "Login-Link per E-Mail" : "Email me a login link")}
                   </motion.button>
+                  {/* Said here rather than left to be discovered: the login
+                      screen offers a password, and nothing on it says where one
+                      comes from. Without this line, somebody who never set one
+                      clicks, types something and is told it is wrong. */}
+                  {passwordMode && (
+                    <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, lineHeight: 1.5, textAlign: "center", padding: "0 4px" }}>
+                      {appLanguage === "de"
+                        ? "Noch kein Passwort? Melde dich mit dem Login-Link an und setze eines unter Einstellungen → Account."
+                        : "No password yet? Sign in with the login link and set one under Settings → Account."}
+                    </div>
+                  )}
+                  {/* Said here rather than left to be discovered: the screen
+                      offers a password and nothing on it says where one comes
+                      from, so somebody who never set one types something and is
+                      told it is wrong. */}
+                  {passwordMode && (
+                    <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, lineHeight: 1.5, textAlign: "center", padding: "0 4px" }}>
+                      {appLanguage === "de"
+                        ? "Noch kein Passwort? Melde dich mit dem Login-Link an und setze eines unter Einstellungen → Account."
+                        : "No password yet? Sign in with the login link and set one under Settings → Account."}
+                    </div>
+                  )}
                   {/* The link stays the way in for everybody who has no password,
                       which is everybody until they set one in Settings. */}
                   <div onClick={() => { setPasswordMode(v => !v); setAuthError(null); setLoginPassword(""); }}
@@ -63174,12 +63226,18 @@ export default function CircularMenu() {
                     </div>
                     <div style={wsField}>
                       <input
-                        type="password" value={pwNew}
+                        type={showPwNew ? "text" : "password"} value={pwNew}
                         onChange={(e) => { setPwNew(e.target.value); setPwSaved(false); setPwError(null); }}
                         onKeyDown={(e) => { if (e.key === "Enter") savePassword(); }}
                         placeholder={appLanguage === "de" ? "Neues Passwort" : "New password"}
                         style={{ ...wsFieldText, flex: 1, minWidth: 120, padding: "4px 2px", border: "none", outline: "none", background: "transparent" }}
                       />
+                      <motion.div whileHover={wsFieldBtnHover} whileTap={{ scale: 0.95 }}
+                        onClick={() => setShowPwNew(v => !v)}
+                        title={showPwNew ? (appLanguage === "de" ? "Passwort verbergen" : "Hide password") : (appLanguage === "de" ? "Passwort anzeigen" : "Show password")}
+                        style={{ ...wsFieldBtn, width: 39, minWidth: 39, padding: 0 }}>
+                        {EYE_ICON(showPwNew)}
+                      </motion.div>
                       <motion.div whileHover={wsFieldBtnHover} whileTap={{ scale: 0.97 }}
                         onClick={pwSaving ? undefined : savePassword}
                         style={{ ...wsFieldBtn, opacity: pwSaving ? 0.6 : 1 }}>
