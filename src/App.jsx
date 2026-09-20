@@ -33599,6 +33599,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       : [];
   const [slideIdx, setSlideIdx] = useState(0);
   const curSlide = slides[slideIdx] || null;
+  const slideKey = curSlide?.key || "main";
+  const slideOverlays = overlays[slideKey] || [];
   // Measure a fixed viewport, independent of the image's intrinsic size.
   // The carousel gutters belong to the layout, so the measurement excludes them.
   const viewRef = useRef(null);
@@ -33645,7 +33647,14 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   };
   const [addMenu, setAddMenu] = useState(false);
   const [stickerOpen, setStickerOpen] = useState(false);
-  const [overlays, setOverlays] = useState([]);     // [{ id, text, x, y, size, color, bold }] — x/y/size relative to image
+  // Platzierte Elemente, nach Folie sortiert: { folienSchlüssel: [{ id, text,
+  // x, y, size, color, bold }] }, x/y/size als Anteil der Fläche.
+  //
+  // Vorher war es EINE Liste für den ganzen Beitrag, gezeichnet nur auf der
+  // ersten Folie. Wer auf Folie drei einen Text setzte, legte ihn damit auf
+  // Folie eins, wo er ihn nicht sah. Der Schlüssel ist derselbe, den die Folie
+  // in `slides` trägt.
+  const [overlays, setOverlays] = useState({});
   const [selOverlay, setSelOverlay] = useState(null);
   // Dictation for the caption, the same SpeechRecognition the notes and the
   // person sheet use. Above the field and right-aligned, which is where every
@@ -34204,7 +34213,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     const [first, ...rest] = prepared;
     imageFileRef.current = first.file;
     setVisual({ url: first.url, w: first.w, h: first.h });
-    setExtras(rest); setReel(null); setOverlays([]); setSelOverlay(null); setSlideIdx(0);
+    setExtras(rest); setReel(null); setOverlays({}); setSelOverlay(null); setSlideIdx(0);
   };
   const withMediaImport = async (load) => {
     if (mediaImportRef.current) return;
@@ -34268,7 +34277,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       return files;
     });
   };
-  const clearVisual = () => { imageFileRef.current = null; setVisual(null); setOverlays([]); setSelOverlay(null); clearExtras(); };
+  const clearVisual = () => { imageFileRef.current = null; setVisual(null); setOverlays({}); setSelOverlay(null); clearExtras(); };
   // Object urls are revoked on the way out. A composer somebody keeps open all
   // day otherwise holds on to every picture they ever picked.
   const clearExtras = () => {
@@ -34298,7 +34307,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     video: file.type.startsWith("video/") });
   const promoteExtra = (x) => {
     imageFileRef.current = x.file;
-    setOverlays([]); setSelOverlay(null);
+    setOverlays({}); setSelOverlay(null);
     const img = new Image();
     // `orig` wandert mit: sonst gälte eine nachgerückte Folie als neu und würde
     // beim Speichern ein zweites Mal hochgeladen.
@@ -34314,7 +34323,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       if (next?.video) {
         setExtras(list => list.slice(1));
         if (reel) URL.revokeObjectURL(reel.url);
-        imageFileRef.current = null; setVisual(null); setOverlays([]); setSelOverlay(null);
+        imageFileRef.current = null; setVisual(null); setOverlays({}); setSelOverlay(null);
         setReel({ file: next.file, url: next.url });
         return;
       }
@@ -34330,19 +34339,24 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // mit einem Zeichen, also braucht es dafür keinen zweiten Elementtyp.
   const addOverlay = ({ text, size = 0.065, bold = true } = {}) => {
     const id = crypto.randomUUID();
-    setOverlays(prev => [...prev, {
+    setOverlays(prev => ({ ...prev, [slideKey]: [...(prev[slideKey] || []), {
       id, text: text || (de ? "Dein Text" : "Your text"),
       // Leicht versetzt, damit ein zweites Element nicht exakt auf dem ersten
       // landet und unauffindbar wird.
-      x: 0.07 + Math.min(0.3, prev.length * 0.04),
-      y: 0.08 + Math.min(0.3, prev.length * 0.06),
+      x: 0.07 + Math.min(0.3, (prev[slideKey] || []).length * 0.04),
+      y: 0.08 + Math.min(0.3, (prev[slideKey] || []).length * 0.06),
       size, color: "#FFFFFF", bold,
-    }]);
+    }] }));
     setSelOverlay(id);
     setAddMenu(false); setStickerOpen(false);
   };
-  const patchOverlay = (id, patch) => setOverlays(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o));
-  const removeOverlay = (id) => { setOverlays(prev => prev.filter(o => o.id !== id)); setSelOverlay(s => s === id ? null : s); };
+  const patchOverlay = (id, patch) => setOverlays(prev => ({
+    ...prev, [slideKey]: (prev[slideKey] || []).map(o => o.id === id ? { ...o, ...patch } : o),
+  }));
+  const removeOverlay = (id) => {
+    setOverlays(prev => ({ ...prev, [slideKey]: (prev[slideKey] || []).filter(o => o.id !== id) }));
+    setSelOverlay(s => s === id ? null : s);
+  };
   // Drag an overlay across the stage — coordinates stay relative (0–1) so the
   // canvas export lands the text in exactly the same spot at full resolution.
   const onOverlayDown = (e, o) => {
@@ -34369,8 +34383,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // Text und Emoji fest ins Bild. Zweimal gebraucht, für die Story und für den
   // normalen Beitrag, und beide Male in Anteilen der Fläche, auf der sie
   // platziert wurden.
-  const drawOverlays = (ctx, W, H) => {
-    overlays.forEach(o => {
+  const drawOverlays = (ctx, W, H, list) => {
+    (list || []).forEach(o => {
       const px = Math.max(8, Math.round(o.size * W));
       ctx.font = `${o.bold ? 700 : 500} ${px}px Geist, -apple-system, sans-serif`;
       ctx.fillStyle = o.color;
@@ -34378,6 +34392,23 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       String(o.text).split("\n").forEach((line, i) =>
         ctx.fillText(line, Math.round(o.x * W), Math.round(o.y * H + i * px * 1.22)));
     });
+  };
+
+  // Eine weitere Folie, mit dem, was jemand darauf gelegt hat. Ohne Elemente
+  // bleibt es die Datei selbst: sie durch eine Leinwand zu schicken würde sie
+  // nur neu komprimieren.
+  const exportExtra = async (x) => {
+    const list = overlays[x.id] || [];
+    if (!list.length || x.video || !x.file) return null;
+    try { await document.fonts?.load(`700 64px Geist`); await document.fonts?.load(`500 64px Geist`); } catch (_) {}
+    const bmp = await createImageBitmap(x.file);
+    const canvas = document.createElement("canvas");
+    canvas.width = bmp.width; canvas.height = bmp.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(bmp, 0, 0);
+    drawOverlays(ctx, bmp.width, bmp.height, list);
+    const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.92));
+    return blob ? { blob, type: "image/jpeg", name: "slide.jpg" } : null;
   };
 
   const exportVisual = async () => {
@@ -34400,19 +34431,20 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       ctx.drawImage(bmp, (W - rw) * storyFocus.x, (H - rh) * storyFocus.y, rw, rh);
       // Dieselben Anteile wie auf der Bühne, nur auf 1080 gerechnet: die
       // Elemente liegen im Rahmen der Story, nicht im Originalbild.
-      drawOverlays(ctx, W, H);
+      drawOverlays(ctx, W, H, overlays.main || []);
       const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.92));
       if (!blob) throw new Error(de ? "Story konnte nicht gerendert werden." : "Could not render the story.");
       return { blob, type: "image/jpeg", name: "story.jpg" };
     }
-    if (overlays.length === 0) return { blob: file, type: file.type || "image/png", name: file.name };
+    const mainOverlays = overlays.main || [];
+    if (mainOverlays.length === 0) return { blob: file, type: file.type || "image/png", name: file.name };
     try { await document.fonts?.load(`700 64px Geist`); await document.fonts?.load(`500 64px Geist`); } catch (_) {}
     const bmp = await createImageBitmap(file);
     const canvas = document.createElement("canvas");
     canvas.width = bmp.width; canvas.height = bmp.height;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(bmp, 0, 0);
-    drawOverlays(ctx, bmp.width, bmp.height);
+    drawOverlays(ctx, bmp.width, bmp.height, mainOverlays);
     const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.92));
     if (!blob) throw new Error(de ? "Visual konnte nicht gerendert werden." : "Could not render the visual.");
     return { blob, type: "image/jpeg", name: "post-visual.jpg" };
@@ -34552,8 +34584,11 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         : visual.orig);
     }
     for (const x of extras) {
+      const drawn = x.file ? await exportExtra(x) : null;
       out.push(x.file
-        ? { ...(await toMetaMedia(x.file, x.file.type, (x.file.name.split(".").pop() || (x.video ? "mp4" : "jpg")).toLowerCase())),
+        ? { ...(drawn
+              ? await toMetaMedia(drawn.blob, drawn.type, "jpg")
+              : await toMetaMedia(x.file, x.file.type, (x.file.name.split(".").pop() || (x.video ? "mp4" : "jpg")).toLowerCase())),
             kind: x.video ? "VIDEO" : "IMAGE" }
         : x.orig);
     }
@@ -34676,10 +34711,15 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       // refused at the container.
       let metaExtras = [];
       if ((metaSel.length || thrSel.length) && extras.length) {
-        metaExtras = await Promise.all(extras.map(async x => ({
-          ...(await toMetaMedia(x.file, x.file.type, (x.file.name.split(".").pop() || (x.video ? "mp4" : "jpg")).toLowerCase())),
-          kind: x.video ? "VIDEO" : "IMAGE",
-        })));
+        metaExtras = await Promise.all(extras.map(async x => {
+          const drawn = await exportExtra(x);
+          return {
+            ...(drawn
+              ? await toMetaMedia(drawn.blob, drawn.type, "jpg")
+              : await toMetaMedia(x.file, x.file.type, (x.file.name.split(".").pop() || (x.video ? "mp4" : "jpg")).toLowerCase())),
+            kind: x.video ? "VIDEO" : "IMAGE",
+          };
+        }));
       }
       let metaReel = null;
       if ((metaSel.length || thrSel.length) && reel) {
@@ -35062,7 +35102,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const footBtn = { height: 42, padding: "0 24px", borderRadius: 999, fontSize: 12.5, fontFamily: FONT,
     fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
   const statusLabel = (s) => ({ published: de ? "Veröffentlicht" : "Published", scheduled: de ? "Geplant" : "Scheduled", draft: de ? "Entwurf" : "Draft", pending: de ? "In Arbeit" : "Pending", failed: de ? "Fehlgeschlagen" : "Failed" }[s] || s);
-  const selectedOverlayObj = overlays.find(o => o.id === selOverlay) || null;
+  const selectedOverlayObj = slideOverlays.find(o => o.id === selOverlay) || null;
   // The last step is where a post leaves the building, and that only means
   // anything with an account behind it.
   const canPublish = stepIdx === LAST && (accounts || []).length > 0;
@@ -35804,7 +35844,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       {/* Was auf dem Bild steht. Nur auf der ersten Folie, denn nur
                           die setzt der Editor zusammen, und nie über einem Video:
                           das müsste dafür neu berechnet werden. */}
-                      {slideIdx === 0 && !curSlide?.video && overlays.map(o => (
+                      {!curSlide?.video && slideOverlays.map(o => (
                         <div key={o.id} onPointerDown={(e) => onOverlayDown(e, o)}
                           style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color,
                             fontFamily: FONT, fontWeight: o.bold ? 700 : 500, touchAction: "none",
@@ -36003,7 +36043,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           // Eine weitere Folie gibt es nur, solange noch Platz
                           // ist: zehn sind das Maximum eines Karussells.
                           slides.length < 10 && [
-                            canVideo ? (de ? "Bild oder Video" : "Picture or video") : (de ? "Weiteres Bild" : "Another picture"),
+                            de ? "Weitere Ansicht" : "Another view",
                             <><rect x="3" y="3" width="18" height="18" rx="3.5" /><circle cx="8.5" cy="8.5" r="2" /><path d="M3 16l5-5 4 4 3-3 6 6" /></>,
                             () => { setAddMenu(false); extraRef.current?.click(); },
                           ],
