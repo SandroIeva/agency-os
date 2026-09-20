@@ -36238,7 +36238,11 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         : (de ? "Was möchtest du teilen?" : "What do you want to share?")}
                       style={{ width: "100%", flex: 1, boxSizing: "border-box", padding: "18px 20px 40px", borderRadius: 18,
                         border: `1px solid ${overLimit ? "#E86767" : theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.6)",
-                        color: theme.text, fontSize: 15, fontFamily: FONT, lineHeight: 1.65, outline: "none", resize: "none", caretColor: theme.text,
+                        // 16,5 statt 15: ein Emoji in diesem Feld ist ein Zeichen wie
+                        // jedes andere und hat zwangsläufig die Schriftgröße des
+                        // Feldes. Ein Textfeld kennt keine zwei Größen, also ist das
+                        // die einzige Schraube, und 15 war für die Zeichen zu klein.
+                        color: theme.text, fontSize: 16.5, fontFamily: FONT, lineHeight: 1.6, outline: "none", resize: "none", caretColor: theme.text,
                         opacity: igStory ? 0.38 : 1, cursor: igStory ? "not-allowed" : "text",
                         transition: "opacity 0.15s ease" }} />
                     <div style={{ position: "absolute", left: 20, bottom: 17, display: "flex", alignItems: "center", gap: 16,
