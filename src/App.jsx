@@ -35441,6 +35441,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // next to it for a while, and a preview of a picture beside that same
   // picture is the picture twice.
   const twoCol = stepIdx === S_TEXT;
+  // Ohne Kanal gibt es nichts zu durchlaufen und nichts zu veröffentlichen.
+  // Dann fallen Schrittleiste und Fuß weg, und was bleibt, ist der graue
+  // Kasten mit dem einen Satz, ringsum derselbe Abstand.
+  const hasChannels = !!accounts && accounts.length > 0;
   const hasMedia = !!(visual || reel);
   // Instagram and TikTok refuse a post with nothing in it; Threads takes text
   // on its own, so the way out of this step cannot depend on a picture.
@@ -35580,7 +35584,11 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
             </div>
           )}
 
-          {/* Numbered step tab bar — Brand-Avatar pattern (active = anthracite) */}
+          {/* Numbered step tab bar — Brand-Avatar pattern (active = anthracite).
+              Sie steht nur da, wenn es etwas zu durchlaufen gibt: ohne Kanal
+              führen beide Schritte auf dieselbe eine Nachricht, und zwei
+              Reiter, die dasselbe zeigen, sind zwei Knöpfe, die nichts tun. */}
+          {hasChannels && (
           <div style={{ display: "flex", gap: 10, marginBottom: 22 }}>
             {steps.map((s, i) => {
               const active = i === stepIdx;
@@ -35598,6 +35606,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
               );
             })}
           </div>
+          )}
 
           {/* Grey box. It fills what is left of the panel, so it is the same
               height on every step and the buttons in its footer are always in
@@ -36587,6 +36596,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 under whatever the step happened to end with, so they moved
                 as the content did. Left is the way out of the flow, right is
                 the way on, and both are the same height. */}
+            {/* Ohne Kanal führt "Weiter" auf denselben Satz, und alles
+                daneben schickt einen Beitrag an niemanden. */}
+            {hasChannels && (
             <div style={{ display: "flex", alignItems: "center", gap: 12, paddingTop: 22, position: "relative" }}>
               {/* Another slide. It belongs on the ground and not on the
                   picture: on the picture it reads as something you are doing TO
@@ -36769,6 +36781,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 </motion.button>
               ) : null}
             </div>
+            )}
           </div>
         </div>
       </div>
