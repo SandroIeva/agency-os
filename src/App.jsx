@@ -32032,6 +32032,13 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
         ig: ig?.enabled ? (ig.accounts || [])[0] || null : null,
         th: th?.enabled ? (th.accounts || [])[0] || null : null,
         tt: tt?.enabled ? (tt.accounts || [])[0] || null : null,
+        // Cleared for the direct path, connected or not. Where Meta answers
+        // for a network, Zernio is not offered for it: two ways to the same
+        // network in one workspace is how somebody authorises the other app
+        // and wonders whose consent screen they are looking at. Everywhere
+        // else nothing changes and Zernio stays the way in.
+        igDirect: !!ig?.enabled,
+        thDirect: !!th?.enabled,
       });
     })();
     return () => { on = false; };
@@ -32210,7 +32217,11 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
     ...(direct?.th ? ["threads"] : []),
     ...(direct?.tt ? ["tiktok"] : []),
   ])];
-  const unconnected = ZERNIO_UI_PLATFORMS.filter(k => !connectedUiKeys.includes(k));
+  // What Zernio may still offer here: not Instagram or Threads in a workspace
+  // that has Meta directly.
+  const zernioOffers = ZERNIO_UI_PLATFORMS.filter(k =>
+    !(k === "instagram" && direct?.igDirect) && !(k === "threads" && direct?.thDirect));
+  const unconnected = zernioOffers.filter(k => !connectedUiKeys.includes(k));
 
   // ── Derived dashboard numbers (defensive — every part can be missing) ──
   const followersOk = data?.followers && !data.followers.__unavailable;
@@ -32427,7 +32438,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
             {de ? "Verknüpfe deine Social-Media-Accounts, um Performance, Top-Posts und Follower-Entwicklung direkt hier zu sehen — und Posts aus i7OS zu veröffentlichen." : "Link your social accounts to see performance, top posts and follower growth right here — and publish posts from i7OS."}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10, textAlign: "left" }}>
-            {ZERNIO_UI_PLATFORMS.map(k => <ConnectChip key={k} uiKey={k} big />)}
+            {zernioOffers.map(k => <ConnectChip key={k} uiKey={k} big />)}
           </div>
         </div>
       ) : (
@@ -33282,6 +33293,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // canvas. Zernio never sees any of this - its path still sends the single
   // rendered visual, and `submit` says so out loud rather than dropping slides
   // on the floor.
+  // Networks this workspace reaches through Meta directly, from the status
+  // calls in loadAccounts. Zernio is then not offered for them.
+  const [directNetworks, setDirectNetworks] = useState({ ig: false, th: false });
   const [extras, setExtras] = useState([]);        // [{ id, file, url }] — carousel slides 2..10
   const [reel, setReel] = useState(null);          // { file, url } — a video instead of a picture
   const extraRef = useRef(null);
@@ -33378,12 +33392,16 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
       body: JSON.stringify({ mode: "status", orgId }),
     }).then(r => r.ok ? r.json() : null).catch(() => null);
+    /* eslint-disable-next-line */
     const [zern, meta, thr, tt] = await Promise.all([
       zernioRequest(session, { mode: "status", orgId }).catch(e => { setError(e); return null; }),
       askDirect("instagram"),
       askDirect("threads"),
       askDirect("tiktok"),
     ]);
+    // Which networks Meta answers for here. Same rule as Analytics: where it
+    // does, Zernio is not offered for that network.
+    setDirectNetworks({ ig: !!meta?.enabled, th: !!thr?.enabled });
     const direct = (meta?.enabled ? meta.accounts || [] : []).map(a => ({
       // Prefixed, so an id can never collide with a Zernio one and so the
       // provider is readable off the id in a log.
@@ -33507,7 +33525,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   };
   // What there is still to connect. Read once here rather than filtered in two
   // places that would drift: the plus hides itself when the list is empty.
-  const unconnectedHere = ZERNIO_UI_PLATFORMS.filter(k => !(accounts || []).some(a => uiKeyFor(a.platform) === k));
+  const zernioAddable = ZERNIO_UI_PLATFORMS.filter(k =>
+    !(k === "instagram" && directNetworks.ig) && !(k === "threads" && directNetworks.th));
+  const unconnectedHere = zernioAddable.filter(k => !(accounts || []).some(a => uiKeyFor(a.platform) === k));
   const toggleAccount = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const charLimit = selected.length ? Math.min(...selected.map(a => POST_CHAR_LIMITS[uiKeyFor(a.platform)] || 3000)) : 3000;
   const overLimit = text.length > charLimit;
@@ -34314,7 +34334,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       ) : (
                         /* The same chips Analytics offers, on this screen. */
                         <div style={{ marginTop: 15, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
-                          {ZERNIO_UI_PLATFORMS.map(k => (
+                          {zernioAddable.map(k => (
                             <ChannelConnectChip key={k} uiKey={k} big theme={theme} de={de}
                               busy={connectBusy === k} onConnect={connectChannel} />
                           ))}
