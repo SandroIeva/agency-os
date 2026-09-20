@@ -33525,18 +33525,27 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // The picture from the editor is slide one; the extras follow in order. One
   // list, because the viewer pages through them and does not care which of them
   // the canvas composed.
-  const slides = visual
-    ? [{ key: "main", url: visual.url }, ...extras.map(x => ({ key: x.id, url: x.url, extra: x }))]
-    : [];
+  //
+  // A video used to stand outside this list, as a mode of its own: one video
+  // INSTEAD of everything. Threads takes a carousel of pictures and videos
+  // mixed, and Instagram takes video children too, so the video is simply the
+  // slide it is, and it can be the first one.
+  const asSlide = (x) => ({ key: x.id, url: x.url, extra: x, video: !!x.video });
+  const slides = reel
+    ? [{ key: "reel", url: reel.url, video: true }, ...extras.map(asSlide)]
+    : visual
+      ? [{ key: "main", url: visual.url }, ...extras.map(asSlide)]
+      : [];
   const [slideIdx, setSlideIdx] = useState(0);
+  const curSlide = slides[slideIdx] || null;
   // Measure a fixed viewport, independent of the image's intrinsic size.
   // The carousel gutters belong to the layout, so the measurement excludes them.
   const viewRef = useRef(null);
   const [viewBox, setViewBox] = useState({ w: 0, h: 0 });
   const [loadedMedia, setLoadedMedia] = useState(null);
-  const currentMediaUrl = reel?.url || slides[slideIdx]?.url || visual?.url;
+  const currentMediaUrl = curSlide?.url || reel?.url || visual?.url;
   const mediaSize = loadedMedia?.url === currentMediaUrl ? loadedMedia
-    : (!reel && currentMediaUrl === visual?.url ? visual : null);
+    : (currentMediaUrl === visual?.url ? visual : null);
   const mediaScale = mediaSize?.w > 0 && mediaSize?.h > 0
     ? Math.min(viewBox.w / mediaSize.w, viewBox.h / mediaSize.h) : 0;
   const mediaWidth = (mediaSize?.w || 0) * mediaScale;
@@ -33914,13 +33923,18 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     e.target.value = "";
     if (!picked.length || mediaImportRef.current) return;
     const videos = picked.filter(f => f.type.startsWith("video/"));
-    if (videos.length) {
-      if (picked.length !== 1) { setError(new Error(de ? "Bitte entweder mehrere Bilder oder ein einzelnes Video auswählen." : "Please choose multiple images or one video.")); return; }
+    const images = picked.filter(f => f.type.startsWith("image/"));
+    // Videos and pictures in one go: the first video leads, the rest queue up
+    // behind it. It used to be refused outright, which made a mixed carousel
+    // impossible to even assemble.
+    if (videos.length && !images.length) {
       clearVisual();
       setReel({ file: videos[0], url: URL.createObjectURL(videos[0]) });
+      setExtras(videos.slice(1, 10).map(asExtra));
       return;
     }
-    await withMediaImport(async () => picked.filter(f => f.type.startsWith("image/")));
+    await withMediaImport(async () => images);
+    if (videos.length) setExtras(list => [...list, ...videos.map(asExtra)].slice(0, 9));
   };
   const adoptAssetUrls = async (urls) => {
     setAssetOpen(false);
@@ -33959,11 +33973,11 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     setReel(r => { if (r) URL.revokeObjectURL(r.url); return null; });
   };
   const onPickExtras = (e) => {
-    const files = [...(e.target.files || [])].filter(f => f.type.startsWith("image/"));
+    const files = [...(e.target.files || [])].filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"));
     e.target.value = "";
     if (1 + extras.length + files.length > 10) { setError(postImageLimitError()); return; }
     if (mediaImportRef.current) return;
-    setExtras(list => [...list, ...files.map(file => ({ id: crypto.randomUUID(), file, url: URL.createObjectURL(file) }))]);
+    setExtras(list => [...list, ...files.map(asExtra)]);
   };
   const removeExtra = (id) => setExtras(list => {
     const hit = list.find(x => x.id === id);
@@ -33975,6 +33989,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // a handover: the next slide becomes the picture the canvas composes. Its
   // object url is deliberately NOT revoked - it is still on screen, just under
   // a different name.
+  const asExtra = (file) => ({ id: crypto.randomUUID(), file, url: URL.createObjectURL(file),
+    video: file.type.startsWith("video/") });
   const promoteExtra = (x) => {
     imageFileRef.current = x.file;
     setOverlays([]); setSelOverlay(null);
@@ -33985,6 +34001,17 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   };
   const removeCurrentSlide = () => {
     if (slideIdx === 0) {
+      // Whatever stood behind the one being removed becomes the lead, and a
+      // video leads as a video rather than being handed to the image editor.
+      const next = extras[0];
+      if (next?.video) {
+        setExtras(list => list.slice(1));
+        if (reel) URL.revokeObjectURL(reel.url);
+        imageFileRef.current = null; setVisual(null); setOverlays([]); setSelOverlay(null);
+        setReel({ file: next.file, url: next.url });
+        return;
+      }
+      if (reel) { dropReel(); if (next) promoteExtra(next); return; }
       if (extras.length) return promoteExtra(extras[0]);
       return clearVisual();
     }
@@ -34167,10 +34194,15 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       // The slides after the first, and the video, go up exactly the same way.
       // They are not rendered through the canvas: the editor composes one flat
       // picture, and a slide it never touched must arrive as the file it is.
+      // `kind` travels with each slide: both networks decide per CHILD
+      // whether it is an image or a video, and a video sent as an image is
+      // refused at the container.
       let metaExtras = [];
       if ((metaSel.length || thrSel.length) && extras.length) {
-        metaExtras = await Promise.all(extras.map(x =>
-          toMetaMedia(x.file, x.file.type, (x.file.name.split(".").pop() || "jpg").toLowerCase())));
+        metaExtras = await Promise.all(extras.map(async x => ({
+          ...(await toMetaMedia(x.file, x.file.type, (x.file.name.split(".").pop() || (x.video ? "mp4" : "jpg")).toLowerCase())),
+          kind: x.video ? "VIDEO" : "IMAGE",
+        })));
       }
       let metaReel = null;
       if ((metaSel.length || thrSel.length) && reel) {
@@ -34222,7 +34254,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         const fail = (error) => parts.push({ platform: "instagram", status: "failed", url: null, error });
         let creationId = null;
 
-        if (metaReel) {
+        // A video on its own is a reel. A video with slides behind it is the
+        // first child of a carousel, which is a different call.
+        if (metaReel && !metaExtras.length) {
           const r = await igStep({ mode: "container", igUserId, kind: "REELS",
             caption: text.trim() || undefined, media: { ...metaReel, kind: "VIDEO" } });
           const j2 = await r.json().catch(() => null);
@@ -34234,11 +34268,13 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         } else if (metaExtras.length) {
           const children = [];
           let broke = null;
-          for (const [idx, m] of [metaMedia, ...metaExtras].entries()) {
+          const lead = metaReel ? { ...metaReel, kind: "VIDEO" } : metaMedia;
+          for (const [idx, m] of [lead, ...metaExtras].filter(Boolean).entries()) {
             const r = await igStep({ mode: "container", igUserId, media: m, isCarouselItem: true });
             const j2 = await r.json().catch(() => null);
             if (!r.ok || !j2?.containerId) { broke = await readFail(r, j2, "Instagram"); break; }
-            const ready = await igWaitFor(igUserId, j2.containerId, 15);
+            // A video child is transcoded like a reel, so it gets the long wait.
+            const ready = await igWaitFor(igUserId, j2.containerId, m.kind === "VIDEO" ? 90 : 15);
             if (!ready.ok) {
               broke = de ? `Folie ${idx + 1}: ${ready.error}` : `Slide ${idx + 1}: ${ready.error}`;
               break;
@@ -34279,7 +34315,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           body: JSON.stringify({ orgId, threadsUserId: a.threadsUserId, ...payload }),
         });
         const media = metaReel
-          ? [{ ...metaReel, kind: "VIDEO" }]
+          ? [{ ...metaReel, kind: "VIDEO" }, ...metaExtras]
           : (metaMedia ? [metaMedia, ...metaExtras] : []);
         const res = await send({ mode: "publish", text: text.trim() || undefined, media });
         let j = await res.json().catch(() => null);
@@ -34345,7 +34381,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         } else {
           // Every picture through the proxy on the verified domain, in the
           // order they are shown, cover first.
-          const proxied = [metaMedia, ...metaExtras].filter(Boolean)
+          const proxied = [metaMedia, ...metaExtras].filter(m => m && m.kind !== "VIDEO")
             .map(m => `${window.location.origin}/api/img-proxy?url=${encodeURIComponent(m.url)}`);
           if (!proxied.length) {
             parts.push({ platform: "tiktok", status: "failed", url: null,
@@ -34880,7 +34916,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   <input ref={fileRef} type="file" multiple
                     accept={canVideo ? "image/*,video/*" : "image/*"}
                     onChange={onPickImage} style={{ display: "none" }} />
-                  <input ref={extraRef} type="file" accept="image/*" multiple onChange={onPickExtras} style={{ display: "none" }} />
+                  <input ref={extraRef} type="file" multiple onChange={onPickExtras}
+                    accept={canVideo ? "image/*,video/*" : "image/*"} style={{ display: "none" }} />
 
                   {!visual && !reel ? (
                     <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center" }}>
@@ -34925,7 +34962,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           arrows line up with the plus and the publish button in
                           the footer below. On the picture they read as part of
                           the picture, which is the one thing they are not. */}
-                      {!reel && slides.length > 1 && ([["prev", -1, "M15 18l-6-6 6-6", "left"], ["next", 1, "M9 6l6 6-6 6", "right"]]).map(([k, step, d, side]) => (
+                      {slides.length > 1 && ([["prev", -1, "M15 18l-6-6 6-6", "left"], ["next", 1, "M9 6l6 6-6 6", "right"]]).map(([k, step, d, side]) => (
                         <div key={k} style={{ position: "absolute", top: "50%", transform: "translateY(-50%)", [side]: 0 }}>
                           <motion.button type="button" whileTap={{ scale: 0.92 }}
                             aria-label={step < 0 ? (de ? "Vorheriges Bild" : "Previous image") : (de ? "Nächstes Bild" : "Next image")}
@@ -34937,12 +34974,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         </div>
                       ))}
 
-                      <div ref={viewRef} style={{ position: "absolute", inset: !reel && slides.length > 1 ? "0 58px" : 0,
+                      <div ref={viewRef} style={{ position: "absolute", inset: slides.length > 1 ? "0 58px" : 0,
                         display: "flex", alignItems: "center", justifyContent: "center", minWidth: 0, minHeight: 0 }}>
                       <div style={{ position: "relative", lineHeight: 0, flexShrink: 0, width: mediaWidth, height: mediaHeight }}>
-                      {reel ? (
-                        <video src={reel.url} controls playsInline
-                          onLoadedMetadata={e => setLoadedMedia({ url: reel.url, w: e.currentTarget.videoWidth, h: e.currentTarget.videoHeight })}
+                      {curSlide?.video ? (
+                        <video key={curSlide.url} src={curSlide.url} controls playsInline
+                          onLoadedMetadata={e => setLoadedMedia({ url: curSlide.url, w: e.currentTarget.videoWidth, h: e.currentTarget.videoHeight })}
                           style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 16, outline: `1px solid ${theme.borderFaint}`, outlineOffset: -1, display: "block" }} />
                       ) : (
                         // Overlays use this fitted image rectangle as their coordinate system.
@@ -34964,7 +35001,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       )}
 
                       {/* Removes the slide you are looking at, or the video. */}
-                      <motion.div whileTap={{ scale: 0.9 }} onClick={reel ? dropReel : removeCurrentSlide}
+                      <motion.div whileTap={{ scale: 0.9 }} onClick={removeCurrentSlide}
                         style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 999,
                           background: "rgba(21,21,28,0.72)", color: "#fff", display: "flex", alignItems: "center",
                           justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" }}>
@@ -35088,16 +35125,17 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   picture: on the picture it reads as something you are doing TO
                   that picture. Here it sits opposite the button that moves you
                   on, which is the other thing you can do from this step. */}
-              {stepIdx === S_VISUAL && visual && !reel && slides.length < 10 && (
+              {stepIdx === S_VISUAL && (visual || reel) && slides.length < 10 && (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => extraRef.current?.click()}
-                  title={de ? "Weiteres Bild" : "Another picture"}
+                  title={canVideo ? (de ? "Weiteres Bild oder Video" : "Another picture or video")
+                                  : (de ? "Weiteres Bild" : "Another picture")}
                   style={{ ...footBtn, width: 42, padding: 0, border: `1px solid ${theme.border}`,
                     background: "transparent", color: theme.text, cursor: "pointer" }}>
                   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
                 </motion.button>
               )}
               {/* Center the slide count beneath the image, independently of the footer buttons. */}
-              {stepIdx === S_VISUAL && !reel && slides.length > 1 && (
+              {stepIdx === S_VISUAL && slides.length > 1 && (
                 <span style={{ position: "absolute", left: "50%", transform: "translateX(-50%)",
                   fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>
                   {slideIdx + 1} / {slides.length}
