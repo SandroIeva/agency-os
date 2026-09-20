@@ -33592,6 +33592,20 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // mixed, and Instagram takes video children too, so the video is simply the
   // slide it is, and it can be the first one.
   const asSlide = (x) => ({ key: x.id, url: x.url, extra: x, video: !!x.video });
+  // Platzierte Elemente, nach Folie sortiert: { folienSchlüssel: [{ id, text,
+  // x, y, size, color, bold }] }, x/y/size als Anteil der Fläche.
+  //
+  // Vorher war es EINE Liste für den ganzen Beitrag, gezeichnet nur auf der
+  // ersten Folie. Wer auf Folie drei einen Text setzte, legte ihn damit auf
+  // Folie eins, wo er ihn nicht sah. Der Schlüssel ist derselbe, den die Folie
+  // in `slides` trägt.
+  //
+  // MUSS über `slideOverlays` stehen: das liest diese Zustände beim Zeichnen,
+  // und eine weiter unten deklarierte Konstante ist beim Lesen noch nicht da.
+  // Genau daran ist die Ansicht am 20.09.2026 mit "Cannot access before
+  // initialization" abgestürzt, und weder Build noch Prüfungen sehen das.
+  const [overlays, setOverlays] = useState({});
+  const [selOverlay, setSelOverlay] = useState(null);
   const slides = reel
     ? [{ key: "reel", url: reel.url, video: true }, ...extras.map(asSlide)]
     : visual
@@ -33647,15 +33661,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   };
   const [addMenu, setAddMenu] = useState(false);
   const [stickerOpen, setStickerOpen] = useState(false);
-  // Platzierte Elemente, nach Folie sortiert: { folienSchlüssel: [{ id, text,
-  // x, y, size, color, bold }] }, x/y/size als Anteil der Fläche.
-  //
-  // Vorher war es EINE Liste für den ganzen Beitrag, gezeichnet nur auf der
-  // ersten Folie. Wer auf Folie drei einen Text setzte, legte ihn damit auf
-  // Folie eins, wo er ihn nicht sah. Der Schlüssel ist derselbe, den die Folie
-  // in `slides` trägt.
-  const [overlays, setOverlays] = useState({});
-  const [selOverlay, setSelOverlay] = useState(null);
   // Dictation for the caption, the same SpeechRecognition the notes and the
   // person sheet use. Above the field and right-aligned, which is where every
   // other one in the app sits, and it keeps the bottom-right corner free: the
