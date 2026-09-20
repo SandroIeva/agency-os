@@ -30940,6 +30940,24 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef,
 // (Zernio redirects back with ?zernio=connected → App root reopens this tab),
 // then the dashboard pulls top posts, follower stats and daily metrics.
 const ZERNIO_UI_PLATFORMS = ["linkedin", "instagram", "threads", "x", "pinterest"];
+
+// Connecting Instagram or Threads straight through Meta. THREE places offer a
+// connection - Settings, Analytics and the post composer - and where Meta
+// answers for a network, Zernio no longer does, so all three need this. One
+// token, one redirect, written once.
+//
+// `popup` is the composer's: a full navigation there would take the post being
+// written with it. Everywhere else the consent screen is a page like any other,
+// and a blocked popup would look like a dead button.
+async function startMetaConnect(what, orgId, lang, popup = null) {
+  const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
+    p_org: orgId || null, p_kind: what, p_lang: lang === "en" ? "en" : "de",
+  });
+  if (error || !token) throw error || new Error("token");
+  const url = `/api/${what}?mode=install&state=${encodeURIComponent(token)}`;
+  if (popup && !popup.closed) { popup.location.href = url; return; }
+  window.location.href = url;
+}
 // i7OS uses "x" as the UI key; Zernio's API still calls the platform "twitter".
 const zernioKeyFor = (uiKey) => (uiKey === "x" ? "twitter" : uiKey);
 const uiKeyFor = (zKey) => (zKey === "twitter" ? "x" : zKey);
@@ -32218,10 +32236,26 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
     ...(direct?.tt ? ["tiktok"] : []),
   ])];
   // What Zernio may still offer here: not Instagram or Threads in a workspace
-  // that has Meta directly.
+  // that has Meta directly. Those two are still offered, they just go the
+  // other way, so the list stays whole and only the click differs.
   const zernioOffers = ZERNIO_UI_PLATFORMS.filter(k =>
     !(k === "instagram" && direct?.igDirect) && !(k === "threads" && direct?.thDirect));
-  const unconnected = zernioOffers.filter(k => !connectedUiKeys.includes(k));
+  const directOffers = [
+    ...(direct?.igDirect ? ["instagram"] : []),
+    ...(direct?.thDirect ? ["threads"] : []),
+  ];
+  const offerable = ZERNIO_UI_PLATFORMS.filter(k => zernioOffers.includes(k) || directOffers.includes(k));
+  const unconnected = offerable.filter(k => !connectedUiKeys.includes(k));
+  // Straight to Meta, or to Zernio. The plan gate applies to Zernio only:
+  // connecting there bills us upstream, the direct path does not.
+  const connectHere = (k) => {
+    if (directOffers.includes(k)) {
+      setBusyKey(k);
+      startMetaConnect(k, orgId, appLanguage).catch(() => setBusyKey(null));
+      return;
+    }
+    connect(k);
+  };
 
   // ── Derived dashboard numbers (defensive — every part can be missing) ──
   const followersOk = data?.followers && !data.followers.__unavailable;
@@ -32344,7 +32378,8 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   // Reusable connect chip (icon + "Verbinden") for a platform.
   const ConnectChip = ({ uiKey, big = false }) => (
     <ChannelConnectChip uiKey={uiKey} big={big} theme={theme} de={de}
-      busy={busyKey === uiKey} blocked={socialBlocked} onConnect={connect} />
+      busy={busyKey === uiKey} blocked={socialBlocked && !directOffers.includes(uiKey)}
+      onConnect={connectHere} />
   );
 
   // A website is a channel like any other, so it sits beside the social numbers
@@ -32438,7 +32473,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
             {de ? "Verknüpfe deine Social-Media-Accounts, um Performance, Top-Posts und Follower-Entwicklung direkt hier zu sehen — und Posts aus i7OS zu veröffentlichen." : "Link your social accounts to see performance, top posts and follower growth right here — and publish posts from i7OS."}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10, textAlign: "left" }}>
-            {zernioOffers.map(k => <ConnectChip key={k} uiKey={k} big />)}
+            {offerable.map(k => <ConnectChip key={k} uiKey={k} big />)}
           </div>
         </div>
       ) : (
@@ -32483,7 +32518,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
               <Dropdown value={null} theme={theme} darkMode={darkMode} align="right" minWidth={220}
                 placeholder={de ? "Hinzufügen" : "Add"}
                 leadingIcon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>}
-                onChange={(k) => { if (!busyKey && !socialBlocked) connect(k); }}
+                onChange={(k) => { if (!busyKey && (!socialBlocked || directOffers.includes(k))) connectHere(k); }}
                 options={unconnected.map(k => {
                   const pm = platformMeta(k);
                   return {
@@ -32494,7 +32529,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
                         <svg width={tpGlyphSize(k, 13)} height={tpGlyphSize(k, 13)} viewBox="0 0 24 24">{touchpointGlyph(k)}</svg>
                       </div>
                     ),
-                    disabled: socialBlocked,
+                    disabled: socialBlocked && !directOffers.includes(k),
                     disabledReason: de ? "Teil eines bezahlten Plans" : "Part of a paid plan",
                   };
                 })} />
@@ -33277,7 +33312,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   useEffect(() => {
     const onMsg = (ev) => {
       if (ev.origin !== window.location.origin) return;
-      if (ev.data?.type !== "zernio-connected") return;
+      if (ev.data?.type !== "zernio-connected" && ev.data?.type !== "meta-connected") return;
       setConnectBusy(null);
       loadAccounts();
     };
@@ -33525,9 +33560,35 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   };
   // What there is still to connect. Read once here rather than filtered in two
   // places that would drift: the plus hides itself when the list is empty.
+  // Instagram and Threads straight through Meta where this workspace has it,
+  // Zernio for the rest. One list on screen; only the click differs.
   const zernioAddable = ZERNIO_UI_PLATFORMS.filter(k =>
     !(k === "instagram" && directNetworks.ig) && !(k === "threads" && directNetworks.th));
-  const unconnectedHere = zernioAddable.filter(k => !(accounts || []).some(a => uiKeyFor(a.platform) === k));
+  const directAddable = [
+    ...(directNetworks.ig ? ["instagram"] : []),
+    ...(directNetworks.th ? ["threads"] : []),
+  ];
+  const addableHere = ZERNIO_UI_PLATFORMS.filter(k => zernioAddable.includes(k) || directAddable.includes(k));
+  const unconnectedHere = addableHere.filter(k => !(accounts || []).some(a => uiKeyFor(a.platform) === k));
+  // The direct path in a popup like Zernio's, for the same reason: a full
+  // navigation would take the post being written with it. The popup reports
+  // back through main.jsx and closes itself.
+  const connectChannelHere = (k) => {
+    if (!directAddable.includes(k)) { connectChannel(k); return; }
+    if (connectBusy) return;
+    setConnectBusy(k); setError(null);
+    let popup = null;
+    try { popup = window.open("", "meta-connect", "width=680,height=760,noopener=no"); } catch (_) { popup = null; }
+    startMetaConnect(k, orgId, appLanguage, popup).catch((e) => { setError(e); setConnectBusy(null); });
+    if (popup) {
+      const watch = setInterval(() => {
+        if (!popup.closed) return;
+        clearInterval(watch);
+        setConnectBusy(null);
+        loadAccounts();
+      }, 600);
+    }
+  };
   const toggleAccount = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const charLimit = selected.length ? Math.min(...selected.map(a => POST_CHAR_LIMITS[uiKeyFor(a.platform)] || 3000)) : 3000;
   const overLimit = text.length > charLimit;
@@ -34317,7 +34378,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         {de ? "Dein Visual und deine Beschreibung sind gespeichert. Verbinde einen Kanal, dann erscheinen hier die Accounts, der Zeitpunkt und die Vorschau."
                             : "Your visual and your description are kept. Connect a channel and the accounts, the timing and the preview appear here."}
                       </div>
-                      {socialBlocked ? (
+                      {socialBlocked && !directAddable.length ? (
                         <div style={{ marginTop: 15, padding: "12px 16px", borderRadius: 14, maxWidth: 460,
                           display: "flex", alignItems: "center", justifyContent: "center", gap: 14, flexWrap: "wrap",
                           background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
@@ -34334,9 +34395,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       ) : (
                         /* The same chips Analytics offers, on this screen. */
                         <div style={{ marginTop: 15, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
-                          {zernioAddable.map(k => (
+                          {addableHere.map(k => (
                             <ChannelConnectChip key={k} uiKey={k} big theme={theme} de={de}
-                              busy={connectBusy === k} onConnect={connectChannel} />
+                              busy={connectBusy === k} blocked={socialBlocked && !directAddable.includes(k)}
+                              onConnect={connectChannelHere} />
                           ))}
                         </div>
                       )}
@@ -34413,7 +34475,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           {unconnectedHere.map(k => {
                             const m = TOUCHPOINT_PLATFORMS.find(x => x.key === k) || { color: "#15151c", label: k };
                             return (
-                              <div key={k} onClick={() => { setConnectOpen(false); connectChannel(k); }}
+                              <div key={k} onClick={() => { setConnectOpen(false); connectChannelHere(k); }}
                                 style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px",
                                   borderRadius: 12, cursor: connectBusy ? "wait" : "pointer",
                                   opacity: connectBusy === k ? 0.5 : 1 }}>
@@ -54867,13 +54929,7 @@ export default function CircularMenu() {
   const startInstagramConnect = async () => {
     setIgBusy(true); setIgErr("");
     try {
-      const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
-        p_org: userOrg?.id || null, p_kind: "instagram", p_lang: appLanguage === "en" ? "en" : "de",
-      });
-      if (error || !token) throw error || new Error("token");
-      // A full navigation, not a popup: Instagram's consent screen is a page,
-      // and a blocked popup would look like a dead button.
-      window.location.href = `/api/instagram?mode=install&state=${encodeURIComponent(token)}`;
+      await startMetaConnect("instagram", userOrg?.id, appLanguage);
     } catch (e) {
       setIgErr(appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection.");
       setIgBusy(false);
@@ -54965,11 +55021,7 @@ export default function CircularMenu() {
   const startThreadsConnect = async () => {
     setThBusy(true); setThErr("");
     try {
-      const { data: token, error } = await supabase.rpc("create_messenger_link_token", {
-        p_org: userOrg?.id || null, p_kind: "threads", p_lang: appLanguage === "en" ? "en" : "de",
-      });
-      if (error || !token) throw error || new Error("token");
-      window.location.href = `/api/threads?mode=install&state=${encodeURIComponent(token)}`;
+      await startMetaConnect("threads", userOrg?.id, appLanguage);
     } catch (e) {
       setThErr(appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection.");
       setThBusy(false);

@@ -22,6 +22,24 @@ if (params.get("zernio") === "connected" && window.opener && !window.opener.clos
   window.close();
 }
 
+// The same for the direct Meta connections. Instagram and Threads come back as
+// ?instagram=connected / ?threads=connected; when that lands in the popup the
+// post composer opened, it reports and closes rather than booting a second copy
+// of the app on top of the post somebody is writing. A full-page return (from
+// Settings or Analytics) has no opener and falls through to the app, which
+// shows its own notice.
+const metaBack = params.get("instagram") || params.get("threads");
+if (metaBack && window.opener && !window.opener.closed) {
+  try {
+    window.opener.postMessage({
+      type: "meta-connected",
+      what: params.get("instagram") ? "instagram" : "threads",
+      status: metaBack,
+    }, window.location.origin);
+  } catch (_) { /* different origin, nothing to tell */ }
+  window.close();
+}
+
 const isDesktopPreview = params.has("desktop");
 const isAdmin = params.has("admin"); // internal operator overview
 const brandToken = params.get("b"); // ?b=<token> (public share) or ?b=preview
