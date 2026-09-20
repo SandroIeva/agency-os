@@ -32358,6 +32358,24 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
     && (accounts.length === 0 || data != null)
     && (!hasDirect || directStats != null)
     && (!showsComments || commentsReady);
+  // Einmal beschrieben, weil es an zwei Stellen steht: allein, solange die
+  // Konten unbekannt sind, und über der schon gebauten, noch verborgenen
+  // Ansicht.
+  const loader = (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      gap: 14, height: 320 }}>
+      <motion.div
+        animate={{ rotate: 360 }}
+        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+        style={{ width: 30, height: 30, borderRadius: "50%",
+          border: `2.5px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)"}`,
+          borderTopColor: theme.text }}
+      />
+      <div style={{ color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>
+        {de ? "Analytics werden geladen" : "Loading analytics"}
+      </div>
+    </div>
+  );
   const [ready, setReady] = useState(false);
   useEffect(() => { if (allLoaded) setReady(true); }, [allLoaded]);
   useEffect(() => {
@@ -32659,21 +32677,8 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
         </div>
       )}
 
-      {!ready ? (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          gap: 14, height: 320 }}>
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            style={{ width: 30, height: 30, borderRadius: "50%",
-              border: `2.5px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)"}`,
-              borderTopColor: theme.text }}
-          />
-          <div style={{ color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>
-            {de ? "Analytics werden geladen …" : "Loading analytics …"}
-          </div>
-        </div>
-      ) : (accounts.length === 0 && !hasDirect) ? (
+      {accounts == null ? loader
+        : (accounts.length === 0 && !hasDirect) ? (
         /* ── Empty state: connect the first account ── */
         <div style={{ maxWidth: 560, margin: "40px auto 0", textAlign: "center" }}>
           <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{de ? "Verbinde deine Kanäle" : "Connect your channels"}</div>
@@ -32684,8 +32689,15 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
             {offerable.map(k => <ConnectChip key={k} uiKey={k} big />)}
           </div>
         </div>
-      ) : (
-        <>
+      ) : (<>
+        {!ready && loader}
+        {/* Gebaut wird es sofort, gezeigt erst, wenn alles darin geladen hat.
+            Vorher hing die Ansicht erst NACH dem Ladezeichen im Baum, und die
+            Kommentare holen ihre Daten selbst: sie konnten also gar nicht eher
+            fertig sein als der Ladebalken, auf den sie warten sollten. Deshalb
+            stand in ihrer Spalte noch einmal "Lädt". Verborgen statt entfernt,
+            damit alle Kästen gleichzeitig anfangen. */}
+        <div style={{ display: ready ? "contents" : "none" }}>
           {/* Everything from here to the trend is Zernio's, and it has nothing
               to say when Zernio holds no account: `data` is never even fetched
               in that case, so the tiles sat at "…" for ever. A workspace whose
@@ -32871,10 +32883,22 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
                       <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{post.content || (de ? "(ohne Text)" : "(no text)")}</div>
                       <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6, fontSize: 11, fontFamily: FONT, color: theme.textDim, flexWrap: "wrap" }}>
                         {dateStr && <span style={{ color: theme.textFaint }}>{dateStr}</span>}
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8l8.8 8.9 8.8-8.9a5.5 5.5 0 000-7.8z"/></svg>{fmtMetric(a.likes, de)}</span>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 11.5a8.4 8.4 0 01-9 8.4 8.6 8.6 0 01-3.9-.9L3 21l2-4.9a8.4 8.4 0 1116-4.6z"/></svg>{fmtMetric(a.comments, de)}</span>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>{fmtMetric(a.shares, de)}</span>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-7.5 11-7.5S23 12 23 12s-4 7.5-11 7.5S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>{fmtMetric(a.impressions, de)}</span>
+                        <span title={de ? "Likes" : "Likes"} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8l8.8 8.9 8.8-8.9a5.5 5.5 0 000-7.8z"/></svg>{fmtMetric(a.likes, de)}</span>
+                        <span title={uiKey === "threads" ? (de ? "Antworten" : "Replies") : (de ? "Kommentare" : "Comments")} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 11.5a8.4 8.4 0 01-9 8.4 8.6 8.6 0 01-3.9-.9L3 21l2-4.9a8.4 8.4 0 1116-4.6z"/></svg>{fmtMetric(a.comments, de)}</span>
+                        {/* Auf Threads ist diese Zahl ein Repost, überall sonst ein
+                            Teilen. Das Kästchen mit dem Pfeil nach oben hieß beides
+                            und sah nach "wird hochgeladen" aus, also zeigt Threads
+                            jetzt den Kreislauf-Pfeil, den es selbst dafür benutzt. */}
+                        <span title={uiKey === "threads" ? (de ? "Reposts" : "Reposts") : (de ? "Geteilt" : "Shares")}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            {uiKey === "threads"
+                              ? <><path d="M17 2l4 4-4 4" /><path d="M3 11V9a4 4 0 014-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a4 4 0 01-4 4H3" /></>
+                              : <path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v13" />}
+                          </svg>
+                          {fmtMetric(a.shares, de)}
+                        </span>
+                        <span title={de ? "Aufrufe" : "Views"} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-7.5 11-7.5S23 12 23 12s-4 7.5-11 7.5S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>{fmtMetric(a.impressions, de)}</span>
                       </div>
                       {/* Who is behind those numbers. LinkedIn only, because
                           that is the platform whose public post page
@@ -32947,8 +32971,8 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
               session={session} orgId={orgId} platform={platform} igUserId={igId} threadsUserId={thId}
               card={card} secLabel={secLabel} onReady={() => setCommentsReady(true)} />
           </div>
-        </>
-      )}
+        </div>
+      </>)}
       {/* Outside the branch above on purpose: a workspace with no social
           account at all still has a website. */}
       {websiteSection}
