@@ -35456,15 +35456,30 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 gap under it. Nothing here is long enough to need a scrollbar.
                 Fifty-fifty, because the preview is the other half of this step
                 and not a footnote to it. */}
-            <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "grid", gap: 30, alignItems: "stretch",
+            {/* Erst laden, dann zeigen. Die Kanäle kommen von vier Anbietern und
+                brauchen einen Moment, die Beschreibung steht sofort da: das sah
+                aus, als würde die Hälfte fehlen und dann nachrutschen. Ein
+                Ladezeichen in der Mitte, und die Ansicht blendet sich ein,
+                sobald wirklich alles da ist. */}
+            {accounts === null ? (
+              <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  style={{ width: 22, height: 22, borderRadius: "50%",
+                    border: `2px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)"}`,
+                    borderTopColor: theme.text }} />
+              </div>
+            ) : (
+            <motion.div className="no-scrollbar"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.22 }}
+              style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "grid", gap: 30, alignItems: "stretch",
               gridTemplateColumns: twoCol ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)" }}>
               <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
 
                 {/* ── 01 Kanäle, links neben der Beschreibung ── */}
                 {stepIdx === S_TEXT && (<>
-                  {accounts == null ? (
-                    <div style={{ color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{de ? "Lädt…" : "Loading…"}</div>
-                  ) : accounts.length === 0 ? (
+                  {accounts.length === 0 ? (
                     /* Nothing connected, so nothing else on this screen: no
                        preview of a post that cannot be sent, no scheduling for
                        it either. One thing to do, in the middle. */
@@ -36318,7 +36333,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 </div>
               )}
 
-            </div>
+            </motion.div>
+            )}
 
             {/* One footer for all three steps. The buttons had been sitting
                 under whatever the step happened to end with, so they moved
