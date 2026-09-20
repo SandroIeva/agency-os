@@ -33913,6 +33913,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     return () => { on = false; };
   }, []);
   const [uploadPct, setUploadPct] = useState(null);
+  // Ohne Bild gibt es keinen großen Knopf, an dem "jetzt oder später" hängen
+  // könnte. Also hängt es an dem stillen Link, und der fragt vorher nach.
+  const [noMediaMenu, setNoMediaMenu] = useState(false);
   // Was noch aussteht. Eine Warteschlange, in die niemand hineinsehen kann, ist
   // schlimmer als keine: man weiß nicht, ob der Beitrag existiert.
   const [queued, setQueued] = useState([]);
@@ -35385,8 +35388,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   corner of the step above. Anchored to the footer rather than
                   fixed: this panel's root is an animating motion.div, and a
                   transformed ancestor makes `fixed` mean "inside that box". */}
-              {canPost && hasMedia && canSchedule && (
+              {canPost && canSchedule && (
                 <div style={{ position: "relative", marginRight: 12 }}>
+                  {/* Mit Bild ist "Später" ein eigener Auslöser neben dem
+                      Posten-Knopf. Ohne Bild gibt es keinen Knopf, dort wird
+                      dieses Fenster aus dem Menü am Link geöffnet. */}
+                  {hasMedia && (
                   <span onClick={() => setWhenOpen(o => !o)}
                     style={{ padding: "0 10px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
                       color: schedule ? theme.text : theme.textDim, cursor: "pointer", whiteSpace: "nowrap" }}>
@@ -35394,6 +35401,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       ? new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(schedule))
                       : (de ? "Später" : "Later")}
                   </span>
+                  )}
                   {whenOpen && (<>
                     <div onClick={() => setWhenOpen(false)}
                       style={{ position: "fixed", inset: 0, zIndex: 5 }} />
@@ -35459,13 +35467,42 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   Text: dann ist das Veröffentlichen ein stiller Link und kein
                   Knopf, der über den drei Einstiegen thront. */}
               {canPost && !hasMedia && (
-                <span onClick={() => { if (textReady && !busy) submit("post"); }}
-                  title={textReady ? undefined : (de ? "Schreib zuerst eine Beschreibung." : "Write a description first.")}
-                  style={{ padding: "0 14px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
-                    color: theme.textDim, opacity: textReady ? 1 : 0.4,
-                    cursor: !textReady ? "default" : busy ? "wait" : "pointer", whiteSpace: "nowrap" }}>
-                  {busy === "post" ? (de ? "Wird gesendet…" : "Sending…") : (de ? "Ohne Bild veröffentlichen" : "Publish without a picture")}
-                </span>
+                <div style={{ position: "relative", display: "inline-flex" }}>
+                  <span onClick={() => {
+                      if (!textReady || busy) return;
+                      // Steht die Zeit schon, ist die Frage beantwortet.
+                      if (schedule) { submit("post"); return; }
+                      setNoMediaMenu(o => !o);
+                    }}
+                    title={textReady ? undefined : (de ? "Schreib zuerst eine Beschreibung." : "Write a description first.")}
+                    style={{ padding: "0 14px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
+                      color: schedule ? theme.text : theme.textDim, opacity: textReady ? 1 : 0.4,
+                      cursor: !textReady ? "default" : busy ? "wait" : "pointer", whiteSpace: "nowrap" }}>
+                    {busy === "post" ? (de ? "Wird gesendet…" : "Sending…")
+                      : schedule
+                        ? `${de ? "Für " : "For "}${new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(schedule))} ${de ? "planen" : "schedule"}`
+                        : (de ? "Ohne Bild veröffentlichen" : "Publish without a picture")}
+                  </span>
+                  {noMediaMenu && (<>
+                    <div onClick={() => setNoMediaMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 5 }} />
+                    <div style={{ position: "absolute", bottom: "calc(100% + 10px)", right: 0, zIndex: 6,
+                      minWidth: 210, padding: 8, borderRadius: 16,
+                      background: darkMode ? "#1c1c24" : "#ffffff",
+                      border: `1px solid ${theme.borderFaint}`,
+                      boxShadow: "0 18px 50px rgba(0,0,0,0.22)" }}>
+                      {[
+                        [de ? "Jetzt posten" : "Post now", () => { setNoMediaMenu(false); submit("post"); }],
+                        canSchedule && [de ? "Später planen" : "Schedule", () => { setNoMediaMenu(false); setWhenOpen(true); }],
+                      ].filter(Boolean).map(([what, run]) => (
+                        <div key={what} onClick={run} className="hover-row"
+                          style={{ padding: "10px 12px", borderRadius: 11, cursor: "pointer",
+                            fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: theme.text }}>
+                          {what}
+                        </div>
+                      ))}
+                    </div>
+                  </>)}
+                </div>
               )}
               {canPost && hasMedia ? (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("post")} disabled={Boolean(busy)}
