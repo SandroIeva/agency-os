@@ -53885,7 +53885,16 @@ export default function CircularMenu() {
     dialogOwnerRef.current = null;
   }, []);
 
+  // On the way out the app passes through a state that looks like a brand-new
+  // account: forgetAccount clears the AI keys, the click sends the view back to
+  // the dashboard, and the session is only gone one await later. For those
+  // renders it reads as "signed in, on the dashboard, no key", which is exactly
+  // what the key dialog watches for, so it appeared in somebody's face as they
+  // logged out. This says "we are leaving" before any of it happens.
+  const signingOutRef = useRef(false);
   const handleLogout = async () => {
+    signingOutRef.current = true;
+    setAiIntroOpen(false);
     forgetAccount();
     await supabase.auth.signOut();
     setSession(null);
@@ -53900,6 +53909,8 @@ export default function CircularMenu() {
   useEffect(() => {
     const uid = session?.user?.id;
     if (!uid) return;
+    // Somebody is in again, whoever it is. The leaving flag has done its job.
+    signingOutRef.current = false;
     let last = null;
     try { last = localStorage.getItem(LAST_USER_KEY); } catch (_) {}
     if (last && last !== uid) forgetAccount();
@@ -55564,10 +55575,13 @@ export default function CircularMenu() {
   // dashboard, once, after they have been somewhere and seen what the place is.
   const leftDashboardRef = useRef(false);
   useEffect(() => {
-    if (!onDashboard) { if (session) leftDashboardRef.current = true; return; }
+    // Never while logging out, and never over the login screen.
+    if (signingOutRef.current) return;
+    if (!session) { setAiIntroOpen(false); leftDashboardRef.current = false; return; }
+    if (!onDashboard) { leftDashboardRef.current = true; return; }
     // Nor in the middle of the dashboard tour, which would put a key form on
     // top of the sphere while it is introducing itself.
-    if (!session || onboardingStep || dashTourOpen) return;
+    if (onboardingStep || dashTourOpen) return;
     if (!leftDashboardRef.current) return;          // first arrival, say nothing
     if (!AI_INTRO_ALWAYS) {
       if (localStorage.getItem("agencyos-ai-key-intro") === "seen") return;
