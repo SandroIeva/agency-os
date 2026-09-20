@@ -1627,7 +1627,7 @@ async function saveStockImage(item, { orgId, userId, email }) {
       upstream = r.status;
     } catch (_) { /* naechste Quelle */ }
   }
-  if (!blob) return { ok: false, reason: "fetch", status: upstream };
+  if (!blob) return { ok: false, reason: upstream === 502 ? "busy" : "fetch", status: upstream };
 
   const room = await checkStorageRoom(orgId, blob.size, { userId, email });
   if (!room.ok) return { ok: false, reason: "quota", limit: room.limit };
@@ -1712,6 +1712,9 @@ function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de
       setError(
         res.reason === "quota"
           ? (de ? `Dein Speicher ist voll (${formatBytesGB(res.limit)}). Räume auf oder erweitere den Plan.` : `Storage is full (${formatBytesGB(res.limit)}). Free up space or upgrade.`)
+          : res.reason === "busy"
+            ? (de ? "Die Bildagentur bremst gerade. Probier es in ein paar Sekunden nochmal."
+                  : "The stock provider is throttling us. Try again in a few seconds.")
           : res.reason === "fetch"
             ? (de ? "Das Bild konnte nicht geladen werden." : "The image could not be loaded.")
             : (de ? "Speichern fehlgeschlagen: " : "Saving failed: ") + (res.message || "")
@@ -33672,6 +33675,16 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   };
   const [addMenu, setAddMenu] = useState(false);
   const [overlayPicker, setOverlayPicker] = useState(null);   // "fg" | "bg" | null
+  // Wo der Wähler aufgeht. Am Bildschirm gemessen, weil er dort hängt.
+  const [pickerAt, setPickerAt] = useState({ top: 120, left: 120 });
+  const openOverlayPicker = (what, e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setPickerAt({
+      top: Math.min(window.innerHeight - 380, r.bottom + 10),
+      left: Math.max(12, Math.min(window.innerWidth - 280, r.left - 120)),
+    });
+    setOverlayPicker(p => (p === what ? null : what));
+  };
   const [stickerOpen, setStickerOpen] = useState(false);
   // Dictation for the caption, the same SpeechRecognition the notes and the
   // person sheet use. Above the field and right-aligned, which is where every
@@ -34369,7 +34382,36 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     return () => window.removeEventListener("keydown", onKey);
   }, [selOverlay]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const addOverlay = ({ text, size = 0.065, bold = true, kind = "text" } = {}) => {
+  // Ein neues Element wird erst gezeichnet und dann gesetzt: wie breit ein Text
+  // ist, weiß vorher niemand. Der Griff misst es im selben Bild-Frame, in dem es
+  // erscheint, und schiebt es an seinen Platz, bevor der Bildschirm es zeigt.
+  const [justAdded, setJustAdded] = useState(null);   // { id, at }
+  useLayoutEffect(() => {
+    if (!justAdded) return;
+    setJustAdded(null);
+    const el = overlayNodes.current[justAdded.id];
+    const stage = stageRef.current;
+    if (!el || !stage) return;
+    const s = stage.getBoundingClientRect();
+    const b = el.getBoundingClientRect();
+    if (!s.width || !s.height) return;
+    const w = b.width / s.width, h = b.height / s.height;
+    let y = Math.max(0.02, justAdded.at - h / 2);
+    // Nicht auf ein vorhandenes Element legen: sonst liegen zwei Texte genau
+    // übereinander und man hält sie für einen.
+    const others = (overlays[slideKey] || []).filter(o => o.id !== justAdded.id);
+    for (let n = 0; n < 8; n++) {
+      const clash = others.some(o => {
+        const oh = (o.size * 1.22 * s.width) / s.height;
+        return y < o.y + oh && y + h > o.y;
+      });
+      if (!clash) break;
+      y += h * 1.15;
+    }
+    patchOverlay(justAdded.id, { x: (1 - w) / 2, y: Math.min(Math.max(0.02, 0.97 - h), y) });
+  }, [justAdded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const addOverlay = ({ text, size = 0.09, bold = true, kind = "text", at = 0.5 } = {}) => {
     const id = crypto.randomUUID();
     setOverlays(prev => ({ ...prev, [slideKey]: [...(prev[slideKey] || []), {
       id, kind, text: text || (de ? "Dein Text" : "Your text"),
@@ -34378,26 +34420,41 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       bg: null, rot: 0,
       // Leicht versetzt, damit ein zweites Element nicht exakt auf dem ersten
       // landet und unauffindbar wird.
-      x: 0.07 + Math.min(0.3, (prev[slideKey] || []).length * 0.04),
-      y: 0.08 + Math.min(0.3, (prev[slideKey] || []).length * 0.06),
+      x: 0.5, y: at,
       size, color: "#FFFFFF", bold,
     }] }));
     setSelOverlay(id);
+    setJustAdded({ id, at });
     setAddMenu(false); setStickerOpen(false);
   };
   // Ausrichten am Rahmen. Die Maße des Elements kommen aus dem DOM: ein Text
   // ist so breit, wie seine Zeichen ihn machen, das weiß nur der Browser.
   const overlayNodes = useRef({});
   const alignOverlay = (k) => {
+    const o = selectedOverlayObj;
     const el = overlayNodes.current[selOverlay];
     const stage = stageRef.current;
-    if (!el || !stage || !selectedOverlayObj) return;
-    const W = stage.offsetWidth, H = stage.offsetHeight;
-    if (!W || !H) return;
-    const w = el.offsetWidth / W, h = el.offsetHeight / H;
-    const at = k === "l" ? { x: 0 } : k === "cx" ? { x: (1 - w) / 2 } : k === "r" ? { x: 1 - w }
-      : k === "t" ? { y: 0 } : k === "cy" ? { y: (1 - h) / 2 } : { y: 1 - h };
-    patchOverlay(selOverlay, at);
+    if (!o || !el || !stage) return;
+    const s = stage.getBoundingClientRect();
+    const b = el.getBoundingClientRect();
+    if (!s.width || !s.height) return;
+    const w = b.width / s.width, h = b.height / s.height;
+    // Gemessen wird die SICHTBARE Kante, und die ist nicht der Ankerpunkt:
+    // Innenabstand und Drehung schieben sie davon weg. Ohne diese Differenz
+    // rutscht ein gedrehtes oder hinterlegtes Element daneben, und mit den
+    // reinen Layoutmaßen passiert gar nichts Sinnvolles.
+    const offX = (b.left - s.left) / s.width - o.x;
+    const offY = (b.top - s.top) / s.height - o.y;
+    const put = (nx, ny) => patchOverlay(o.id, {
+      ...(nx == null ? {} : { x: nx - offX }),
+      ...(ny == null ? {} : { y: ny - offY }),
+    });
+    if (k === "l") put(0, null);
+    else if (k === "cx") put((1 - w) / 2, null);
+    else if (k === "r") put(1 - w, null);
+    else if (k === "t") put(null, 0);
+    else if (k === "cy") put(null, (1 - h) / 2);
+    else put(null, 1 - h);
   };
   // Am Element ziehen statt Zahlen tippen: unten rechts größer und kleiner,
   // oben rechts drehen. Beides rechnet vom Ursprung des Elements aus, der auch
@@ -35860,6 +35917,26 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       {/* Für Text: ausrichten, Größe, Farben. Ein Emoji braucht
                           davon nichts, das zieht man an seinen Griffen groß und
                           dreht es, und Entf löscht es. */}
+                      {/* Ein Emoji braucht keine Schrifteinstellungen: Größe und
+                          Drehung holt man sich an seinen Griffen. Ausrichten und
+                          Entfernen gehören trotzdem dazu, also bekommt es eine
+                          kurze Leiste statt gar keiner. */}
+                      {selectedOverlayObj && selectedOverlayObj.kind === "emoji" && (
+                        <div onPointerDown={(e) => e.stopPropagation()}
+                          style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", zIndex: 4,
+                            display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 14,
+                            background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
+                            border: `1px solid ${theme.borderFaint}`, boxShadow: "0 12px 34px rgba(0,0,0,0.22)" }}>
+                          <AlignGrid de={de} theme={theme} darkMode={darkMode} size={24}
+                            style={{ gap: 6 }} onAct={alignOverlay} />
+                          <div style={{ width: 1, height: 20, background: theme.borderFaint }} />
+                          <div onClick={() => removeOverlay(selectedOverlayObj.id)} title={de ? "Entfernen" : "Remove"}
+                            style={{ width: 22, height: 22, borderRadius: 7, cursor: "pointer", display: "flex",
+                              alignItems: "center", justifyContent: "center", color: theme.textDim }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                          </div>
+                        </div>
+                      )}
                       {selectedOverlayObj && selectedOverlayObj.kind !== "emoji" && (
                         <div onPointerDown={(e) => e.stopPropagation()}
                           style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", zIndex: 4,
@@ -35902,7 +35979,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                               öffnen denselben Farbwähler, den der Artboard benutzt. */}
                           {[["fg", selectedOverlayObj.color, de ? "Textfarbe" : "Text colour"],
                             ["bg", selectedOverlayObj.bg, de ? "Hintergrund" : "Background"]].map(([what, value, title]) => (
-                            <div key={what} onClick={() => setOverlayPicker(p => p === what ? null : what)} title={title}
+                            <div key={what} onClick={(e) => openOverlayPicker(what, e)} title={title}
                               style={{ width: 22, height: 22, borderRadius: 7, cursor: "pointer", flexShrink: 0,
                                 border: `1px solid ${theme.borderFaint}`,
                                 background: value || (darkMode
@@ -35922,9 +35999,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       )}
                       {/* Der Farbwähler des Artboards, hier in klein: nur die
                           eigene Farbe, keine Verläufe und keine Bilder. */}
-                      {selectedOverlayObj && overlayPicker && (
+                      {/* An den Bildschirm gehängt, nicht in die Bühne: die hat
+                          overflow hidden, und der Farbwähler ist breiter als der
+                          hochkante Story-Rahmen. Drin lag er halb abgeschnitten. */}
+                      {selectedOverlayObj && overlayPicker && createPortal(
                         <div onPointerDown={(e) => e.stopPropagation()}
-                          style={{ position: "absolute", top: 54, left: "50%", transform: "translateX(-50%)", zIndex: 5,
+                          style={{ position: "fixed", top: pickerAt.top, left: pickerAt.left, zIndex: 100011,
                             width: 268, borderRadius: 16, overflow: "hidden",
                             background: darkMode ? "#1c1c24" : "#ffffff",
                             border: `1px solid ${theme.borderFaint}`, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
@@ -35941,8 +36021,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                               {de ? "Ohne Hintergrund" : "No background"}
                             </div>
                           )}
-                        </div>
-                      )}
+                        </div>, document.body)}
 
                       <div ref={viewRef} style={{ position: "absolute", inset: slides.length > 1 ? "0 58px" : 0,
                         display: "flex", alignItems: "center", justifyContent: "center", minWidth: 0, minHeight: 0 }}>
@@ -36195,7 +36274,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       style={{ position: "fixed", inset: 0, zIndex: 30 }} />
                     {stickerOpen ? (
                       <div style={{ position: "absolute", bottom: "calc(100% + 12px)", left: 0, zIndex: 31 }}>
-                        {emojiPanel((emoji) => addOverlay({ text: emoji, size: 0.18, bold: false, kind: "emoji" }))}
+                        {emojiPanel((emoji) => addOverlay({ text: emoji, size: 0.18, bold: false, kind: "emoji", at: 0.3 }))}
                       </div>
                     ) : (
                       <div onClick={(e) => e.stopPropagation()}

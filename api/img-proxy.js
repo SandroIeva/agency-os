@@ -39,8 +39,12 @@ export default async function handler(req) {
     // Referer und mit bot-artiger Kennung mit 403, während dasselbe Bild im
     // <img>-Tag desselben Nutzers laedt. Geholt wird ohnehin nur, was jemand in
     // der App ausgewaehlt hat.
-    const { res } = await safeFetch(target, {
-      maxBytes: MAX_BYTES, timeoutMs: 12000,
+    // Pixabay antwortet unter Last mit 429, und zwar sprunghaft: zwei Klicks
+    // hintereinander gehen, der dritte nicht, zwanzig Sekunden später wieder.
+    // Einmal kurz warten und nochmal fragen kostet den Nutzer nichts und spart
+    // ihm die Meldung, die er sonst dreimal am Tag sieht.
+    const ask = () => safeFetch(target, {
+      maxBytes: MAX_BYTES, timeoutMs: 9000,
       headers: {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         Accept: "image/avif,image/webp,image/png,image/jpeg,*/*;q=0.8",
@@ -48,6 +52,17 @@ export default async function handler(req) {
         Referer: new URL(target).origin + "/",
       },
     });
+    let res = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      ({ res } = await ask());
+      if (res.status !== 429 && res.status !== 503) break;
+      if (attempt === 2) break;
+      // Der Hoster darf sagen, wie lange. Sagt er nichts, warten wir kurz.
+      const said = Number(res.headers.get("retry-after"));
+      const wait = Math.min(2500, Number.isFinite(said) && said > 0 ? said * 1000 : 600 * (attempt + 1));
+      try { await res.body?.cancel(); } catch (_) {}
+      await new Promise(r => setTimeout(r, wait));
+    }
     if (!res.ok) {
       // Der Grund gehört ins Log, sonst steht in der App nur "konnte nicht
       // geladen werden" und niemand weiss, wer abgelehnt hat.
