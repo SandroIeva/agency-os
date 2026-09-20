@@ -34,6 +34,8 @@
 // every share link.
 import { createClient } from "@supabase/supabase-js";
 
+import { followerDelta } from "../server/followerSnapshots.js";
+
 export const config = { runtime: "edge" };
 
 const json = (obj, status = 200) =>
@@ -427,11 +429,17 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     const quota = await ig(token, `/${row.ig_user_id}/content_publishing_limit`, { fields: "config,quota_usage" });
     const q = quota.ok ? (quota.body?.data?.[0] || {}) : null;
 
+    const followers = profile.body?.followers_count ?? null;
+    const delta = await followerDelta(db, {
+      orgId, platform: "instagram", accountId: row.ig_user_id, followers,
+    });
+
     return json({
       account: {
         igUserId: row.ig_user_id,
         username: profile.body?.username || row.username,
-        followers: profile.body?.followers_count ?? null,
+        followers,
+        followersDelta: delta,
         following: profile.body?.follows_count ?? null,
         posts: profile.body?.media_count ?? null,
       },

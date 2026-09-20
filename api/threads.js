@@ -27,6 +27,8 @@
 //   POST { mode: "limit",      orgId } → posts left in the 24h window
 import { createClient } from "@supabase/supabase-js";
 
+import { followerDelta } from "../server/followerSnapshots.js";
+
 export const config = { runtime: "edge" };
 
 const json = (obj, status = 200) =>
@@ -379,11 +381,17 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     // A metric is either a running total or a series; take whichever came back.
     const value = (m) => m?.total_value?.value
       ?? (Array.isArray(m?.values) ? m.values.reduce((sum, v) => sum + (v.value || 0), 0) : null);
+    const followers = value((insights || []).find(m => m.name === "followers_count"));
+    const delta = await followerDelta(db, {
+      orgId, platform: "threads", accountId: row.threads_user_id, followers,
+    });
+
     return json({
       account: { threadsUserId: row.threads_user_id, username: profile.body?.username || row.username },
       days,
       metrics: Object.fromEntries((insights || []).map(m => [m.name, value(m)])),
-      followers: value((insights || []).find(m => m.name === "followers_count")),
+      followers,
+      followersDelta: delta,
       demographics: demo.ok
         ? ((demo.body?.data?.[0]?.total_value?.breakdowns?.[0]?.results || [])
             .map(r => ({ key: (r.dimension_values || [])[0], value: r.value }))

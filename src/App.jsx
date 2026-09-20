@@ -31463,6 +31463,10 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
   // reads the numbers fine and is refused on the answers.
   const [thHint, setThHint] = useState(null);
   const [shown, setShown] = useState(5);
+  // The same comments, read the other way round: not what was said last, but
+  // who keeps saying something. One switch rather than a second panel, because
+  // both answers come from the one list we already fetched.
+  const [rank, setRank] = useState(false);
   const [scReady, setScReady] = useState(true);
   // Who a commenter actually is — headline, reach, where they are. Zernio gives
   // a name and a picture, which is enough to read a thread and not enough to
@@ -31634,9 +31638,52 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
     })();
   }, [list]);
 
+  // Who comes back. Counted over the comments already in hand, which is the
+  // last 28 days on Instagram and on Threads, so this is a ranking of the
+  // month and not of all time. The account's own replies are left out: under
+  // your own posts you are always first, and that is not a supporter.
+  //
+  // Keyed by handle before name, since a display name can change between two
+  // comments while the handle does not.
+  const supporters = (() => {
+    const by = new Map();
+    for (const c of list) {
+      const f = c.from || c.author || c.user || {};
+      if (f.isOwner) continue;
+      const name = f.name || f.display_name || f.username || f.full_name || null;
+      const key = f.username || f.url || name;
+      if (!key) continue;
+      const e = by.get(key) || { key, name, count: 0, likes: 0, last: null,
+        avatar: null, url: null, platform: c.platform };
+      e.count += 1;
+      e.likes += Number(c.likeCount) || 0;
+      if (!e.avatar) e.avatar = f.picture || f.avatar_url || null;
+      if (!e.name) e.name = name;
+      const at = String(c.createdTime || "");
+      if (at > String(e.last || "")) { e.last = c.createdTime || null; e.url = c.url || c.postPermalink || null; }
+      by.set(key, e);
+    }
+    return [...by.values()].sort((a, b) => b.count - a.count || b.likes - a.likes
+      || String(b.last || "").localeCompare(String(a.last || "")));
+  })();
+
   return (
     <div style={card}>
-      <div style={secLabel}>{de ? "Letzte Kommentare" : "Latest comments"}</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: 12, marginBottom: 14 }}>
+        <div style={{ ...secLabel, marginBottom: 0 }}>
+          {rank ? (de ? "Größte Unterstützer" : "Biggest supporters")
+                : (de ? "Letzte Kommentare" : "Latest comments")}
+        </div>
+        {list.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontFamily: FONT, fontSize: 11.5, color: theme.textDim }}>
+              {de ? "Ranking" : "Ranking"}
+            </span>
+            <ToggleSwitch on={rank} onClick={() => setRank(v => !v)} darkMode={darkMode} />
+          </div>
+        )}
+      </div>
       {igHint === "scope" && (
         <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 9,
           fontFamily: FONT, fontSize: 11.5, color: theme.textDim, lineHeight: 1.5,
@@ -31673,7 +31720,47 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
                   : "Without SOCIALCRAWL_API_KEY, LinkedIn comments arrive with no author — the key is set in Vercel for Production and Preview only, not Development."}
             </div>
           )}
-          {list.slice(0, shown).map((c, i) => {
+          {rank && supporters.length === 0 && msg(de
+            ? "Unter den Beiträgen hat bisher nur euer eigenes Konto geantwortet."
+            : "So far only your own account has replied under the posts.")}
+          {rank && supporters.map((p, i) => (
+            <div key={p.key} style={{ display: "flex", gap: 12, alignItems: "center", padding: "10px 0",
+              borderBottom: i < supporters.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
+              <span style={{ width: 16, flexShrink: 0, fontFamily: FONT, fontSize: 12,
+                fontWeight: 600, color: theme.textFaint, textAlign: "right" }}>{i + 1}</span>
+              <div style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
+                overflow: "hidden", color: "#fff", display: "flex", alignItems: "center",
+                justifyContent: "center", fontFamily: FONT, fontSize: 12, fontWeight: 600,
+                background: p.avatar ? `center/cover no-repeat url(${p.avatar})` : "#15151c" }}>
+                {p.avatar ? "" : ((p.name || "?").trim()[0]?.toUpperCase() || "?")}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: theme.text,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {p.name || (de ? "Unbekannt" : "Unknown")}
+                </div>
+                <div style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint, marginTop: 1 }}>
+                  {p.count} {p.count === 1 ? (de ? "Kommentar" : "comment") : (de ? "Kommentare" : "comments")}
+                  {p.likes > 0 && ` · ${p.likes} ${de ? "Likes" : "likes"}`}
+                  {p.last && ` · ${de ? "zuletzt " : "last "}${when(p.last)}`}
+                </div>
+              </div>
+              {p.url && (
+                <a href={p.url} target="_blank" rel="noreferrer"
+                  style={{ fontFamily: FONT, fontSize: 11, color: theme.textFaint, flexShrink: 0 }}>
+                  {de ? "Öffnen" : "Open"}
+                </a>
+              )}
+            </div>
+          ))}
+          {rank && supporters.length > 0 && (
+            <div style={{ marginTop: 12, fontFamily: FONT, fontSize: 11, color: theme.textFaint,
+              lineHeight: 1.5 }}>
+              {de ? "Gezählt über die Kommentare der letzten 28 Tage."
+                  : "Counted across the comments of the last 28 days."}
+            </div>
+          )}
+          {!rank && list.slice(0, shown).map((c, i) => {
             // Read from whatever the vendor called it. A row that says
             // "Unknown" is a row that had a name somewhere and lost it to a
             // field name.
@@ -31821,7 +31908,7 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
               </div>
             );
           })}
-          {shown < list.length && (
+          {!rank && shown < list.length && (
             <div onClick={() => setShown(n => n + 10)}
               style={{ marginTop: 12, padding: "9px 0", textAlign: "center", cursor: "pointer",
                 fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: theme.text,
@@ -32373,6 +32460,26 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
     + (thOn?.metrics?.likes || 0) + (thOn?.metrics?.replies || 0)
     + (ttOn?.posts || []).reduce((n, p) => n + (p.likes || 0) + (p.comments || 0) + (p.shares || 0), 0);
   const anyDirect = !!(igOn || thOn || ttOn);
+  // What came in since we last looked. Not a platform metric: the endpoints
+  // write down the follower count once a day and answer with the difference,
+  // because Threads and TikTok report only a total and Instagram's own daily
+  // figure stays silent under 100 followers.
+  const directDeltas = [igOn?.account?.followersDelta, thOn?.followersDelta, ttOn?.account?.followersDelta]
+    .filter(d => d && typeof d.value === "number");
+  const followerGain = directDeltas.length
+    ? { value: directDeltas.reduce((s, d) => s + d.value, 0),
+        since: directDeltas.map(d => d.since).sort()[0] }
+    : null;
+  const gainText = (() => {
+    if (!followerGain || !followerGain.value) return null;
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const when = followerGain.since === yesterday
+      ? (de ? "gestern" : "yesterday")
+      : new Intl.DateTimeFormat(de ? "de-DE" : "en-GB", { day: "numeric", month: "short" })
+          .format(new Date(followerGain.since + "T12:00:00Z"));
+    const n = `${followerGain.value > 0 ? "+" : ""}${fmtMetric(followerGain.value, de)}`;
+    return de ? `${n} seit ${when}` : `${n} since ${when}`;
+  })();
   const totalFollowers = (followersOk ? followerTotal : 0) + directFollowers;
   const totalImpressions = (dailyOk ? impressions : 0) + directImpressions;
   const totalInteractions = (dailyOk ? interactions : 0) + directInteractions;
@@ -32385,7 +32492,11 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   const numbersPending = ((accounts?.length || 0) > 0 && data == null) || directStats == null;
 
   const kpis = [
-    { label: "Follower", value: haveFollowers ? fmtMetric(totalFollowers, de) : "–", delta: followersOk && followerGrowth ? followerGrowth : null },
+    { label: "Follower", value: haveFollowers ? fmtMetric(totalFollowers, de) : "–",
+      delta: followersOk && followerGrowth ? followerGrowth : null,
+      // Grey and small: it is a footnote to the number above it, not a second
+      // number competing with it.
+      hint: gainText },
     { label: de ? "Impressionen" : "Impressions", value: haveCounts ? fmtMetric(totalImpressions, de) : "–", delta: null },
     { label: de ? "Interaktionen" : "Interactions", value: haveCounts ? fmtMetric(totalInteractions, de) : "–", delta: null },
     { label: "Engagement-Rate", value: haveCounts && totalImpressions ? ((de ? totalRate.toFixed(1).replace(".", ",") : totalRate.toFixed(1)) + " %") : "–", delta: null },
@@ -32572,6 +32683,9 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
                     <span style={{ fontSize: 11, fontFamily: FONT, fontWeight: 600, color: k.delta >= 0 ? "#00B894" : "#E86767" }}>
                       {k.delta >= 0 ? "+" : ""}{fmtMetric(k.delta, de)}
                     </span>
+                  )}
+                  {!numbersPending && k.hint && (
+                    <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint }}>{k.hint}</span>
                   )}
                 </div>
               </motion.div>

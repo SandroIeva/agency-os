@@ -41,6 +41,8 @@
 //   POST { mode: "publish-status", orgId, publishId } → how far along it is
 import { createClient } from "@supabase/supabase-js";
 
+import { followerDelta } from "../server/followerSnapshots.js";
+
 export const config = { runtime: "edge" };
 
 const json = (obj, status = 200) =>
@@ -459,11 +461,16 @@ export default async function handler(req) {
       limited = true;
     }
     const u = r.body?.data?.user || {};
+    const followers = u.follower_count ?? null;
+    const delta = await followerDelta(db, {
+      orgId, platform: "tiktok", accountId: row.open_id || u.open_id, followers,
+    });
     return json({
       account: {
         openId: u.open_id || row.open_id,
         displayName: u.display_name || row.display_name,
-        followers: u.follower_count ?? null,
+        followers,
+        followersDelta: delta,
         following: u.following_count ?? null,
         likes: u.likes_count ?? null,
         posts: u.video_count ?? null,
