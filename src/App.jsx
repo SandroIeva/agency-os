@@ -34624,6 +34624,23 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // canvas export lands the text in exactly the same spot at full resolution.
   // Welche Mittellinie gerade greift, während gezogen wird. Nur zum Anzeigen.
   const [snap, setSnap] = useState({ x: false, y: false });
+  // Die Werkzeugleiste hängt am Bildschirm, nicht in der Bühne. Der graue
+  // Kasten darum schneidet ab, was über seinen Rand ragt, und eine Leiste, die
+  // auf der Bildkante liegen soll, ragt genau dorthin. Also wird die Lage des
+  // Bildes gemessen und die Leiste dorthin gesetzt.
+  const [barAt, setBarAt] = useState({ top: 0, left: 0 });
+  useLayoutEffect(() => {
+    if (!selOverlay) return;
+    const place = () => {
+      const el = stageRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setBarAt({ top: Math.max(8, r.top - 26), left: r.left + r.width / 2 });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [selOverlay, viewBox.w, viewBox.h, slideIdx, cropRatio, stepIdx]);
   const onOverlayDown = (e, o) => {
     e.preventDefault(); e.stopPropagation();
     setSelOverlay(o.id);
@@ -36188,9 +36205,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           Drehung holt man sich an seinen Griffen. Ausrichten und
                           Entfernen gehören trotzdem dazu, also bekommt es eine
                           kurze Leiste statt gar keiner. */}
-                      {selectedOverlayObj && selectedOverlayObj.kind === "emoji" && (
+                      {selectedOverlayObj && selectedOverlayObj.kind === "emoji" && createPortal(
                         <div onPointerDown={(e) => e.stopPropagation()}
-                          style={{ position: "absolute", top: -26, left: "50%", transform: "translateX(-50%)", zIndex: 6, lineHeight: 1.2,
+                          style={{ position: "fixed", top: barAt.top, left: barAt.left, transform: "translateX(-50%)", zIndex: 100010, lineHeight: 1.2,
                             display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 14,
                             background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
                             border: `1px solid ${theme.borderFaint}`, boxShadow: "0 12px 34px rgba(0,0,0,0.22)" }}>
@@ -36202,11 +36219,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                               alignItems: "center", justifyContent: "center", color: theme.textDim }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
                           </div>
-                        </div>
-                      )}
-                      {selectedOverlayObj && selectedOverlayObj.kind !== "emoji" && (
+                        </div>, document.body)}
+                      {selectedOverlayObj && selectedOverlayObj.kind !== "emoji" && createPortal(
                         <div onPointerDown={(e) => e.stopPropagation()}
-                          style={{ position: "absolute", top: -26, left: "50%", transform: "translateX(-50%)", zIndex: 6, lineHeight: 1.2,
+                          style={{ position: "fixed", top: barAt.top, left: barAt.left, transform: "translateX(-50%)", zIndex: 100010, lineHeight: 1.2,
                             display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 14,
                             background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
                             border: `1px solid ${theme.borderFaint}`, boxShadow: "0 12px 34px rgba(0,0,0,0.22)" }}>
@@ -36280,8 +36296,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                               alignItems: "center", justifyContent: "center", color: theme.textDim }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
                           </div>
-                        </div>
-                      )}
+                        </div>, document.body)}
                       {/* Der Farbwähler des Artboards, hier in klein: nur die
                           eigene Farbe, keine Verläufe und keine Bilder. */}
                       {/* An den Bildschirm gehängt, nicht in die Bühne: die hat
