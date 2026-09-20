@@ -33943,6 +33943,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     });
   };
   const [queueOpen, setQueueOpen] = useState(false);
+  // Eine Story ist kein anderes Format, sondern ein anderer Ort: dasselbe Bild
+  // kann beides sein, also kann es die Datei nicht entscheiden. Nur Instagram
+  // hat diesen Ort, Threads kennt ihn nicht.
+  const [igStory, setIgStory] = useState(false);
   // Ein geplanter Beitrag ist Arbeit, die weg ist, wenn man daneben trifft.
   // Der erste Klick fragt, der zweite löscht.
   const [confirmDrop, setConfirmDrop] = useState(null);
@@ -33966,6 +33970,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     setText(q.body || "");
     const when = new Date(q.publish_at);
     setSchedule(new Date(when.getTime() - when.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+    setIgStory((q.targets || []).some(t => t.story));
     setSelectedIds((q.targets || []).map(t => (accounts || []).find(a =>
       (t.provider === "meta" && a.igUserId && a.igUserId === t.igUserId)
       || (t.provider === "threads" && a.threadsUserId && a.threadsUserId === t.threadsUserId))?.id)
@@ -33999,7 +34004,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     setQueueOpen(false); setWhenOpen(false);
     setStepIdx(S_TEXT);
   };
-  const stopEditing = () => { setEditing(null); setText(""); setSchedule(""); clearVisual(); setSelectedIds(soleChannel()); };
+  const stopEditing = () => { setEditing(null); setText(""); setSchedule(""); setIgStory(false); clearVisual(); setSelectedIds(soleChannel()); };
 
   const queueRows = (rows) => rows.map(q => (
     <div key={q.id} onClick={() => openQueued(q)} className="hover-row"
@@ -34425,7 +34430,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         publish_at: new Date(schedule).toISOString(),
         media: fresh,
         targets: selected.filter(a => a.provider === "meta" || a.provider === "threads").map(a => a.provider === "meta"
-          ? { provider: "meta", igUserId: a.igUserId, label: a.username || a.displayName }
+          ? { provider: "meta", igUserId: a.igUserId, label: a.username || a.displayName, story: igStory || undefined }
           : { provider: "threads", threadsUserId: a.threadsUserId, label: a.username || a.displayName }),
         // Ein gescheiterter Beitrag, den jemand angefasst hat, darf es noch
         // einmal versuchen.
@@ -34472,6 +34477,15 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     // Geplant heißt bei den direkten Kanälen: wir heben den Beitrag auf und
     // schicken ihn zur Zeit. Die Kanäle selbst können es nicht.
     const queueDirect = !!schedule && (metaSel.length > 0 || thrSel.length > 0);
+    // Eine Story ist genau ein Medium. Der Rest des Karussells hätte keinen
+    // Ort, an den er gehen könnte, und stillschweigend das erste Bild zu nehmen
+    // wäre eine Entscheidung, die niemand getroffen hat.
+    if (igStory && metaSel.length && extras.length) {
+      setError(new Error(de
+        ? "Eine Story nimmt nur ein Bild oder ein Video. Nimm die weiteren Folien raus."
+        : "A story takes one picture or video. Remove the other slides."));
+      return;
+    }
     // Instagram fetches the media itself and refuses a post without any.
     if (metaSel.length && !imageFileRef.current && !reel) {
       setError(new Error(de ? "Instagram braucht ein Bild oder ein Video." : "Instagram needs an image or a video."));
@@ -34544,7 +34558,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           return;
         }
         const targets = [
-          ...metaSel.map(a => ({ provider: "meta", igUserId: a.igUserId, label: a.username || a.displayName })),
+          ...metaSel.map(a => ({ provider: "meta", igUserId: a.igUserId, label: a.username || a.displayName, story: igStory || undefined })),
           ...thrSel.map(a => ({ provider: "threads", threadsUserId: a.threadsUserId, label: a.username || a.displayName })),
         ];
         const { error: qErr } = await supabase.from("scheduled_posts").insert({
@@ -34605,6 +34619,23 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         const igUserId = a.igUserId;
         const fail = (error) => parts.push({ platform: "instagram", status: "failed", url: null, error });
         let creationId = null;
+
+        // Die Story zuerst, weil sie über allem anderen steht: dasselbe
+        // Medium, anderer Ort, und Instagram nimmt dort keine Bildunterschrift.
+        if (igStory) {
+          const m = metaReel ? { ...metaReel, kind: "VIDEO" } : metaMedia;
+          if (!m) { fail(de ? "Eine Story braucht ein Bild oder ein Video." : "A story needs a picture or a video."); continue; }
+          const r = await igStep({ mode: "container", igUserId, kind: "STORIES", media: m });
+          const j2 = await r.json().catch(() => null);
+          if (!r.ok || !j2?.containerId) { fail(await readFail(r, j2, "Instagram")); continue; }
+          const ready = await igWaitFor(igUserId, j2.containerId, metaReel ? 90 : 15);
+          if (!ready.ok) { fail(ready.error); continue; }
+          const pub = await igStep({ mode: "publish-finish", igUserId, containerId: j2.containerId });
+          const pj = await pub.json().catch(() => null);
+          parts.push({ platform: "instagram", status: pub.ok ? "published" : "failed",
+            url: pj?.url || null, error: pub.ok ? null : await readFail(pub, pj, "Instagram") });
+          continue;
+        }
 
         // A video on its own is a reel. A video with slides behind it is the
         // first child of a carousel, which is a different call.
@@ -34868,7 +34899,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       setResult(r);
       // The channel survives a post when it is the only one: emptying it would
       // put the person back in front of the same one-item question.
-      if (r.status !== "failed" && !isDraft) { setText(""); clearVisual(); setSchedule(""); setSelectedIds(soleChannel()); }
+      if (r.status !== "failed" && !isDraft) { setText(""); clearVisual(); setSchedule(""); setIgStory(false); setSelectedIds(soleChannel()); }
     } catch (e) { setError(e); }
     setBusy(null);
   };
@@ -35265,6 +35296,27 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       })}
                     </div>
                   </>)}
+
+                  {/* Instagram kann dasselbe Bild in den Feed oder in die Story
+                      legen. Die Story nimmt genau EIN Medium, keine
+                      Bildunterschrift, und ist nach 24 Stunden weg. */}
+                  {selected.some(a => a.provider === "meta") && (
+                    <div style={{ marginTop: 14, padding: "14px 16px", borderRadius: 14,
+                      background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12.5, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+                            {de ? "Als Story posten" : "Post as a story"}
+                          </div>
+                          <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5, marginTop: 3 }}>
+                            {de ? "Ein Bild oder ein Video, ohne Text, nach 24 Stunden weg. Nur Instagram."
+                                : "One picture or video, no caption, gone after 24 hours. Instagram only."}
+                          </div>
+                        </div>
+                        <ToggleSwitch on={igStory} onClick={() => setIgStory(v => !v)} darkMode={darkMode} />
+                      </div>
+                    </div>
+                  )}
 
                   {/* TikTok asks for more than the others, and it is not
                       optional: their terms require the person posting to see

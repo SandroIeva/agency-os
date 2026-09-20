@@ -121,8 +121,11 @@ export default async function handler(req) {
 
       if (st.parent) { if (!await finish(st.parent)) { pending = true; } continue; }
 
+      // Eine Story ist genau ein Medium, also nie ein Karussell.
+      const story = isThreads ? false : !!t.story;
+
       // ── Karussell: Folie für Folie, und jede überlebt den Takt ──
-      if (media.length > 1) {
+      if (media.length > 1 && !story) {
         const children = Array.isArray(st.children) ? [...st.children] : [];
         let broke = null;
         for (let i = 0; i < media.length; i++) {
@@ -167,9 +170,12 @@ export default async function handler(req) {
       }
 
       if (!media.length) { fail("Instagram needs an image or a video"); continue; }
+      const isVideo = String(media[0]?.kind || "").toUpperCase() === "VIDEO";
       const r = await call("instagram", { ...base, mode: "container", media: media[0],
-        kind: String(media[0]?.kind || "").toUpperCase() === "VIDEO" ? "REELS" : "IMAGE",
-        caption: row.body || undefined });
+        // In der Story gibt es keine Bildunterschrift, und ein Video ist dort
+        // kein Reel, sondern eine Story mit Bewegtbild.
+        kind: story ? "STORIES" : isVideo ? "REELS" : "IMAGE",
+        caption: story ? undefined : (row.body || undefined) });
       if (!r.ok || !r.j?.containerId) { fail(r.j?.error || `Instagram ${r.status}`); continue; }
       state[key] = { parent: r.j.containerId };
       await save(row.id, { containers: state });
