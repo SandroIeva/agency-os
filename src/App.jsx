@@ -35626,8 +35626,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 <motion.div
                   animate={{ rotate: 360 }}
                   transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                  style={{ width: 30, height: 30, borderRadius: "50%",
-                    border: `2.5px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)"}`,
+                  style={{ width: 36, height: 36, borderRadius: "50%",
+                    border: `3px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)"}`,
                     borderTopColor: theme.text }} />
               </div>
             ) : (
