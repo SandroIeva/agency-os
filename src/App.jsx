@@ -1873,6 +1873,44 @@ function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de
   );
 }
 
+// Ausrichten am Rahmen: links/mitte/rechts und oben/mitte/unten, mit kleinen
+// Objekten statt Hilfslinien, weil man dann sieht, was dabei herauskommt.
+//
+// Auf Modulebene, weil der Artboard und der Story-Editor dasselbe tun. Zwei
+// Fassungen derselben sechs Knöpfe laufen beim ersten Handgriff auseinander.
+const ALIGN_MARK = (x1, y1, w1, h1, x2, y2, w2, h2) => (
+  <><rect x={x1} y={y1} width={w1} height={h1} rx="1.5" fill="currentColor" stroke="none" />
+    <rect x={x2} y={y2} width={w2} height={h2} rx="1.5" fill="currentColor" stroke="none" opacity="0.5" /></>
+);
+const ALIGN_DEFS = [
+  ["l", ALIGN_MARK(4,5,16,5,4,14,10,5), "Links", "Left"],
+  ["cx", ALIGN_MARK(4,5,16,5,7,14,10,5), "Horizontal zentrieren", "Centre horizontally"],
+  ["r", ALIGN_MARK(4,5,16,5,10,14,10,5), "Rechts", "Right"],
+  ["t", ALIGN_MARK(5,4,5,16,14,4,5,10), "Oben", "Top"],
+  ["cy", ALIGN_MARK(5,4,5,16,14,7,5,10), "Vertikal zentrieren", "Centre vertically"],
+  ["b", ALIGN_MARK(5,4,5,16,14,10,5,10), "Unten", "Bottom"],
+];
+function AlignGrid({ onAct, de, theme, darkMode, size = 32, style = {} }) {
+  const btn = (k) => {
+    const [, glyph, dde, een] = ALIGN_DEFS.find(d => d[0] === k);
+    return (
+      <div key={k} title={de ? dde : een} onClick={() => onAct(k)}
+        style={{ flex: 1, minWidth: size, height: size, borderRadius: 8, display: "flex",
+          alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.text,
+          background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeLinecap="round">{glyph}</svg>
+      </div>
+    );
+  };
+  return (
+    <div style={{ display: "flex", gap: 10, ...style }}>
+      <div style={{ display: "flex", gap: 4, flex: 1 }}>{["l", "cx", "r"].map(btn)}</div>
+      <div style={{ display: "flex", gap: 4, flex: 1 }}>{["t", "cy", "b"].map(btn)}</div>
+    </div>
+  );
+}
+
 // ── Reusable Dropdown ────────────────────────────────────────────────────────
 // Anthracite pill trigger + frosted popover with hover-row items and a modern
 // check on the active one. options: [{ value, label, icon?, sub? }].
@@ -25611,37 +25649,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     )}
   </>);
 
-  // Small rounded objects show the resulting alignment without guide lines.
-  const alignMark = (x1, y1, w1, h1, x2, y2, w2, h2) => (
-    <><rect x={x1} y={y1} width={w1} height={h1} rx="1.5" fill="currentColor" stroke="none" />
-      <rect x={x2} y={y2} width={w2} height={h2} rx="1.5" fill="currentColor" stroke="none" opacity="0.5" /></>
-  );
-  const ALIGN_DEFS = [
-    ["l", alignMark(4,5,16,5,4,14,10,5), "Links", "Left"],
-    ["cx", alignMark(4,5,16,5,7,14,10,5), "Horizontal zentrieren", "Centre horizontally"],
-    ["r", alignMark(4,5,16,5,10,14,10,5), "Rechts", "Right"],
-    ["t", alignMark(5,4,5,16,14,4,5,10), "Oben", "Top"],
-    ["cy", alignMark(5,4,5,16,14,7,5,10), "Vertikal zentrieren", "Centre vertically"],
-    ["b", alignMark(5,4,5,16,14,10,5,10), "Unten", "Bottom"],
-  ];
-  const alignBtn = (k, act) => {
-    const [, glyph, dde, een] = ALIGN_DEFS.find(d => d[0] === k);
-    return (
-      <div key={k} title={de ? dde : een} onClick={act}
-        style={{ flex: 1, height: 32, borderRadius: 8, display: "flex", alignItems: "center",
-          justifyContent: "center", cursor: "pointer", color: theme.text,
-          background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
-
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          strokeLinecap="round">{glyph}</svg>
-      </div>
-    );
-  };
+  // Die sechs Knöpfe stehen auf Modulebene (AlignGrid): der Story-Editor im
+  // Composer richtet genauso aus, und zwei Fassungen davon wären zwei.
   const alignGrid = (act) => (
-    <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
-      <div style={{ display: "flex", gap: 4, flex: 1 }}>{["l", "cx", "r"].map(k => alignBtn(k, () => act(k)))}</div>
-      <div style={{ display: "flex", gap: 4, flex: 1 }}>{["t", "cy", "b"].map(k => alignBtn(k, () => act(k)))}</div>
-    </div>
+    <AlignGrid onAct={act} de={de} theme={theme} darkMode={darkMode} style={{ marginTop: 6 }} />
   );
 
   // The depth wrapper. Shapes, images, stickies and text each draw through a
@@ -33660,6 +33671,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     window.addEventListener("pointerup", up);
   };
   const [addMenu, setAddMenu] = useState(false);
+  const [overlayPicker, setOverlayPicker] = useState(null);   // "fg" | "bg" | null
   const [stickerOpen, setStickerOpen] = useState(false);
   // Dictation for the caption, the same SpeechRecognition the notes and the
   // person sheet use. Above the field and right-aligned, which is where every
@@ -34342,10 +34354,28 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // Text oder Emoji auf dem Bild. Beides ist dieselbe Sache: Zeichen, die beim
   // Veröffentlichen fest ins Bild gerechnet werden. Ein Emoji ist nur ein Text
   // mit einem Zeichen, also braucht es dafür keinen zweiten Elementtyp.
-  const addOverlay = ({ text, size = 0.065, bold = true } = {}) => {
+  // Entf und Rückschritt löschen, wie überall sonst auch. Nicht, während
+  // jemand in einem Feld tippt: dort löscht dieselbe Taste Buchstaben.
+  useEffect(() => {
+    if (!selOverlay) return;
+    const onKey = (e) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      e.preventDefault();
+      removeOverlay(selOverlay);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selOverlay]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const addOverlay = ({ text, size = 0.065, bold = true, kind = "text" } = {}) => {
     const id = crypto.randomUUID();
     setOverlays(prev => ({ ...prev, [slideKey]: [...(prev[slideKey] || []), {
-      id, text: text || (de ? "Dein Text" : "Your text"),
+      id, kind, text: text || (de ? "Dein Text" : "Your text"),
+      // Hintergrund und Drehung gehören zum Element, nicht in eine Leiste:
+      // beides wird beim Veröffentlichen mit ins Bild gerechnet.
+      bg: null, rot: 0,
       // Leicht versetzt, damit ein zweites Element nicht exakt auf dem ersten
       // landet und unauffindbar wird.
       x: 0.07 + Math.min(0.3, (prev[slideKey] || []).length * 0.04),
@@ -34355,6 +34385,53 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     setSelOverlay(id);
     setAddMenu(false); setStickerOpen(false);
   };
+  // Ausrichten am Rahmen. Die Maße des Elements kommen aus dem DOM: ein Text
+  // ist so breit, wie seine Zeichen ihn machen, das weiß nur der Browser.
+  const overlayNodes = useRef({});
+  const alignOverlay = (k) => {
+    const el = overlayNodes.current[selOverlay];
+    const stage = stageRef.current;
+    if (!el || !stage || !selectedOverlayObj) return;
+    const W = stage.offsetWidth, H = stage.offsetHeight;
+    if (!W || !H) return;
+    const w = el.offsetWidth / W, h = el.offsetHeight / H;
+    const at = k === "l" ? { x: 0 } : k === "cx" ? { x: (1 - w) / 2 } : k === "r" ? { x: 1 - w }
+      : k === "t" ? { y: 0 } : k === "cy" ? { y: (1 - h) / 2 } : { y: 1 - h };
+    patchOverlay(selOverlay, at);
+  };
+  // Am Element ziehen statt Zahlen tippen: unten rechts größer und kleiner,
+  // oben rechts drehen. Beides rechnet vom Ursprung des Elements aus, der auch
+  // der Drehpunkt ist.
+  const overlayHandle = (o, what) => (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const el = overlayNodes.current[o.id];
+    const stage = stageRef.current;
+    if (!el || !stage) return;
+    const box = el.getBoundingClientRect();
+    // Der Ursprung ist die obere linke Ecke, um die auch gedreht wird.
+    const ox = box.left, oy = box.top;
+    const dist = (x, y) => Math.hypot(x - ox, y - oy) || 1;
+    const ang = (x, y) => Math.atan2(y - oy, x - ox) * 180 / Math.PI;
+    const from = { d: dist(e.clientX, e.clientY), a: ang(e.clientX, e.clientY), size: o.size, rot: o.rot || 0 };
+    const move = (ev) => {
+      if (what === "scale") {
+        const next = from.size * (dist(ev.clientX, ev.clientY) / from.d);
+        patchOverlay(o.id, { size: Math.min(0.6, Math.max(0.02, next)) });
+      } else {
+        let next = from.rot + (ang(ev.clientX, ev.clientY) - from.a);
+        // Ohne Rastung trifft niemand die Waagerechte.
+        if (Math.abs(next % 90) < 4) next = Math.round(next / 90) * 90;
+        patchOverlay(o.id, { rot: Math.round(next) });
+      }
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
   const patchOverlay = (id, patch) => setOverlays(prev => ({
     ...prev, [slideKey]: (prev[slideKey] || []).map(o => o.id === id ? { ...o, ...patch } : o),
   }));
@@ -34391,11 +34468,29 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const drawOverlays = (ctx, W, H, list) => {
     (list || []).forEach(o => {
       const px = Math.max(8, Math.round(o.size * W));
+      const lines = String(o.text).split("\n");
+      const lh = px * 1.22;
+      const pad = o.bg ? px * 0.22 : 0;
+      ctx.save();
       ctx.font = `${o.bold ? 700 : 500} ${px}px Geist, -apple-system, sans-serif`;
-      ctx.fillStyle = o.color;
       ctx.textBaseline = "top";
-      String(o.text).split("\n").forEach((line, i) =>
-        ctx.fillText(line, Math.round(o.x * W), Math.round(o.y * H + i * px * 1.22)));
+      // Erst an den Platz, dann drehen, dann zeichnen: dieselbe Reihenfolge wie
+      // im Browser, wo rotate um die obere linke Ecke dreht.
+      ctx.translate(o.x * W, o.y * H);
+      if (o.rot) ctx.rotate((o.rot * Math.PI) / 180);
+      if (o.bg) {
+        const wide = Math.max(...lines.map(l => ctx.measureText(l).width));
+        ctx.fillStyle = o.bg;
+        const r = px * 0.14;
+        const bw = wide + pad * 2, bh = lh * lines.length + pad * 2;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(-pad, -pad, bw, bh, r);
+        else ctx.rect(-pad, -pad, bw, bh);
+        ctx.fill();
+      }
+      ctx.fillStyle = o.color;
+      lines.forEach((line, i) => ctx.fillText(line, 0, i * lh));
+      ctx.restore();
     });
   };
 
@@ -35762,51 +35857,90 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       {/* Schwebt über der Bühne statt im Fuß zu stehen: sie gehört
                           zu dem Element, das gerade gewählt ist, und ist weg, sobald
                           keines mehr gewählt ist. */}
-                      {selectedOverlayObj && (
+                      {/* Für Text: ausrichten, Größe, Farben. Ein Emoji braucht
+                          davon nichts, das zieht man an seinen Griffen groß und
+                          dreht es, und Entf löscht es. */}
+                      {selectedOverlayObj && selectedOverlayObj.kind !== "emoji" && (
                         <div onPointerDown={(e) => e.stopPropagation()}
                           style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", zIndex: 4,
-                            display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 14,
+                            display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 14,
                             background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
                             border: `1px solid ${theme.borderFaint}`, boxShadow: "0 12px 34px rgba(0,0,0,0.22)" }}>
                           <input value={selectedOverlayObj.text}
                             onChange={(e) => patchOverlay(selectedOverlayObj.id, { text: e.target.value })}
                             placeholder={de ? "Text" : "Text"}
-                            style={{ width: 150, border: "none", outline: "none", background: "transparent",
+                            style={{ width: 140, border: "none", outline: "none", background: "transparent",
                               color: theme.text, fontSize: 12.5, fontFamily: FONT, caretColor: theme.text }} />
                           <div style={{ width: 1, height: 20, background: theme.borderFaint }} />
-                          {[["\u2212", -0.012], ["+", 0.012]].map(([sign, step]) => (
-                            <div key={sign} onClick={() => patchOverlay(selectedOverlayObj.id,
-                              { size: Math.min(0.4, Math.max(0.02, selectedOverlayObj.size + step)) })}
-                              title={de ? "Größe" : "Size"}
-                              style={{ width: 22, height: 22, borderRadius: 7, cursor: "pointer", display: "flex",
-                                alignItems: "center", justifyContent: "center", fontFamily: FONT, fontSize: 13,
-                                fontWeight: 600, color: theme.text,
-                                background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" }}>
-                              {sign}
-                            </div>
-                          ))}
+                          {/* Die Größe als Zahl, wie im Artboard: gemessen auf der
+                              Breite, mit der exportiert wird, damit 48 auch 48
+                              heißt und nicht ein Anteil von irgendetwas. */}
+                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <input type="number" min="8" max="600"
+                              value={Math.round(selectedOverlayObj.size * 1080)}
+                              onChange={(e) => {
+                                const v = Number(e.target.value);
+                                if (!Number.isFinite(v) || v <= 0) return;
+                                patchOverlay(selectedOverlayObj.id, { size: Math.min(0.6, Math.max(0.01, v / 1080)) });
+                              }}
+                              style={{ width: 46, border: "none", outline: "none", borderRadius: 8, padding: "5px 6px",
+                                background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
+                                color: theme.text, fontSize: 12, fontFamily: FONT, textAlign: "center" }} />
+                            <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>px</span>
+                          </div>
                           <div onClick={() => patchOverlay(selectedOverlayObj.id, { bold: !selectedOverlayObj.bold })}
                             title={de ? "Fett" : "Bold"}
-                            style={{ width: 22, height: 22, borderRadius: 7, cursor: "pointer", display: "flex",
+                            style={{ width: 24, height: 24, borderRadius: 7, cursor: "pointer", display: "flex",
                               alignItems: "center", justifyContent: "center", fontFamily: FONT, fontSize: 12.5,
                               fontWeight: 700, color: selectedOverlayObj.bold ? (darkMode ? "#15151c" : "#fff") : theme.text,
                               background: selectedOverlayObj.bold ? (darkMode ? "#F4F4F7" : "#15151c")
-                                : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") }}>
+                                : (darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5") }}>
                             B
                           </div>
                           <div style={{ width: 1, height: 20, background: theme.borderFaint }} />
-                          {["#FFFFFF", "#15151c", "#E86767", "#00B894", "#F5C542"].map(c => (
-                            <div key={c} onClick={() => patchOverlay(selectedOverlayObj.id, { color: c })}
-                              style={{ width: 18, height: 18, borderRadius: 999, background: c, cursor: "pointer",
-                                border: `1px solid ${selectedOverlayObj.color === c ? theme.text : theme.borderFaint}`,
-                                boxShadow: selectedOverlayObj.color === c ? `0 0 0 2px ${darkMode ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.12)"}` : "none" }} />
+                          {/* Zwei Farben: die der Schrift und die dahinter. Beide
+                              öffnen denselben Farbwähler, den der Artboard benutzt. */}
+                          {[["fg", selectedOverlayObj.color, de ? "Textfarbe" : "Text colour"],
+                            ["bg", selectedOverlayObj.bg, de ? "Hintergrund" : "Background"]].map(([what, value, title]) => (
+                            <div key={what} onClick={() => setOverlayPicker(p => p === what ? null : what)} title={title}
+                              style={{ width: 22, height: 22, borderRadius: 7, cursor: "pointer", flexShrink: 0,
+                                border: `1px solid ${theme.borderFaint}`,
+                                background: value || (darkMode
+                                  ? "repeating-conic-gradient(rgba(255,255,255,0.14) 0% 25%, transparent 0% 50%) 50% / 10px 10px"
+                                  : "repeating-conic-gradient(rgba(0,0,0,0.12) 0% 25%, transparent 0% 50%) 50% / 10px 10px") }} />
                           ))}
+                          <div style={{ width: 1, height: 20, background: theme.borderFaint }} />
+                          <AlignGrid de={de} theme={theme} darkMode={darkMode} size={24}
+                            style={{ gap: 6 }} onAct={alignOverlay} />
                           <div style={{ width: 1, height: 20, background: theme.borderFaint }} />
                           <div onClick={() => removeOverlay(selectedOverlayObj.id)} title={de ? "Entfernen" : "Remove"}
                             style={{ width: 22, height: 22, borderRadius: 7, cursor: "pointer", display: "flex",
                               alignItems: "center", justifyContent: "center", color: theme.textDim }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
                           </div>
+                        </div>
+                      )}
+                      {/* Der Farbwähler des Artboards, hier in klein: nur die
+                          eigene Farbe, keine Verläufe und keine Bilder. */}
+                      {selectedOverlayObj && overlayPicker && (
+                        <div onPointerDown={(e) => e.stopPropagation()}
+                          style={{ position: "absolute", top: 54, left: "50%", transform: "translateX(-50%)", zIndex: 5,
+                            width: 268, borderRadius: 16, overflow: "hidden",
+                            background: darkMode ? "#1c1c24" : "#ffffff",
+                            border: `1px solid ${theme.borderFaint}`, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
+                          <ColorPicker
+                            value={(overlayPicker === "fg" ? selectedOverlayObj.color : selectedOverlayObj.bg) || "#FFFFFF"}
+                            onChange={(c) => patchOverlay(selectedOverlayObj.id,
+                              overlayPicker === "fg" ? { color: c } : { bg: c })}
+                            tabs={["custom"]} de={de} theme={theme} darkMode={darkMode}
+                            onClose={() => setOverlayPicker(null)} />
+                          {overlayPicker === "bg" && (
+                            <div onClick={() => { patchOverlay(selectedOverlayObj.id, { bg: null }); setOverlayPicker(null); }}
+                              style={{ padding: "10px 14px", cursor: "pointer", borderTop: `1px solid ${theme.borderFaint}`,
+                                fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
+                              {de ? "Ohne Hintergrund" : "No background"}
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -35854,15 +35988,36 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       {/* Was auf dem Bild steht. Nur auf der ersten Folie, denn nur
                           die setzt der Editor zusammen, und nie über einem Video:
                           das müsste dafür neu berechnet werden. */}
-                      {!curSlide?.video && slideOverlays.map(o => (
-                        <div key={o.id} onPointerDown={(e) => onOverlayDown(e, o)}
-                          style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color,
-                            fontFamily: FONT, fontWeight: o.bold ? 700 : 500, touchAction: "none",
-                            fontSize: Math.max(9, o.size * (stageW || 1)), lineHeight: 1.22, whiteSpace: "pre", cursor: "move",
-                            outline: selOverlay === o.id ? "1.5px dashed rgba(77,159,255,0.9)" : "none", outlineOffset: 3 }}>
-                          {o.text}
-                        </div>
-                      ))}
+                      {!curSlide?.video && slideOverlays.map(o => {
+                        const px = Math.max(9, o.size * (stageW || 1));
+                        const pad = o.bg ? px * 0.22 : 0;
+                        const on = selOverlay === o.id;
+                        // Griffe sitzen INNERHALB des gedrehten Elements, damit
+                        // sie sich mitdrehen: ein Griff, der woanders liegt als
+                        // die Ecke, an der man zieht, führt die Hand in die Irre.
+                        const grip = (pos, cursor, what, round) => (
+                          <div onPointerDown={overlayHandle(o, what)}
+                            style={{ position: "absolute", ...pos, width: 14, height: 14, borderRadius: round ? 999 : 4,
+                              background: "#fff", border: "1.5px solid rgba(77,159,255,0.95)",
+                              cursor, touchAction: "none", boxShadow: "0 1px 4px rgba(0,0,0,0.3)" }} />
+                        );
+                        return (
+                          <div key={o.id} ref={el => { overlayNodes.current[o.id] = el; }}
+                            onPointerDown={(e) => onOverlayDown(e, o)}
+                            style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`,
+                              color: o.color, background: o.bg || "transparent",
+                              padding: pad, borderRadius: o.bg ? px * 0.14 : 0,
+                              fontFamily: FONT, fontWeight: o.bold ? 700 : 500, touchAction: "none",
+                              fontSize: px, lineHeight: 1.22, whiteSpace: "pre", cursor: "move",
+                              transform: `rotate(${o.rot || 0}deg) translate(${-pad}px, ${-pad}px)`,
+                              transformOrigin: "0 0",
+                              outline: on ? "1.5px dashed rgba(77,159,255,0.9)" : "none", outlineOffset: 3 }}>
+                            {o.text}
+                            {on && grip({ right: -7, bottom: -7 }, "nwse-resize", "scale", false)}
+                            {on && grip({ right: -7, top: -7 }, "grab", "rotate", true)}
+                          </div>
+                        );
+                      })}
 
                       {/* Removes the slide you are looking at, or the video. */}
                       <motion.div whileTap={{ scale: 0.9 }} onClick={removeCurrentSlide}
@@ -36040,7 +36195,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       style={{ position: "fixed", inset: 0, zIndex: 30 }} />
                     {stickerOpen ? (
                       <div style={{ position: "absolute", bottom: "calc(100% + 12px)", left: 0, zIndex: 31 }}>
-                        {emojiPanel((emoji) => addOverlay({ text: emoji, size: 0.18, bold: false }))}
+                        {emojiPanel((emoji) => addOverlay({ text: emoji, size: 0.18, bold: false, kind: "emoji" }))}
                       </div>
                     ) : (
                       <div onClick={(e) => e.stopPropagation()}
