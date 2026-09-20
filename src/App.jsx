@@ -34447,6 +34447,11 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // on its own, so the way out of this step cannot depend on a picture.
   const mediaRequired = selected.some(a => a.provider === "meta" || a.provider === "tiktok");
   const canPost = canPublish && (hasMedia || !mediaRequired);
+  // Entwurf und Zeitpunkt kann nur Zernio. Instagram, Threads und TikTok
+  // veröffentlichen sofort oder gar nicht, also standen dort zwei Knöpfe, die
+  // nichts konnten, außer eine Fehlermeldung zu zeigen: genau das ist beim
+  // Klick auf "Entwurf speichern" passiert.
+  const canQueue = selected.length > 0 && selected.every(a => !a.provider);
 
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -34662,11 +34667,16 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         const p = TOUCHPOINT_PLATFORMS.find(x => x.key === uiKey) || { color: "#15151c", label: a.platform };
                         const on = selectedIds.includes(a.id);
                         return (
+                          /* Weiß, ausgewählt wie nicht ausgewählt. Die Zeile war
+                             anthrazit, wenn sie an war, und stand damit als
+                             zweiter schwarzer Balken unter dem schwarzen
+                             Schritt-Reiter. Was an ist, sagt der Haken rechts,
+                             derselbe wie in der Mitgliederliste. */
                           <motion.div key={a.id} whileTap={{ scale: 0.99 }} onClick={() => toggleAccount(a.id)}
-                            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 14px 9px 9px", borderRadius: 999, cursor: "pointer",
-                              background: on ? (darkMode ? "rgba(244,244,247,0.95)" : "#15151c") : "transparent",
-                              border: `1px solid ${on ? "transparent" : theme.borderFaint}`,
-                              color: on ? (darkMode ? "#15151c" : "#fff") : theme.textDim, transition: "background 0.15s ease, color 0.15s ease" }}>
+                            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 12px 9px 9px", borderRadius: 999, cursor: "pointer",
+                              background: darkMode ? "rgba(255,255,255,0.05)" : "#fff",
+                              border: `1px solid ${on ? theme.border : theme.borderFaint}`,
+                              color: theme.text, transition: "border-color 0.15s ease" }}>
                             <div style={{ width: 24, height: 24, borderRadius: 8, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                               <svg width={tpGlyphSize(uiKey, 14)} height={tpGlyphSize(uiKey, 14)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
                             </div>
@@ -34687,9 +34697,15 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                                 Meta
                               </span>
                             )}
-                            <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: FONT, opacity: 0.7, flexShrink: 0 }}>
+                            <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: FONT, color: theme.textDim, flexShrink: 0 }}>
                               {p.label}
                             </span>
+                            <div style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                              background: on ? (darkMode ? "#fff" : "#15151c") : "transparent",
+                              border: `1.5px solid ${on ? (darkMode ? "#fff" : "#15151c") : (darkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.25)")}`,
+                              display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              {on && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={darkMode ? "#15151c" : "#fff"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>}
+                            </div>
                           </motion.div>
                         );
                       })}
@@ -35080,7 +35096,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   {slideIdx + 1} / {slides.length}
                 </span>
               )}
-              {canPost && hasMedia && (
+              {canPost && hasMedia && canQueue && (
                 <motion.button ref={draftRef} whileTap={{ scale: 0.97 }} onClick={() => submit("draft")} disabled={Boolean(busy)}
                   style={{ ...footBtn, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text,
                     cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>
@@ -35092,7 +35108,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   corner of the step above. Anchored to the footer rather than
                   fixed: this panel's root is an animating motion.div, and a
                   transformed ancestor makes `fixed` mean "inside that box". */}
-              {canPost && hasMedia && (
+              {canPost && hasMedia && canQueue && (
                 <div style={{ position: "relative", marginRight: 12 }}>
                   <span onClick={() => setWhenOpen(o => !o)}
                     style={{ padding: "0 10px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
