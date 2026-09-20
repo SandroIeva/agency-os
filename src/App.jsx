@@ -33916,6 +33916,25 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // Ohne Bild gibt es keinen großen Knopf, an dem "jetzt oder später" hängen
   // könnte. Also hängt es an dem stillen Link, und der fragt vorher nach.
   const [noMediaMenu, setNoMediaMenu] = useState(false);
+  // Emojis gehören bei Social Media zum Text, nicht zur Oberfläche. Derselbe
+  // Vorrat und dieselben Reiter wie im Messenger, damit es nicht zwei Picker
+  // gibt, die sich langsam auseinanderentwickeln.
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [emojiTab, setEmojiTab] = useState("smileys");
+  const captionRef = useRef(null);
+  // An der Schreibmarke, nicht hinten dran: in einer Beschreibung steht der
+  // Smiley meistens mitten im Satz.
+  const insertEmoji = (emoji) => {
+    const el = captionRef.current;
+    if (!el) { setText(t => t + emoji); return; }
+    const from = el.selectionStart ?? text.length;
+    const to = el.selectionEnd ?? from;
+    setText(text.slice(0, from) + emoji + text.slice(to));
+    if (captionUndo !== null) setCaptionUndo(null);
+    requestAnimationFrame(() => {
+      try { el.focus(); el.setSelectionRange(from + emoji.length, from + emoji.length); } catch (_) {}
+    });
+  };
   const [queueOpen, setQueueOpen] = useState(false);
   // Ein geplanter Beitrag, der wieder aufgemacht wurde. Solange das gesetzt
   // ist, schreibt der Composer in diese Zeile statt eine neue zu bauen.
@@ -35482,13 +35501,65 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       fixed 320 inside a box that fills the panel, which left
                       the box scrolling around a half-empty field. */}
                   <div style={{ position: "relative", flex: 1, minHeight: 220, display: "flex" }}>
-                    <textarea value={text}
+                    <textarea ref={captionRef} value={text}
                       onChange={e => { setText(e.target.value); if (captionUndo !== null) setCaptionUndo(null); }} autoFocus
                       placeholder={de ? "Was möchtest du teilen?" : "What do you want to share?"}
                       style={{ width: "100%", flex: 1, boxSizing: "border-box", padding: "18px 20px 40px", borderRadius: 18,
                         border: `1px solid ${overLimit ? "#E86767" : theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.6)",
                         color: theme.text, fontSize: 15, fontFamily: FONT, lineHeight: 1.65, outline: "none", resize: "none", caretColor: theme.text }} />
                     <div style={{ position: "absolute", left: 20, bottom: 17, display: "flex", alignItems: "center", gap: 16 }}>
+                    <div style={{ position: "relative" }}>
+                      <motion.div whileTap={{ scale: 0.96 }} onClick={() => setEmojiOpen(o => !o)}
+                        title="Emoji"
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
+                          fontSize: 11.5, fontFamily: FONT, fontWeight: 500,
+                          color: emojiOpen ? theme.text : theme.textFaint }}>
+                        {/* Ein gezeichneter Smiley, kein Emoji: ein Emoji als
+                            Bedienelement zeichnet jedes Betriebssystem anders. */}
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+                          style={{ position: "relative", top: -2 }}>
+                          <circle cx="12" cy="12" r="9" /><path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                          <line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" />
+                        </svg>
+                        Emoji
+                      </motion.div>
+                      {emojiOpen && (<>
+                        <div onClick={() => setEmojiOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+                        <div onClick={(e) => e.stopPropagation()}
+                          style={{ position: "absolute", bottom: "calc(100% + 12px)", left: 0, zIndex: 31,
+                            width: 320, height: 280, borderRadius: 16, overflow: "hidden",
+                            background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
+                            border: `1px solid ${theme.border}`,
+                            boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+                            display: "flex", flexDirection: "column" }}>
+                          <div style={{ display: "flex", borderBottom: `1px solid ${theme.borderFaint}`, padding: 4 }}>
+                            {[["smileys", "\u{1F600}"], ["gestures", "\u{1F44B}"], ["hearts", "\u2764\uFE0F"], ["objects", "\u{1F389}"]].map(([id, icon]) => (
+                              <motion.div key={id} whileTap={{ scale: 0.92 }} onClick={() => setEmojiTab(id)}
+                                style={{ flex: 1, padding: "8px 0", borderRadius: 10, cursor: "pointer",
+                                  textAlign: "center", fontSize: 18,
+                                  background: emojiTab === id ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent" }}>
+                                {icon}
+                              </motion.div>
+                            ))}
+                          </div>
+                          <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 2 }}>
+                              {EMOJI_GROUPS[emojiTab].map((emoji, i) => (
+                                <motion.div key={emoji + i} whileTap={{ scale: 0.9 }}
+                                  whileHover={{ scale: 1.25, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }}
+                                  onClick={() => insertEmoji(emoji)}
+                                  style={{ width: 34, height: 34, borderRadius: 8, display: "flex",
+                                    alignItems: "center", justifyContent: "center", cursor: "pointer",
+                                    fontSize: 20, lineHeight: 1 }}>
+                                  {emoji}
+                                </motion.div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </>)}
+                    </div>
                     <motion.div whileTap={{ scale: 0.96 }} onClick={toggleDictation}
                       title={dictating ? (de ? "Diktat stoppen" : "Stop dictation") : (de ? "Diktieren" : "Dictate")}
                       style={{ display: "inline-flex", alignItems: "center", gap: 6,
