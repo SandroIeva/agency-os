@@ -34622,21 +34622,45 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   };
   // Drag an overlay across the stage — coordinates stay relative (0–1) so the
   // canvas export lands the text in exactly the same spot at full resolution.
+  // Welche Mittellinie gerade greift, während gezogen wird. Nur zum Anzeigen.
+  const [snap, setSnap] = useState({ x: false, y: false });
   const onOverlayDown = (e, o) => {
     e.preventDefault(); e.stopPropagation();
     setSelOverlay(o.id);
     const stage = stageRef.current; if (!stage) return;
     const rect = stage.getBoundingClientRect();
+    // Einmal am Anfang gemessen: die Größe ändert sich beim Ziehen nicht, und
+    // die SICHTBARE Kante ist wegen Innenabstand und Drehung nicht der
+    // Ankerpunkt. Ohne diesen Versatz rastet ein gedrehtes Element daneben ein.
+    const el = overlayNodes.current[o.id];
+    const b = el ? el.getBoundingClientRect() : null;
+    const w = b ? b.width / rect.width : 0;
+    const h = b ? b.height / rect.height : 0;
+    const offX = b ? (b.left - rect.left) / rect.width - o.x : 0;
+    const offY = b ? (b.top - rect.top) / rect.height - o.y : 0;
+    // Knapp über einem Prozent der Fläche. Enger trifft man nicht, weiter fühlt
+    // sich an, als klebe das Element.
+    const TOL = 0.013;
     overlayDragRef.current = { id: o.id, dx: e.clientX - (rect.left + o.x * rect.width), dy: e.clientY - (rect.top + o.y * rect.height) };
     const move = (ev) => {
       const d = overlayDragRef.current; if (!d) return;
       const r = stage.getBoundingClientRect();
-      patchOverlay(d.id, {
-        x: Math.min(0.95, Math.max(0, (ev.clientX - d.dx - r.left) / r.width)),
-        y: Math.min(0.95, Math.max(0, (ev.clientY - d.dy - r.top) / r.height)),
-      });
+      let nx = Math.min(0.95, Math.max(0, (ev.clientX - d.dx - r.left) / r.width));
+      let ny = Math.min(0.95, Math.max(0, (ev.clientY - d.dy - r.top) / r.height));
+      // Mitte fangen, waagerecht und senkrecht unabhängig voneinander.
+      const onX = Math.abs((nx + offX + w / 2) - 0.5) < TOL;
+      const onY = Math.abs((ny + offY + h / 2) - 0.5) < TOL;
+      if (onX) nx = 0.5 - w / 2 - offX;
+      if (onY) ny = 0.5 - h / 2 - offY;
+      setSnap(s => (s.x === onX && s.y === onY ? s : { x: onX, y: onY }));
+      patchOverlay(d.id, { x: nx, y: ny });
     };
-    const up = () => { overlayDragRef.current = null; window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    const up = () => {
+      overlayDragRef.current = null;
+      setSnap({ x: false, y: false });
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   };
@@ -36059,9 +36083,104 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         </div>
                       ))}
 
-                      {/* Schwebt über der Bühne statt im Fuß zu stehen: sie gehört
-                          zu dem Element, das gerade gewählt ist, und ist weg, sobald
-                          keines mehr gewählt ist. */}
+                      <div ref={viewRef} style={{ position: "absolute", inset: slides.length > 1 ? "0 58px" : 0,
+                        display: "flex", alignItems: "center", justifyContent: "center", minWidth: 0, minHeight: 0 }}>
+                      {/* stageRef sitzt hier und nicht weiter innen: die platzierten
+                          Elemente rechnen in Anteilen DIESES Rechtecks, und das ist
+                          bei einer Story der hochkante Ausschnitt und sonst das
+                          eingepasste Bild. Lagen sie innen, gäbe es sie in der Story
+                          gar nicht. */}
+                      <div ref={stageRef} onPointerDown={() => setSelOverlay(null)}
+                        style={{ position: "relative", lineHeight: 0, flexShrink: 0, userSelect: "none",
+                        width: storyBox ? storyBox.w : mediaWidth, height: storyBox ? storyBox.h : mediaHeight }}>
+                      {storyBox ? (
+                        /* Hochkant, im Verhältnis der Story, und das Bild darin
+                           verschiebbar. Gezeigt wird genau der Ausschnitt, der
+                           gepostet wird: objectPosition hier und dieselbe Zahl
+                           beim Rendern. */
+                        <div onPointerDown={onStoryDrag}
+                          style={{ position: "relative", width: "100%", height: "100%", borderRadius: 16,
+                            overflow: "hidden", background: "#000", cursor: "grab", touchAction: "none",
+                            outline: `1px solid ${theme.borderFaint}`, outlineOffset: -1 }}>
+                          <img src={currentMediaUrl} alt="" draggable={false}
+                            onLoad={e => setLoadedMedia({ url: currentMediaUrl, w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+                            style={{ display: "block", width: "100%", height: "100%", objectFit: "cover",
+                              objectPosition: `${cropFocus.x * 100}% ${cropFocus.y * 100}%` }} />
+                          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "18px 12px 10px",
+                            textAlign: "center", pointerEvents: "none",
+                            background: "linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0))",
+                            fontSize: 11, fontFamily: FONT, color: "rgba(255,255,255,0.92)" }}>
+                            {de ? "Zum Verschieben ziehen" : "Drag to reposition"}
+                          </div>
+                        </div>
+                      ) : curSlide?.video ? (
+                        <video key={curSlide.url} src={curSlide.url} controls playsInline
+                          onLoadedMetadata={e => setLoadedMedia({ url: curSlide.url, w: e.currentTarget.videoWidth, h: e.currentTarget.videoHeight })}
+                          style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 16, outline: `1px solid ${theme.borderFaint}`, outlineOffset: -1, display: "block" }} />
+                      ) : (
+                        <img src={currentMediaUrl} alt="" draggable={false}
+                          onLoad={e => setLoadedMedia({ url: currentMediaUrl, w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+                          style={{ display: "block", width: "100%", height: "100%", objectFit: "contain",
+                            borderRadius: 16, outline: `1px solid ${theme.borderFaint}`, outlineOffset: -1 }} />
+                      )}
+
+                      {/* Was auf dem Bild steht. Nur auf der ersten Folie, denn nur
+                          die setzt der Editor zusammen, und nie über einem Video:
+                          das müsste dafür neu berechnet werden. */}
+                      {!curSlide?.video && slideOverlays.map(o => {
+                        const px = Math.max(9, o.size * (stageW || 1));
+                        const pad = o.bg ? px * 0.22 : 0;
+                        const on = selOverlay === o.id;
+                        // Griffe sitzen INNERHALB des gedrehten Elements, damit
+                        // sie sich mitdrehen: ein Griff, der woanders liegt als
+                        // die Ecke, an der man zieht, führt die Hand in die Irre.
+                        const grip = (pos, cursor, what, round) => (
+                          <div onPointerDown={overlayHandle(o, what)}
+                            style={{ position: "absolute", ...pos, width: 14, height: 14, borderRadius: round ? 999 : 4,
+                              background: "#fff", border: "1.5px solid rgba(77,159,255,0.95)",
+                              cursor, touchAction: "none", boxShadow: "0 1px 4px rgba(0,0,0,0.3)" }} />
+                        );
+                        return (
+                          <div key={o.id} ref={el => { overlayNodes.current[o.id] = el; }}
+                            onPointerDown={(e) => { if (editingOverlay !== o.id) onOverlayDown(e, o); }}
+                            onDoubleClick={(e) => { if (o.kind !== "emoji") { e.stopPropagation(); startOverlayEdit(o); } }}
+                            style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`,
+                              color: o.color, background: o.bg || "transparent",
+                              padding: pad, borderRadius: o.bg ? px * 0.14 : 0,
+                              fontFamily: FONT, fontWeight: o.bold ? 700 : 500, touchAction: "none",
+                              fontSize: px, lineHeight: 1.22, whiteSpace: "pre", cursor: "move",
+                              transform: `rotate(${o.rot || 0}deg) translate(${-pad}px, ${-pad}px)`,
+                              transformOrigin: "0 0",
+                              outline: on ? "1.5px dashed rgba(77,159,255,0.9)" : "none", outlineOffset: 3 }}>
+                            {editingOverlay === o.id ? (<>
+                              {/* Unsichtbar, aber maßgebend: der Rahmen ist so groß
+                                  wie der Text, den man gerade tippt, und das Feld
+                                  liegt genau darauf. */}
+                              <span style={{ visibility: "hidden" }}>{overlayDraft || " "}</span>
+                              <textarea autoFocus value={overlayDraft} rows={1}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => setOverlayDraft(e.target.value)}
+                                onBlur={commitOverlayEdit}
+                                onKeyDown={(e) => {
+                                  e.stopPropagation();
+                                  if (e.key === "Escape" || (e.key === "Enter" && !e.shiftKey)) { e.preventDefault(); commitOverlayEdit(); }
+                                }}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                style={{ position: "absolute", inset: pad, width: "100%", height: "100%",
+                                  padding: 0, margin: 0, border: "none", outline: "none", resize: "none",
+                                  background: "transparent", color: o.color, font: "inherit",
+                                  fontWeight: "inherit", lineHeight: "inherit", whiteSpace: "pre",
+                                  overflow: "hidden", caretColor: o.color }} />
+                            </>) : o.text}
+                            {on && editingOverlay !== o.id && grip({ right: -7, bottom: -7 }, "nwse-resize", "scale", false)}
+                            {on && editingOverlay !== o.id && grip({ right: -7, top: -7 }, "grab", "rotate", true)}
+                          </div>
+                        );
+                      })}
+
+                      {/* Am oberen Rand des BILDES, nicht am Rand des grauen Kastens,
+                          und ein Stück darüber hinaus: so liegt sie angeschnitten auf
+                          der Kante statt im Bild zu schweben. */}
                       {/* Für Text: ausrichten, Größe, Farben. Ein Emoji braucht
                           davon nichts, das zieht man an seinen Griffen groß und
                           dreht es, und Entf löscht es. */}
@@ -36071,7 +36190,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           kurze Leiste statt gar keiner. */}
                       {selectedOverlayObj && selectedOverlayObj.kind === "emoji" && (
                         <div onPointerDown={(e) => e.stopPropagation()}
-                          style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", zIndex: 4,
+                          style={{ position: "absolute", top: -26, left: "50%", transform: "translateX(-50%)", zIndex: 6, lineHeight: 1.2,
                             display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 14,
                             background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
                             border: `1px solid ${theme.borderFaint}`, boxShadow: "0 12px 34px rgba(0,0,0,0.22)" }}>
@@ -36087,7 +36206,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       )}
                       {selectedOverlayObj && selectedOverlayObj.kind !== "emoji" && (
                         <div onPointerDown={(e) => e.stopPropagation()}
-                          style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", zIndex: 4,
+                          style={{ position: "absolute", top: -26, left: "50%", transform: "translateX(-50%)", zIndex: 6, lineHeight: 1.2,
                             display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 14,
                             background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
                             border: `1px solid ${theme.borderFaint}`, boxShadow: "0 12px 34px rgba(0,0,0,0.22)" }}>
@@ -36189,100 +36308,14 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           )}
                         </div>, document.body)}
 
-                      <div ref={viewRef} style={{ position: "absolute", inset: slides.length > 1 ? "0 58px" : 0,
-                        display: "flex", alignItems: "center", justifyContent: "center", minWidth: 0, minHeight: 0 }}>
-                      {/* stageRef sitzt hier und nicht weiter innen: die platzierten
-                          Elemente rechnen in Anteilen DIESES Rechtecks, und das ist
-                          bei einer Story der hochkante Ausschnitt und sonst das
-                          eingepasste Bild. Lagen sie innen, gäbe es sie in der Story
-                          gar nicht. */}
-                      <div ref={stageRef} onPointerDown={() => setSelOverlay(null)}
-                        style={{ position: "relative", lineHeight: 0, flexShrink: 0, userSelect: "none",
-                        width: storyBox ? storyBox.w : mediaWidth, height: storyBox ? storyBox.h : mediaHeight }}>
-                      {storyBox ? (
-                        /* Hochkant, im Verhältnis der Story, und das Bild darin
-                           verschiebbar. Gezeigt wird genau der Ausschnitt, der
-                           gepostet wird: objectPosition hier und dieselbe Zahl
-                           beim Rendern. */
-                        <div onPointerDown={onStoryDrag}
-                          style={{ position: "relative", width: "100%", height: "100%", borderRadius: 16,
-                            overflow: "hidden", background: "#000", cursor: "grab", touchAction: "none",
-                            outline: `1px solid ${theme.borderFaint}`, outlineOffset: -1 }}>
-                          <img src={currentMediaUrl} alt="" draggable={false}
-                            onLoad={e => setLoadedMedia({ url: currentMediaUrl, w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-                            style={{ display: "block", width: "100%", height: "100%", objectFit: "cover",
-                              objectPosition: `${cropFocus.x * 100}% ${cropFocus.y * 100}%` }} />
-                          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "18px 12px 10px",
-                            textAlign: "center", pointerEvents: "none",
-                            background: "linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0))",
-                            fontSize: 11, fontFamily: FONT, color: "rgba(255,255,255,0.92)" }}>
-                            {de ? "Zum Verschieben ziehen" : "Drag to reposition"}
-                          </div>
-                        </div>
-                      ) : curSlide?.video ? (
-                        <video key={curSlide.url} src={curSlide.url} controls playsInline
-                          onLoadedMetadata={e => setLoadedMedia({ url: curSlide.url, w: e.currentTarget.videoWidth, h: e.currentTarget.videoHeight })}
-                          style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 16, outline: `1px solid ${theme.borderFaint}`, outlineOffset: -1, display: "block" }} />
-                      ) : (
-                        <img src={currentMediaUrl} alt="" draggable={false}
-                          onLoad={e => setLoadedMedia({ url: currentMediaUrl, w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-                          style={{ display: "block", width: "100%", height: "100%", objectFit: "contain",
-                            borderRadius: 16, outline: `1px solid ${theme.borderFaint}`, outlineOffset: -1 }} />
-                      )}
-
-                      {/* Was auf dem Bild steht. Nur auf der ersten Folie, denn nur
-                          die setzt der Editor zusammen, und nie über einem Video:
-                          das müsste dafür neu berechnet werden. */}
-                      {!curSlide?.video && slideOverlays.map(o => {
-                        const px = Math.max(9, o.size * (stageW || 1));
-                        const pad = o.bg ? px * 0.22 : 0;
-                        const on = selOverlay === o.id;
-                        // Griffe sitzen INNERHALB des gedrehten Elements, damit
-                        // sie sich mitdrehen: ein Griff, der woanders liegt als
-                        // die Ecke, an der man zieht, führt die Hand in die Irre.
-                        const grip = (pos, cursor, what, round) => (
-                          <div onPointerDown={overlayHandle(o, what)}
-                            style={{ position: "absolute", ...pos, width: 14, height: 14, borderRadius: round ? 999 : 4,
-                              background: "#fff", border: "1.5px solid rgba(77,159,255,0.95)",
-                              cursor, touchAction: "none", boxShadow: "0 1px 4px rgba(0,0,0,0.3)" }} />
-                        );
-                        return (
-                          <div key={o.id} ref={el => { overlayNodes.current[o.id] = el; }}
-                            onPointerDown={(e) => { if (editingOverlay !== o.id) onOverlayDown(e, o); }}
-                            onDoubleClick={(e) => { if (o.kind !== "emoji") { e.stopPropagation(); startOverlayEdit(o); } }}
-                            style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`,
-                              color: o.color, background: o.bg || "transparent",
-                              padding: pad, borderRadius: o.bg ? px * 0.14 : 0,
-                              fontFamily: FONT, fontWeight: o.bold ? 700 : 500, touchAction: "none",
-                              fontSize: px, lineHeight: 1.22, whiteSpace: "pre", cursor: "move",
-                              transform: `rotate(${o.rot || 0}deg) translate(${-pad}px, ${-pad}px)`,
-                              transformOrigin: "0 0",
-                              outline: on ? "1.5px dashed rgba(77,159,255,0.9)" : "none", outlineOffset: 3 }}>
-                            {editingOverlay === o.id ? (<>
-                              {/* Unsichtbar, aber maßgebend: der Rahmen ist so groß
-                                  wie der Text, den man gerade tippt, und das Feld
-                                  liegt genau darauf. */}
-                              <span style={{ visibility: "hidden" }}>{overlayDraft || " "}</span>
-                              <textarea autoFocus value={overlayDraft} rows={1}
-                                onFocus={(e) => e.target.select()}
-                                onChange={(e) => setOverlayDraft(e.target.value)}
-                                onBlur={commitOverlayEdit}
-                                onKeyDown={(e) => {
-                                  e.stopPropagation();
-                                  if (e.key === "Escape" || (e.key === "Enter" && !e.shiftKey)) { e.preventDefault(); commitOverlayEdit(); }
-                                }}
-                                onPointerDown={(e) => e.stopPropagation()}
-                                style={{ position: "absolute", inset: pad, width: "100%", height: "100%",
-                                  padding: 0, margin: 0, border: "none", outline: "none", resize: "none",
-                                  background: "transparent", color: o.color, font: "inherit",
-                                  fontWeight: "inherit", lineHeight: "inherit", whiteSpace: "pre",
-                                  overflow: "hidden", caretColor: o.color }} />
-                            </>) : o.text}
-                            {on && editingOverlay !== o.id && grip({ right: -7, bottom: -7 }, "nwse-resize", "scale", false)}
-                            {on && editingOverlay !== o.id && grip({ right: -7, top: -7 }, "grab", "rotate", true)}
-                          </div>
-                        );
-                      })}
+                      {/* Die Linie zeigt, woran gerade eingerastet ist. Nur während
+                          des Ziehens, und nur die Achse, die greift. */}
+                      {(snap.x || snap.y) && (<>
+                        {snap.x && <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1,
+                          background: "rgba(77,159,255,0.95)", pointerEvents: "none" }} />}
+                        {snap.y && <div style={{ position: "absolute", top: "50%", left: 0, right: 0, height: 1,
+                          background: "rgba(77,159,255,0.95)", pointerEvents: "none" }} />}
+                      </>)}
 
                       {/* Was mit dieser Folie geschehen kann. Vorher stand hier ein
                           Kreuz und konnte nur eines: löschen. Ein Zuschnitt gehört an
