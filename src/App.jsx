@@ -33509,8 +33509,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const [extras, setExtras] = useState([]);        // [{ id, file, url }] — carousel slides 2..10
   const [reel, setReel] = useState(null);          // { file, url } — a video instead of a picture
   const extraRef = useRef(null);
-  // Video selection requires a direct Instagram connection.
-  const hasDirectIg = (accounts || []).some(a => a.provider === "meta");
+  // Where a video can actually go. All three direct networks take one:
+  // Instagram as a reel, Threads as a video post, TikTok as the only thing it
+  // publishes at all. Zernio is not in the list, because its path sends the
+  // single picture the editor composed and would drop a video in silence.
+  const canVideo = (accounts || []).some(a =>
+    a.provider === "meta" || a.provider === "threads" || a.provider === "tiktok");
   // The picture from the editor is slide one; the extras follow in order. One
   // list, because the viewer pages through them and does not care which of them
   // the canvas composed.
@@ -34084,7 +34088,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     setError(null); setResult(null);
     const isDraft = kind === "draft";
     if (!isDraft && selected.length === 0) { setError(new Error(de ? "Wähle mindestens einen Kanal." : "Pick at least one channel.")); setStepIdx(2); return; }
-    if (!text.trim() && !imageFileRef.current) { setError(new Error(de ? "Text oder Visual fehlt." : "Text or visual required.")); return; }
+    // A video counts as the visual. Without `reel` here, a clip posted with no
+    // caption was turned away as if nothing had been picked.
+    if (!text.trim() && !imageFileRef.current && !reel) { setError(new Error(de ? "Text oder Visual fehlt." : "Text or visual required.")); return; }
     if (overLimit) { setError(new Error(de ? `Text zu lang (max. ${charLimit} Zeichen für die gewählten Kanäle).` : `Text too long (max ${charLimit} chars for the selected channels).`)); setStepIdx(0); return; }
     // The direct Meta connection publishes and nothing else: Instagram's API has
     // no draft and no scheduled post, so a queue would have to be ours, and a
@@ -34108,8 +34114,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     // than letting Zernio receive a post whose picture silently went missing.
     if (reel && zernSel.length) {
       setError(new Error(de
-        ? "Ein Reel geht nur an den direkten Instagram-Kanal. Nimm die anderen Kanäle raus."
-        : "A reel can only go to the direct Instagram channel. Take the other channels out."));
+        ? "Ein Video geht nur an die direkten Kanäle: Instagram, Threads, TikTok. Nimm die anderen raus."
+        : "A video can only go to the direct channels: Instagram, Threads, TikTok. Take the others out."));
       return;
     }
     if (extras.length && zernSel.length) {
@@ -34313,7 +34319,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           caption: text.trim() || undefined,
         };
         let init;
-        if (metaReel) {
+        if (reel) {
           init = await send({ mode: "publish-init", kind: "video", size: reel.file.size, ...common });
         } else {
           // Every picture through the proxy on the verified domain, in the
@@ -34879,7 +34885,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 {stepIdx === S_VISUAL && (<>
                   {/* Images can be selected together before connecting a channel. */}
                   <input ref={fileRef} type="file" multiple
-                    accept={hasDirectIg ? "image/*,video/*" : "image/*"}
+                    accept={canVideo ? "image/*,video/*" : "image/*"}
                     onChange={onPickImage} style={{ display: "none" }} />
                   <input ref={extraRef} type="file" accept="image/*" multiple onChange={onPickExtras} style={{ display: "none" }} />
 
@@ -34894,7 +34900,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                             // The formats say what is possible, so no fourth
                             // card has to announce that a video is allowed. A
                             // video IS the reel, and the file says so.
-                            sub: hasDirectIg ? "JPG, PNG, MP4, MOV" : "JPG, PNG",
+                            sub: canVideo ? "JPG, PNG, MP4, MOV" : "JPG, PNG",
                             icon: <><rect x="3" y="3" width="18" height="18" rx="3.5"/><circle cx="8.5" cy="8.5" r="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></>,
                             onClick: () => fileRef.current?.click() },
                           { key: "assets", label: de ? "Aus den Assets" : "From Assets",
