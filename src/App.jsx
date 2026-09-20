@@ -35737,7 +35737,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       </div>
                     </div>
                   ) : (
-                    <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: "relative", overflow: "hidden" }}>
+                    /* Abwählen gehört hierher und nicht auf das Bild: wer neben
+                       das Bild klickt, ist mit dem Element fertig. Das Element
+                       selbst und die Leiste halten ihren Klick auf, sonst
+                       würde ein Griff danach es abwählen. */
+                    <div onPointerDown={() => setSelOverlay(null)}
+                      style={{ flex: 1, minHeight: 0, minWidth: 0, position: "relative", overflow: "hidden" }}>
                       {/* Paging sits in the grey, at the very edges, so the two
                           arrows line up with the plus and the publish button in
                           the footer below. On the picture they read as part of
