@@ -33945,23 +33945,44 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
   const queueRows = (rows) => rows.map(q => (
     <div key={q.id} onClick={() => openQueued(q)} className="hover-row"
-      style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "6px 0", cursor: "pointer" }}>
-      <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap" }}>
-        {new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "short", timeStyle: "short" }).format(new Date(q.publish_at))}
-      </span>
-      <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontFamily: FONT,
-        color: q.status === "failed" ? "#E86767" : theme.textDim,
-        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {q.status === "failed" ? (q.last_error || (de ? "Fehlgeschlagen" : "Failed"))
-          : (q.targets || []).map(t => t.label).filter(Boolean).join(", ")
-            || (q.body || "").slice(0, 40)}
-      </span>
+      style={{ display: "flex", alignItems: "flex-start", gap: 11, padding: "10px 11px",
+        borderRadius: 12, cursor: "pointer" }}>
+      {/* Das Logo sagt in einem Blick, wohin er geht. Der Kontoname stand hier
+          vorher und sagte nur, wie das Konto heißt. */}
+      <div style={{ display: "flex", gap: 4, flexShrink: 0, paddingTop: 1 }}>
+        {(q.targets || []).slice(0, 3).map((t, i) => {
+          const k = t.provider === "meta" ? "instagram" : "threads";
+          const p = TOUCHPOINT_PLATFORMS.find(x => x.key === k) || { color: "#15151c" };
+          return (
+            <div key={i} title={t.label || p.label}
+              style={{ width: 22, height: 22, borderRadius: 7, background: p.color, flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width={tpGlyphSize(k, 13)} height={tpGlyphSize(k, 13)} viewBox="0 0 24 24">{touchpointGlyph(k)}</svg>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 11.5, fontFamily: FONT, fontWeight: 600, whiteSpace: "nowrap",
+          color: q.status === "failed" ? "#E86767" : theme.text }}>
+          {new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(q.publish_at))}
+          {q.status === "failed" ? ` · ${de ? "Fehlgeschlagen" : "Failed"}` : ""}
+        </div>
+        {/* Zwei Zeilen, weil eine Zeitangabe allein nicht sagt, welcher Beitrag
+            das ist. */}
+        <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.45, marginTop: 2,
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+          {q.status === "failed" ? (q.last_error || "")
+            : (q.body || (de ? "Ohne Text" : "No text"))}
+        </div>
+      </div>
       <span onClick={async (e) => {
         e.stopPropagation();
         await supabase.from("scheduled_posts").delete().eq("id", q.id);
         if (editing?.id === q.id) stopEditing();
         loadQueue();
-      }} style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, cursor: "pointer", flexShrink: 0 }}>
+      }} style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, cursor: "pointer",
+        flexShrink: 0, paddingTop: 2 }}>
         {de ? "Absagen" : "Cancel"}
       </span>
     </div>
@@ -35279,36 +35300,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   <input ref={extraRef} type="file" multiple onChange={onPickExtras}
                     accept={canVideo ? "image/*,video/*" : "image/*"} style={{ display: "none" }} />
 
-                  {/* Beim Bearbeiten hängen die Medien schon an der Zeile. Sie
-                      wieder in den Editor zu laden hieße, aus einer
-                      hochgeladenen Datei eine lokale zu machen, und dafür gibt
-                      es keinen Weg zurück. Also stehen sie hier als das, was sie
-                      sind: unverändert, bis jemand neue wählt. */}
-                  {editing && !visual && !reel && (editing.media || []).length > 0 && (
-                    <div style={{ marginBottom: 18, padding: "14px 16px", borderRadius: 16,
-                      background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
-                      <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
-                        {(editing.media || []).map((m, i) => {
-                          const src = m.url || (m.bucket && m.path
-                            ? supabase.storage.from(m.bucket).getPublicUrl(m.path).data?.publicUrl : null);
-                          return (
-                            <div key={i} style={{ width: 66, height: 66, borderRadius: 11, overflow: "hidden", flexShrink: 0,
-                              background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
-                              display: "flex", alignItems: "center", justifyContent: "center" }}>
-                              {String(m.kind || "").toUpperCase() === "VIDEO"
-                                ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 4l14 8-14 8z"/></svg>
-                                : src ? <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                : null}
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
-                        {de ? "Diese Medien bleiben, solange du keine neuen auswählst."
-                            : "These stay as they are unless you pick new ones."}
-                      </div>
-                    </div>
-                  )}
                   {!visual && !reel ? (
                     <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, width: "100%" }}>
