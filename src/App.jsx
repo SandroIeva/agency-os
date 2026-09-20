@@ -33917,11 +33917,35 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // könnte. Also hängt es an dem stillen Link, und der fragt vorher nach.
   const [noMediaMenu, setNoMediaMenu] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
+  // Ein geplanter Beitrag, der wieder aufgemacht wurde. Solange das gesetzt
+  // ist, schreibt der Composer in diese Zeile statt eine neue zu bauen.
+  const [editing, setEditing] = useState(null);   // { id, media: [...] }
   // Dieselben Zeilen im Zeitpunkt-Fenster und unter der Uhr oben. Einmal
   // beschrieben, weil zwei Listen derselben Sache beim nächsten Handgriff
   // auseinanderlaufen.
+  // Zurück in den Composer: Text, Zeit und Kanäle stehen wieder da, die Medien
+  // bleiben die der Zeile, bis jemand neue wählt. Sie noch einmal in den Editor
+  // zu laden hieße, aus einer hochgeladenen Datei wieder eine lokale zu machen,
+  // und dafür gibt es keinen Weg zurück.
+  const openQueued = (q) => {
+    setEditing({ id: q.id, media: Array.isArray(q.media) ? q.media : [] });
+    setText(q.body || "");
+    const when = new Date(q.publish_at);
+    setSchedule(new Date(when.getTime() - when.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+    setSelectedIds((q.targets || []).map(t => (accounts || []).find(a =>
+      (t.provider === "meta" && a.igUserId && a.igUserId === t.igUserId)
+      || (t.provider === "threads" && a.threadsUserId && a.threadsUserId === t.threadsUserId))?.id)
+      .filter(Boolean));
+    clearVisual();
+    setResult(null); setError(null);
+    setQueueOpen(false); setWhenOpen(false);
+    setStepIdx(S_TEXT);
+  };
+  const stopEditing = () => { setEditing(null); setText(""); setSchedule(""); clearVisual(); setSelectedIds(soleChannel()); };
+
   const queueRows = (rows) => rows.map(q => (
-    <div key={q.id} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "6px 0" }}>
+    <div key={q.id} onClick={() => openQueued(q)} className="hover-row"
+      style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "6px 0", cursor: "pointer" }}>
       <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.text, whiteSpace: "nowrap" }}>
         {new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "short", timeStyle: "short" }).format(new Date(q.publish_at))}
       </span>
@@ -33932,8 +33956,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           : (q.targets || []).map(t => t.label).filter(Boolean).join(", ")
             || (q.body || "").slice(0, 40)}
       </span>
-      <span onClick={async () => {
+      <span onClick={async (e) => {
+        e.stopPropagation();
         await supabase.from("scheduled_posts").delete().eq("id", q.id);
+        if (editing?.id === q.id) stopEditing();
         loadQueue();
       }} style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, cursor: "pointer", flexShrink: 0 }}>
         {de ? "Absagen" : "Cancel"}
@@ -33946,7 +33972,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const loadQueue = useCallback(async () => {
     if (!orgId) { setQueued([]); return; }
     const { data } = await supabase.from("scheduled_posts")
-      .select("id, publish_at, status, body, targets, last_error")
+      .select("id, publish_at, status, body, targets, media, last_error")
       .eq("org_id", orgId).in("status", ["queued", "processing", "failed"])
       .order("publish_at", { ascending: true }).limit(20);
     setQueued(data || []);
@@ -34272,6 +34298,53 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
               : `Upload failed (${mb} MB): ${said}`));
     }
     return { bucket: "brand-assets", path };
+  };
+
+  // Die Medien, die gerade im Editor liegen, hochgeladen und in der Form, die
+  // scheduled_posts speichert. Nur für das Speichern eines geplanten Beitrags:
+  // der normale Weg baut sie unterwegs, weil er sie auch gleich verschickt.
+  const uploadCurrentMedia = async () => {
+    const out = [];
+    if (reel) out.push({ ...(await toMetaMedia(reel.file, reel.file.type,
+      (reel.file.name.split(".").pop() || "mp4").toLowerCase())), kind: "VIDEO" });
+    else {
+      const rendered = await exportVisual();
+      if (rendered) out.push({ ...(await toMetaMedia(rendered.blob, rendered.type, "jpg")), kind: "IMAGE" });
+    }
+    for (const x of extras) {
+      out.push({ ...(await toMetaMedia(x.file, x.file.type,
+        (x.file.name.split(".").pop() || (x.video ? "mp4" : "jpg")).toLowerCase())),
+        kind: x.video ? "VIDEO" : "IMAGE" });
+    }
+    return out;
+  };
+
+  const saveQueued = async () => {
+    if (!editing || busy) return;
+    setError(null);
+    if (!selected.length) { setError(new Error(de ? "Wähle mindestens einen Kanal." : "Pick at least one channel.")); setStepIdx(S_TEXT); return; }
+    if (!schedule) { setError(new Error(de ? "Wann soll er raus?" : "When should it go out?")); return; }
+    if (overLimit) { setError(new Error(de ? `Text zu lang (max. ${charLimit} Zeichen).` : `Text too long (max ${charLimit}).`)); setStepIdx(S_TEXT); return; }
+    setBusy("save");
+    try {
+      const fresh = (visual || reel) ? await uploadCurrentMedia() : (editing.media || []);
+      const { error: uErr } = await supabase.from("scheduled_posts").update({
+        body: text.trim() || null,
+        publish_at: new Date(schedule).toISOString(),
+        media: fresh,
+        targets: selected.filter(a => a.provider === "meta" || a.provider === "threads").map(a => a.provider === "meta"
+          ? { provider: "meta", igUserId: a.igUserId, label: a.username || a.displayName }
+          : { provider: "threads", threadsUserId: a.threadsUserId, label: a.username || a.displayName }),
+        // Ein gescheiterter Beitrag, den jemand angefasst hat, darf es noch
+        // einmal versuchen.
+        status: "queued", attempts: 0, last_error: null, containers: {},
+      }).eq("id", editing.id);
+      if (uErr) throw new Error(uErr.message);
+      await loadQueue();
+      setResult({ status: "scheduled", platforms: [] });
+      stopEditing();
+    } catch (e) { setError(e); }
+    setBusy(null);
   };
 
   const submit = async (kind) => {
@@ -35206,6 +35279,36 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   <input ref={extraRef} type="file" multiple onChange={onPickExtras}
                     accept={canVideo ? "image/*,video/*" : "image/*"} style={{ display: "none" }} />
 
+                  {/* Beim Bearbeiten hängen die Medien schon an der Zeile. Sie
+                      wieder in den Editor zu laden hieße, aus einer
+                      hochgeladenen Datei eine lokale zu machen, und dafür gibt
+                      es keinen Weg zurück. Also stehen sie hier als das, was sie
+                      sind: unverändert, bis jemand neue wählt. */}
+                  {editing && !visual && !reel && (editing.media || []).length > 0 && (
+                    <div style={{ marginBottom: 18, padding: "14px 16px", borderRadius: 16,
+                      background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+                      <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                        {(editing.media || []).map((m, i) => {
+                          const src = m.url || (m.bucket && m.path
+                            ? supabase.storage.from(m.bucket).getPublicUrl(m.path).data?.publicUrl : null);
+                          return (
+                            <div key={i} style={{ width: 66, height: 66, borderRadius: 11, overflow: "hidden", flexShrink: 0,
+                              background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
+                              display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              {String(m.kind || "").toUpperCase() === "VIDEO"
+                                ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.textDim} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 4l14 8-14 8z"/></svg>
+                                : src ? <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, lineHeight: 1.5 }}>
+                        {de ? "Diese Medien bleiben, solange du keine neuen auswählst."
+                            : "These stay as they are unless you pick new ones."}
+                      </div>
+                    </div>
+                  )}
                   {!visual && !reel ? (
                     <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, width: "100%" }}>
@@ -35428,7 +35531,13 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   {slideIdx + 1} / {slides.length}
                 </span>
               )}
-              {canPost && hasMedia && canDraft && (
+              {editing && (
+                <motion.button whileTap={{ scale: 0.97 }} onClick={stopEditing}
+                  style={{ ...footBtn, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, cursor: "pointer" }}>
+                  {de ? "Abbrechen" : "Cancel"}
+                </motion.button>
+              )}
+              {!editing && canPost && hasMedia && canDraft && (
                 <motion.button ref={draftRef} whileTap={{ scale: 0.97 }} onClick={() => submit("draft")} disabled={Boolean(busy)}
                   style={{ ...footBtn, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text,
                     cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>
@@ -35440,12 +35549,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   corner of the step above. Anchored to the footer rather than
                   fixed: this panel's root is an animating motion.div, and a
                   transformed ancestor makes `fixed` mean "inside that box". */}
-              {canPost && canSchedule && (
+              {(editing || (canPost && canSchedule)) && (
                 <div style={{ position: "relative", marginRight: 12 }}>
                   {/* Mit Bild ist "Später" ein eigener Auslöser neben dem
                       Posten-Knopf. Ohne Bild gibt es keinen Knopf, dort wird
                       dieses Fenster aus dem Menü am Link geöffnet. */}
-                  {hasMedia && (
+                  {(hasMedia || editing) && (
                   <span onClick={() => setWhenOpen(o => !o)}
                     style={{ padding: "0 10px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
                       color: schedule ? theme.text : theme.textDim, cursor: "pointer", whiteSpace: "nowrap" }}>
@@ -35500,7 +35609,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
               {/* Nichts ausgewählt, aber alle gewählten Kanäle nehmen reinen
                   Text: dann ist das Veröffentlichen ein stiller Link und kein
                   Knopf, der über den drei Einstiegen thront. */}
-              {canPost && !hasMedia && (
+              {!editing && canPost && !hasMedia && (
                 <div style={{ position: "relative", display: "inline-flex" }}>
                   <span onClick={() => {
                       if (!textReady || busy) return;
@@ -35549,7 +35658,13 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   </>)}
                 </div>
               )}
-              {canPost && hasMedia ? (
+              {editing ? (
+                <motion.button whileTap={{ scale: 0.97 }} onClick={saveQueued} disabled={Boolean(busy)}
+                  style={{ ...footBtn, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
+                    cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}>
+                  {busy === "save" ? (de ? "Wird gespeichert…" : "Saving…") : (de ? "Speichern" : "Save")}
+                </motion.button>
+              ) : canPost && hasMedia ? (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => submit("post")} disabled={Boolean(busy)}
                   style={{ ...footBtn, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
                     // Never narrower than the draft button beside it. Measured,
