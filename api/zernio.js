@@ -220,11 +220,27 @@ async function ensureProfile(orgId) {
   if (row?.zernio_profile_id) return row.zernio_profile_id;
 
   const { data: org } = await admin.from("organizations").select("name").eq("id", orgId).maybeSingle();
-  const created = await zfetch("/profiles", {
-    method: "POST",
-    body: { name: `${org?.name || "Workspace"} · i7OS`, description: `i7OS workspace ${orgId}` },
-  });
-  const profileId = created?.profile?._id || created?._id;
+  const name = `${org?.name || "Workspace"} · i7OS`;
+  let created;
+  try {
+    created = await zfetch("/profiles", {
+      method: "POST",
+      body: { name, description: `i7OS workspace ${orgId}` },
+    });
+  } catch (e) {
+    // "A profile with this name already exists" ist keine Fehlermeldung,
+    // sondern eine Auskunft: es gibt das Profil schon. Passiert, wenn die Zeile
+    // in workspace_social fehlt, obwohl drüben angelegt wurde, oder wenn zwei
+    // Workspaces gleich heißen. Bisher blieb dann eine rote Zeile über dem
+    // Composer stehen und nichts ging mehr.
+    if (!/already exists/i.test(String(e?.message || ""))) throw e;
+    const list = await zfetch("/profiles").catch(() => null);
+    const mine = (list?.profiles || list?.data || (Array.isArray(list) ? list : []) || [])
+      .find(p => p?.name === name || (p?.description || "").includes(orgId));
+    if (!mine?._id && !mine?.id) throw e;
+    created = { profile: mine };
+  }
+  const profileId = created?.profile?._id || created?.profile?.id || created?._id || created?.id;
   if (!profileId) throw new HttpError(502, "Zernio profile creation returned no id", "zernio_error");
   const { error: upErr } = await admin.from("workspace_social").upsert(
     { org_id: orgId, zernio_profile_id: profileId, updated_at: new Date().toISOString() },
