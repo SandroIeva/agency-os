@@ -1783,26 +1783,23 @@ function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de
                 </button>
               )}
             </div>
-            {/* Credit back to the source. Pexels requires it; Pixabay only asks
-                for it — we show it either way, and it also tells the user where
-                the results are coming from. */}
-            <div style={{ fontSize: 11, color: theme.textFaint, marginTop: 9 }}>
-              {de ? "Bilder von " : "Images from "}
-              <a href={provider === "pexels" ? "https://www.pexels.com" : "https://pixabay.com"} target="_blank" rel="noopener noreferrer"
-                style={{ color: theme.textDim, textDecoration: "underline" }}>
-                {provider === "pexels" ? "Pexels" : "Pixabay"}
-              </a>
-              {de ? " · beim Auswählen wird das Bild in deinen Workspace kopiert" : " · picking copies the image into your workspace"}
-            </div>
+            {/* No credit line under the search field. Pixabay asks for credit
+                and does not require it, and the line said two things nobody
+                needed: where the pictures come from, and that picking one copies
+                it, which is what picking a picture does.
+                ⚠ Pexels is different and REQUIRES a photographer credit per
+                image. If STOCK_PROVIDER is ever switched to pexels, that credit
+                has to appear under each tile; the API returns `photographer`
+                and `photographerUrl` for exactly that. */}
           </div>
 
           <div ref={scrollRef} onScroll={onScroll} style={{ overflowY: "auto", padding: 18 }}>
             {error ? (
-              <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: "#E86767" }}>{error}</div>
+              <div style={{ padding: 24, textAlign: "center", fontSize: 13, fontFamily: FONT, color: "#E86767" }}>{error}</div>
             ) : loading && !items.length ? (
-              <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: theme.textDim }}>{de ? "Suche …" : "Searching …"}</div>
+              <div style={{ padding: 24, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Suche …" : "Searching …"}</div>
             ) : !items.length ? (
-              <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: theme.textDim }}>{de ? "Nichts gefunden." : "Nothing found."}</div>
+              <div style={{ padding: 24, textAlign: "center", fontSize: 13, fontFamily: FONT, color: theme.textDim }}>{de ? "Nichts gefunden." : "Nothing found."}</div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 12 }}>
                 {items.map(it => (
@@ -1824,7 +1821,7 @@ function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de
                       style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                     {saving === it.id && (
                       <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center",
-                        background: "rgba(0,0,0,0.45)", color: "#fff", fontSize: 12, fontWeight: 600 }}>
+                        background: "rgba(0,0,0,0.45)", color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600 }}>
                         {de ? "Wird gespeichert …" : "Saving …"}
                       </div>
                     )}
