@@ -35415,13 +35415,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           Beschreibung beim Posten stillschweigend. */}
                       {igStory && text.trim() && (
                         <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${theme.borderFaint}`,
-                          fontSize: 11.5, fontFamily: FONT, lineHeight: 1.5,
-                          color: selected.some(a => a.provider !== "meta") ? theme.textDim : "#E86767" }}>
-                          {selected.some(a => a.provider !== "meta")
-                            ? (de ? "Deine Beschreibung geht an die anderen gewählten Kanäle. In eine Story nimmt Instagram keinen Text an."
-                                  : "Your description goes to the other selected channels. Instagram takes no text for a story.")
-                            : (de ? "Instagram nimmt für eine Story keinen Text an. Deine Beschreibung geht dann nirgendwohin."
-                                  : "Instagram takes no text for a story, so your description would go nowhere.")}
+                          fontSize: 11.5, fontFamily: FONT, lineHeight: 1.5, color: theme.textDim }}>
+                          {de ? "Dein geschriebener Text bleibt stehen, geht aber nicht mit. Schalte die Story aus, dann kommt er zurück."
+                              : "Your text stays in the field but does not go out. Switch the story off and it counts again."}
                         </div>
                       )}
                     </div>
@@ -35756,13 +35752,24 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       fixed 320 inside a box that fills the panel, which left
                       the box scrolling around a half-empty field. */}
                   <div style={{ position: "relative", flex: 1, minHeight: 220, display: "flex" }}>
-                    <textarea ref={captionRef} value={text}
+                    {/* Bei einer Story nimmt Instagram keinen Text an, und mit
+                        eingeschalteter Story ist Instagram der einzige Kanal,
+                        der mitkommt. Dann gibt es hier nichts einzugeben, also
+                        ist das Feld aus und blass, wie die Kanäle nebenan. Eine
+                        Meldung hinterher ist schlechter als ein Feld, das von
+                        vornherein sagt, dass es gerade nichts aufnimmt. */}
+                    <textarea ref={captionRef} value={text} disabled={igStory}
                       onChange={e => { setText(e.target.value); if (captionUndo !== null) setCaptionUndo(null); }} autoFocus
-                      placeholder={de ? "Was möchtest du teilen?" : "What do you want to share?"}
+                      placeholder={igStory
+                        ? (de ? "Eine Story nimmt keinen Text." : "A story takes no text.")
+                        : (de ? "Was möchtest du teilen?" : "What do you want to share?")}
                       style={{ width: "100%", flex: 1, boxSizing: "border-box", padding: "18px 20px 40px", borderRadius: 18,
                         border: `1px solid ${overLimit ? "#E86767" : theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.6)",
-                        color: theme.text, fontSize: 15, fontFamily: FONT, lineHeight: 1.65, outline: "none", resize: "none", caretColor: theme.text }} />
-                    <div style={{ position: "absolute", left: 20, bottom: 17, display: "flex", alignItems: "center", gap: 16 }}>
+                        color: theme.text, fontSize: 15, fontFamily: FONT, lineHeight: 1.65, outline: "none", resize: "none", caretColor: theme.text,
+                        opacity: igStory ? 0.38 : 1, cursor: igStory ? "not-allowed" : "text",
+                        transition: "opacity 0.15s ease" }} />
+                    <div style={{ position: "absolute", left: 20, bottom: 17, display: "flex", alignItems: "center", gap: 16,
+                      opacity: igStory ? 0.38 : 1, pointerEvents: igStory ? "none" : "auto" }}>
                     {/* display flex, sonst sitzt das Zeichen auf der Textlinie
                         dieses Rahmens und hängt ein paar Pixel zu hoch. */}
                     <div style={{ position: "relative", display: "flex", alignItems: "center", lineHeight: 0 }}>
