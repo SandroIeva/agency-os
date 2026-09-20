@@ -52417,6 +52417,18 @@ export default function CircularMenu() {
   const [loginEmail, setLoginEmail] = useState("");     // magic-link email
   const [magicSending, setMagicSending] = useState(false);
   const [magicSent, setMagicSent] = useState(false);
+  // Signing in with a password, beside Google and the link. Somebody who is not
+  // at the mailbox cannot use a link, and that is exactly the case Meta's App
+  // Review is: the reviewer is handed an address and a password and has to get
+  // in. "Inaccessible app" fails a whole submission, not one permission.
+  const [loginPassword, setLoginPassword] = useState("");
+  const [passwordMode, setPasswordMode] = useState(false);
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  // Setting one, under Einstellungen → Account.
+  const [pwNew, setPwNew] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwSaved, setPwSaved] = useState(false);
+  const [pwError, setPwError] = useState(null);
 
   // Organization / onboarding state
   const [userOrg, setUserOrg] = useState(null);            // current org the user belongs to
@@ -53677,6 +53689,45 @@ export default function CircularMenu() {
     } finally {
       setMagicSending(false);
     }
+  };
+
+  // The password half. The password itself is never set here: this screen
+  // signs in, Settings sets it.
+  const handlePasswordLogin = async () => {
+    const email = (loginEmail || "").trim().toLowerCase();
+    if (!email || !loginPassword || passwordBusy) return;
+    setAuthError(null);
+    setPasswordBusy(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password: loginPassword });
+      if (error) throw error;
+      setLoginPassword("");
+    } catch (e) {
+      // Supabase says the same thing for a wrong password and an address with
+      // none, and so do we: which of the two it is, is not for a login screen
+      // to give away.
+      const wrong = /invalid login credentials/i.test(e?.message || "");
+      setAuthError(wrong
+        ? (deRoot ? "E-Mail oder Passwort stimmt nicht." : "That email or password is not right.")
+        : (e.message || (deRoot ? "Anmeldung fehlgeschlagen." : "Sign-in failed.")));
+    } finally {
+      setPasswordBusy(false);
+    }
+  };
+
+  // Setting a password for this account. It works for a session that came from
+  // Google or from a link: the password is added, nothing is taken away.
+  const savePassword = async () => {
+    const pw = (pwNew || "").trim();
+    if (pw.length < 8) {
+      setPwError(appLanguage === "de" ? "Mindestens 8 Zeichen." : "At least 8 characters.");
+      return;
+    }
+    setPwSaving(true); setPwError(null); setPwSaved(false);
+    const { error } = await supabase.auth.updateUser({ password: pw });
+    setPwSaving(false);
+    if (error) setPwError(error.message);
+    else { setPwNew(""); setPwSaved(true); }
   };
 
   // Silent token refresh: tries two strategies (popup strategy removed — COOP-blocked)
@@ -58284,7 +58335,7 @@ export default function CircularMenu() {
                   <input
                     type="email" value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") handleMagicLink(); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") (passwordMode ? handlePasswordLogin : handleMagicLink)(); }}
                     placeholder={appLanguage === "de" ? "deine@email.com" : "you@email.com"}
                     style={{
                       width: "100%", boxSizing: "border-box", padding: "15px 18px", borderRadius: 16,
@@ -58292,20 +58343,45 @@ export default function CircularMenu() {
                       fontSize: 15, fontFamily: FONT, outline: "none", caretColor: "#8B7AFF",
                     }}
                   />
+                  {passwordMode && (
+                    <input
+                      type="password" value={loginPassword} autoFocus
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handlePasswordLogin(); }}
+                      placeholder={appLanguage === "de" ? "Passwort" : "Password"}
+                      style={{
+                        width: "100%", boxSizing: "border-box", padding: "15px 18px", borderRadius: 16,
+                        background: theme.cardBg, border: `1px solid ${theme.border}`, color: theme.text,
+                        fontSize: 15, fontFamily: FONT, outline: "none", caretColor: "#8B7AFF",
+                      }}
+                    />
+                  )}
                   <motion.button
                     whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                    onClick={handleMagicLink}
-                    disabled={magicSending}
+                    onClick={passwordMode ? handlePasswordLogin : handleMagicLink}
+                    disabled={magicSending || passwordBusy}
                     style={{
                       width: "100%", padding: "15px 18px", borderRadius: 16, border: "none",
                       background: primaryBtn(darkMode).background, color: primaryBtn(darkMode).color, fontSize: 15, fontWeight: 600, fontFamily: FONT,
-                      cursor: magicSending ? "default" : "pointer", opacity: magicSending ? 0.7 : 1,
+                      cursor: (magicSending || passwordBusy) ? "default" : "pointer", opacity: (magicSending || passwordBusy) ? 0.7 : 1,
                     }}
                   >
-                    {magicSending
-                      ? (appLanguage === "de" ? "Sende Link…" : "Sending link…")
-                      : (appLanguage === "de" ? "Login-Link per E-Mail" : "Email me a login link")}
+                    {passwordMode
+                      ? (passwordBusy
+                          ? (appLanguage === "de" ? "Anmelden…" : "Signing in…")
+                          : (appLanguage === "de" ? "Anmelden" : "Sign in"))
+                      : magicSending
+                        ? (appLanguage === "de" ? "Sende Link…" : "Sending link…")
+                        : (appLanguage === "de" ? "Login-Link per E-Mail" : "Email me a login link")}
                   </motion.button>
+                  {/* The link stays the way in for everybody who has no password,
+                      which is everybody until they set one in Settings. */}
+                  <div onClick={() => { setPasswordMode(v => !v); setAuthError(null); setLoginPassword(""); }}
+                    style={{ fontSize: 12.5, color: theme.textDim, fontFamily: FONT, cursor: "pointer", textAlign: "center", padding: "2px 0" }}>
+                    {passwordMode
+                      ? (appLanguage === "de" ? "Stattdessen Login-Link" : "Send a login link instead")
+                      : (appLanguage === "de" ? "Mit Passwort anmelden" : "Sign in with a password")}
+                  </div>
                 </motion.div>
               )}
 
@@ -63046,6 +63122,66 @@ export default function CircularMenu() {
               {/* Storage usage — lives under Workspace, styled like the other sections */}
               {settingsTab === "workspace" && userOrg && (
                 <StorageUsageBar orgId={userOrg.id} theme={theme} appLanguage={appLanguage} />
+              )}
+
+              {/* Password. Google and the link stay; this is a third way in, and
+                  the only one that works for somebody who has neither the
+                  Google account nor the mailbox. */}
+              {settingsTab === "account" && session && (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.28, duration: 0.4, ease: [0.22, 0.68, 0.35, 1.0] }}
+                  style={{ marginTop: 24 }}
+                >
+                  <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12, paddingLeft: 4 }}>
+                    {appLanguage === "de" ? "Passwort" : "Password"}
+                  </div>
+                  <div style={{ borderRadius: 20, background: theme.cardBg, border: `1px solid ${theme.border}`, padding: "16px 20px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
+                      <div style={{
+                        width: 36, height: 36, borderRadius: 10,
+                        background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.svgStroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="8" cy="12" r="4" /><path d="M12 12h9M18 12v3M15.5 12v2" />
+                        </svg>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>
+                          {appLanguage === "de" ? "Passwort setzen" : "Set a password"}
+                        </div>
+                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, lineHeight: 1.4 }}>
+                          {appLanguage === "de"
+                            ? "Damit kommst du ohne Google und ohne Login-Link in dein Konto. Mindestens 8 Zeichen."
+                            : "Lets you sign in without Google and without a login link. At least 8 characters."}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={wsField}>
+                      <input
+                        type="password" value={pwNew}
+                        onChange={(e) => { setPwNew(e.target.value); setPwSaved(false); setPwError(null); }}
+                        onKeyDown={(e) => { if (e.key === "Enter") savePassword(); }}
+                        placeholder={appLanguage === "de" ? "Neues Passwort" : "New password"}
+                        style={{ ...wsFieldText, flex: 1, minWidth: 120, padding: "4px 2px", border: "none", outline: "none", background: "transparent" }}
+                      />
+                      <motion.div whileHover={wsFieldBtnHover} whileTap={{ scale: 0.97 }}
+                        onClick={pwSaving ? undefined : savePassword}
+                        style={{ ...wsFieldBtn, opacity: pwSaving ? 0.6 : 1 }}>
+                        {pwSaving ? "…" : (appLanguage === "de" ? "Speichern" : "Save")}
+                      </motion.div>
+                    </div>
+                    {pwError && (
+                      <div style={{ marginTop: 10, fontSize: 11.5, fontFamily: FONT, color: "#E84393" }}>{pwError}</div>
+                    )}
+                    {pwSaved && (
+                      <div style={{ marginTop: 10, fontSize: 11.5, fontFamily: FONT, color: "#00B894" }}>
+                        {appLanguage === "de" ? "Passwort gespeichert. Du kannst dich damit jetzt anmelden." : "Password saved. You can sign in with it now."}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
               )}
 
               {/* Google Connection Status — only shown when broken so user can reconnect */}
