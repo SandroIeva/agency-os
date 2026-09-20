@@ -32707,7 +32707,12 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
       {!ready && loader}
       {accounts == null ? null
         : (accounts.length === 0 && !hasDirect) ? (
-        <div style={{ display: ready ? "block" : "none" }}>
+        /* Eingeblendet statt hereingeschnitten, und nur die Deckkraft: ein
+           Transform bliebe nach der Animation stehen und machte aus diesem
+           Kasten den Bezugsrahmen für alles, was darin position fixed ist. */
+        <motion.div initial={false} animate={{ opacity: ready ? 1 : 0 }}
+          transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1] }}
+          style={{ display: ready ? "block" : "none" }}>
         {/* ── Empty state: connect the first account ── */}
         <div style={{ maxWidth: 560, margin: "40px auto 0", textAlign: "center" }}>
           <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{de ? "Verbinde deine Kanäle" : "Connect your channels"}</div>
@@ -32718,7 +32723,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
             {offerable.map(k => <ConnectChip key={k} uiKey={k} big />)}
           </div>
         </div>
-        </div>
+        </motion.div>
       ) : (<>
         {/* Gebaut wird es sofort, gezeigt erst, wenn alles darin geladen hat.
             Vorher hing die Ansicht erst NACH dem Ladezeichen im Baum, und die
@@ -32726,7 +32731,12 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
             fertig sein als der Ladebalken, auf den sie warten sollten. Deshalb
             stand in ihrer Spalte noch einmal "Lädt". Verborgen statt entfernt,
             damit alle Kästen gleichzeitig anfangen. */}
-        <div style={{ display: ready ? "contents" : "none" }}>
+        {/* Eingeblendet statt hereingeschnitten, und nur die Deckkraft: ein
+            Transform bliebe nach der Animation stehen und machte aus diesem
+            Kasten den Bezugsrahmen für alles, was darin position fixed ist. */}
+        <motion.div initial={false} animate={{ opacity: ready ? 1 : 0 }}
+          transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1] }}
+          style={{ display: ready ? "block" : "none" }}>
           {/* Everything from here to the trend is Zernio's, and it has nothing
               to say when Zernio holds no account: `data` is never even fetched
               in that case, so the tiles sat at "…" for ever. A workspace whose
@@ -33000,13 +33010,15 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
               session={session} orgId={orgId} platform={platform} igUserId={igId} threadsUserId={thId}
               card={card} secLabel={secLabel} onReady={() => setCommentsReady(true)} />
           </div>
-        </div>
+        </motion.div>
       </>)}
       {/* Outside the branch above on purpose: a workspace with no social
           account at all still has a website. Verborgen, solange oben geladen
           wird: sonst steht dieser Block allein unter dem Ladezeichen und die
           Seite wirkt trotzdem halb fertig. */}
-      <div style={{ display: ready ? "block" : "none" }}>{websiteSection}</div>
+      <motion.div initial={false} animate={{ opacity: ready ? 1 : 0 }}
+        transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1], delay: ready ? 0.06 : 0 }}
+        style={{ display: ready ? "block" : "none" }}>{websiteSection}</motion.div>
     </div>
   );
 }
@@ -35537,7 +35549,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
               </div>
             ) : (
             <motion.div className="no-scrollbar"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.22 }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1] }}
               style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "grid", gap: 30, alignItems: "stretch",
               gridTemplateColumns: twoCol ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)" }}>
               <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
