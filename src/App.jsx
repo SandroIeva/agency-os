@@ -30939,12 +30939,15 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef,
 // the ZERNIO_API_KEY lives server-side. Flow: user connects accounts per OAuth
 // (Zernio redirects back with ?zernio=connected → App root reopens this tab),
 // then the dashboard pulls top posts, follower stats and daily metrics.
-const ZERNIO_UI_PLATFORMS = ["linkedin", "instagram", "threads", "x", "pinterest"];
+// What Zernio is OFFERED for. X is deliberately not on it (owner, 2026-09-20):
+// it comes back when we actually want it. An account already connected there
+// keeps showing and keeps working; this list only decides what can be added.
+const ZERNIO_UI_PLATFORMS = ["linkedin", "instagram", "threads", "pinterest"];
 
-// Connecting Instagram or Threads straight through Meta. THREE places offer a
-// connection - Settings, Analytics and the post composer - and where Meta
-// answers for a network, Zernio no longer does, so all three need this. One
-// token, one redirect, written once.
+// Connecting a network straight through its own API: Instagram, Threads and
+// TikTok. THREE places offer a connection - Settings, Analytics and the post
+// composer - and where we answer for a network ourselves, Zernio no longer
+// does, so all three need this. One token, one redirect, written once.
 //
 // `popup` is the composer's: a full navigation there would take the post being
 // written with it. Everywhere else the consent screen is a page like any other,
@@ -32057,6 +32060,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
         // else nothing changes and Zernio stays the way in.
         igDirect: !!ig?.enabled,
         thDirect: !!th?.enabled,
+        ttDirect: !!tt?.enabled,
       });
     })();
     return () => { on = false; };
@@ -32243,8 +32247,14 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   const directOffers = [
     ...(direct?.igDirect ? ["instagram"] : []),
     ...(direct?.thDirect ? ["threads"] : []),
+    // TikTok has no Zernio side at all: it is offered only where the direct
+    // path is cleared, and nowhere else.
+    ...(direct?.ttDirect ? ["tiktok"] : []),
   ];
-  const offerable = ZERNIO_UI_PLATFORMS.filter(k => zernioOffers.includes(k) || directOffers.includes(k));
+  const offerable = [
+    ...ZERNIO_UI_PLATFORMS.filter(k => zernioOffers.includes(k) || directOffers.includes(k)),
+    ...(directOffers.includes("tiktok") ? ["tiktok"] : []),
+  ];
   const unconnected = offerable.filter(k => !connectedUiKeys.includes(k));
   // Straight to Meta, or to Zernio. The plan gate applies to Zernio only:
   // connecting there bills us upstream, the direct path does not.
@@ -33330,7 +33340,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // on the floor.
   // Networks this workspace reaches through Meta directly, from the status
   // calls in loadAccounts. Zernio is then not offered for them.
-  const [directNetworks, setDirectNetworks] = useState({ ig: false, th: false });
+  const [directNetworks, setDirectNetworks] = useState({ ig: false, th: false, tt: false });
   const [extras, setExtras] = useState([]);        // [{ id, file, url }] — carousel slides 2..10
   const [reel, setReel] = useState(null);          // { file, url } — a video instead of a picture
   const extraRef = useRef(null);
@@ -33436,7 +33446,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     ]);
     // Which networks Meta answers for here. Same rule as Analytics: where it
     // does, Zernio is not offered for that network.
-    setDirectNetworks({ ig: !!meta?.enabled, th: !!thr?.enabled });
+    setDirectNetworks({ ig: !!meta?.enabled, th: !!thr?.enabled, tt: !!tt?.enabled });
     const direct = (meta?.enabled ? meta.accounts || [] : []).map(a => ({
       // Prefixed, so an id can never collide with a Zernio one and so the
       // provider is readable off the id in a log.
@@ -33567,8 +33577,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const directAddable = [
     ...(directNetworks.ig ? ["instagram"] : []),
     ...(directNetworks.th ? ["threads"] : []),
+    ...(directNetworks.tt ? ["tiktok"] : []),
   ];
-  const addableHere = ZERNIO_UI_PLATFORMS.filter(k => zernioAddable.includes(k) || directAddable.includes(k));
+  const addableHere = [
+    ...ZERNIO_UI_PLATFORMS.filter(k => zernioAddable.includes(k) || directAddable.includes(k)),
+    ...(directAddable.includes("tiktok") ? ["tiktok"] : []),
+  ];
   const unconnectedHere = addableHere.filter(k => !(accounts || []).some(a => uiKeyFor(a.platform) === k));
   // The direct path in a popup like Zernio's, for the same reason: a full
   // navigation would take the post being written with it. The popup reports

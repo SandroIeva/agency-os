@@ -28,13 +28,13 @@ if (params.get("zernio") === "connected" && window.opener && !window.opener.clos
 // of the app on top of the post somebody is writing. A full-page return (from
 // Settings or Analytics) has no opener and falls through to the app, which
 // shows its own notice.
-const metaBack = params.get("instagram") || params.get("threads");
-if (metaBack && window.opener && !window.opener.closed) {
+const directBack = params.get("instagram") || params.get("threads") || params.get("tiktok");
+if (directBack && window.opener && !window.opener.closed) {
   try {
     window.opener.postMessage({
       type: "meta-connected",
-      what: params.get("instagram") ? "instagram" : "threads",
-      status: metaBack,
+      what: params.get("instagram") ? "instagram" : params.get("threads") ? "threads" : "tiktok",
+      status: directBack,
     }, window.location.origin);
   } catch (_) { /* different origin, nothing to tell */ }
   window.close();
