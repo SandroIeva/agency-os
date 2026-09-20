@@ -22,6 +22,9 @@
 //   POST { mode: "status",     orgId } → which accounts are connected, and as whom
 //   POST { mode: "disconnect", orgId, threadsUserId } → forget one account
 //   POST { mode: "publish",    orgId, … } → one post, container flow
+//   POST { mode: "child",       orgId, media } → eine Karussell-Folie bauen
+//   POST { mode: "container-status", orgId, containerId } → wie weit ist sie
+//   POST { mode: "carousel",    orgId, children, text } → die Folien zu einem Beitrag
 //   POST { mode: "publish-finish", orgId, containerId } → finish a slow one
 //   POST { mode: "overview",   orgId } → profile and the 24h window, one trip
 //   POST { mode: "limit",      orgId } → posts left in the 24h window
@@ -590,6 +593,58 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     if (st === "ERROR" || st === "EXPIRED") return json({ error: r.body?.error_message || st, code: "media_failed" }, 502);
     if (st && st !== "FINISHED" && st !== "PUBLISHED") return json({ status: "processing", containerId }, 202);
     return publishContainer(containerId);
+  }
+
+  // ── Ein Karussell baut der BROWSER, Folie für Folie ──────────────────────
+  //
+  // Der Weg darunter ("publish") macht alles in einem Aufruf und wartet je
+  // Folie zwanzig Sekunden darauf, dass Threads sie geholt hat. Für Bilder
+  // reicht das. Für ein Video nicht: Threads rechnet es erst um, und eine
+  // Edge-Funktion kann dabei nicht sitzen bleiben. Ein gemischtes Karussell
+  // endete deshalb zuverlässig in "Threads is still fetching a slide".
+  //
+  // Also dieselbe Aufteilung wie bei Instagram: hier wird gebaut und sofort
+  // geantwortet, gewartet wird im Browser, der so lange fragen darf, wie es
+  // eben dauert.
+  if (body.mode === "child" || body.mode === "carousel") {
+    const mediaUrl = async (m) => {
+      if (m?.url) return String(m.url);
+      if (!m?.bucket || !m?.path) return null;
+      const { data } = await db.storage.from(m.bucket).createSignedUrl(m.path, 3600);
+      return data?.signedUrl || null;
+    };
+    if (body.mode === "child") {
+      const m = body.media || null;
+      const u = await mediaUrl(m);
+      if (!u) return json({ error: "Media could not be resolved to a url", code: "invalid_media" }, 400);
+      const isVideo = String(m.kind || "").toUpperCase() === "VIDEO";
+      const made = await makeContainer(isVideo
+        ? { media_type: "VIDEO", video_url: u, is_carousel_item: true }
+        : { media_type: "IMAGE", image_url: u, is_carousel_item: true });
+      if (!made.ok || !made.id) return json({ error: made.error || "Container failed", code: "threads_error" }, 502);
+      return json({ containerId: made.id });
+    }
+    const children = (Array.isArray(body.children) ? body.children : [])
+      .map(String).filter(x => /^\d+$/.test(x));
+    if (children.length < 2) return json({ error: "A carousel needs at least two slides", code: "invalid_media" }, 400);
+    const parent = await makeContainer({
+      media_type: "CAROUSEL",
+      children: children.slice(0, 20).join(","),
+      text: body.text ? String(body.text).slice(0, 500) : undefined,
+    });
+    if (!parent.ok || !parent.id) return json({ error: parent.error || "Container failed", code: "threads_error" }, 502);
+    return json({ containerId: parent.id });
+  }
+
+  // Wie weit ist eine Folie? Eine Frage, eine Antwort, kein Warten.
+  if (body.mode === "container-status") {
+    const containerId = String(body.containerId || "");
+    if (!/^\d+$/.test(containerId)) return json({ error: "containerId is required", code: "invalid_container" }, 400);
+    const r = await th(token, `/${containerId}`, { fields: "status,error_message" });
+    const st = r.body?.status;
+    if (st === "ERROR" || st === "EXPIRED") return json({ status: "error", error: r.body?.error_message || st });
+    if (!st || st === "FINISHED" || st === "PUBLISHED") return json({ status: "ready" });
+    return json({ status: "pending", state: st });
   }
 
   if (body.mode === "publish") {

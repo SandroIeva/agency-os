@@ -34400,6 +34400,54 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         const media = metaReel
           ? [{ ...metaReel, kind: "VIDEO" }, ...metaExtras]
           : (metaMedia ? [metaMedia, ...metaExtras] : []);
+
+        // Ein Karussell wird hier gebaut, Folie für Folie, und nicht drüben in
+        // einem Aufruf: Threads rechnet ein Video erst um, und eine
+        // Edge-Funktion kann dabei nicht sitzen bleiben. Sie wartete zwanzig
+        // Sekunden je Folie und gab dann "Threads is still fetching a slide"
+        // zurück. Hier darf gewartet werden, so lange es dauert.
+        if (media.length > 1) {
+          const thWaitFor = async (containerId, tries) => {
+            for (let n = 0; n < tries; n++) {
+              const r = await send({ mode: "container-status", containerId });
+              const j2 = await r.json().catch(() => null);
+              if (j2?.status === "ready") return { ok: true };
+              if (j2?.status === "error") return { ok: false, error: j2.error };
+              if (!r.ok) return { ok: false, error: await readFail(r, j2, "Threads") };
+              await new Promise(done => setTimeout(done, 2000));
+            }
+            return { ok: false, error: de ? "Threads ist damit noch beschäftigt." : "Threads is still working on it." };
+          };
+          const children = [];
+          let broke = null;
+          for (const [idx, m] of media.entries()) {
+            const r = await send({ mode: "child", media: m });
+            const j2 = await r.json().catch(() => null);
+            if (!r.ok || !j2?.containerId) { broke = await readFail(r, j2, "Threads"); break; }
+            // Ein Video wird umgerechnet, ein Bild nur geholt.
+            const ready = await thWaitFor(j2.containerId, m.kind === "VIDEO" ? 90 : 15);
+            if (!ready.ok) { broke = de ? `Folie ${idx + 1}: ${ready.error}` : `Slide ${idx + 1}: ${ready.error}`; break; }
+            children.push(j2.containerId);
+          }
+          if (broke) { parts.push({ platform: "threads", status: "failed", url: null, error: broke }); continue; }
+          const par = await send({ mode: "carousel", children, text: text.trim() || undefined });
+          const pj = await par.json().catch(() => null);
+          if (!par.ok || !pj?.containerId) {
+            parts.push({ platform: "threads", status: "failed", url: null, error: await readFail(par, pj, "Threads") });
+            continue;
+          }
+          const ready = await thWaitFor(pj.containerId, 90);
+          if (!ready.ok) {
+            parts.push({ platform: "threads", status: "pending", url: null, error: ready.error });
+            continue;
+          }
+          const fin = await send({ mode: "publish-finish", containerId: pj.containerId });
+          const fj = await fin.json().catch(() => null);
+          parts.push({ platform: "threads", status: fin.ok ? "published" : "failed",
+            url: fj?.url || null, error: fin.ok ? null : await readFail(fin, fj, "Threads") });
+          continue;
+        }
+
         const res = await send({ mode: "publish", text: text.trim() || undefined, media });
         let j = await res.json().catch(() => null);
         // 202 means Threads is still processing the media. The container is
