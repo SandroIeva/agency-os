@@ -34064,30 +34064,30 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // garantiert irgendwann auseinanderlaufen.
   const emojiPanel = (onChoose) => (
     <div onClick={(e) => e.stopPropagation()}
-      style={{ width: 320, height: 280, borderRadius: 16, overflow: "hidden",
+      style={{ width: 360, height: 322, borderRadius: 18, overflow: "hidden",
         background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
         border: `1px solid ${theme.border}`,
         boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
         display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", borderBottom: `1px solid ${theme.borderFaint}`, padding: 4 }}>
+      <div style={{ display: "flex", gap: 4, borderBottom: `1px solid ${theme.borderFaint}`, padding: 6 }}>
         {[["smileys", "\u{1F600}"], ["gestures", "\u{1F44B}"], ["hearts", "\u2764\uFE0F"], ["objects", "\u{1F389}"]].map(([id, icon]) => (
           <motion.div key={id} whileTap={{ scale: 0.92 }} onClick={() => setEmojiTab(id)}
-            style={{ flex: 1, padding: "8px 0", borderRadius: 10, cursor: "pointer",
-              textAlign: "center", fontSize: 18,
+            style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer",
+              textAlign: "center", fontSize: 20,
               background: emojiTab === id ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent" }}>
             {icon}
           </motion.div>
         ))}
       </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 2 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 4 }}>
           {EMOJI_GROUPS[emojiTab].map((emoji, i) => (
             <motion.div key={emoji + i} whileTap={{ scale: 0.9 }}
               whileHover={{ scale: 1.25, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }}
               onClick={() => onChoose(emoji)}
-              style={{ width: 34, height: 34, borderRadius: 8, display: "flex",
+              style={{ width: 38, height: 38, borderRadius: 10, display: "flex",
                 alignItems: "center", justifyContent: "center", cursor: "pointer",
-                fontSize: 20, lineHeight: 1 }}>
+                fontSize: 22, lineHeight: 1 }}>
               {emoji}
             </motion.div>
           ))}
