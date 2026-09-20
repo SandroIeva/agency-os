@@ -491,6 +491,7 @@ export default async function handler(req) {
       posts: videos.map(v => ({
         id: v.id,
         text: v.video_description || v.title || "",
+        image: v.cover_image_url || null,
         url: v.share_url || null,
         // create_time is seconds, and everything on our side counts in
         // milliseconds. Multiplied here rather than in three consumers.

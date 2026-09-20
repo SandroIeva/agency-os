@@ -413,7 +413,9 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     const since = Math.floor(Date.now() / 1000) - days * 86400;
 
     const list = await th(token, `/${row.threads_user_id}/threads`, {
-      fields: "id,text,permalink,timestamp,media_type",
+      // With the picture, so the post can be shown and not only counted. A
+      // text post simply has neither field.
+      fields: "id,text,permalink,timestamp,media_type,media_url,thumbnail_url",
       limit: 25,
     });
     if (!list.ok) return json({ error: list.body?.error?.message || "threads_failed" }, 502);
@@ -439,6 +441,7 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
 
     const posts = heads.map((m, i) => ({
       id: m.id,
+      image: m.thumbnail_url || m.media_url || null,
       text: m.text || "",
       url: m.permalink || null,
       publishedAt: m.timestamp || null,

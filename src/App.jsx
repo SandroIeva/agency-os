@@ -32128,17 +32128,17 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   // share counts: the same act under two names.
   const metaPosts = [
     ...((directStats?.ig?.posts) || []).map(p => ({
-      _id: "ig:" + p.id, platform: "instagram", content: p.text,
+      _id: "ig:" + p.id, platform: "instagram", content: p.text, image: p.image || null,
       platformPostUrl: p.url, publishedAt: p.publishedAt,
       analytics: { likes: p.likes || 0, comments: p.comments || 0, shares: 0, impressions: p.reach || 0 },
     })),
     ...((directStats?.th?.posts) || []).map(p => ({
-      _id: "th:" + p.id, platform: "threads", content: p.text,
+      _id: "th:" + p.id, platform: "threads", content: p.text, image: p.image || null,
       platformPostUrl: p.url, publishedAt: p.publishedAt,
       analytics: { likes: p.likes || 0, comments: p.replies || 0, shares: p.reposts || 0, impressions: p.views || 0 },
     })),
     ...((directStats?.tt?.posts) || []).map(p => ({
-      _id: "tt:" + p.id, platform: "tiktok", content: p.text,
+      _id: "tt:" + p.id, platform: "tiktok", content: p.text, image: p.image || null,
       platformPostUrl: p.url, publishedAt: p.publishedAt,
       analytics: { likes: p.likes || 0, comments: p.comments || 0, shares: p.shares || 0, impressions: p.views || 0 },
     })),
@@ -32644,9 +32644,37 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
                   <div key={post._id || i} onClick={() => post.platformPostUrl && window.open(post.platformPostUrl, "_blank", "noopener")}
                     style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "12px 0", borderBottom: i < topPosts.length - 1 ? `1px solid ${theme.borderFaint}` : "none", cursor: post.platformPostUrl ? "pointer" : "default" }}>
                     <span style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.textFaint, width: 18, flexShrink: 0, paddingTop: 1 }}>{i + 1}</span>
-                    <div style={{ width: 30, height: 30, borderRadius: 9, background: meta.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <svg width={tpGlyphSize(uiKey, 15)} height={tpGlyphSize(uiKey, 15)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
-                    </div>
+                    {/* The post itself, where there is one: a line of text says
+                        far less about a post than the picture people saw. A
+                        text post keeps the network's mark, which is also what
+                        an image that will not load falls back to. */}
+                    {(() => {
+                      const src = post.image || post.thumbnailUrl || post.mediaUrl || null;
+                      const mark = (
+                        <div style={{ width: 44, height: 44, borderRadius: 11, background: meta.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <svg width={tpGlyphSize(uiKey, 20)} height={tpGlyphSize(uiKey, 20)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
+                        </div>
+                      );
+                      if (!src) return mark;
+                      return (
+                        <div style={{ position: "relative", width: 44, height: 44, flexShrink: 0 }}>
+                          <img src={src} alt="" loading="lazy"
+                            onError={(e) => { e.currentTarget.style.display = "none"; e.currentTarget.nextSibling.style.display = "flex"; }}
+                            style={{ width: 44, height: 44, borderRadius: 11, objectFit: "cover", display: "block",
+                              border: `1px solid ${theme.borderFaint}` }} />
+                          <div style={{ display: "none", position: "absolute", inset: 0, borderRadius: 11, background: meta.color,
+                            alignItems: "center", justifyContent: "center" }}>
+                            <svg width={tpGlyphSize(uiKey, 20)} height={tpGlyphSize(uiKey, 20)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
+                          </div>
+                          {/* Which network it was, still readable over the picture. */}
+                          <div style={{ position: "absolute", right: -4, bottom: -4, width: 18, height: 18, borderRadius: 6,
+                            background: meta.color, border: `2px solid ${theme.cardBg || (darkMode ? "#1c1c26" : "#fff")}`,
+                            display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <svg width={tpGlyphSize(uiKey, 9)} height={tpGlyphSize(uiKey, 9)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontFamily: FONT, color: theme.text, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{post.content || (de ? "(ohne Text)" : "(no text)")}</div>
                       <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6, fontSize: 11, fontFamily: FONT, color: theme.textDim, flexWrap: "wrap" }}>

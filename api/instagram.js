@@ -459,7 +459,9 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     const since = Math.floor(Date.now() / 1000) - days * 86400;
 
     const list = await ig(token, `/${row.ig_user_id}/media`, {
-      fields: "id,caption,media_type,permalink,timestamp,like_count,comments_count",
+      // media_url and thumbnail_url so a post can be SHOWN rather than only
+      // counted. A video has no media_url worth displaying, it has a thumbnail.
+      fields: "id,caption,media_type,permalink,timestamp,like_count,comments_count,media_url,thumbnail_url",
       limit: 50,
     });
     if (!list.ok) return json({ error: list.body?.error?.message || "media_failed" }, 502);
@@ -473,6 +475,7 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
         url: m.permalink || null,
         publishedAt: m.timestamp || null,
         mediaType: m.media_type || null,
+        image: m.thumbnail_url || m.media_url || null,
         likes: m.like_count ?? 0,
         comments: m.comments_count ?? 0,
       }));
@@ -526,14 +529,28 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     const who = (c) => {
       const username = c.from?.username || c.username || null;
       return { id: c.from?.id || null, username, name: username,
+        // The picture when Meta gives one. It is asked for below and simply
+        // absent when it is not allowed, which is why nothing here insists.
+        picture: c.from?.profile_picture_url || null,
         isOwner: (c.from?.id && c.from.id === row.ig_user_id) || (!!username && username === row.username) };
     };
+    // Asked WITH the commenter's picture, and again without it if Meta refuses
+    // the field. Whether a commenter's picture is readable by the account they
+    // commented on is not something the docs answer plainly, and the cheapest
+    // honest way to find out is to ask and to cope with a no.
+    const WITH_PIC = "id,text,timestamp,like_count,username,from{id,username,profile_picture_url},replies.limit(10){id,text,timestamp,like_count,username,from{id,username,profile_picture_url}}";
+    const PLAIN = "id,text,timestamp,like_count,username,from{id,username},replies.limit(10){id,text,timestamp,like_count,username,from{id,username}}";
+    let picFields = true;
     let refused = null;
     const perPost = await Promise.all(posts.map(async (m) => {
-      const r = await ig(token, `/${m.id}/comments`, {
-        fields: "id,text,timestamp,like_count,username,from{id,username},replies.limit(10){id,text,timestamp,like_count,username,from{id,username}}",
+      let r = await ig(token, `/${m.id}/comments`, {
+        fields: picFields ? WITH_PIC : PLAIN,
         limit: 25,
       });
+      if (!r.ok && picFields && r.status === 400) {
+        picFields = false;
+        r = await ig(token, `/${m.id}/comments`, { fields: PLAIN, limit: 25 });
+      }
       if (!r.ok) { refused = refused || r.body?.error || { message: "comments_failed" }; return []; }
       const base = { platform: "instagram", postId: m.id, postPermalink: m.permalink || null,
         postContent: (m.caption || "").slice(0, 140) };
