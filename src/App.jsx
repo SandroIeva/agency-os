@@ -1615,12 +1615,19 @@ function AISpeakingSphere({ darkMode = true, speaking = false, audioLevel = null
 // Returns { ok, url } or { ok: false, reason: "quota" | "fetch" | "upload" }.
 async function saveStockImage(item, { orgId, userId, email }) {
   if (!item?.full || !orgId) return { ok: false, reason: "fetch" };
-  let blob;
-  try {
-    const r = await fetch(`/api/img-proxy?url=${encodeURIComponent(item.full)}`);
-    if (!r.ok) return { ok: false, reason: "fetch" };
-    blob = await r.blob();
-  } catch { return { ok: false, reason: "fetch" }; }
+  // Zwei Quellen, die grosse zuerst. Lehnt der Hoster die eine ab, ist ein
+  // Beitrag mit dem kleineren Bild immer noch besser als eine Fehlermeldung,
+  // und bei Pixabay liegen die beiden auf verschiedenen Rechnern.
+  let blob = null;
+  let upstream = 0;
+  for (const src of [item.full, item.thumb].filter(Boolean)) {
+    try {
+      const r = await fetch(`/api/img-proxy?url=${encodeURIComponent(src)}`);
+      if (r.ok) { blob = await r.blob(); break; }
+      upstream = r.status;
+    } catch (_) { /* naechste Quelle */ }
+  }
+  if (!blob) return { ok: false, reason: "fetch", status: upstream };
 
   const room = await checkStorageRoom(orgId, blob.size, { userId, email });
   if (!room.ok) return { ok: false, reason: "quota", limit: room.limit };

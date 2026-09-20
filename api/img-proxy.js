@@ -34,8 +34,26 @@ export default async function handler(req) {
   catch (e) { return new Response(e instanceof BlockedUrlError ? e.message : "bad url", { status: 400 }); }
 
   try {
-    const { res } = await safeFetch(target, { maxBytes: MAX_BYTES, timeoutMs: 12000 });
-    if (!res.ok) return new Response("upstream " + res.status, { status: 502 });
+    // Wie ein Browser fragen, nicht wie ein Skript. Bildhoster mit
+    // Hotlink-Schutz (Pixabay zum Beispiel) beantworten eine Anfrage ohne
+    // Referer und mit bot-artiger Kennung mit 403, während dasselbe Bild im
+    // <img>-Tag desselben Nutzers laedt. Geholt wird ohnehin nur, was jemand in
+    // der App ausgewaehlt hat.
+    const { res } = await safeFetch(target, {
+      maxBytes: MAX_BYTES, timeoutMs: 12000,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        Accept: "image/avif,image/webp,image/png,image/jpeg,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        Referer: new URL(target).origin + "/",
+      },
+    });
+    if (!res.ok) {
+      // Der Grund gehört ins Log, sonst steht in der App nur "konnte nicht
+      // geladen werden" und niemand weiss, wer abgelehnt hat.
+      console.error("[img-proxy] upstream", res.status, new URL(target).host);
+      return new Response("upstream " + res.status, { status: 502 });
+    }
 
     const ct = (res.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
     if (!ALLOWED_TYPES.has(ct)) {
