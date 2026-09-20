@@ -33923,12 +33923,17 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // Dieselben Zeilen im Zeitpunkt-Fenster und unter der Uhr oben. Einmal
   // beschrieben, weil zwei Listen derselben Sache beim nächsten Handgriff
   // auseinanderlaufen.
-  // Zurück in den Composer: Text, Zeit und Kanäle stehen wieder da, die Medien
-  // bleiben die der Zeile, bis jemand neue wählt. Sie noch einmal in den Editor
-  // zu laden hieße, aus einer hochgeladenen Datei wieder eine lokale zu machen,
-  // und dafür gibt es keinen Weg zurück.
+  // Zurück in den Composer: Text, Zeit, Kanäle und die Bilder.
+  //
+  // Die Medien werden NICHT wieder heruntergeladen. Sie liegen bereits an einer
+  // Adresse, die der Browser anzeigen kann, also stehen sie als Folien mit
+  // genau dieser Adresse in der Bühne, und jede merkt sich in `orig`, welcher
+  // gespeicherte Eintrag sie ist. Beim Speichern wird dieser Eintrag
+  // unverändert weitergereicht: nur was jemand wirklich neu ausgewählt hat,
+  // wird hochgeladen.
   const openQueued = (q) => {
-    setEditing({ id: q.id, media: Array.isArray(q.media) ? q.media : [] });
+    const stored = Array.isArray(q.media) ? q.media : [];
+    setEditing({ id: q.id, media: stored });
     setText(q.body || "");
     const when = new Date(q.publish_at);
     setSchedule(new Date(when.getTime() - when.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
@@ -33937,6 +33942,30 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       || (t.provider === "threads" && a.threadsUserId && a.threadsUserId === t.threadsUserId))?.id)
       .filter(Boolean));
     clearVisual();
+    const remote = stored.map(m => ({
+      orig: m,
+      url: m.url || (m.bucket && m.path
+        ? supabase.storage.from(m.bucket).getPublicUrl(m.path).data?.publicUrl : null),
+      video: String(m.kind || "").toUpperCase() === "VIDEO",
+    })).filter(x => x.url);
+    if (remote.length) {
+      const [first, ...rest] = remote;
+      const behind = rest.map(r => ({ id: crypto.randomUUID(), file: null, url: r.url, video: r.video, orig: r.orig }));
+      if (first.video) {
+        setReel({ file: null, url: first.url, orig: first.orig });
+        setExtras(behind);
+      } else {
+        // Die Maße kommen vom Bild selbst. Gelesen wird es nie, nur gemessen,
+        // also braucht es dafür keine Freigabe der fremden Adresse.
+        imageFileRef.current = null;
+        const img = new Image();
+        img.onload = () => setVisual({ url: first.url, w: img.naturalWidth, h: img.naturalHeight, orig: first.orig });
+        img.onerror = () => setVisual({ url: first.url, w: 1080, h: 1080, orig: first.orig });
+        img.src = first.url;
+        setExtras(behind);
+      }
+      setSlideIdx(0);
+    }
     setResult(null); setError(null);
     setQueueOpen(false); setWhenOpen(false);
     setStepIdx(S_TEXT);
@@ -34130,7 +34159,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     imageFileRef.current = x.file;
     setOverlays([]); setSelOverlay(null);
     const img = new Image();
-    img.onload = () => setVisual({ url: x.url, w: img.naturalWidth, h: img.naturalHeight });
+    // `orig` wandert mit: sonst gälte eine nachgerückte Folie als neu und würde
+    // beim Speichern ein zweites Mal hochgeladen.
+    img.onload = () => setVisual({ url: x.url, w: img.naturalWidth, h: img.naturalHeight, orig: x.orig });
     img.src = x.url;
     setExtras(list => list.filter(e => e.id !== x.id));
   };
@@ -34321,23 +34352,30 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     return { bucket: "brand-assets", path };
   };
 
-  // Die Medien, die gerade im Editor liegen, hochgeladen und in der Form, die
-  // scheduled_posts speichert. Nur für das Speichern eines geplanten Beitrags:
-  // der normale Weg baut sie unterwegs, weil er sie auch gleich verschickt.
-  const uploadCurrentMedia = async () => {
+  // Die Folien, wie sie jetzt in der Bühne stehen, in der Form, die
+  // scheduled_posts speichert. Eine Folie ohne lokale Datei ist eine, die schon
+  // hochgeladen war: die reicht ihren gespeicherten Eintrag unverändert weiter,
+  // statt dieselbe Datei ein zweites Mal in den Speicher zu legen.
+  const mediaForSave = async () => {
     const out = [];
-    if (reel) out.push({ ...(await toMetaMedia(reel.file, reel.file.type,
-      (reel.file.name.split(".").pop() || "mp4").toLowerCase())), kind: "VIDEO" });
-    else {
+    if (reel) {
+      out.push(reel.file
+        ? { ...(await toMetaMedia(reel.file, reel.file.type, (reel.file.name.split(".").pop() || "mp4").toLowerCase())), kind: "VIDEO" }
+        : reel.orig);
+    } else if (visual) {
+      // exportVisual gibt null zurück, wenn die Datei nicht lokal vorliegt.
       const rendered = await exportVisual();
-      if (rendered) out.push({ ...(await toMetaMedia(rendered.blob, rendered.type, "jpg")), kind: "IMAGE" });
+      out.push(rendered
+        ? { ...(await toMetaMedia(rendered.blob, rendered.type, "jpg")), kind: "IMAGE" }
+        : visual.orig);
     }
     for (const x of extras) {
-      out.push({ ...(await toMetaMedia(x.file, x.file.type,
-        (x.file.name.split(".").pop() || (x.video ? "mp4" : "jpg")).toLowerCase())),
-        kind: x.video ? "VIDEO" : "IMAGE" });
+      out.push(x.file
+        ? { ...(await toMetaMedia(x.file, x.file.type, (x.file.name.split(".").pop() || (x.video ? "mp4" : "jpg")).toLowerCase())),
+            kind: x.video ? "VIDEO" : "IMAGE" }
+        : x.orig);
     }
-    return out;
+    return out.filter(Boolean);
   };
 
   const saveQueued = async () => {
@@ -34348,7 +34386,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     if (overLimit) { setError(new Error(de ? `Text zu lang (max. ${charLimit} Zeichen).` : `Text too long (max ${charLimit}).`)); setStepIdx(S_TEXT); return; }
     setBusy("save");
     try {
-      const fresh = (visual || reel) ? await uploadCurrentMedia() : (editing.media || []);
+      const fresh = await mediaForSave();
       const { error: uErr } = await supabase.from("scheduled_posts").update({
         body: text.trim() || null,
         publish_at: new Date(schedule).toISOString(),
