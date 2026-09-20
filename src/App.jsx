@@ -32013,7 +32013,6 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   const [accounts, setAccounts] = useState(null);   // null = loading
   const [data, setData] = useState(null);           // { top, followers, daily }
   const [platform, setPlatform] = useState("all");  // ui key or "all"
-  const [view, setView] = useState("social");       // "social" | "website"
   const [error, setError] = useState(null);
   const [busyKey, setBusyKey] = useState(null);     // platform being connected / account being removed
   const orgId = userOrg?.id;
@@ -32401,41 +32400,42 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
       onConnect={connectHere} />
   );
 
-  // A website is a channel like any other, so it sits beside the social numbers
-  // rather than in a place of its own. Same switch as the messenger uses.
-  const viewSwitch = (
-    <div style={{ display: "inline-flex", padding: 4, borderRadius: 999, marginBottom: 20,
-      background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-      {[["social", de ? "Social Media" : "Social media"], ["website", de ? "Website" : "Website"]].map(([key, label]) => {
-        const on = view === key;
-        return (
-          <motion.div key={key} whileTap={{ scale: 0.97 }} onClick={() => setView(key)}
-            style={{ padding: "8px 20px", borderRadius: 999, cursor: "pointer",
-              fontSize: 12.5, fontFamily: FONT, fontWeight: on ? 600 : 500,
-              // Quiet on purpose: this only picks which numbers are on screen,
-              // and a black pill claimed more attention than the choice is worth.
-              background: on ? (darkMode ? "rgba(255,255,255,0.12)" : "#fff") : "transparent",
-              color: on ? theme.text : theme.textDim,
-              boxShadow: on && !darkMode ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
-              transition: "background .16s ease, color .16s ease" }}>
-            {label}
-          </motion.div>
-        );
-      })}
-    </div>
-  );
-
-  if (view === "website") return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
-      {viewSwitch}
-      <WebsitePresencePanel theme={theme} darkMode={darkMode} appLanguage={appLanguage}
-        session={session} userOrg={userOrg} projectId={projectId} />
+  // The website used to sit behind a switch at the top, beside "Social Media",
+  // as if it were a second dashboard. It is not: it is one more thing to look
+  // at on this one, so it stands further down in a section of its own, the
+  // way the strategy teaser does under Touchpoints (owner, 2026-09-20).
+  const websiteSection = (
+    <div style={{ marginTop: 34 }}>
+      <div style={secLabel}>{de ? "Website" : "Website"}</div>
+      <div style={{ borderRadius: 18, border: `1px solid ${theme.borderFaint}`, padding: 22,
+        background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 13, background: "#15151c", flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c-2.5 3-3.5 6-3.5 9s1 6 3.5 9M12 3c2.5 3 3.5 6 3.5 9s-1 6-3.5 9" />
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
+              {de ? "Deine Website prüfen" : "Check your website"}
+            </div>
+            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.55, marginTop: 6, maxWidth: 560 }}>
+              {de ? "Wir lesen die Startseite und halten sie gegen deine Marke: Was sie verspricht, wie sie klingt und was fehlt. Jede Prüfung wird gespeichert, damit du siehst, was sich seit dem letzten Mal geändert hat."
+                  : "We read the front page and hold it against your brand: what it promises, how it sounds and what is missing. Every check is kept, so you can see what changed since the last one."}
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <WebsitePresencePanel theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+                session={session} userOrg={userOrg} projectId={projectId} />
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
-      {viewSwitch}
       {/* Zernio connects one set of accounts per WORKSPACE, so there are no
           per-brand social numbers to show. Drawing the workspace's under a
           customer's brand without saying so reads as that customer's reach. */}
@@ -32757,6 +32757,9 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
           </div>
         </>
       )}
+      {/* Outside the branch above on purpose: a workspace with no social
+          account at all still has a website. */}
+      {websiteSection}
     </div>
   );
 }
