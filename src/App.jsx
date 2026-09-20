@@ -34925,9 +34925,16 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   {/* Der Zeitpunkt steht oben, nicht unten: der Fuß trägt
                       schon das Plus, Abbrechen und Speichern, und "wann" ist
                       keine Aktion, sondern eine Eigenschaft des Beitrags. */}
-                  <span onClick={() => setWhenOpen(o => !o)}
+                  {/* Solange weder Text noch Bild da ist, gibt es nichts zu
+                      planen. Der Auslöser steht dann blass da statt ein Fenster
+                      zu öffnen, in dem man eine Zeit für nichts wählt. */}
+                  <span onClick={() => { if (text.trim() || hasMedia) setWhenOpen(o => !o); }}
+                    title={(text.trim() || hasMedia) ? undefined
+                      : (de ? "Erst Text oder Visual, dann der Zeitpunkt." : "Text or a visual first, then the time.")}
                     style={{ padding: "0 10px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
-                      color: schedule ? theme.text : theme.textDim, cursor: "pointer", whiteSpace: "nowrap" }}>
+                      color: schedule ? theme.text : theme.textDim,
+                      opacity: (text.trim() || hasMedia) ? 1 : 0.35,
+                      cursor: (text.trim() || hasMedia) ? "pointer" : "default", whiteSpace: "nowrap" }}>
                     {schedule
                       ? new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(schedule))
                       : (de ? "Später" : "Later")}
@@ -35203,10 +35210,13 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                             /* Dieselbe Rundung wie die Schritt-Reiter darüber und das
                                Textfeld daneben. Eine Pille neben lauter 12ern liest
                                sich als anderes Bauteil. */
-                            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 12px 11px 9px", borderRadius: 12, cursor: "pointer",
+                            /* Kein Rahmen: die weiße Fläche auf dem grauen Grund ist
+                               schon die Karte, und was gewählt ist, sagt der Haken.
+                               Rundum dasselbe Innenmaß, damit Logo und Haken gleich
+                               weit von ihrer Kante stehen. */
+                            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: 14, borderRadius: 12, cursor: "pointer",
                               background: darkMode ? "rgba(255,255,255,0.05)" : "#fff",
-                              border: `1px solid ${on ? theme.border : theme.borderFaint}`,
-                              color: theme.text, transition: "border-color 0.15s ease" }}>
+                              color: theme.text }}>
                             <div style={{ width: 24, height: 24, borderRadius: 8, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                               <svg width={tpGlyphSize(uiKey, 14)} height={tpGlyphSize(uiKey, 14)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
                             </div>
@@ -35557,7 +35567,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         border: `1px solid ${overLimit ? "#E86767" : theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.6)",
                         color: theme.text, fontSize: 15, fontFamily: FONT, lineHeight: 1.65, outline: "none", resize: "none", caretColor: theme.text }} />
                     <div style={{ position: "absolute", left: 20, bottom: 17, display: "flex", alignItems: "center", gap: 16 }}>
-                    <div style={{ position: "relative" }}>
+                    {/* display flex, sonst sitzt das Zeichen auf der Textlinie
+                        dieses Rahmens und hängt ein paar Pixel zu hoch. */}
+                    <div style={{ position: "relative", display: "flex", alignItems: "center", lineHeight: 0 }}>
                       {/* Nur das Zeichen, ohne Wort: was es tut, sagt der
                             Picker beim Öffnen. lineHeight 0, damit die Box
                             genau so hoch ist wie das Zeichen und in der Reihe
@@ -35569,8 +35581,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           color: emojiOpen ? theme.text : theme.textFaint }}>
                         {/* Ein gezeichneter Smiley, kein Emoji: ein Emoji als
                             Bedienelement zeichnet jedes Betriebssystem anders. */}
-                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                          strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                           <circle cx="12" cy="12" r="9" /><path d="M8 14s1.5 2 4 2 4-2 4-2" />
                           <line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" />
                         </svg>
@@ -35752,14 +35764,14 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   getroffen. Gleiche Breite, sonst liest sich das Paar schief. */}
               {editing && (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={stopEditing}
-                  style={{ ...footBtn, minWidth: 124, marginRight: 10, padding: "0 18px",
+                  style={{ ...footBtn, minWidth: 92, marginRight: 5, padding: "0 12px",
                     border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, cursor: "pointer" }}>
                   {de ? "Abbrechen" : "Cancel"}
                 </motion.button>
               )}
               {editing ? (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={saveQueued} disabled={Boolean(busy)}
-                  style={{ ...footBtn, minWidth: 124, padding: "0 18px", border: "none",
+                  style={{ ...footBtn, minWidth: 92, padding: "0 12px", border: "none",
                     background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
                     cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}>
                   {busy === "save" ? (de ? "Wird gespeichert…" : "Saving…") : (de ? "Speichern" : "Save")}
