@@ -33666,7 +33666,19 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // objectPosition: 0 zeigt den linken/oberen Rand, 1 den rechten/unteren. Die
   // Ansicht und der Export rechnen mit derselben Zahl, sonst postet man etwas
   // anderes, als man gesehen hat.
-  const [storyFocus, setStoryFocus] = useState({ x: 0.5, y: 0.5 });
+  // Zuschnitt je Folie: { folienSchlüssel: { ratio, x, y } }. ratio ist Breite
+  // geteilt durch Höhe, x und y sind der sichtbare Ausschnitt wie bei
+  // objectPosition. Die Story ist davon nur ein Sonderfall mit festem 9:16,
+  // den der Schalter erzwingt; alles andere wählt man am Bild selbst.
+  //
+  // Warum es das gibt: Instagram nimmt im Feed nur Seitenverhältnisse zwischen
+  // 4:5 und 1,91:1. Ein hochkantes Handyfoto ist 9:16 und fällt durch. Wer kein
+  // Bildprogramm offen hat, schneidet es hier zurecht statt woanders.
+  const [crops, setCrops] = useState({});
+  const CROP_RATIOS = [
+    ["4:5", 4 / 5, "Instagram, hochkant", "Instagram, portrait"],
+    ["1:1", 1, "Quadratisch", "Square"],
+  ];
   const extraRef = useRef(null);
   // Where a video can actually go. All three direct networks take one:
   // Instagram as a reel, Threads as a video post, TikTok as the only thing it
@@ -33722,10 +33734,18 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // da ist, und wird schmaler, wenn die Breite nicht reicht. Ein Video wird
   // nicht beschnitten: dafür müsste es neu berechnet werden, und das gehört
   // nicht in einen Browser-Tab.
-  const storyBox = (igStory && visual && !curSlide?.video && viewBox.h > 0)
+  // Was gerade gilt: die Story schlägt einen gewählten Zuschnitt, weil sie ein
+  // Ziel ist und kein Geschmack.
+  const slideCrop = crops[slideKey] || null;
+  const cropRatio = igStory ? (9 / 16) : (slideCrop?.ratio ?? null);
+  const cropFocus = { x: slideCrop?.x ?? 0.5, y: slideCrop?.y ?? 0.5 };
+  const setCropFocus = (f) => setCrops(prev => ({
+    ...prev, [slideKey]: { ...(prev[slideKey] || {}), ratio: prev[slideKey]?.ratio ?? null, ...f },
+  }));
+  const storyBox = (cropRatio && visual && !curSlide?.video && viewBox.h > 0)
     ? (() => {
-        const h = Math.min(viewBox.h, viewBox.w * (16 / 9));
-        return { w: h * (9 / 16), h };
+        const h = Math.min(viewBox.h, viewBox.w / cropRatio);
+        return { w: h * cropRatio, h };
       })()
     : null;
   // Ziehen verschiebt den Ausschnitt, nicht das Bild: bewegt wird um den Teil,
@@ -33737,9 +33757,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     const scale = Math.max(frame.width / visual.w, frame.height / visual.h);
     const overX = visual.w * scale - frame.width;
     const overY = visual.h * scale - frame.height;
-    const from = { x: e.clientX, y: e.clientY, fx: storyFocus.x, fy: storyFocus.y };
+    const from = { x: e.clientX, y: e.clientY, fx: cropFocus.x, fy: cropFocus.y };
     const clamp = (v) => Math.min(1, Math.max(0, v));
-    const move = (ev) => setStoryFocus({
+    const move = (ev) => setCropFocus({
       x: overX > 1 ? clamp(from.fx - (ev.clientX - from.x) / overX) : from.fx,
       y: overY > 1 ? clamp(from.fy - (ev.clientY - from.y) / overY) : from.fy,
     });
@@ -33751,6 +33771,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     window.addEventListener("pointerup", up);
   };
   const [addMenu, setAddMenu] = useState(false);
+  const [slideMenu, setSlideMenu] = useState(false);
   const [overlayPicker, setOverlayPicker] = useState(null);   // "fg" | "bg" | null
   // Geschrieben wird dort, wo der Text steht. Ein Feld in der Leiste ist ein
   // Umweg über den Bildschirmrand, und man sieht beim Tippen nicht, wie es
@@ -34622,6 +34643,26 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
   // Render the composition (image + text overlays) to a JPEG at the image's
   // natural resolution. No overlays → the original file is used untouched.
+  // Ein Bild auf ein Seitenverhältnis bringen, mit demselben Ausschnitt, den
+  // die Bühne zeigt: 1080 breit, die Höhe folgt dem Verhältnis, gefüllt wie
+  // objectFit cover und verschoben wie objectPosition. Eine Formel für die
+  // Ansicht und den Export, sonst postet man etwas anderes, als man gesehen hat.
+  const renderCrop = async (file, ratio, focus, list) => {
+    try { await document.fonts?.load(`700 64px Geist`); await document.fonts?.load(`500 64px Geist`); } catch (_) {}
+    const bmp = await createImageBitmap(file);
+    const W = 1080, H = Math.round(1080 / ratio);
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+    const scale = Math.max(W / bmp.width, H / bmp.height);
+    const rw = bmp.width * scale, rh = bmp.height * scale;
+    ctx.drawImage(bmp, (W - rw) * (focus?.x ?? 0.5), (H - rh) * (focus?.y ?? 0.5), rw, rh);
+    drawOverlays(ctx, W, H, list);
+    const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.92));
+    return blob ? { blob, type: "image/jpeg", name: "visual.jpg" } : null;
+  };
+
   // Text und Emoji fest ins Bild. Zweimal gebraucht, für die Story und für den
   // normalen Beitrag, und beide Male in Anteilen der Fläche, auf der sie
   // platziert wurden.
@@ -34659,7 +34700,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // nur neu komprimieren.
   const exportExtra = async (x) => {
     const list = overlays[x.id] || [];
-    if (!list.length || x.video || !x.file) return null;
+    const c = crops[x.id];
+    if (x.video || !x.file) return null;
+    if (c?.ratio) return renderCrop(x.file, c.ratio, c, list);
+    if (!list.length) return null;
     try { await document.fonts?.load(`700 64px Geist`); await document.fonts?.load(`500 64px Geist`); } catch (_) {}
     const bmp = await createImageBitmap(x.file);
     const canvas = document.createElement("canvas");
@@ -34676,25 +34720,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     if (!file || !visual) return null;
     // Für eine Story wird beschnitten, und zwar auf denselben Ausschnitt, den
     // die Bühne zeigt: dieselbe Formel, die objectPosition benutzt.
-    if (igStory) {
-      // Erst die Schrift, dann zeichnen: sonst rendert der erste Export in einer
-      // Ersatzschrift und sieht anders aus als die Bühne.
-      try { await document.fonts?.load(`700 64px Geist`); await document.fonts?.load(`500 64px Geist`); } catch (_) {}
-      const bmp = await createImageBitmap(file);
-      const W = 1080, H = 1920;
-      const canvas = document.createElement("canvas");
-      canvas.width = W; canvas.height = H;
-      const ctx = canvas.getContext("2d");
-      ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
-      const scale = Math.max(W / bmp.width, H / bmp.height);
-      const rw = bmp.width * scale, rh = bmp.height * scale;
-      ctx.drawImage(bmp, (W - rw) * storyFocus.x, (H - rh) * storyFocus.y, rw, rh);
-      // Dieselben Anteile wie auf der Bühne, nur auf 1080 gerechnet: die
-      // Elemente liegen im Rahmen der Story, nicht im Originalbild.
-      drawOverlays(ctx, W, H, overlays.main || []);
-      const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.92));
-      if (!blob) throw new Error(de ? "Story konnte nicht gerendert werden." : "Could not render the story.");
-      return { blob, type: "image/jpeg", name: "story.jpg" };
+    if (cropRatio) {
+      const rendered = await renderCrop(file, cropRatio, cropFocus, overlays.main || []);
+      if (!rendered) throw new Error(de ? "Zuschnitt konnte nicht gerendert werden." : "Could not render the crop.");
+      return rendered;
     }
     const mainOverlays = overlays.main || [];
     if (mainOverlays.length === 0) return { blob: file, type: file.type || "image/png", name: file.name };
@@ -35788,7 +35817,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                             const next = !v;
                             if (next) setSelectedIds(ids => ids.filter(id =>
                               (accounts || []).find(a => a.id === id)?.provider === "meta"));
-                            setStoryFocus({ x: 0.5, y: 0.5 });
+                            setCrops(prev => ({ ...prev, main: { ...(prev.main || {}), x: 0.5, y: 0.5 } }));
                             return next;
                           })} />
                       </div>
@@ -36182,7 +36211,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                           <img src={currentMediaUrl} alt="" draggable={false}
                             onLoad={e => setLoadedMedia({ url: currentMediaUrl, w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
                             style={{ display: "block", width: "100%", height: "100%", objectFit: "cover",
-                              objectPosition: `${storyFocus.x * 100}% ${storyFocus.y * 100}%` }} />
+                              objectPosition: `${cropFocus.x * 100}% ${cropFocus.y * 100}%` }} />
                           <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "18px 12px 10px",
                             textAlign: "center", pointerEvents: "none",
                             background: "linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0))",
@@ -36255,13 +36284,74 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         );
                       })}
 
-                      {/* Removes the slide you are looking at, or the video. */}
-                      <motion.div whileTap={{ scale: 0.9 }} onClick={removeCurrentSlide}
-                        style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 999,
-                          background: "rgba(21,21,28,0.72)", color: "#fff", display: "flex", alignItems: "center",
-                          justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                      </motion.div>
+                      {/* Was mit dieser Folie geschehen kann. Vorher stand hier ein
+                          Kreuz und konnte nur eines: löschen. Ein Zuschnitt gehört an
+                          dieselbe Stelle, denn er betrifft dieselbe Folie. */}
+                      <div style={{ position: "absolute", top: 10, right: 10 }}>
+                        <motion.div whileTap={{ scale: 0.9 }}
+                          onClick={(e) => { e.stopPropagation(); setSlideMenu(o => !o); }}
+                          title={de ? "Diese Folie" : "This slide"}
+                          style={{ width: 30, height: 30, borderRadius: 999,
+                            background: "rgba(21,21,28,0.72)", color: "#fff", display: "flex", alignItems: "center",
+                            justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" }}>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                            <circle cx="9" cy="12" r="1.7" /><circle cx="15" cy="12" r="1.7" />
+                          </svg>
+                        </motion.div>
+                        {slideMenu && (<>
+                          <div onPointerDown={(e) => { e.stopPropagation(); setSlideMenu(false); }}
+                            style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+                          <div onPointerDown={(e) => e.stopPropagation()}
+                            style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 31,
+                              minWidth: 246, padding: 8, borderRadius: 16,
+                              background: darkMode ? "#1c1c24" : "#ffffff",
+                              border: `1px solid ${theme.borderFaint}`,
+                              boxShadow: "0 18px 50px rgba(0,0,0,0.26)" }}>
+                            {/* Zuschneiden gibt es nur für Bilder: ein Video dafür neu
+                                zu berechnen gehört nicht in einen Browser-Tab. Und
+                                nicht in der Story, die schreibt ihr Format selbst vor. */}
+                            {!curSlide?.video && !igStory && CROP_RATIOS.map(([label2, ratio, dde, een]) => (
+                              <div key={label2} className="hover-row"
+                                onClick={() => {
+                                  setCrops(prev => ({ ...prev, [slideKey]: { ratio, x: prev[slideKey]?.x ?? 0.5, y: prev[slideKey]?.y ?? 0.5 } }));
+                                  setSlideMenu(false);
+                                }}
+                                style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 12px",
+                                  borderRadius: 12, cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
+                                  fontWeight: 600, color: theme.text }}>
+                                <span style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0,
+                                  border: `1.6px solid ${slideCrop?.ratio === ratio ? theme.text : theme.textFaint}`,
+                                  // Das Kästchen zeigt das Verhältnis, das es setzt.
+                                  transform: `scaleX(${Math.min(1, ratio)}) scaleY(${Math.min(1, 1 / ratio)})` }} />
+                                <span style={{ flex: 1 }}>{de ? dde : een}</span>
+                                <span style={{ fontSize: 11, color: theme.textFaint }}>{label2}</span>
+                              </div>
+                            ))}
+                            {slideCrop?.ratio && !igStory && (
+                              <div className="hover-row"
+                                onClick={() => { setCrops(prev => ({ ...prev, [slideKey]: { ...prev[slideKey], ratio: null } })); setSlideMenu(false); }}
+                                style={{ padding: "11px 12px", borderRadius: 12, cursor: "pointer",
+                                  fontFamily: FONT, fontSize: 12.5, color: theme.textDim }}>
+                                {de ? "Zuschnitt aufheben" : "Remove the crop"}
+                              </div>
+                            )}
+                            {!curSlide?.video && !igStory && (
+                              <div style={{ height: 1, background: theme.borderFaint, margin: "6px 10px" }} />
+                            )}
+                            <div className="hover-row"
+                              onClick={() => { setSlideMenu(false); removeCurrentSlide(); }}
+                              style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 12px",
+                                borderRadius: 12, cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
+                                fontWeight: 600, color: theme.text }}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.75 }}>
+                                <path d="M18 6L6 18M6 6l12 12" />
+                              </svg>
+                              {de ? "Entfernen" : "Remove"}
+                            </div>
+                          </div>
+                        </>)}
+                      </div>
 
                       </div>
                       </div>
