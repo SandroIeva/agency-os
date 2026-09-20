@@ -33675,6 +33675,24 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   };
   const [addMenu, setAddMenu] = useState(false);
   const [overlayPicker, setOverlayPicker] = useState(null);   // "fg" | "bg" | null
+  // Geschrieben wird dort, wo der Text steht. Ein Feld in der Leiste ist ein
+  // Umweg über den Bildschirmrand, und man sieht beim Tippen nicht, wie es
+  // aussieht.
+  //
+  // Ein eigenes Textfeld ÜBER dem Element statt contentEditable: React zeichnet
+  // bei jedem Zeichen neu, und der Cursor springt dabei ans Ende. Das Feld
+  // gehört sich selbst, bis es fertig ist.
+  const [editingOverlay, setEditingOverlay] = useState(null);
+  const [overlayDraft, setOverlayDraft] = useState("");
+  const startOverlayEdit = (o) => { setEditingOverlay(o.id); setOverlayDraft(o.text); setSelOverlay(o.id); };
+  const commitOverlayEdit = () => {
+    if (!editingOverlay) return;
+    const text = overlayDraft.trim() ? overlayDraft : (de ? "Dein Text" : "Your text");
+    patchOverlay(editingOverlay, { text });
+    setEditingOverlay(null);
+  };
+  const SIZE_PRESETS = [16, 24, 32, 48, 64, 80, 96, 128, 160, 200, 260, 320];
+  const [sizeList, setSizeList] = useState(false);
   // Wo der Wähler aufgeht. Am Bildschirm gemessen, weil er dort hängt.
   const [pickerAt, setPickerAt] = useState({ top: 120, left: 120 });
   const openOverlayPicker = (what, e) => {
@@ -34425,6 +34443,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     }] }));
     setSelOverlay(id);
     setJustAdded({ id, at });
+    // Ein frisch gesetzter Text will beschrieben werden. Er steht schon da und
+    // ist markiert, also ersetzt das erste Zeichen ihn.
+    if (kind === "text") { setEditingOverlay(id); setOverlayDraft(text || (de ? "Dein Text" : "Your text")); }
     setAddMenu(false); setStickerOpen(false);
   };
   // Ausrichten am Rahmen. Die Maße des Elements kommen aus dem DOM: ein Text
@@ -35943,27 +35964,45 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                             display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 14,
                             background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
                             border: `1px solid ${theme.borderFaint}`, boxShadow: "0 12px 34px rgba(0,0,0,0.22)" }}>
-                          <input value={selectedOverlayObj.text}
-                            onChange={(e) => patchOverlay(selectedOverlayObj.id, { text: e.target.value })}
-                            placeholder={de ? "Text" : "Text"}
-                            style={{ width: 140, border: "none", outline: "none", background: "transparent",
-                              color: theme.text, fontSize: 12.5, fontFamily: FONT, caretColor: theme.text }} />
-                          <div style={{ width: 1, height: 20, background: theme.borderFaint }} />
-                          {/* Die Größe als Zahl, wie im Artboard: gemessen auf der
-                              Breite, mit der exportiert wird, damit 48 auch 48
-                              heißt und nicht ein Anteil von irgendetwas. */}
-                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                            <input type="number" min="8" max="600"
-                              value={Math.round(selectedOverlayObj.size * 1080)}
-                              onChange={(e) => {
-                                const v = Number(e.target.value);
-                                if (!Number.isFinite(v) || v <= 0) return;
-                                patchOverlay(selectedOverlayObj.id, { size: Math.min(0.6, Math.max(0.01, v / 1080)) });
-                              }}
-                              style={{ width: 46, border: "none", outline: "none", borderRadius: 8, padding: "5px 6px",
-                                background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5",
-                                color: theme.text, fontSize: 12, fontFamily: FONT, textAlign: "center" }} />
-                            <span style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint }}>px</span>
+                          {/* Zahl tippen oder eine aus der Liste nehmen, dieselben
+                              Stufen wie im Artboard. Keine Pfeilchen: die trifft
+                              niemand gern, und sie zählen in Einerschritten. */}
+                          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 2,
+                            borderRadius: 8, paddingRight: 2,
+                            background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }}>
+                            <NumberField value={Math.round(selectedOverlayObj.size * 1080)} min={8} max={600}
+                              onCommit={(v) => patchOverlay(selectedOverlayObj.id, { size: Math.min(0.6, Math.max(0.01, v / 1080)) })}
+                              style={{ width: 44, height: 26, border: "none", outline: "none", background: "transparent",
+                                color: theme.text, fontFamily: FONT, fontSize: 12, textAlign: "center" }} />
+                            <div onClick={() => setSizeList(v => !v)} title={de ? "Schriftgrößen" : "Font sizes"}
+                              style={{ width: 16, height: 26, display: "flex", alignItems: "center",
+                                justifyContent: "center", cursor: "pointer" }}>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={theme.textDim}
+                                strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                            </div>
+                            {sizeList && (<>
+                              <div onClick={() => setSizeList(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+                              <div className="no-scrollbar"
+                                style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 31,
+                                  width: 84, maxHeight: 220, overflowY: "auto", padding: 6, borderRadius: 14,
+                                  background: darkMode ? "#1c1c24" : "#ffffff",
+                                  border: `1px solid ${theme.borderFaint}`,
+                                  boxShadow: "0 12px 34px rgba(0,0,0,0.22)" }}>
+                                {SIZE_PRESETS.map(sz => {
+                                  const on2 = Math.round(selectedOverlayObj.size * 1080) === sz;
+                                  return (
+                                    <div key={sz} className="hover-row"
+                                      onClick={() => { patchOverlay(selectedOverlayObj.id, { size: sz / 1080 }); setSizeList(false); }}
+                                      style={{ padding: "7px 10px", borderRadius: 9, cursor: "pointer",
+                                        fontFamily: FONT, fontSize: 12.5, color: theme.text,
+                                        fontWeight: on2 ? 700 : 400,
+                                        background: on2 ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)") : "transparent" }}>
+                                      {sz}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </>)}
                           </div>
                           <div onClick={() => patchOverlay(selectedOverlayObj.id, { bold: !selectedOverlayObj.bold })}
                             title={de ? "Fett" : "Bold"}
@@ -36082,7 +36121,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         );
                         return (
                           <div key={o.id} ref={el => { overlayNodes.current[o.id] = el; }}
-                            onPointerDown={(e) => onOverlayDown(e, o)}
+                            onPointerDown={(e) => { if (editingOverlay !== o.id) onOverlayDown(e, o); }}
+                            onDoubleClick={(e) => { if (o.kind !== "emoji") { e.stopPropagation(); startOverlayEdit(o); } }}
                             style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`,
                               color: o.color, background: o.bg || "transparent",
                               padding: pad, borderRadius: o.bg ? px * 0.14 : 0,
@@ -36091,9 +36131,28 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                               transform: `rotate(${o.rot || 0}deg) translate(${-pad}px, ${-pad}px)`,
                               transformOrigin: "0 0",
                               outline: on ? "1.5px dashed rgba(77,159,255,0.9)" : "none", outlineOffset: 3 }}>
-                            {o.text}
-                            {on && grip({ right: -7, bottom: -7 }, "nwse-resize", "scale", false)}
-                            {on && grip({ right: -7, top: -7 }, "grab", "rotate", true)}
+                            {editingOverlay === o.id ? (<>
+                              {/* Unsichtbar, aber maßgebend: der Rahmen ist so groß
+                                  wie der Text, den man gerade tippt, und das Feld
+                                  liegt genau darauf. */}
+                              <span style={{ visibility: "hidden" }}>{overlayDraft || " "}</span>
+                              <textarea autoFocus value={overlayDraft} rows={1}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => setOverlayDraft(e.target.value)}
+                                onBlur={commitOverlayEdit}
+                                onKeyDown={(e) => {
+                                  e.stopPropagation();
+                                  if (e.key === "Escape" || (e.key === "Enter" && !e.shiftKey)) { e.preventDefault(); commitOverlayEdit(); }
+                                }}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                style={{ position: "absolute", inset: pad, width: "100%", height: "100%",
+                                  padding: 0, margin: 0, border: "none", outline: "none", resize: "none",
+                                  background: "transparent", color: o.color, font: "inherit",
+                                  fontWeight: "inherit", lineHeight: "inherit", whiteSpace: "pre",
+                                  overflow: "hidden", caretColor: o.color }} />
+                            </>) : o.text}
+                            {on && editingOverlay !== o.id && grip({ right: -7, bottom: -7 }, "nwse-resize", "scale", false)}
+                            {on && editingOverlay !== o.id && grip({ right: -7, top: -7 }, "grab", "rotate", true)}
                           </div>
                         );
                       })}
