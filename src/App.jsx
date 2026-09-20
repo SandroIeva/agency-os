@@ -35339,6 +35339,21 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         </div>
                         <ToggleSwitch on={igStory} onClick={() => setIgStory(v => !v)} darkMode={darkMode} />
                       </div>
+                      {/* Instagram nimmt über die API für eine Story KEINEN Text
+                          entgegen, weder Bildunterschrift noch Sticker. Ohne
+                          diesen Satz verschwindet eine geschriebene
+                          Beschreibung beim Posten stillschweigend. */}
+                      {igStory && text.trim() && (
+                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${theme.borderFaint}`,
+                          fontSize: 11.5, fontFamily: FONT, lineHeight: 1.5,
+                          color: selected.some(a => a.provider !== "meta") ? theme.textDim : "#E86767" }}>
+                          {selected.some(a => a.provider !== "meta")
+                            ? (de ? "Deine Beschreibung geht an die anderen gewählten Kanäle. In eine Story nimmt Instagram keinen Text an."
+                                  : "Your description goes to the other selected channels. Instagram takes no text for a story.")
+                            : (de ? "Instagram nimmt für eine Story keinen Text an. Deine Beschreibung geht dann nirgendwohin."
+                                  : "Instagram takes no text for a story, so your description would go nowhere.")}
+                        </div>
+                      )}
                     </div>
                   )}
 
