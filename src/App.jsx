@@ -63221,12 +63221,15 @@ export default function CircularMenu() {
                         placeholder={appLanguage === "de" ? "Neues Passwort" : "New password"}
                         style={{ ...wsFieldText, flex: 1, minWidth: 120, padding: "4px 2px", border: "none", outline: "none", background: "transparent" }}
                       />
-                      <motion.div whileHover={wsFieldBtnHover} whileTap={{ scale: 0.95 }}
-                        onClick={() => setShowPwNew(v => !v)}
+                      {/* Just the eye, the way the login screen has it: it
+                          switches what the field shows, it does not act on
+                          anything, and a button ground beside Speichern read as
+                          a second action. */}
+                      <div onClick={() => setShowPwNew(v => !v)}
                         title={showPwNew ? (appLanguage === "de" ? "Passwort verbergen" : "Hide password") : (appLanguage === "de" ? "Passwort anzeigen" : "Show password")}
-                        style={{ ...wsFieldBtn, width: 39, minWidth: 39, padding: 0 }}>
+                        style={{ display: "flex", alignItems: "center", cursor: "pointer", color: theme.textDim, padding: "0 2px", flexShrink: 0 }}>
                         {EYE_ICON(showPwNew)}
-                      </motion.div>
+                      </div>
                       <motion.div whileHover={wsFieldBtnHover} whileTap={{ scale: 0.97 }}
                         onClick={pwSaving ? undefined : savePassword}
                         style={{ ...wsFieldBtn, opacity: pwSaving ? 0.6 : 1 }}>
