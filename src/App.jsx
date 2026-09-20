@@ -33670,6 +33670,20 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   }, [visual, stepIdx, !!reel]);
 
   const selected = (accounts || []).filter(a => selectedIds.includes(a.id));
+  // One connected channel is not a choice, it is the answer. It used to start
+  // unticked like any other, so the only way to find out that a post needed a
+  // channel at all was to reach the last step and be told.
+  //
+  // Keyed on WHICH accounts there are, not on how many times the list was
+  // fetched: taking the only one out again has to stay taken out, and that is
+  // the same list. A newly connected second channel makes it a real question,
+  // so nothing is pre-ticked from then on.
+  const accountKey = (accounts || []).map(a => a.id).sort().join("|");
+  const soleChannel = () => (accounts || []).length === 1 ? [accounts[0].id] : [];
+  useEffect(() => {
+    const only = soleChannel();
+    if (only.length) setSelectedIds(only);
+  }, [accountKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── TikTok's own rules ─────────────────────────────────────────────────────
   // TikTok decides per CREATOR what may be posted: which privacy levels that
@@ -34391,7 +34405,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
         platforms: parts,
       };
       setResult(r);
-      if (r.status !== "failed" && !isDraft) { setText(""); clearVisual(); setSchedule(""); setSelectedIds([]); }
+      // The channel survives a post when it is the only one: emptying it would
+      // put the person back in front of the same one-item question.
+      if (r.status !== "failed" && !isDraft) { setText(""); clearVisual(); setSchedule(""); setSelectedIds(soleChannel()); }
     } catch (e) { setError(e); }
     setBusy(null);
   };
@@ -34428,7 +34444,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       {/* The picture first and with the room, the way the Visual step shows
           it. The profile bar that used to sit on top was a drawing of a header
           nobody needed, and it pushed the picture out of a card that clips. */}
-      {visual && (
+      {(visual || reel) && (
         /* Mini composited preview — same relative overlay coordinates as the
            editor; cqw units (container query width) keep the text-to-image scale
            identical at this smaller size. */
@@ -34441,8 +34457,16 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
             @media (hover: none) { .post-preview-arrow { opacity: 1; pointer-events: auto; } }
             @media (prefers-reduced-motion: reduce) { .post-preview-arrow { transition: none; } }
           `}</style>
-          <img src={slides[slideIdx]?.url || visual.url} alt=""
-            style={{ display: "block", maxWidth: "calc(100% - 48px)", maxHeight: "calc(100% - 48px)", width: "auto", height: "auto", objectFit: "contain" }} />
+          {/* A video previews as a video. This card drew itself only when
+              there was a `visual`, and a reel is not one, so the last step
+              showed a caption under an empty box. */}
+          {reel ? (
+            <video src={reel.url} controls playsInline preload="metadata"
+              style={{ display: "block", maxWidth: "calc(100% - 48px)", maxHeight: "calc(100% - 48px)", width: "auto", height: "auto", objectFit: "contain" }} />
+          ) : (
+            <img src={slides[slideIdx]?.url || visual.url} alt=""
+              style={{ display: "block", maxWidth: "calc(100% - 48px)", maxHeight: "calc(100% - 48px)", width: "auto", height: "auto", objectFit: "contain" }} />
+          )}
           {slideIdx === 0 && overlays.map(o => (
             <div key={o.id} style={{ position: "absolute", left: `${o.x * 100}%`, top: `${o.y * 100}%`, color: o.color, fontFamily: FONT, fontWeight: o.bold ? 700 : 500, fontSize: `${o.size * 100}cqw`, lineHeight: 1.22, whiteSpace: "pre", pointerEvents: "none" }}>{o.text}</div>
           ))}
