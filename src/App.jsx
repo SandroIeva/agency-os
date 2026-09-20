@@ -34944,7 +34944,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       cursor: (text.trim() || hasMedia) ? "pointer" : "default", whiteSpace: "nowrap" }}>
                     {schedule
                       ? new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(schedule))
-                      : (de ? "Später" : "Later")}
+                      : (de ? "Beitrag planen" : "Schedule post")}
                   </span>
                   {whenOpen && (<>
                     <div onClick={() => setWhenOpen(false)}
