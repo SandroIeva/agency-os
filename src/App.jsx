@@ -32354,9 +32354,13 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   // zurück, also kostet ein Wechsel der Kanal-Pille keinen zweiten Ladebalken.
   const [commentsReady, setCommentsReady] = useState(false);
   const showsComments = accounts != null && (accounts.length > 0 || hasDirect);
-  const allLoaded = accounts != null && direct != null
+  // `directStats` ohne Bedingung: es wird IMMER gesetzt, notfalls auf "nichts
+  // verbunden". Vorher hing es an hasDirect, und das ist falsch, solange die
+  // Liste der direkten Verbindungen selbst noch unterwegs ist: dann sah die
+  // Ansicht kurz aus wie ein Workspace ohne Kanäle, zeigte die
+  // Verbinden-Knöpfe und hielt sich für fertig.
+  const allLoaded = accounts != null && direct != null && directStats != null
     && (accounts.length === 0 || data != null)
-    && (!hasDirect || directStats != null)
     && (!showsComments || commentsReady);
   // Einmal beschrieben, weil es an zwei Stellen steht: allein, solange die
   // Konten unbekannt sind, und über der schon gebauten, noch verborgenen
@@ -32677,9 +32681,15 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
         </div>
       )}
 
-      {accounts == null ? loader
+      {/* Erst das Ladezeichen, und zwar für JEDEN Fall. Die Frage "hat dieser
+          Workspace überhaupt Kanäle" lässt sich vorher nicht beantworten, und
+          wer sie trotzdem stellt, zeigt für zwei Sekunden die
+          Verbinden-Knöpfe an jemanden, der längst verbunden ist. */}
+      {!ready && loader}
+      {accounts == null ? null
         : (accounts.length === 0 && !hasDirect) ? (
-        /* ── Empty state: connect the first account ── */
+        <div style={{ display: ready ? "block" : "none" }}>
+        {/* ── Empty state: connect the first account ── */}
         <div style={{ maxWidth: 560, margin: "40px auto 0", textAlign: "center" }}>
           <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{de ? "Verbinde deine Kanäle" : "Connect your channels"}</div>
           <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 26 }}>
@@ -32689,8 +32699,8 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
             {offerable.map(k => <ConnectChip key={k} uiKey={k} big />)}
           </div>
         </div>
+        </div>
       ) : (<>
-        {!ready && loader}
         {/* Gebaut wird es sofort, gezeigt erst, wenn alles darin geladen hat.
             Vorher hing die Ansicht erst NACH dem Ladezeichen im Baum, und die
             Kommentare holen ihre Daten selbst: sie konnten also gar nicht eher
@@ -32974,8 +32984,10 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
         </div>
       </>)}
       {/* Outside the branch above on purpose: a workspace with no social
-          account at all still has a website. */}
-      {websiteSection}
+          account at all still has a website. Verborgen, solange oben geladen
+          wird: sonst steht dieser Block allein unter dem Ladezeichen und die
+          Seite wirkt trotzdem halb fertig. */}
+      <div style={{ display: ready ? "block" : "none" }}>{websiteSection}</div>
     </div>
   );
 }
