@@ -477,8 +477,11 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     // comments sat at zero calls for exactly that reason.
     if (media[0] && !posts.some(m => m.id === media[0].id)) posts.unshift(media[0]);
 
-    const FIELDS = "id,text,username,timestamp,permalink,is_reply_owned_by_me,hide_status";
-    const PLAIN = "id,text,username,timestamp,permalink";
+    // profile_picture_url hangs on the reply itself: Threads returns only `id`
+    // unless every field is asked for by name, which is why the panel had
+    // initials where it could have had faces.
+    const FIELDS = "id,text,username,profile_picture_url,timestamp,permalink,is_reply_owned_by_me,hide_status";
+    const PLAIN = "id,text,username,profile_picture_url,timestamp,permalink";
     let refused = null;
     const perPost = await Promise.all(posts.map(async (m) => {
       let r = await th(token, `/${m.id}/replies`, { fields: FIELDS, limit: 25 });
@@ -505,6 +508,9 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
             id: null,
             username: c.username || null,
             name: c.username || null,
+            // The panel draws this when it is there and an initial when it is
+            // not: a private profile simply has no picture to give.
+            picture: c.profile_picture_url || null,
             isOwner: c.is_reply_owned_by_me === true || (!!c.username && c.username === row.username),
           },
         }));
