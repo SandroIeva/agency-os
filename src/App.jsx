@@ -32182,6 +32182,14 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   // moved Instagram and Threads off Zernio therefore landed on the empty state
   // and the Meta numbers, and the API calls Meta wants to see before an app
   // review, never happened at all.
+  // Vier Quellen speisen diese Ansicht, und jede sagt hier ausdrücklich, dass
+  // sie GEANTWORTET hat. Vorher wurde das aus den Daten geschlossen, und das
+  // geht nicht: eine leere Kontenliste heißt "nichts verbunden" und "noch
+  // nicht gefragt" gleichermaßen. Genau daran sah man beim Öffnen zwei
+  // Sekunden lang die Verbinden-Knöpfe und danach ein Dashboard voller
+  // Striche, obwohl alles verbunden war.
+  const [answered, setAnswered] = useState({});
+  const answer = (what) => setAnswered(a => (a[what] ? a : { ...a, [what]: true }));
   const [direct, setDirect] = useState(null);       // null = still asking
   // ⚠ This must ALWAYS settle to an object. The view treats `direct === null`
   // as "still asking" and shows nothing but "Lädt …" while it is, so a path
@@ -32190,7 +32198,14 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   // to ask, and the early return used to park it at null.
   const NOTHING_DIRECT = { ig: null, th: null, tt: null };
   useEffect(() => {
-    if (!orgId || !session?.access_token) { setDirect(NOTHING_DIRECT); return; }
+    if (!orgId || !session?.access_token) {
+      setDirect(NOTHING_DIRECT);
+      // Ohne Workspace gibt es nichts zu fragen, das ist eine Antwort. Eine
+      // fehlende Sitzung ist keine: die kommt einen Wimpernschlag später, und
+      // wer sie als Antwort nimmt, hält eine halb geladene Seite für fertig.
+      if (!orgId) answer("direct");
+      return;
+    }
     let on = true;
     // And a request that never answers must not hold the page either. Ten
     // seconds, then treat it as "nothing connected" rather than as "still
@@ -32224,6 +32239,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
         thDirect: !!th?.enabled,
         ttDirect: !!tt?.enabled,
       });
+      answer("direct");
     })();
     return () => { on = false; };
   }, [orgId, session?.access_token]);
@@ -32240,7 +32256,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   const ttId = direct?.tt?.openId || null;
   useEffect(() => {
     if (!orgId || !session?.access_token || direct == null) { setDirectStats(null); return; }
-    if (!igId && !thId && !ttId) { setDirectStats({ ig: null, th: null, tt: null }); return; }
+    if (!igId && !thId && !ttId) { setDirectStats({ ig: null, th: null, tt: null }); answer("stats"); return; }
     let on = true;
     setDirectStats(null);
     const ask = (path, payload) => fetch(path, {
@@ -32273,6 +32289,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
         tt: ttOv ? { ...ttOv, posts: ttPosts?.posts || [] }
           : (ttId ? failed("TikTok") : null),
       });
+      answer("stats");
     })();
     return () => { on = false; };
     // The IDS, not the object: `direct` is rebuilt on every render and would
@@ -32309,8 +32326,10 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   const loadStatus = useCallback(async () => {
     const token = ++statusReqRef.current;
     const asked = orgId;
-    setAccounts([]);
-    if (!asked) return;
+    // NICHT vorher leeren. Das war der eigentliche Fehler: zwischen dem Leeren
+    // und der Antwort sah die Ansicht einen Workspace ohne Kanäle und zeigte,
+    // was man dann zeigt.
+    if (!asked) { setAccounts([]); answer("accounts"); return; }
     setError(null);
     try {
       const r = await zernioRequest(session, { mode: "status", orgId: asked });
@@ -32320,16 +32339,17 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
       if (statusReqRef.current !== token) return;
       setAccounts([]); setError(e);
     }
+    answer("accounts");
   }, [orgId, session?.access_token]); // eslint-disable-line
   useEffect(() => { loadStatus(); }, [loadStatus]);
 
   useEffect(() => {
-    if (!orgId || !accounts || accounts.length === 0) return;
+    if (!orgId || !accounts || accounts.length === 0) { if (accounts && accounts.length === 0) answer("data"); return; }
     let on = true;
     setData(null);
     zernioRequest(session, { mode: "analytics", orgId, platform: platform === "all" ? undefined : zernioKeyFor(platform) })
-      .then(r => { if (on) setData(r); })
-      .catch(e => { if (on) { setData({}); setError(e); } });
+      .then(r => { if (on) { setData(r); answer("data"); } })
+      .catch(e => { if (on) { setData({}); setError(e); answer("data"); } });
     return () => { on = false; };
   }, [orgId, accounts, platform]); // eslint-disable-line
 
@@ -32354,14 +32374,10 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   // zurück, also kostet ein Wechsel der Kanal-Pille keinen zweiten Ladebalken.
   const [commentsReady, setCommentsReady] = useState(false);
   const showsComments = accounts != null && (accounts.length > 0 || hasDirect);
-  // `directStats` ohne Bedingung: es wird IMMER gesetzt, notfalls auf "nichts
-  // verbunden". Vorher hing es an hasDirect, und das ist falsch, solange die
-  // Liste der direkten Verbindungen selbst noch unterwegs ist: dann sah die
-  // Ansicht kurz aus wie ein Workspace ohne Kanäle, zeigte die
-  // Verbinden-Knöpfe und hielt sich für fertig.
-  const allLoaded = accounts != null && direct != null && directStats != null
-    && (accounts.length === 0 || data != null)
-    && (!showsComments || commentsReady);
+  // Keine Schlüsse mehr aus den Daten: jede Quelle hat gesagt, dass sie
+  // geantwortet hat, oder sie hat es nicht.
+  const allLoaded = !!answered.accounts && !!answered.direct && !!answered.stats
+    && !!answered.data && (!showsComments || commentsReady);
   // Einmal beschrieben, weil es an zwei Stellen steht: allein, solange die
   // Konten unbekannt sind, und über der schon gebauten, noch verborgenen
   // Ansicht.
@@ -32382,10 +32398,13 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   );
   const [ready, setReady] = useState(false);
   useEffect(() => { if (allLoaded) setReady(true); }, [allLoaded]);
+  // Ein anderer Workspace ist eine andere Seite: da wird wieder geladen, und
+  // zwar sichtbar. Die Pille oben ist etwas anderes, die lässt `ready` stehen.
   useEffect(() => {
+    setAnswered({}); setCommentsReady(false); setReady(false);
     const t = setTimeout(() => setReady(true), 12000);
     return () => clearTimeout(t);
-  }, []);
+  }, [orgId]);
 
   const connect = async (uiKey) => {
     setBusyKey(uiKey); setError(null);
