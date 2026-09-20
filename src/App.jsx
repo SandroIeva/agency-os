@@ -1656,7 +1656,12 @@ const LOAD_AHEAD_PX = 500;
 // Split out from the overlay so it can also live inside another dialog (the
 // document image modal renders it as one of its tabs) without nesting a modal
 // inside a modal. It fills whatever container it's placed in.
-function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de", onPick, onClose = null }) {
+// `marked` gibt zu einem Treffer die Nummer in der Auswahl zurück, 0 für nicht
+// gewählt, und `onUnpick` nimmt ihn wieder heraus. Ohne beides verhält sich das
+// Panel wie vorher: ein Klick, ein Bild, fertig. Mit beidem kann man hier ein
+// Karussell zusammenstellen und SIEHT dabei, was schon drin ist und in welcher
+// Reihenfolge.
+function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de", onPick, onClose = null, marked = null, onUnpick = null }) {
   const de = appLanguage === "de";
   const [query, setQuery] = useState("");
   const [items, setItems] = useState([]);
@@ -1812,13 +1817,29 @@ function StockSearchPanel({ session, userOrg, theme, darkMode, appLanguage = "de
                     whileHover={saving ? {} : { filter: "brightness(0.74)" }}
                     whileTap={{ scale: 0.985 }}
                     transition={{ duration: 0.28, ease: [0.22, 0.68, 0.35, 1] }}
-                    onClick={() => pick(it)}
+                    onClick={() => { const n = marked ? marked(it) : 0;
+                      // Ein zweiter Klick nimmt heraus statt noch einmal zu
+                      // speichern: das Bild liegt schon in unserem Speicher.
+                      if (n > 0) { onUnpick?.(it); return; } pick(it); }}
                     style={{ cursor: saving ? "wait" : "pointer", borderRadius: 12, overflow: "hidden", aspectRatio: "4 / 3",
                       position: "relative", filter: "brightness(1)", opacity: saving && saving !== it.id ? 0.45 : 1,
                       background: it.avgColor || (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)") }}
                   >
                     <img src={it.thumb} alt={it.alt} loading="lazy"
                       style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                    {marked && marked(it) > 0 && (<>
+                      {/* Ein Rahmen sagt DASS es gewählt ist, die Zahl sagt an
+                          welcher Stelle. Bei einem Karussell ist die Reihenfolge
+                          die halbe Information. */}
+                      <div style={{ position: "absolute", inset: 0, borderRadius: 12, pointerEvents: "none",
+                        boxShadow: `inset 0 0 0 3px ${darkMode ? "#F4F4F7" : "#15151c"}` }} />
+                      <div style={{ position: "absolute", top: 8, right: 8, width: 23, height: 23, borderRadius: 999,
+                        background: darkMode ? "#F4F4F7" : "#15151c", color: darkMode ? "#15151c" : "#fff",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontFamily: FONT, fontSize: 11.5, fontWeight: 700 }}>
+                        {marked(it)}
+                      </div>
+                    </>)}
                     {saving === it.id && (
                       <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center",
                         background: "rgba(0,0,0,0.45)", color: "#fff", fontSize: 12, fontFamily: FONT, fontWeight: 600 }}>
@@ -41602,6 +41623,12 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
   // still hand in the violet theme accent, and this picker opens from all of them.
   const accent = darkMode ? "#F4F4F7" : "#15151c";
   const [selectedUrls, setSelectedUrls] = useState([]);
+  // Ein Stock-Treffer und die Datei, die daraus wurde, sind zwei verschiedene
+  // Dinge: gewählt wird über die gespeicherte URL, gezeigt wird das
+  // Suchergebnis. Ohne diese Zuordnung kann die Kachel nicht wissen, dass sie
+  // gemeint ist, und genau deshalb sah man in der Stock-Suche nie, was man
+  // schon ausgewählt hatte.
+  const [fromStock, setFromStock] = useState({});   // Treffer-id → gespeicherte URL
   const pick = (url) => {
     if (!multiple) { onPick(url); return; }
     setErr("");
@@ -41730,10 +41757,20 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 12 }}>
                 {shown.map(f => (
                   <motion.div key={f.id} whileHover={{ y: -3 }} whileTap={{ scale: 0.97 }} onClick={() => pick(f.public_url)} title={f.name}
-                    style={{ cursor: "pointer", borderRadius: 12, overflow: "hidden", border: `2px solid ${selectedUrls.includes(f.public_url) ? theme.text : theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+                    style={{ cursor: "pointer", borderRadius: 12, overflow: "hidden", position: "relative", border: `2px solid ${selectedUrls.includes(f.public_url) ? theme.text : theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
                     <div style={{ width: "100%", aspectRatio: "1 / 1", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
                       <img src={f.public_url} alt={f.name} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     </div>
+                    {/* Dieselbe Nummer wie in der Stock-Suche. Die Stelle im
+                        Karussell stand bisher nur klein vor dem Dateinamen. */}
+                    {multiple && selectedUrls.includes(f.public_url) && (
+                      <div style={{ position: "absolute", top: 7, right: 7, width: 23, height: 23, borderRadius: 999,
+                        background: darkMode ? "#F4F4F7" : "#15151c", color: darkMode ? "#15151c" : "#fff",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontFamily: FONT, fontSize: 11.5, fontWeight: 700 }}>
+                        {selectedUrls.indexOf(f.public_url) + 1}
+                      </div>
+                    )}
                     <div style={{ padding: "7px 9px", fontSize: 11.5, fontFamily: FONT, color: theme.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{multiple && selectedUrls.includes(f.public_url) ? `${selectedUrls.indexOf(f.public_url) + 1}. ` : ""}{f.name || "—"}</div>
                   </motion.div>
                 ))}
@@ -41751,7 +41788,12 @@ function ImageInsertModal({ orgId, session, userOrg, appLanguage = "de", uploadF
                 theme={theme}
                 darkMode={darkMode}
                 appLanguage={appLanguage}
-                onPick={(url) => pick(url)}
+                onPick={(url, item) => { if (item?.id != null) setFromStock(m => ({ ...m, [item.id]: url })); pick(url); }}
+                marked={multiple ? (it) => {
+                  const u = fromStock[it.id];
+                  return u ? selectedUrls.indexOf(u) + 1 : 0;
+                } : null}
+                onUnpick={(it) => { const u = fromStock[it.id]; if (u) pick(u); }}
               />
             </div>
           ) : tab === "upload" ? (
