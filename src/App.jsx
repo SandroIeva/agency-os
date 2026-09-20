@@ -31724,7 +31724,7 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
             ? "Unter den Beiträgen hat bisher nur euer eigenes Konto geantwortet."
             : "So far only your own account has replied under the posts.")}
           {rank && supporters.map((p, i) => (
-            <div key={p.key} style={{ display: "flex", gap: 12, alignItems: "center", padding: "10px 0",
+            <div key={p.key} style={{ display: "flex", gap: 12, alignItems: "center", padding: "15px 0",
               borderBottom: i < supporters.length - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
               <span style={{ width: 16, flexShrink: 0, fontFamily: FONT, fontSize: 12,
                 fontWeight: 600, color: theme.textFaint, textAlign: "right" }}>{i + 1}</span>
@@ -32303,7 +32303,10 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
     setBusyKey(null);
   };
 
-  const card = { borderRadius: 18, background: theme.cardBg, border: `1px solid ${theme.border}`, padding: 20 };
+  const card = { borderRadius: 18, background: theme.cardBg, padding: 20 };
+  // The four numbers at the top carry the view, so they stand taller than the
+  // cards below them rather than the same height with more air inside.
+  const kpiCard = { ...card, padding: "30px 20px" };
   const secLabel = { fontSize: 11, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, marginBottom: 14 };
   const platformMeta = (uiKey) => TOUCHPOINT_PLATFORMS.find(p => p.key === uiKey);
   // Who reacted to a post. Zernio counts reactions; it cannot name them,
@@ -32517,8 +32520,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   // way the strategy teaser does under Touchpoints (owner, 2026-09-20).
   const websiteSection = (
     <div style={{ marginTop: 34 }}>
-      <div style={secLabel}>{de ? "Website" : "Website"}</div>
-      <div style={{ borderRadius: 18, border: `1px solid ${theme.borderFaint}`, padding: 22,
+      <div style={{ borderRadius: 18, padding: 22,
         background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
           <div style={{ width: 44, height: 44, borderRadius: 13, background: "#15151c", flexShrink: 0,
@@ -32675,7 +32677,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
           {/* KPI tiles */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 22 }}>
             {kpis.map((k, i) => (
-              <motion.div key={k.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 + i * 0.05, duration: 0.3 }} style={card}>
+              <motion.div key={k.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 + i * 0.05, duration: 0.3 }} style={kpiCard}>
                 <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginBottom: 8 }}>{k.label}</div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
                   <span style={{ fontSize: 24, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{numbersPending ? "…" : k.value}</span>
@@ -32737,7 +32739,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
               here listed connected accounts, which the tabs above already name,
               and the LinkedIn page card below is gone too. Comments take the
               full width when there are no posts to rank. */}
-          <div style={{ display: "grid", alignItems: "start", gap: 14,
+          <div style={{ display: "grid", gap: 14,
             gridTemplateColumns: (accounts.length > 0 || topPosts.length > 0)
               ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)" }}>
             {(accounts.length > 0 || topPosts.length > 0) && (
