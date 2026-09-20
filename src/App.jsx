@@ -33936,6 +33936,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     });
   };
   const [queueOpen, setQueueOpen] = useState(false);
+  // Ein geplanter Beitrag ist Arbeit, die weg ist, wenn man daneben trifft.
+  // Der erste Klick fragt, der zweite löscht.
+  const [confirmDrop, setConfirmDrop] = useState(null);
   // Ein geplanter Beitrag, der wieder aufgemacht wurde. Solange das gesetzt
   // ist, schreibt der Composer in diese Zeile statt eine neue zu bauen.
   const [editing, setEditing] = useState(null);   // { id, media: [...] }
@@ -34026,12 +34029,16 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       </div>
       <span onClick={async (e) => {
         e.stopPropagation();
+        if (confirmDrop !== q.id) { setConfirmDrop(q.id); return; }
+        setConfirmDrop(null);
         await supabase.from("scheduled_posts").delete().eq("id", q.id);
         if (editing?.id === q.id) stopEditing();
         loadQueue();
-      }} style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, cursor: "pointer",
-        flexShrink: 0, paddingTop: 2 }}>
-        {de ? "Absagen" : "Cancel"}
+      }} title={de ? "Der Beitrag geht dann nicht raus." : "The post will not go out."}
+        style={{ fontSize: 11, fontFamily: FONT, fontWeight: confirmDrop === q.id ? 600 : 400,
+          color: confirmDrop === q.id ? "#E86767" : theme.textFaint, cursor: "pointer",
+          flexShrink: 0, paddingTop: 2, whiteSpace: "nowrap" }}>
+        {confirmDrop === q.id ? (de ? "Wirklich absagen?" : "Really cancel?") : (de ? "Absagen" : "Cancel")}
       </span>
     </div>
   ));
@@ -34975,7 +34982,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
               )}
           {queued.length > 0 && (
             <div style={{ position: "relative", flexShrink: 0 }}>
-              <motion.div whileTap={{ scale: 0.94 }} onClick={() => setQueueOpen(o => !o)}
+              <motion.div whileTap={{ scale: 0.94 }} onClick={() => { setConfirmDrop(null); setQueueOpen(o => !o); }}
                 title={de ? "Geplante Beiträge" : "Scheduled posts"}
                 style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 12px", borderRadius: 999,
                   border: `1px solid ${theme.borderFaint}`, cursor: "pointer", color: theme.text }}>
@@ -35762,11 +35769,16 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   Fußes: links steht das Plus, mit dem man etwas HINZUFÜGT, und
                   ein Abbrechen direkt daneben wird irgendwann versehentlich
                   getroffen. Gleiche Breite, sonst liest sich das Paar schief. */}
+              {/* NICHT "Abbrechen": daneben in der Liste steht ein Absagen, das
+                  den Beitrag löscht, und zweimal dasselbe Wort für zwei sehr
+                  verschiedene Dinge hat schon einen geplanten Beitrag gekostet.
+                  Dieser hier wirft nur die Änderungen weg. */}
               {editing && (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={stopEditing}
+                  title={de ? "Änderungen verwerfen. Der geplante Beitrag bleibt." : "Discard the changes. The scheduled post stays."}
                   style={{ ...footBtn, minWidth: 92, marginRight: 5, padding: "0 12px",
                     border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, cursor: "pointer" }}>
-                  {de ? "Abbrechen" : "Cancel"}
+                  {de ? "Verwerfen" : "Discard"}
                 </motion.button>
               )}
               {editing ? (
