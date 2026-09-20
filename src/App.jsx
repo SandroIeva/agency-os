@@ -33372,20 +33372,27 @@ async function renderPostArtboard(board, type = "image/png") {
 function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage = "de", incomingVisual = null, onViewContext = null }) {
   const de = appLanguage === "de";
   const L = (o) => (de ? o.de : o.en);
-  // The picture comes first. Writing a caption for a post you have not seen yet
-  // is the wrong way round, and it is the picture that decides what the text
-  // has to say. "Beschreibung" rather than "Text", because that is what it is:
-  // the words under the image, not the post.
-  const steps = [{ de: "Visual", en: "Visual" }, { de: "Beschreibung", en: "Description" }, { de: "Kanäle", en: "Channels" }];
-  // Named, not counted. Three panels are matched on this index and they are
-  // written in a different order than they are shown, so swapping two steps by
-  // editing bare numbers is how a panel ends up under the wrong tab.
-  const S_VISUAL = 0, S_TEXT = 1, S_CHANNELS = 2;
+  // "Beschreibung" rather than "Text", because that is what it is: the words
+  // under the image, not the post. The picture used to come first, on the
+  // argument that a caption for a post you have not seen is written the wrong
+  // way round. It cost more than it gave: the channels sat at the end, so the
+  // character limit and what a network even accepts arrived after both the
+  // text and the picture were done.
+  //
+  // Zwei Schritte, nicht drei. Kanäle und Text gehören auf einen Schirm: das
+  // Zeichenlimit ist das Minimum der gewählten Kanäle, und getrennt erfuhr man
+  // davon erst am Ende, als der Text schon stand. Das Visual kommt danach,
+  // weil erst dann feststeht, was die gewählten Kanäle annehmen.
+  const steps = [{ de: "Beschreibung", en: "Description" }, { de: "Visual", en: "Visual" }];
+  // Named, not counted. The panels are matched on this index and are written
+  // in a different order than they are shown, so swapping two steps by editing
+  // bare numbers is how a panel ends up under the wrong tab.
+  const S_TEXT = 0, S_VISUAL = 1;
   const LAST = steps.length - 1;
   const [stepIdx, setStepIdx] = useState(0);
   const [hoverTab, setHoverTab] = useState(null);
 
-  // Accounts (step 03, Kanäle)
+  // Accounts (Schritt 01, links neben der Beschreibung)
   const [accounts, setAccounts] = useState(null);   // null = loading
   const [selectedIds, setSelectedIds] = useState([]);
   // Connecting happens HERE now. It used to hand you over to Audience, which
@@ -33807,7 +33814,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const setCaptionFromAssistant = useCallback((next) => {
     setCaptionUndo(textRef.current);
     setText(String(next || "").slice(0, 5000));
-    setStepIdx(1);   // the Description step, so the change happens in plain sight
+    setStepIdx(S_TEXT);   // the Description step, so the change happens in plain sight
   }, []);
 
   // ── What the assistant is told when it is opened over this view ───────────
@@ -34101,7 +34108,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     if (busy) return;
     setError(null); setResult(null);
     const isDraft = kind === "draft";
-    if (!isDraft && selected.length === 0) { setError(new Error(de ? "Wähle mindestens einen Kanal." : "Pick at least one channel.")); setStepIdx(2); return; }
+    if (!isDraft && selected.length === 0) { setError(new Error(de ? "Wähle mindestens einen Kanal." : "Pick at least one channel.")); setStepIdx(S_TEXT); return; }
     // A video counts as the visual. Without `reel` here, a clip posted with no
     // caption was turned away as if nothing had been picked.
     if (!text.trim() && !imageFileRef.current && !reel) { setError(new Error(de ? "Text oder Visual fehlt." : "Text or visual required.")); return; }
@@ -34434,6 +34441,9 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // it: the preview, the schedule, the two publish buttons, and the second
   // column they live in.
   const canPublish = stepIdx === LAST && (accounts || []).length > 0;
+  // Both steps are split down the middle: the first holds the channels beside
+  // the text, the second the picture beside its preview.
+  const twoCol = canPublish || stepIdx === S_TEXT;
 
   // ── Live preview card (right column, constant across steps) ──
   const previewCard = (
@@ -34536,7 +34546,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     color: active ? "#fff" : theme.text, transition: "background .38s cubic-bezier(0.33, 1, 0.68, 1)" }}>
                   <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.5)" : theme.textDim }}>{String(i + 1).padStart(2, "0")}</span>
                   <span style={{ fontSize: 13.5, fontFamily: FONT, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{L(s)}</span>
-                  {i === S_CHANNELS && selected.length > 0 && <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.6)" : theme.textDim }}>{selected.length}</span>}
+                  {i === S_TEXT && selected.length > 0 && <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: FONT, fontWeight: 600, color: active ? "rgba(255,255,255,0.6)" : theme.textDim }}>{selected.length}</span>}
                 </div>
               );
             })}
@@ -34560,11 +34570,11 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                 Fifty-fifty, because the preview is the other half of this step
                 and not a footnote to it. */}
             <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "grid", gap: 30, alignItems: "stretch",
-              gridTemplateColumns: canPublish ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)" }}>
+              gridTemplateColumns: twoCol ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)" }}>
               <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
 
-                {/* ── 03 Kanäle, and publishing ── */}
-                {stepIdx === S_CHANNELS && (<>
+                {/* ── 01 Kanäle, links neben der Beschreibung ── */}
+                {stepIdx === S_TEXT && (<>
                   {accounts == null ? (
                     <div style={{ color: theme.textDim, fontSize: 13, fontFamily: FONT }}>{de ? "Lädt…" : "Loading…"}</div>
                   ) : accounts.length === 0 ? (
@@ -35008,9 +35018,51 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   )}
                 </>)}
 
-                {/* ── 01 Text ── */}
-                {stepIdx === S_TEXT && (<>
-                  {stepHead(de ? "Beschreibung" : "Description", de ? "Schreib, was du teilen willst. Die Kanäle kommen zum Schluss, dann steht auch das Zeichenlimit fest." : "Write what you want to share. Channels come last, and so does the character limit.")}
+                {/* ── Publishing, on the same screen as the channels: they are
+                       one decision, and splitting them made a step out of a
+                       tick box. ── */}
+                {canPublish && (<>
+                  {/* Over the limit is only knowable once the channels are
+                      chosen, which is here, so it is said here. */}
+                  {overLimit && (
+                    <div style={{ marginTop: 20, padding: "11px 15px", borderRadius: 12, background: "rgba(232,103,103,.08)", border: "1px solid rgba(232,103,103,.16)", color: "#E86767", fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
+                      {de ? `Der Text ist ${text.length - charLimit} Zeichen zu lang für die gewählten Kanäle (max. ${charLimit}).`
+                          : `The text is ${text.length - charLimit} characters too long for the chosen channels (max ${charLimit}).`}
+                      {" "}
+                      <span onClick={() => setStepIdx(0)} style={{ textDecoration: "underline", cursor: "pointer" }}>{de ? "Kürzen" : "Shorten it"}</span>
+                    </div>
+                  )}
+
+                  {result && (
+                    <div style={{ marginTop: 18, borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: theme.cardBg, padding: 16 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: (result.platforms || []).length ? 10 : 0 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: result.status === "failed" ? "#E86767" : "#00B894" }} />
+                        <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{statusLabel(result.status)}</span>
+                      </div>
+                      {(result.platforms || []).map((p, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
+                          <span style={{ minWidth: 70, color: theme.text }}>{(TOUCHPOINT_PLATFORMS.find(x => x.key === uiKeyFor(p.platform)) || { label: p.platform }).label}</span>
+                          <span>{statusLabel(p.status)}</span>
+                          {p.url && <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ color: theme.text, textDecoration: "underline", textUnderlineOffset: 2 }}>{de ? "Ansehen ↗" : "View ↗"}</a>}
+                          {p.error && <span style={{ color: "#E86767" }}>{p.error}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>)}
+              </div>
+
+              {/* Die Beschreibung, neben den Kanälen. Der Zähler unten rechts
+                  misst gegen das Minimum der gewählten Kanäle, also muss die
+                  Auswahl daneben stehen und nicht einen Schritt weiter. */}
+              {stepIdx === S_TEXT && (
+                <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+                  {/* Dieselbe Höhe wie die Kopfzeile der Kanäle gegenüber, damit
+                      Liste und Feld auf einer Linie beginnen. */}
+                  <div style={{ display: "flex", alignItems: "center", height: 26, marginBottom: 12 }}>
+                    <div style={{ ...label, marginBottom: 0 }}>{de ? "Beschreibung" : "Description"}</div>
+                  </div>
+
                   {/* The field takes the height that is there. It used to be a
                       fixed 320 inside a box that fills the panel, which left
                       the box scrolling around a half-empty field. */}
@@ -35063,41 +35115,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         : `${text.length} ${de ? "Zeichen" : "characters"}`}
                     </div>
                   </div>
-                </>)}
-
-                {/* ── Publishing, on the same screen as the channels: they are
-                       one decision, and splitting them made a step out of a
-                       tick box. ── */}
-                {canPublish && (<>
-                  {/* Over the limit is only knowable once the channels are
-                      chosen, which is here, so it is said here. */}
-                  {overLimit && (
-                    <div style={{ marginTop: 20, padding: "11px 15px", borderRadius: 12, background: "rgba(232,103,103,.08)", border: "1px solid rgba(232,103,103,.16)", color: "#E86767", fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
-                      {de ? `Der Text ist ${text.length - charLimit} Zeichen zu lang für die gewählten Kanäle (max. ${charLimit}).`
-                          : `The text is ${text.length - charLimit} characters too long for the chosen channels (max ${charLimit}).`}
-                      {" "}
-                      <span onClick={() => setStepIdx(0)} style={{ textDecoration: "underline", cursor: "pointer" }}>{de ? "Kürzen" : "Shorten it"}</span>
-                    </div>
-                  )}
-
-                  {result && (
-                    <div style={{ marginTop: 18, borderRadius: 16, border: `1px solid ${theme.borderFaint}`, background: theme.cardBg, padding: 16 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: (result.platforms || []).length ? 10 : 0 }}>
-                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: result.status === "failed" ? "#E86767" : "#00B894" }} />
-                        <span style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{statusLabel(result.status)}</span>
-                      </div>
-                      {(result.platforms || []).map((p, i) => (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
-                          <span style={{ minWidth: 70, color: theme.text }}>{(TOUCHPOINT_PLATFORMS.find(x => x.key === uiKeyFor(p.platform)) || { label: p.platform }).label}</span>
-                          <span>{statusLabel(p.status)}</span>
-                          {p.url && <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ color: theme.text, textDecoration: "underline", textUnderlineOffset: 2 }}>{de ? "Ansehen ↗" : "View ↗"}</a>}
-                          {p.error && <span style={{ color: "#E86767" }}>{p.error}</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>)}
-              </div>
+                </div>
+              )}
 
               {/* The preview, on the step that publishes, once there is
                   somewhere to publish to */}
