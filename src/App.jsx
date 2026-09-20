@@ -34064,7 +34064,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // garantiert irgendwann auseinanderlaufen.
   const emojiPanel = (onChoose) => (
     <div onClick={(e) => e.stopPropagation()}
-      style={{ width: 360, height: 322, borderRadius: 18, overflow: "hidden",
+      // lineHeight ausdrücklich: der Auslöser unter der Beschreibung steht in
+      // einem Rahmen mit lineHeight 0, damit das Smiley-Zeichen mittig sitzt,
+      // und dieses 0 erbte das ganze Fenster. Die Reiterleiste fiel dadurch auf
+      // die halbe Höhe zusammen, während dasselbe Fenster über dem Plus im
+      // Visual richtig aussah: derselbe Code, zwei verschiedene Elternteile.
+      style={{ width: 360, height: 322, borderRadius: 18, overflow: "hidden", lineHeight: 1.2,
         background: darkMode ? "rgba(28,28,38,0.98)" : "rgba(255,255,255,0.99)",
         border: `1px solid ${theme.border}`,
         boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
