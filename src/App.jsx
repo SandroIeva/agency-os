@@ -33879,6 +33879,17 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
   const mediaImportRef = useRef(false);
   const postImageLimitError = () => new Error(de ? "Ein Karussell kann bis zu 10 Bilder enthalten." : "A carousel can contain up to 10 images.");
+  // Instagram und Threads holen sich die Datei selbst über eine URL, Bytes
+  // nehmen sie nicht an. Also liegt sie vorher in unserem Supabase-Speicher,
+  // und der steht auf dem kostenlosen Plan: 50 MB je Objekt, nicht
+  // verhandelbar. Meta selbst nähme knapp ein Gigabyte. Die Grenze ist also
+  // unser Umweg, nicht das Netzwerk, und sie wird hier gesagt statt nach dem
+  // Hochladen von 117 MB.
+  const MEDIA_MAX_MB = 50;
+  const tooBigError = (f) => new Error(de
+    ? `Die Datei ist ${Math.round((f.size || 0) / 1048576)} MB groß. Unser Zwischenspeicher nimmt höchstens ${MEDIA_MAX_MB} MB, dort holen Instagram und Threads sie ab.`
+    : `The file is ${Math.round((f.size || 0) / 1048576)} MB. Our storage, where Instagram and Threads fetch it from, takes at most ${MEDIA_MAX_MB} MB.`);
+  const tooBig = (files) => files.find(f => (f.size || 0) > MEDIA_MAX_MB * 1048576) || null;
   // Commit only after every image has loaded, preserving the user's selection order.
   const adoptPostFiles = async (files) => {
     if (!files.length) return;
@@ -33922,6 +33933,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     const picked = [...(e.target.files || [])];
     e.target.value = "";
     if (!picked.length || mediaImportRef.current) return;
+    const over = tooBig(picked);
+    if (over) { setError(tooBigError(over)); return; }
     const videos = picked.filter(f => f.type.startsWith("video/"));
     const images = picked.filter(f => f.type.startsWith("image/"));
     // Videos and pictures in one go: the first video leads, the rest queue up
@@ -33975,6 +33988,8 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const onPickExtras = (e) => {
     const files = [...(e.target.files || [])].filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"));
     e.target.value = "";
+    const over = tooBig(files);
+    if (over) { setError(tooBigError(over)); return; }
     if (1 + extras.length + files.length > 10) { setError(postImageLimitError()); return; }
     if (mediaImportRef.current) return;
     setExtras(list => [...list, ...files.map(asExtra)]);
