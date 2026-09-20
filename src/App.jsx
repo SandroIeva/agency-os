@@ -34918,8 +34918,56 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
           {/* Die Uhr erscheint nur, wenn wirklich etwas wartet. Ein Symbol, das
               immer da steht und meistens nichts zeigt, lernt man zu übersehen. */}
+          {/* Rechts in der Leiste: wann er rausgeht, und was schon wartet. */}
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+            {(editing || canSchedule) && (
+            <div style={{ position: "relative", flexShrink: 0 }}>
+                  {/* Der Zeitpunkt steht oben, nicht unten: der Fuß trägt
+                      schon das Plus, Abbrechen und Speichern, und "wann" ist
+                      keine Aktion, sondern eine Eigenschaft des Beitrags. */}
+                  <span onClick={() => setWhenOpen(o => !o)}
+                    style={{ padding: "0 10px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
+                      color: schedule ? theme.text : theme.textDim, cursor: "pointer", whiteSpace: "nowrap" }}>
+                    {schedule
+                      ? new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(schedule))
+                      : (de ? "Später" : "Later")}
+                  </span>
+                  {whenOpen && (<>
+                    <div onClick={() => setWhenOpen(false)}
+                      style={{ position: "fixed", inset: 0, zIndex: 5 }} />
+                    {/* An opaque ground, not theme.cardBg: that is translucent
+                        by design and everything under this panel showed
+                        through it. */}
+                    <div style={{ position: "absolute", top: "calc(100% + 12px)", right: 0, zIndex: 6,
+                      minWidth: 264, padding: 16, borderRadius: 16,
+                      background: darkMode ? "#1c1c24" : "#ffffff",
+                      border: `1px solid ${theme.borderFaint}`,
+                      boxShadow: "0 18px 50px rgba(0,0,0,0.22)" }}>
+                      <div style={{ ...label, marginBottom: 10 }}>{de ? "Zeitpunkt" : "When"}</div>
+                      <input type="datetime-local" value={schedule || defaultWhen()} onChange={e => setSchedule(e.target.value)}
+                        style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 12,
+                          border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                          color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none",
+                          colorScheme: darkMode ? "dark" : "light" }} />
+                      <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 14 }}>
+                        <span onClick={() => { setSchedule(""); setWhenOpen(false); }}
+                          style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, cursor: "pointer" }}>
+                          {de ? "Doch sofort" : "Post now instead"}
+                        </span>
+                        <motion.button whileTap={{ scale: 0.97 }}
+                          onClick={() => { if (!schedule) setSchedule(defaultWhen()); setWhenOpen(false); }}
+                          style={{ marginLeft: "auto", height: 34, padding: "0 16px", borderRadius: 999, border: "none",
+                            background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
+                            fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
+                          {de ? "Übernehmen" : "Apply"}
+                        </motion.button>
+                      </div>
+                    </div>
+                  </>)}
+                </div>
+              )}
           {queued.length > 0 && (
-            <div style={{ marginLeft: "auto", position: "relative", flexShrink: 0 }}>
+            <div style={{ position: "relative", flexShrink: 0 }}>
               <motion.div whileTap={{ scale: 0.94 }} onClick={() => setQueueOpen(o => !o)}
                 title={de ? "Geplante Beiträge" : "Scheduled posts"}
                 style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 12px", borderRadius: 999,
@@ -34943,6 +34991,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
               </>)}
             </div>
           )}
+          </div>
         </div>
 
         <div style={{ flex: 1, minHeight: 0, padding: 30, display: "flex", flexDirection: "column" }}>
@@ -35509,20 +35558,22 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         color: theme.text, fontSize: 15, fontFamily: FONT, lineHeight: 1.65, outline: "none", resize: "none", caretColor: theme.text }} />
                     <div style={{ position: "absolute", left: 20, bottom: 17, display: "flex", alignItems: "center", gap: 16 }}>
                     <div style={{ position: "relative" }}>
+                      {/* Nur das Zeichen, ohne Wort: was es tut, sagt der
+                            Picker beim Öffnen. lineHeight 0, damit die Box
+                            genau so hoch ist wie das Zeichen und in der Reihe
+                            auf derselben Linie sitzt wie das Mikrofon daneben,
+                            das sein eigenes Wort neben sich hat. */}
                       <motion.div whileTap={{ scale: 0.96 }} onClick={() => setEmojiOpen(o => !o)}
                         title="Emoji"
-                        style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
-                          fontSize: 11.5, fontFamily: FONT, fontWeight: 500,
+                        style={{ display: "inline-flex", alignItems: "center", lineHeight: 0, cursor: "pointer",
                           color: emojiOpen ? theme.text : theme.textFaint }}>
                         {/* Ein gezeichneter Smiley, kein Emoji: ein Emoji als
                             Bedienelement zeichnet jedes Betriebssystem anders. */}
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                          strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
-                          style={{ position: "relative", top: -2 }}>
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                           <circle cx="12" cy="12" r="9" /><path d="M8 14s1.5 2 4 2 4-2 4-2" />
                           <line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" />
                         </svg>
-                        Emoji
                       </motion.div>
                       {emojiOpen && (<>
                         <div onClick={() => setEmojiOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
@@ -35564,10 +35615,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                       title={dictating ? (de ? "Diktat stoppen" : "Stop dictation") : (de ? "Diktieren" : "Dictate")}
                       style={{ display: "inline-flex", alignItems: "center", gap: 6,
                         cursor: "pointer", fontSize: 11.5, fontFamily: FONT, fontWeight: 500, color: dictating ? "#EF4444" : theme.textFaint }}>
-                      {/* The glyph's own baseline sits low against 11.5px text,
-                          so it is lifted rather than the row being re-aligned. */}
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"
-                        style={{ position: "relative", top: -2 }}>
+                      {/* Kein Versatz mehr: das Zeichen steht jetzt neben einem
+                          zweiten Zeichen, und zwei Glyphen auf verschiedenen
+                          Höhen fallen sofort auf. Die Reihe richtet mittig aus. */}
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                         <line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
                       </svg>
@@ -35631,12 +35682,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   {slideIdx + 1} / {slides.length}
                 </span>
               )}
-              {editing && (
-                <motion.button whileTap={{ scale: 0.97 }} onClick={stopEditing}
-                  style={{ ...footBtn, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, cursor: "pointer" }}>
-                  {de ? "Abbrechen" : "Cancel"}
-                </motion.button>
-              )}
               {!editing && canPost && hasMedia && canDraft && (
                 <motion.button ref={draftRef} whileTap={{ scale: 0.97 }} onClick={() => submit("draft")} disabled={Boolean(busy)}
                   style={{ ...footBtn, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text,
@@ -35649,63 +35694,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   corner of the step above. Anchored to the footer rather than
                   fixed: this panel's root is an animating motion.div, and a
                   transformed ancestor makes `fixed` mean "inside that box". */}
-              {(editing || (canPost && canSchedule)) && (
-                <div style={{ position: "relative", marginRight: 12 }}>
-                  {/* Mit Bild ist "Später" ein eigener Auslöser neben dem
-                      Posten-Knopf. Ohne Bild gibt es keinen Knopf, dort wird
-                      dieses Fenster aus dem Menü am Link geöffnet. */}
-                  {(hasMedia || editing) && (
-                  <span onClick={() => setWhenOpen(o => !o)}
-                    style={{ padding: "0 10px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
-                      color: schedule ? theme.text : theme.textDim, cursor: "pointer", whiteSpace: "nowrap" }}>
-                    {schedule
-                      ? new Intl.DateTimeFormat(de ? "de-DE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(schedule))
-                      : (de ? "Später" : "Later")}
-                  </span>
-                  )}
-                  {whenOpen && (<>
-                    <div onClick={() => setWhenOpen(false)}
-                      style={{ position: "fixed", inset: 0, zIndex: 5 }} />
-                    {/* An opaque ground, not theme.cardBg: that is translucent
-                        by design and everything under this panel showed
-                        through it. */}
-                    <div style={{ position: "absolute", bottom: "calc(100% + 12px)", right: 0, zIndex: 6,
-                      minWidth: 264, padding: 16, borderRadius: 16,
-                      background: darkMode ? "#1c1c24" : "#ffffff",
-                      border: `1px solid ${theme.borderFaint}`,
-                      boxShadow: "0 18px 50px rgba(0,0,0,0.22)" }}>
-                      <div style={{ ...label, marginBottom: 10 }}>{de ? "Zeitpunkt" : "When"}</div>
-                      <input type="datetime-local" value={schedule || defaultWhen()} onChange={e => setSchedule(e.target.value)}
-                        style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 12,
-                          border: `1px solid ${theme.borderFaint}`, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-                          color: theme.text, fontSize: 13, fontFamily: FONT, outline: "none",
-                          colorScheme: darkMode ? "dark" : "light" }} />
-                      {/* Was schon wartet. Ohne diese Liste wüsste niemand, ob
-                          ein geplanter Beitrag überhaupt existiert. */}
-                      {queued.length > 0 && (
-                        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${theme.borderFaint}`,
-                          maxHeight: 190, overflowY: "auto" }}>
-                          <div style={{ ...label, marginBottom: 8 }}>{de ? "Wartet" : "Waiting"}</div>
-                          {queueRows(queued)}
-                        </div>
-                      )}
-                      <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 14 }}>
-                        <span onClick={() => { setSchedule(""); setWhenOpen(false); }}
-                          style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, cursor: "pointer" }}>
-                          {de ? "Doch sofort" : "Post now instead"}
-                        </span>
-                        <motion.button whileTap={{ scale: 0.97 }}
-                          onClick={() => { if (!schedule) setSchedule(defaultWhen()); setWhenOpen(false); }}
-                          style={{ marginLeft: "auto", height: 34, padding: "0 16px", borderRadius: 999, border: "none",
-                            background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
-                            fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}>
-                          {de ? "Übernehmen" : "Apply"}
-                        </motion.button>
-                      </div>
-                    </div>
-                  </>)}
-                </div>
-              )}
               {/* Nichts ausgewählt, aber alle gewählten Kanäle nehmen reinen
                   Text: dann ist das Veröffentlichen ein stiller Link und kein
                   Knopf, der über den drei Einstiegen thront. */}
@@ -35758,9 +35746,21 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   </>)}
                 </div>
               )}
+              {/* Abbrechen gehört neben Speichern, nicht ans andere Ende des
+                  Fußes: links steht das Plus, mit dem man etwas HINZUFÜGT, und
+                  ein Abbrechen direkt daneben wird irgendwann versehentlich
+                  getroffen. Gleiche Breite, sonst liest sich das Paar schief. */}
+              {editing && (
+                <motion.button whileTap={{ scale: 0.97 }} onClick={stopEditing}
+                  style={{ ...footBtn, minWidth: 124, marginRight: 10, padding: "0 18px",
+                    border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, cursor: "pointer" }}>
+                  {de ? "Abbrechen" : "Cancel"}
+                </motion.button>
+              )}
               {editing ? (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={saveQueued} disabled={Boolean(busy)}
-                  style={{ ...footBtn, border: "none", background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
+                  style={{ ...footBtn, minWidth: 124, padding: "0 18px", border: "none",
+                    background: darkMode ? "#fff" : "#15151c", color: darkMode ? "#15151c" : "#fff",
                     cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}>
                   {busy === "save" ? (de ? "Wird gespeichert…" : "Saving…") : (de ? "Speichern" : "Save")}
                 </motion.button>
