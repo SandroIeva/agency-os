@@ -30847,16 +30847,50 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef,
       ) : null}
 
       <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 26px 26px" }}>
+        {/* An empty tab and a filter that matches nothing are different
+            situations, and only one of them is the user's doing: the first one
+            is a starting point and says what to do, the second is one line. */}
         {people.length === 0 ? (
-          <div style={{ padding: "60px 20px", textAlign: "center", fontSize: 13,
-            fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-            {/* An empty tab and a filter that matches nothing are different
-                situations, and only one of them is the user's doing. */}
-            {allPeople.length === 0
-              ? (de ? "Noch niemand hier. Wer auf Social Media kommentiert oder mehrfach reagiert, erscheint von selbst. Manuell anlegen und importieren geht schon, wird aber noch nicht gespeichert."
-                    : "Nobody here yet. Anyone who comments on social, or reacts repeatedly, shows up on their own. Adding and importing by hand already works, but is not saved yet.")
-              : (de ? "Keine Personen gefunden." : "No people found.")}
-          </div>
+          allPeople.length === 0 ? (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                textAlign: "center", padding: "78px 20px 40px" }}
+            >
+              <div style={{ fontSize: 16, fontFamily: FONT, color: theme.text, fontWeight: 500, marginBottom: 7 }}>
+                {de ? "Noch niemand hier" : "Nobody here yet"}
+              </div>
+              {/* A line of text is read, a paragraph across the whole screen is
+                  not: this one is held to a column. */}
+              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 380, marginBottom: 22 }}>
+                {de ? "Wer auf Social Media kommentiert oder mehrfach reagiert, erscheint hier von selbst."
+                    : "Anyone who comments on social, or reacts repeatedly, shows up here on their own."}
+              </div>
+              <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                onClick={() => createNewPerson()}
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px", borderRadius: 999,
+                  background: "transparent", border: `1px solid ${theme.border}`, color: theme.text,
+                  fontSize: 13.5, fontWeight: 500, fontFamily: FONT, cursor: "pointer" }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+                  <line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
+                </svg>
+                {de ? "Person hinzufügen" : "Add a person"}
+              </motion.button>
+              {/* Said, not hidden: somebody who types a person in and comes back
+                  to an empty list would think the app lost it. */}
+              <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint, marginTop: 14, maxWidth: 380, lineHeight: 1.5 }}>
+                {de ? "Von Hand angelegte Personen werden noch nicht gespeichert."
+                    : "People added by hand are not saved yet."}
+              </div>
+            </motion.div>
+          ) : (
+            <div style={{ padding: "60px 20px", textAlign: "center", fontSize: 13,
+              fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
+              {de ? "Keine Personen gefunden." : "No people found."}
+            </div>
+          )
         ) : view === "list" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
             {people.map(p => (
