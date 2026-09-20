@@ -34452,6 +34452,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // nichts konnten, außer eine Fehlermeldung zu zeigen: genau das ist beim
   // Klick auf "Entwurf speichern" passiert.
   const canQueue = selected.length > 0 && selected.every(a => !a.provider);
+  // Ohne Bild bleibt der Text das Einzige, was der Beitrag hat. Solange der
+  // leer ist, gibt es nichts zu veröffentlichen, und ein Link, der das erst
+  // nach dem Klick sagt, ist eine Falle.
+  const textReady = !!text.trim();
 
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -34673,7 +34677,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                              Schritt-Reiter. Was an ist, sagt der Haken rechts,
                              derselbe wie in der Mitgliederliste. */
                           <motion.div key={a.id} whileTap={{ scale: 0.99 }} onClick={() => toggleAccount(a.id)}
-                            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 12px 9px 9px", borderRadius: 999, cursor: "pointer",
+                            /* Dieselbe Rundung wie die Schritt-Reiter darüber und das
+                               Textfeld daneben. Eine Pille neben lauter 12ern liest
+                               sich als anderes Bauteil. */
+                            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 12px 11px 9px", borderRadius: 12, cursor: "pointer",
                               background: darkMode ? "rgba(255,255,255,0.05)" : "#fff",
                               border: `1px solid ${on ? theme.border : theme.borderFaint}`,
                               color: theme.text, transition: "border-color 0.15s ease" }}>
@@ -35155,9 +35162,11 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   Text: dann ist das Veröffentlichen ein stiller Link und kein
                   Knopf, der über den drei Einstiegen thront. */}
               {canPost && !hasMedia && (
-                <span onClick={() => { if (!busy) submit("post"); }}
+                <span onClick={() => { if (textReady && !busy) submit("post"); }}
+                  title={textReady ? undefined : (de ? "Schreib zuerst eine Beschreibung." : "Write a description first.")}
                   style={{ padding: "0 14px", fontSize: 12.5, fontFamily: FONT, fontWeight: 600,
-                    color: busy ? theme.textFaint : theme.textDim, cursor: busy ? "wait" : "pointer", whiteSpace: "nowrap" }}>
+                    color: theme.textDim, opacity: textReady ? 1 : 0.4,
+                    cursor: !textReady ? "default" : busy ? "wait" : "pointer", whiteSpace: "nowrap" }}>
                   {busy === "post" ? (de ? "Wird gesendet…" : "Sending…") : (de ? "Ohne Bild veröffentlichen" : "Publish without a picture")}
                 </span>
               )}
