@@ -35630,6 +35630,71 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     border: `3px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)"}`,
                     borderTopColor: theme.text }} />
               </div>
+            ) : accounts.length === 0 ? (
+            /* Ohne Kanal gibt es auf keinem der beiden Schritte etwas zu tun
+               als genau das eine. Keine Beschreibung daneben, keine Einstiege
+               für ein Visual, das nirgendwo hingehen kann: das war eine halbe
+               Maske um einen Satz herum, der allein stehen sollte. */
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                transition={{ duration: 0.4, ease: [0.22, 0.68, 0.35, 1] }}
+                style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 10, padding: "20px 0" }}>
+                <div style={{ width: 56, height: 56, borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text, marginBottom: 4 }}>
+                  {/* Broadcast, not a chain link: the chain is the share
+                      link's glyph and means "a url", which is not what
+                      connecting a channel is. */}
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="2.2"/>
+                    <path d="M8.6 8.6a4.8 4.8 0 000 6.8M15.4 15.4a4.8 4.8 0 000-6.8"/>
+                    <path d="M5.8 5.8a8.8 8.8 0 000 12.4M18.2 18.2a8.8 8.8 0 000-12.4"/>
+                  </svg>
+                </div>
+                <div style={{ fontSize: 19, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.2 }}>
+                  {de ? "Noch kein Kanal verbunden" : "No channel connected yet"}
+                </div>
+                {/* Der Satz hier erklärte die Spalten, die daneben standen.
+                    Die stehen nicht mehr daneben, und in der Testphase sagt
+                    der Kasten darunter ohnehin dasselbe besser. */}
+                {!(socialBlocked && !directAddable.length) && (
+                  <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 400 }}>
+                    {de ? "Verbinde einen Kanal, dann kannst du von hier aus posten."
+                        : "Connect a channel and you can post from here."}
+                  </div>
+                )}
+                {socialBlocked && !directAddable.length ? (
+                  <div style={{ marginTop: 20, padding: "22px 26px", borderRadius: 20, maxWidth: 360,
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 3, textAlign: "center",
+                    background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)",
+                    color: theme.text, fontFamily: FONT, lineHeight: 1.55 }}>
+                    {/* Zwei Sätze, zwei Zeilen. Nebeneinander gesetzt las
+                        sich die Einschränkung wie ein Nachsatz im selben
+                        Atemzug, und der Knopf stand daneben statt
+                        darunter. */}
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>
+                      {de ? "Kanäle verbinden gehört zu einem bezahlten Plan."
+                          : "Connecting channels is part of a paid plan."}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: theme.textDim }}>
+                      {de ? "In der Testphase ist es noch nicht enthalten."
+                          : "It is not included during the trial."}
+                    </div>
+                    <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => openBillingSettings()}
+                      style={{ ...primaryBtn(darkMode), marginTop: 16, padding: "9px 22px", borderRadius: 999, border: "none",
+                        fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                      {de ? "Plan wählen" : "Choose a plan"}
+                    </motion.button>
+                  </div>
+                ) : (
+                  /* The same chips Analytics offers, on this screen. */
+                  <div style={{ marginTop: 15, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+                    {addableHere.map(k => (
+                      <ChannelConnectChip key={k} uiKey={k} big theme={theme} de={de}
+                        busy={connectBusy === k} blocked={socialBlocked && !directAddable.includes(k)}
+                        onConnect={connectChannelHere} />
+                    ))}
+                  </div>
+                )}
+              </motion.div>
             ) : (
             <motion.div className="no-scrollbar"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -35640,54 +35705,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
                 {/* ── 01 Kanäle, links neben der Beschreibung ── */}
                 {stepIdx === S_TEXT && (<>
-                  {accounts.length === 0 ? (
-                    /* Nothing connected, so nothing else on this screen: no
-                       preview of a post that cannot be sent, no scheduling for
-                       it either. One thing to do, in the middle. */
-                    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 10, padding: "20px 0" }}>
-                      <div style={{ width: 56, height: 56, borderRadius: 18, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: theme.text, marginBottom: 4 }}>
-                        {/* Broadcast, not a chain link: the chain is the share
-                            link's glyph and means "a url", which is not what
-                            connecting a channel is. */}
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="2.2"/>
-                          <path d="M8.6 8.6a4.8 4.8 0 000 6.8M15.4 15.4a4.8 4.8 0 000-6.8"/>
-                          <path d="M5.8 5.8a8.8 8.8 0 000 12.4M18.2 18.2a8.8 8.8 0 000-12.4"/>
-                        </svg>
-                      </div>
-                      <div style={{ fontSize: 19, fontFamily: FONT, fontWeight: 600, color: theme.text, letterSpacing: -0.2 }}>
-                        {de ? "Noch kein Kanal verbunden" : "No channel connected yet"}
-                      </div>
-                      <div style={{ fontSize: 13.5, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, maxWidth: 420 }}>
-                        {de ? "Dein Visual und deine Beschreibung sind gespeichert. Verbinde einen Kanal, dann erscheinen hier die Accounts, der Zeitpunkt und die Vorschau."
-                            : "Your visual and your description are kept. Connect a channel and the accounts, the timing and the preview appear here."}
-                      </div>
-                      {socialBlocked && !directAddable.length ? (
-                        <div style={{ marginTop: 15, padding: "12px 16px", borderRadius: 14, maxWidth: 460,
-                          display: "flex", alignItems: "center", justifyContent: "center", gap: 14, flexWrap: "wrap",
-                          background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                          border: `1px solid ${theme.borderFaint}`, color: theme.text, fontSize: 12.5, fontFamily: FONT, lineHeight: 1.5 }}>
-                          <span>{de
-                            ? "Social-Accounts verbinden gehört zu einem bezahlten Plan. In der Testphase ist es noch nicht enthalten."
-                            : "Connecting social accounts is part of a paid plan. It is not included during the trial."}</span>
-                          <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => openBillingSettings()}
-                            style={{ ...primaryBtn(darkMode), padding: "7px 15px", borderRadius: 999, border: "none", flexShrink: 0,
-                              fontFamily: FONT, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                            {de ? "Plan wählen" : "Choose a plan"}
-                          </motion.button>
-                        </div>
-                      ) : (
-                        /* The same chips Analytics offers, on this screen. */
-                        <div style={{ marginTop: 15, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
-                          {addableHere.map(k => (
-                            <ChannelConnectChip key={k} uiKey={k} big theme={theme} de={de}
-                              busy={connectBusy === k} blocked={socialBlocked && !directAddable.includes(k)}
-                              onConnect={connectChannelHere} />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : (<>
+                  {(<>
                     {/* Only what is connected. The networks you do NOT have
                         used to stand in the same row as the ones you do, so the
                         list was mostly things that were not choices. They moved
