@@ -58429,17 +58429,6 @@ export default function CircularMenu() {
                         : "No password yet? Sign in with the login link and set one under Settings → Account."}
                     </div>
                   )}
-                  {/* Said here rather than left to be discovered: the screen
-                      offers a password and nothing on it says where one comes
-                      from, so somebody who never set one types something and is
-                      told it is wrong. */}
-                  {passwordMode && (
-                    <div style={{ fontSize: 12, color: theme.textDim, fontFamily: FONT, lineHeight: 1.5, textAlign: "center", padding: "0 4px" }}>
-                      {appLanguage === "de"
-                        ? "Noch kein Passwort? Melde dich mit dem Login-Link an und setze eines unter Einstellungen → Account."
-                        : "No password yet? Sign in with the login link and set one under Settings → Account."}
-                    </div>
-                  )}
                   {/* The link stays the way in for everybody who has no password,
                       which is everybody until they set one in Settings. */}
                   <div onClick={() => { setPasswordMode(v => !v); setAuthError(null); setLoginPassword(""); }}
