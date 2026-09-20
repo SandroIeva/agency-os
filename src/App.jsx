@@ -33567,6 +33567,15 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const [directNetworks, setDirectNetworks] = useState({ ig: false, th: false, tt: false });
   const [extras, setExtras] = useState([]);        // [{ id, file, url }] — carousel slides 2..10
   const [reel, setReel] = useState(null);          // { file, url } — a video instead of a picture
+  // Eine Story ist kein anderes Format, sondern ein anderer Ort: dasselbe Bild
+  // kann beides sein, also kann es die Datei nicht entscheiden. Nur Instagram
+  // hat diesen Ort, Threads kennt ihn nicht.
+  const [igStory, setIgStory] = useState(false);
+  // Welcher Ausschnitt des Bildes in der Story steht. 0..1 je Achse, wie
+  // objectPosition: 0 zeigt den linken/oberen Rand, 1 den rechten/unteren. Die
+  // Ansicht und der Export rechnen mit derselben Zahl, sonst postet man etwas
+  // anderes, als man gesehen hat.
+  const [storyFocus, setStoryFocus] = useState({ x: 0.5, y: 0.5 });
   const extraRef = useRef(null);
   // Where a video can actually go. All three direct networks take one:
   // Instagram as a reel, Threads as a video post, TikTok as the only thing it
@@ -33602,6 +33611,38 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     ? Math.min(viewBox.w / mediaSize.w, viewBox.h / mediaSize.h) : 0;
   const mediaWidth = (mediaSize?.w || 0) * mediaScale;
   const mediaHeight = (mediaSize?.h || 0) * mediaScale;
+  // Eine Story ist 9:16, egal was das Bild ist. Der Rahmen nimmt die Höhe, die
+  // da ist, und wird schmaler, wenn die Breite nicht reicht. Ein Video wird
+  // nicht beschnitten: dafür müsste es neu berechnet werden, und das gehört
+  // nicht in einen Browser-Tab.
+  const storyBox = (igStory && visual && !curSlide?.video && viewBox.h > 0)
+    ? (() => {
+        const h = Math.min(viewBox.h, viewBox.w * (16 / 9));
+        return { w: h * (9 / 16), h };
+      })()
+    : null;
+  // Ziehen verschiebt den Ausschnitt, nicht das Bild: bewegt wird um den Teil,
+  // der über den Rahmen hinausragt, sonst läuft die Maus schneller als das Bild.
+  const onStoryDrag = (e) => {
+    if (!storyBox || !visual?.w || !visual?.h) return;
+    e.preventDefault();
+    const frame = e.currentTarget.getBoundingClientRect();
+    const scale = Math.max(frame.width / visual.w, frame.height / visual.h);
+    const overX = visual.w * scale - frame.width;
+    const overY = visual.h * scale - frame.height;
+    const from = { x: e.clientX, y: e.clientY, fx: storyFocus.x, fy: storyFocus.y };
+    const clamp = (v) => Math.min(1, Math.max(0, v));
+    const move = (ev) => setStoryFocus({
+      x: overX > 1 ? clamp(from.fx - (ev.clientX - from.x) / overX) : from.fx,
+      y: overY > 1 ? clamp(from.fy - (ev.clientY - from.y) / overY) : from.fy,
+    });
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
   const [overlays, setOverlays] = useState([]);     // [{ id, text, x, y, size, color, bold }] — x/y/size relative to image
   const [selOverlay, setSelOverlay] = useState(null);
   // Dictation for the caption, the same SpeechRecognition the notes and the
@@ -33967,10 +34008,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     });
   };
   const [queueOpen, setQueueOpen] = useState(false);
-  // Eine Story ist kein anderes Format, sondern ein anderer Ort: dasselbe Bild
-  // kann beides sein, also kann es die Datei nicht entscheiden. Nur Instagram
-  // hat diesen Ort, Threads kennt ihn nicht.
-  const [igStory, setIgStory] = useState(false);
   // Ein geplanter Beitrag ist Arbeit, die weg ist, wenn man daneben trifft.
   // Der erste Klick fragt, der zweite löscht.
   const [confirmDrop, setConfirmDrop] = useState(null);
@@ -34279,6 +34316,22 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   const exportVisual = async () => {
     const file = imageFileRef.current;
     if (!file || !visual) return null;
+    // Für eine Story wird beschnitten, und zwar auf denselben Ausschnitt, den
+    // die Bühne zeigt: dieselbe Formel, die objectPosition benutzt.
+    if (igStory) {
+      const bmp = await createImageBitmap(file);
+      const W = 1080, H = 1920;
+      const canvas = document.createElement("canvas");
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+      const scale = Math.max(W / bmp.width, H / bmp.height);
+      const rw = bmp.width * scale, rh = bmp.height * scale;
+      ctx.drawImage(bmp, (W - rw) * storyFocus.x, (H - rh) * storyFocus.y, rw, rh);
+      const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.92));
+      if (!blob) throw new Error(de ? "Story konnte nicht gerendert werden." : "Could not render the story.");
+      return { blob, type: "image/jpeg", name: "story.jpg" };
+    }
     if (overlays.length === 0) return { blob: file, type: file.type || "image/png", name: file.name };
     try { await document.fonts?.load(`700 64px Geist`); await document.fonts?.load(`500 64px Geist`); } catch (_) {}
     const bmp = await createImageBitmap(file);
@@ -35269,13 +35322,19 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                         const uiKey = uiKeyFor(a.platform);
                         const p = TOUCHPOINT_PLATFORMS.find(x => x.key === uiKey) || { color: "#15151c", label: a.platform };
                         const on = selectedIds.includes(a.id);
+                        // Solange die Story an ist, kann nur Instagram mit.
+                        const storyBlocked = igStory && a.provider !== "meta";
                         return (
                           /* Weiß, ausgewählt wie nicht ausgewählt. Die Zeile war
                              anthrazit, wenn sie an war, und stand damit als
                              zweiter schwarzer Balken unter dem schwarzen
                              Schritt-Reiter. Was an ist, sagt der Haken rechts,
                              derselbe wie in der Mitgliederliste. */
-                          <motion.div key={a.id} whileTap={{ scale: 0.99 }} onClick={() => toggleAccount(a.id)}
+                          <motion.div key={a.id} whileTap={{ scale: storyBlocked ? 1 : 0.99 }}
+                            onClick={() => { if (!storyBlocked) toggleAccount(a.id); }}
+                            title={storyBlocked
+                              ? (de ? `${p.label} kennt keine Story.` : `${p.label} has no stories.`)
+                              : undefined}
                             /* Dieselbe Rundung wie die Schritt-Reiter darüber und das
                                Textfeld daneben. Eine Pille neben lauter 12ern liest
                                sich als anderes Bauteil. */
@@ -35283,9 +35342,10 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                                schon die Karte, und was gewählt ist, sagt der Haken.
                                Rundum dasselbe Innenmaß, damit Logo und Haken gleich
                                weit von ihrer Kante stehen. */
-                            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: 14, borderRadius: 12, cursor: "pointer",
+                            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: 14, borderRadius: 12,
+                              cursor: storyBlocked ? "default" : "pointer", opacity: storyBlocked ? 0.38 : 1,
                               background: darkMode ? "rgba(255,255,255,0.05)" : "#fff",
-                              color: theme.text }}>
+                              color: theme.text, transition: "opacity 0.15s ease" }}>
                             <div style={{ width: 24, height: 24, borderRadius: 8, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                               <svg width={tpGlyphSize(uiKey, 14)} height={tpGlyphSize(uiKey, 14)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
                             </div>
@@ -35337,7 +35397,17 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                                 : "One picture or video, no caption, gone after 24 hours. Instagram only."}
                           </div>
                         </div>
-                        <ToggleSwitch on={igStory} onClick={() => setIgStory(v => !v)} darkMode={darkMode} />
+                        {/* Eine Story gibt es nur bei Instagram. Beim Einschalten
+                            fliegen die anderen Kanäle aus der Auswahl, statt
+                            später mit einer Fehlermeldung abzulehnen. */}
+                        <ToggleSwitch on={igStory} darkMode={darkMode}
+                          onClick={() => setIgStory(v => {
+                            const next = !v;
+                            if (next) setSelectedIds(ids => ids.filter(id =>
+                              (accounts || []).find(a => a.id === id)?.provider === "meta"));
+                            setStoryFocus({ x: 0.5, y: 0.5 });
+                            return next;
+                          })} />
                       </div>
                       {/* Instagram nimmt über die API für eine Story KEINEN Text
                           entgegen, weder Bildunterschrift noch Sticker. Ohne
@@ -35578,8 +35648,29 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
 
                       <div ref={viewRef} style={{ position: "absolute", inset: slides.length > 1 ? "0 58px" : 0,
                         display: "flex", alignItems: "center", justifyContent: "center", minWidth: 0, minHeight: 0 }}>
-                      <div style={{ position: "relative", lineHeight: 0, flexShrink: 0, width: mediaWidth, height: mediaHeight }}>
-                      {curSlide?.video ? (
+                      <div style={{ position: "relative", lineHeight: 0, flexShrink: 0,
+                        width: storyBox ? storyBox.w : mediaWidth, height: storyBox ? storyBox.h : mediaHeight }}>
+                      {storyBox ? (
+                        /* Hochkant, im Verhältnis der Story, und das Bild darin
+                           verschiebbar. Gezeigt wird genau der Ausschnitt, der
+                           gepostet wird: objectPosition hier und dieselbe Zahl
+                           beim Rendern. */
+                        <div onPointerDown={onStoryDrag}
+                          style={{ position: "relative", width: "100%", height: "100%", borderRadius: 16,
+                            overflow: "hidden", background: "#000", cursor: "grab", touchAction: "none",
+                            outline: `1px solid ${theme.borderFaint}`, outlineOffset: -1 }}>
+                          <img src={currentMediaUrl} alt="" draggable={false}
+                            onLoad={e => setLoadedMedia({ url: currentMediaUrl, w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+                            style={{ display: "block", width: "100%", height: "100%", objectFit: "cover",
+                              objectPosition: `${storyFocus.x * 100}% ${storyFocus.y * 100}%` }} />
+                          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "18px 12px 10px",
+                            textAlign: "center", pointerEvents: "none",
+                            background: "linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0))",
+                            fontSize: 11, fontFamily: FONT, color: "rgba(255,255,255,0.92)" }}>
+                            {de ? "Zum Verschieben ziehen" : "Drag to reposition"}
+                          </div>
+                        </div>
+                      ) : curSlide?.video ? (
                         <video key={curSlide.url} src={curSlide.url} controls playsInline
                           onLoadedMetadata={e => setLoadedMedia({ url: curSlide.url, w: e.currentTarget.videoWidth, h: e.currentTarget.videoHeight })}
                           style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 16, outline: `1px solid ${theme.borderFaint}`, outlineOffset: -1, display: "block" }} />
