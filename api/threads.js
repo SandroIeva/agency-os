@@ -40,13 +40,19 @@ const GRAPH_ROOT = process.env.THREADS_GRAPH_HOST || "https://graph.threads.net"
 const V = process.env.THREADS_API_VERSION || "v1.0";
 const GRAPH = `${GRAPH_ROOT}/${V}`;
 
-// Read the profile and publish to it. Replies and insights are deliberately
-// absent: a token keeps the scopes it was issued with, so widening the list
-// later strands every connection made before the change, but asking for a
-// permission we do not use is the surest way to have a review rejected.
+// Read the profile, publish to it, read its numbers, read the answers under
+// its posts. A token keeps the scopes it was issued with, so widening this list
+// strands every connection made before the change: it belongs in the same App
+// Review as the rest, not in a later one. Asking for a permission we do not use
+// is the surest way to have a review rejected, so the list is exactly what the
+// code calls.
+//
+// threads_read_replies is the GET half. threads_manage_replies (answering,
+// hiding, approving) is deliberately NOT asked for: nothing in i7OS answers a
+// reply, it only shows them, the same way the Instagram panel does.
 // threads_profile_discovery was here for the Benchmark card, which is gone. A
 // connection made while it was asked for still carries it, which is harmless.
-const SCOPES = ["threads_basic", "threads_content_publish", "threads_manage_insights"].join(",");
+const SCOPES = ["threads_basic", "threads_content_publish", "threads_manage_insights", "threads_read_replies"].join(",");
 
 // 60-day tokens with no refresh token: a live one is traded for a fresh one, so
 // it must happen before the old one lapses. Threads refuses to refresh a token
@@ -306,6 +312,11 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
         expiresAt: a.token_expires_at,
         needsReconnect: new Date(a.token_expires_at).getTime() <= Date.now() || !!a.last_error,
         lastError: a.last_error || null,
+        // What this connection was granted is what it can do. A token from
+        // before the replies were added reads the profile and the numbers fine
+        // and is refused on the replies, so the UI can ask for one reconnect
+        // instead of showing an empty box. Same as Instagram's.
+        missingScopes: SCOPES.split(",").filter(sc => !String(a.scopes || "").split(",").includes(sc)),
       })),
     });
   }
@@ -439,6 +450,73 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     posts.sort((x, y) => (y.likes + y.replies + y.reposts) - (x.likes + x.replies + x.reposts));
 
     return json({ days, postCount: recent.length, posts: posts.slice(0, limit) });
+  }
+
+  // ── replies — who is answering under the account's own posts ─────────────
+  //
+  // The mirror of Instagram's comments panel, and read-only for the same
+  // reason: i7OS shows the answers, it does not write them.
+  if (body.mode === "replies") {
+    const days = Math.min(90, Math.max(1, Number(body.days) || 28));
+    const cutoff = Date.now() - days * 86400000;
+    const list = await th(token, `/${row.threads_user_id}/threads`, {
+      fields: "id,text,permalink,timestamp,media_type", limit: 25,
+    });
+    if (!list.ok) return json({ error: list.body?.error?.message || "threads_failed" }, 502);
+    // A repost is not a post of yours, and nobody answers under it here.
+    const media = (list.body?.data || []).filter(m => m.media_type !== "REPOST_FACADE");
+    const posts = media
+      .filter(m => !m.timestamp || new Date(m.timestamp).getTime() >= cutoff)
+      .slice(0, 10);
+    // The newest post is asked ALWAYS, even outside the window and even with
+    // nothing under it: an account nobody answers would otherwise never make
+    // the call Meta counts before a permission can be reviewed. Instagram's
+    // comments sat at zero calls for exactly that reason.
+    if (media[0] && !posts.some(m => m.id === media[0].id)) posts.unshift(media[0]);
+
+    const FIELDS = "id,text,username,timestamp,permalink,is_reply_owned_by_me,hide_status";
+    const PLAIN = "id,text,username,timestamp,permalink";
+    let refused = null;
+    const perPost = await Promise.all(posts.map(async (m) => {
+      let r = await th(token, `/${m.id}/replies`, { fields: FIELDS, limit: 25 });
+      // An unknown field comes back as a 400 naming it. The same request
+      // without the extras is the answer, not an error.
+      if (!r.ok && r.status === 400 && /field/i.test(JSON.stringify(r.body?.error || ""))) {
+        r = await th(token, `/${m.id}/replies`, { fields: PLAIN, limit: 25 });
+      }
+      if (!r.ok) { refused = refused || r.body?.error || { message: "replies_failed" }; return []; }
+      const base = { platform: "threads", postId: m.id, postPermalink: m.permalink || null,
+        postContent: (m.text || "").slice(0, 140) };
+      return (r.body?.data || [])
+        .filter(c => c.hide_status !== "HIDDEN")
+        .map(c => ({
+          ...base,
+          id: c.id,
+          message: c.text || "",
+          createdTime: c.timestamp || null,
+          // Threads does not put a like count on a reply, and a hard 0 would
+          // read as "nobody liked it" rather than "not said".
+          likeCount: null,
+          url: c.permalink || null,
+          from: {
+            id: null,
+            username: c.username || null,
+            name: c.username || null,
+            isOwner: c.is_reply_owned_by_me === true || (!!c.username && c.username === row.username),
+          },
+        }));
+    }));
+    const flat = perPost.flat();
+    // Every post refused and nothing came back is a permission answer, not an
+    // account nobody talks to. Said as one, so the panel can ask for the
+    // single reconnect that fixes it.
+    if (!flat.length && refused && posts.length) {
+      const scopeMissing = String(row.scopes || "").split(",").indexOf("threads_read_replies") === -1;
+      return json({ error: refused.message || "replies_failed",
+        code: scopeMissing ? "scope_missing" : "threads_error" }, scopeMissing ? 403 : 502);
+    }
+    flat.sort((a2, b2) => String(b2.createdTime || "").localeCompare(String(a2.createdTime || "")));
+    return json({ recent: flat.slice(0, 60) });
   }
 
   if (body.mode === "limit") {

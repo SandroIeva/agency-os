@@ -31376,13 +31376,16 @@ function WebsitePresencePanel({ theme, darkMode, appLanguage, session, userOrg, 
 // promise the tab cannot keep.
 const COMMENT_PLATFORMS = ["linkedin", "instagram", "facebook", "threads", "youtube", "twitter"];
 
-function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, card, secLabel, igUserId = null }) {
+function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, card, secLabel, igUserId = null, threadsUserId = null }) {
   const [recent, setRecent] = useState(null);   // null = loading
   const [error, setError] = useState(null);
   // "scope" when the Instagram connection predates comment access and has to be
   // made once more. Said in the panel, because an empty box looks like an
   // account nobody talks to.
   const [igHint, setIgHint] = useState(null);
+  // The same for Threads: a connection made before the replies were added
+  // reads the numbers fine and is refused on the answers.
+  const [thHint, setThHint] = useState(null);
   const [shown, setShown] = useState(5);
   const [scReady, setScReady] = useState(true);
   // Who a commenter actually is — headline, reach, where they are. Zernio gives
@@ -31458,43 +31461,57 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
     if (!orgId || !session) return;
     let alive = true;
     autoDone.current = false;
-    setRecent(null); setError(null); setShown(5); setIgHint(null);
+    setRecent(null); setError(null); setShown(5); setIgHint(null); setThHint(null);
     // Instagram straight from Meta when the workspace is connected there: free,
     // and it names every commenter. It REPLACES Zernio's Instagram comments
     // rather than joining them, or a comment reachable both ways would show
     // twice. Zernio still answers for every other network.
     const wantsIg = !!igUserId && (platform === "all" || platform === "instagram");
-    const fromZernio = wantsIg && platform === "instagram" ? Promise.resolve(null)
+    // Threads answers come straight from Meta too, for the same reason: free,
+    // and they name whoever wrote them. Zernio still answers for the rest.
+    const wantsTh = !!threadsUserId && (platform === "all" || platform === "threads");
+    const askMeta = (path, payload) => fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ orgId, ...payload }),
+    }).then(async res => ({ status: res.status, j: await res.json().catch(() => null) })).catch(() => null);
+    // Nothing to ask Zernio when the one platform in view is one we read
+    // ourselves.
+    const onlyOurs = (platform === "instagram" && wantsIg) || (platform === "threads" && wantsTh);
+    const fromZernio = onlyOurs ? Promise.resolve(null)
       : zernioRequest(session, { mode: "comments", orgId, recent: true,
           platform: platform === "all" ? undefined : zernioKeyFor(platform) })
           .then(r => ({ ok: true, r })).catch(e => ({ ok: false, e }));
-    const fromMeta = !wantsIg ? Promise.resolve(null)
-      : fetch("/api/instagram", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ mode: "comments", orgId, igUserId }),
-        }).then(async res => ({ status: res.status, j: await res.json().catch(() => null) })).catch(() => null);
-    Promise.all([fromZernio, fromMeta]).then(([z, m]) => {
+    const fromMeta = !wantsIg ? Promise.resolve(null) : askMeta("/api/instagram", { mode: "comments", igUserId });
+    const fromThreads = !wantsTh ? Promise.resolve(null) : askMeta("/api/threads", { mode: "replies", threadsUserId });
+    Promise.all([fromZernio, fromMeta, fromThreads]).then(([z, m, t]) => {
       if (!alive) return;
       const metaList = m && m.status === 200 && Array.isArray(m.j?.recent) ? m.j.recent : null;
+      const thList = t && t.status === 200 && Array.isArray(t.j?.recent) ? t.j.recent : null;
+      const direct = [...(metaList || []), ...(thList || [])];
       if (m?.j?.code === "scope_missing") setIgHint("scope");
+      if (t?.j?.code === "scope_missing") setThHint("scope");
       if (z?.ok) setScReady(z.r.socialcrawl !== false);
       const zUsable = z?.ok && !z.r.list?.__unavailable;
       if (!zUsable) {
-        if (metaList) { setRecent(metaList); return; }
+        if (direct.length) { direct.sort((a, b) => String(b.createdTime || "").localeCompare(String(a.createdTime || ""))); setRecent(direct); return; }
         if (z && !z.ok) { setError(z.e); return; }
         if (z?.ok) { setRecent(z.r.list); return; }            // Zernio's add-on is off
-        if (m?.j?.code === "scope_missing") { setRecent([]); return; }
-        setError({ message: m?.j?.error || (de ? "Instagram hat nicht geantwortet." : "Instagram did not answer.") });
+        if (metaList || thList) { setRecent([]); return; }     // connected, nobody said anything
+        if (m?.j?.code === "scope_missing" || t?.j?.code === "scope_missing") { setRecent([]); return; }
+        setError({ message: m?.j?.error || t?.j?.error || (de ? "Meta hat nicht geantwortet." : "Meta did not answer.") });
         return;
       }
       const zList = z.r.recent || [];
-      const merged = metaList ? [...zList.filter(c => c.platform !== "instagram"), ...metaList] : zList;
+      // Ours REPLACE Zernio's for the same network, or a comment reachable
+      // both ways would show up twice.
+      const ours = new Set([...(metaList ? ["instagram"] : []), ...(thList ? ["threads"] : [])]);
+      const merged = ours.size ? [...zList.filter(c => !ours.has(c.platform)), ...direct] : zList;
       merged.sort((a, b) => String(b.createdTime || "").localeCompare(String(a.createdTime || "")));
       setRecent(merged);
     });
     return () => { alive = false; };
-  }, [orgId, session, platform, igUserId]); // eslint-disable-line
+  }, [orgId, session, platform, igUserId, threadsUserId]); // eslint-disable-line
 
   const when = (iso) => {
     const d = new Date(iso);
@@ -31550,6 +31567,14 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
           background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
           {de ? "Damit hier die Instagram-Kommentare erscheinen, verbinde Instagram in den Einstellungen einmal neu. Die bestehende Verbindung stammt von vor dem Kommentarzugriff."
               : "To see Instagram comments here, connect Instagram once more in Settings. The current connection predates comment access."}
+        </div>
+      )}
+      {thHint === "scope" && (
+        <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 9,
+          fontFamily: FONT, fontSize: 11.5, color: theme.textDim, lineHeight: 1.5,
+          background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}>
+          {de ? "Damit hier die Threads-Antworten erscheinen, verbinde Threads in den Einstellungen einmal neu. Die bestehende Verbindung stammt von vor dem Zugriff auf Antworten."
+              : "To see Threads replies here, connect Threads once more in Settings. The current connection predates reply access."}
         </div>
       )}
       {error ? msg(zernioErrorText(error, de))
@@ -32575,7 +32600,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
             </div>
             )}
             <SocialCommentsPanel theme={theme} darkMode={darkMode} de={de}
-              session={session} orgId={orgId} platform={platform} igUserId={igId}
+              session={session} orgId={orgId} platform={platform} igUserId={igId} threadsUserId={thId}
               card={card} secLabel={secLabel} />
           </div>
         </>
