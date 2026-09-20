@@ -16,7 +16,7 @@ Review.
 | Business Verification | **erledigt** (Angabe des Owners, 20.09.2026) |
 | App-Icon 1024 × 1024 | **erledigt**: `public/i7os-app-icon-1024.png`, aus `logo-dark.svg` gerendert, weiß auf `#15151c`, keine Meta-Marken |
 | Datenschutz, Meta-Abschnitte und `#data-deletion` | **erledigt**, live auf i7os.com/privacy |
-| API-Aufruf je Berechtigung | `instagram_business_manage_comments` hat einen. Für die übrigen sechs: Audience → Analytics einmal öffnen |
+| API-Aufruf je Berechtigung | Laut Konsole am 20.09. alle außer `threads_read_replies`, das an dem Tag erst dazukam. Dafür: Threads neu verbinden, dann Letzte Kommentare öffnen |
 | Bildschirmaufnahmen | offen, Drehbücher unten |
 | Prüfer-Zugang | offen: Konto anlegen, Workspace muss in `INSTAGRAM_DIRECT_ORGS` stehen |
 | Allowed usage, Data handling, Data protection | offen, in der Konsole auszufüllen |
@@ -39,7 +39,14 @@ eingereicht wird, braucht auch keinen Aufruf.
 
 ## Was eingereicht wird
 
-Nur die Berechtigungen, die der Code tatsächlich anfragt. **Sieben**:
+Nur die Berechtigungen, die der Code tatsächlich anfragt. **Acht**:
+`threads_read_replies` kam am 20.09.2026 dazu, als die Threads-Antworten in
+dieselbe Kommentar-Ansicht kamen wie die Instagram-Kommentare. Jetzt und nicht
+später, weil ein Token die Berechtigungen behält, mit denen es ausgestellt
+wurde: nachträglich ergänzt müsste jede bestehende Verbindung neu verbunden
+werden. `threads_manage_replies` (antworten, verbergen) wird **nicht**
+angefragt, i7OS zeigt die Antworten nur.
+Davor waren es sieben:
 `threads_manage_insights` kam dazu, als die Threads-Zahlen in Audience gebaut
 wurden, und `instagram_business_manage_comments`, als Analytics die
 Instagram-Kommentare direkt über Meta las. `threads_profile_discovery` ist
@@ -55,6 +62,7 @@ entfernt. Nicht einreichen, der Code fragt sie nicht mehr an.
 | `threads_basic` | Konto lesen | Analytics-Panel, Profil |
 | `threads_content_publish` | veröffentlichen | Analytics-Panel, 24-h-Kontingent · Composer |
 | `threads_manage_insights` | Zahlen lesen | Analytics-Panel, Kennzahlen und Follower-Herkunft |
+| `threads_read_replies` | Antworten lesen | Analytics → Letzte Kommentare |
 
 ## Die sechs Schritte, in dieser Reihenfolge
 
@@ -92,7 +100,9 @@ innerhalb von 30 Tagen vor der Einreichung**. Die Spalte in der Konsole wird
 täglich zusammengerechnet, ein frischer Aufruf taucht also erst am nächsten Tag
 auf.
 
-**Audience → Analytics** einmal zu öffnen erzeugt **sechs** der sieben Aufrufe.
+**Audience → Analytics** einmal zu öffnen erzeugt **sechs** der acht Aufrufe.
+Die beiden übrigen, die Kommentare und die Antworten, entstehen in der Ansicht
+**Letzte Kommentare** auf derselben Seite.
 Nachgelesen im Code, nicht angenommen:
 
 | Aufruf beim Öffnen von Analytics | deckt ab |
@@ -104,10 +114,17 @@ Nachgelesen im Code, nicht angenommen:
 | `/{th-id}/threads_insights` (Kennzahlen und Herkunft) | `threads_manage_insights` |
 | `/{th-id}/threads_publishing_limit` | `threads_content_publish` |
 
-⚠ **`instagram_business_manage_comments` braucht eine neue Verbindung.** Ein
-Instagram-Token behält die Rechte, mit denen es ausgestellt wurde. Vor der
-Einreichung also Instagram einmal trennen und neu verbinden und danach
-Analytics öffnen, damit `/{media-id}/comments` einen Aufruf hat.
+⚠ **Kommentare und Antworten brauchen je eine neue Verbindung.** Ein Token
+behält die Rechte, mit denen es ausgestellt wurde. Vor der Einreichung also
+Instagram **und** Threads einmal trennen und neu verbinden, dann die Ansicht
+Letzte Kommentare öffnen: `/{media-id}/comments` und `/{th-media-id}/replies`
+haben danach je einen Aufruf.
+
+Beide fragen den **neuesten Beitrag immer** ab, auch wenn nichts darunter
+steht. Sonst entsteht bei einem Konto, unter dem niemand schreibt, nie ein
+Aufruf, und genau daran hing `instagram_business_manage_comments` lange auf
+null. Ein Konto ohne Kommentare erzeugt also genau einen Aufruf pro Öffnen der
+Ansicht; mit Kommentaren sind es bis zu zehn.
 
 ⚠ Und die Voraussetzung dafür, dass Analytics überhaupt etwas aufruft: der
 Bereich zeigte bis zum 14.09.2026 die Seite "Verbinde deine Kanäle", sobald
@@ -135,6 +152,7 @@ zurück in i7OS, die Zeile zeigt das verbundene Konto.
 | 5 | `threads_basic` | Audience → Analytics: das verbundene Threads-Konto mit Name und Followerzahl |
 | 6 | `threads_manage_insights` | Dieselbe Seite: Aufrufe, Likes und die Herkunft der Follower |
 | 7 | `threads_content_publish` | Composer: reinen Textbeitrag auf Threads veröffentlichen, danach der Beitrag im Konto |
+| 8 | `threads_read_replies` | Analytics → Letzte Kommentare: die Antworten unter den eigenen Threads-Beiträgen, in derselben Liste wie die Instagram-Kommentare |
 
 ## Der Text für die Prüfer
 
@@ -160,6 +178,11 @@ dafür nötig ist.
 > - `threads_basic`, `threads_manage_insights`, `threads_content_publish`: the
 >   same three things for Threads, including text-only posts, which Instagram
 >   does not accept.
+> - `threads_read_replies`: to show the replies to the account's own Threads
+>   posts in the same list as the Instagram comments, so the agency reads the
+>   reaction to both networks in one place. We only read them; i7OS never
+>   writes, hides or approves a reply, which is why we do not ask for
+>   `threads_manage_replies`.
 >
 > Every connection is made by the account owner through the consent screen, is
 > stored per workspace, and can be removed in Settings → Account or from the
