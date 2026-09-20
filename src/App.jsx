@@ -34127,7 +34127,23 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       bucket: "brand-assets", path, file: blob, orgId,
       userId: session?.user?.id, contentType, sizeBytes: blob.size,
     });
-    if (up.error) throw new Error(de ? "Upload fehlgeschlagen." : "Upload failed.");
+    if (up.error) {
+      // Es stand "Upload fehlgeschlagen." und sonst nichts: derselbe Satz für
+      // eine zu große Datei, eine abgelaufene Sitzung und ein abgerissenes
+      // Netz. Ein Video läuft als Erstes in die Größengrenze des Speichers,
+      // und die weist Supabase ab, bevor Threads oder Instagram die Datei
+      // überhaupt zu sehen bekommen.
+      console.error("[composer] upload failed", up.error);
+      const said = String(up.error?.message || up.error?.error || "");
+      const mb = Math.round((blob.size || 0) / 1048576);
+      const tooBig = /exceed|maximum allowed size|too large|payload/i.test(said)
+        || String(up.error?.statusCode || "") === "413";
+      throw new Error(tooBig
+        ? (de ? `Die Datei ist mit ${mb} MB zu groß für den Zwischenspeicher. Nimm eine kleinere.`
+              : `The file is ${mb} MB, which is over the storage limit. Use a smaller one.`)
+        : (de ? `Upload fehlgeschlagen (${mb} MB): ${said}`
+              : `Upload failed (${mb} MB): ${said}`));
+    }
     return { bucket: "brand-assets", path };
   };
 
