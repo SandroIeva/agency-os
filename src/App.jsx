@@ -32380,6 +32380,10 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   const totalRate = totalImpressions ? (totalInteractions / totalImpressions) * 100 : 0;
   const haveFollowers = followersOk || anyDirect;
   const haveCounts = dailyOk || anyDirect;
+  // Waiting for NUMBERS, not for Zernio. A workspace with no Zernio account
+  // never fetches `data` at all, so "data == null" meant the tiles and Top
+  // Posts sat on "…" for ever while the direct numbers were already in hand.
+  const numbersPending = ((accounts?.length || 0) > 0 && data == null) || directStats == null;
 
   const kpis = [
     { label: "Follower", value: haveFollowers ? fmtMetric(totalFollowers, de) : "–", delta: followersOk && followerGrowth ? followerGrowth : null },
@@ -32563,7 +32567,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
               <motion.div key={k.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 + i * 0.05, duration: 0.3 }} style={card}>
                 <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginBottom: 8 }}>{k.label}</div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-                  <span style={{ fontSize: 24, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{data == null ? "…" : k.value}</span>
+                  <span style={{ fontSize: 24, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{numbersPending ? "…" : k.value}</span>
                   {k.delta != null && (
                     <span style={{ fontSize: 11, fontFamily: FONT, fontWeight: 600, color: k.delta >= 0 ? "#00B894" : "#E86767" }}>
                       {k.delta >= 0 ? "+" : ""}{fmtMetric(k.delta, de)}
@@ -32578,10 +32582,19 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
               bottom of the right-hand column where it used to sit. For
               Instagram and Threads these are not a footnote to Zernio's
               numbers, they are the numbers. */}
-          <InstagramDirectPanel theme={theme} darkMode={darkMode} de={de}
-            card={card} secLabel={secLabel}
-            ig={directStats?.ig || null} th={directStats?.th || null}
-            tt={directStats?.tt || null} />
+          {/* One number in one place. On "Alle" these are already the tiles
+              above, and the card underneath repeated them; it belongs to a
+              single network, so it appears when one is picked. And it needs the
+              same gap to what follows as everything else here. */}
+          {platform !== "all" && (
+            <div style={{ marginBottom: 22 }}>
+              <InstagramDirectPanel theme={theme} darkMode={darkMode} de={de}
+                card={card} secLabel={secLabel}
+                ig={platform === "instagram" ? (directStats?.ig || null) : null}
+                th={platform === "threads" ? (directStats?.th || null) : null}
+                tt={platform === "tiktok" ? (directStats?.tt || null) : null} />
+            </div>
+          )}
 
           {/* Impressions trend — weekly buckets from the daily series */}
           {dailyOk && dailyCoversPlatform && weekly.length > 1 && (
@@ -32616,7 +32629,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
             {(accounts.length > 0 || topPosts.length > 0) && (
             <div style={card}>
               <div style={secLabel}>{de ? "Top 5 Posts (Engagement)" : "Top 5 posts (engagement)"}</div>
-              {data == null ? (
+              {numbersPending ? (
                 <div style={{ padding: "18px 0", color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>{de ? "Lädt…" : "Loading…"}</div>
               ) : topPosts.length === 0 ? (
                 <div style={{ padding: "18px 0", color: theme.textDim, fontSize: 12.5, fontFamily: FONT, lineHeight: 1.6 }}>
