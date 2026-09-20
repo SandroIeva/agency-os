@@ -435,6 +435,16 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
 
     const profile = await ig(token, "/me",
       { fields: "user_id,username,account_type,followers_count,follows_count,media_count" });
+
+    // Wo die Follower sitzen. Eigener Aufruf, weil er eine Aufschlüsselung
+    // braucht und kein Zeitfenster akzeptiert, und weil Instagram ihn erst ab
+    // 100 Followern beantwortet. Das ist ein Zustand zum Anzeigen, kein Fehler.
+    // Threads liefert dasselbe in derselben Form, damit die Ansicht beide gleich
+    // zeichnen kann.
+    const demo = await ig(token, `/${row.ig_user_id}/insights`, {
+      metric: "follower_demographics", period: "lifetime", metric_type: "total_value",
+      breakdown: body.breakdown || "country",
+    });
     const quota = await ig(token, `/${row.ig_user_id}/content_publishing_limit`, { fields: "config,quota_usage" });
     const q = quota.ok ? (quota.body?.data?.[0] || {}) : null;
 
@@ -456,6 +466,11 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
       // name → number, which is all a tile needs. The raw shape nests the value
       // one level deeper than anybody rendering it cares about.
       metrics: Object.fromEntries((insights || []).map(m => [m.name, m.total_value?.value ?? null])),
+      demographics: demo.ok
+        ? ((demo.body?.data?.[0]?.total_value?.breakdowns?.[0]?.results || [])
+            .map(r => ({ key: (r.dimension_values || [])[0], value: r.value }))
+            .sort((a, b) => b.value - a.value).slice(0, 6))
+        : null,
       unavailable: dropped.length ? dropped : undefined,
       quota: q ? { used: q.quota_usage ?? 0, total: q.config?.quota_total ?? 100 } : null,
       tokenExpiresAt: row.token_expires_at,

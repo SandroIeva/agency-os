@@ -32093,6 +32093,30 @@ function InstagramDirectPanel({ theme, darkMode, de, card, secLabel, ig = null, 
           {tile(de ? `Reichweite, ${state.days} Tage` : `Reach, ${state.days} days`, num(state.metrics?.reach))}
           {tile(de ? `Interaktionen, ${state.days} Tage` : `Interactions, ${state.days} days`, num(state.metrics?.total_interactions))}
         </div>
+        {/* Dieselbe Zeile wie bei Threads, aus demselben Grund: Instagram
+            beantwortet die Herkunft erst ab 100 Followern, und das ist ein
+            Zustand zum Anzeigen statt einer leeren Reihe, die kaputt aussieht. */}
+        {state.demographics?.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 6 }}>
+              {de ? "Follower nach Land" : "Followers by country"}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              {state.demographics.map(d => (
+                <span key={d.key} style={{ fontSize: 11.5, fontFamily: FONT, color: theme.text,
+                  padding: "3px 9px", borderRadius: 999, border: `1px solid ${theme.borderFaint}` }}>
+                  {d.key} {num(d.value)}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {state.demographics?.length === 0 && (
+          <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 12 }}>
+            {de ? "Instagram zeigt die Herkunft der Follower erst ab 100 Followern."
+                : "Instagram only reports follower origins from 100 followers up."}
+          </div>
+        )}
         {state.quota && (
           <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginTop: 16,
             paddingTop: 14, borderTop: `1px solid ${theme.borderFaint}` }}>
