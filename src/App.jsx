@@ -32424,14 +32424,19 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   // Einmal beschrieben, weil es an zwei Stellen steht: allein, solange die
   // Konten unbekannt sind, und über der schon gebauten, noch verborgenen
   // Ansicht.
+  //
+  // Über die ganze Fläche gelegt statt in den Fluss gestellt: mit einer festen
+  // Höhe von 320 hing es im oberen Drittel eines Bereichs, der dreimal so hoch
+  // ist. Absolut geht hier, weil die fertige Ansicht so lange auf display:none
+  // steht, der Kasten also wirklich leer ist.
   const loader = (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-      gap: 14, height: 320 }}>
+    <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", gap: 16 }}>
       <motion.div
         animate={{ rotate: 360 }}
         transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-        style={{ width: 30, height: 30, borderRadius: "50%",
-          border: `2.5px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)"}`,
+        style={{ width: 36, height: 36, borderRadius: "50%",
+          border: `3px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)"}`,
           borderTopColor: theme.text }}
       />
       <div style={{ color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>
@@ -32708,7 +32713,7 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
   );
 
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
+    <div style={{ position: "relative", flex: 1, minHeight: 0, overflowY: "auto", padding: 26 }}>
       {/* Zernio connects one set of accounts per WORKSPACE, so there are no
           per-brand social numbers to show. Drawing the workspace's under a
           customer's brand without saying so reads as that customer's reach. */}
@@ -32760,7 +32765,8 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
         <div style={{ maxWidth: 560, margin: "40px auto 0", textAlign: "center" }}>
           <div style={{ fontSize: 20, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{de ? "Verbinde deine Kanäle" : "Connect your channels"}</div>
           <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 26 }}>
-            {de ? "Verknüpfe deine Social-Media-Accounts, um Performance, Top-Posts und Follower-Entwicklung direkt hier zu sehen — und Posts aus i7OS zu veröffentlichen." : "Link your social accounts to see performance, top posts and follower growth right here — and publish posts from i7OS."}
+            {de ? "Verknüpfe deine Social-Media-Accounts, um Performance, Top-Posts und Follower-Entwicklung direkt hier zu sehen. Und um Posts aus i7OS zu veröffentlichen."
+                : "Link your social accounts to see performance, top posts and follower growth right here, and publish posts from i7OS."}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10, textAlign: "left" }}>
             {offerable.map(k => <ConnectChip key={k} uiKey={k} big />)}
