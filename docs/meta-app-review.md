@@ -85,13 +85,25 @@ entfernt. Nicht einreichen, der Code fragt sie nicht mehr an.
 Eine pro Berechtigung, und eine fehlende Aufnahme ist ein benannter
 Ablehnungsgrund. Metas Vorgaben, soweit sie uns betreffen:
 
+Quelle: https://developers.facebook.com/docs/app-review/submission-guide/screen-recordings/
+
+- **Kein Ton, und zwar wörtlich:** *"Deaktiviere das Audio. Unsere Reviewer
+  werden es nicht anhören."* Nicht optional, sondern ungehört. Eine nur
+  gesprochene Erklärung kommt nirgendwo an.
+- **Erklärt wird trotzdem, nur schriftlich.** Meta verlangt **Annotations**,
+  also Text im Bild, und Untertitel oder Tooltips *"falls deine App nicht auf
+  Englisch verfügbar ist oder falls Teile deiner App nicht selbsterklärend
+  sind"*. Daher kommt der Widerspruch, den man beim Lesen zu finden glaubt:
+  erklären ja, sprechen nein. Zwei bis vier kurze Einblendungen je Clip an den
+  entscheidenden Stellen reichen.
 - **Oberfläche auf Englisch.** i7OS ist zweisprachig, also vor der Aufnahme
-  `appLanguage` auf `en` stellen. Kein Sonderaufwand, nur nicht vergessen.
+  `appLanguage` auf `en` stellen. Das erspart auch die meisten Untertitel.
 - Mindestens 1080p, und der Bildschirm **höchstens 1440 Punkte breit**.
-- **Kein Ton.** Was erklärt werden muss, wird eingeblendet.
-- Die Maus muss sichtbar sein und bedienen; Tastaturkürzel zeigen nichts.
-- Zu sehen sein muss: wie jemand verbindet, wie Metas Zustimmungsfenster aussieht,
-  und was danach im Produkt damit passiert.
+- **Mauszeiger vergrößern**, nicht nur sichtbar lassen: *"Erhöhe die
+  Cursorgröße deiner Maus, damit wir sie leichter sehen können."*
+  Tastaturkürzel zeigen nichts und bedienen deshalb nicht.
+- Zu sehen sein muss der **vollständige Login- und OAuth-Ablauf**, von
+  abgemeldet bis verbunden, und danach, was im Produkt damit passiert.
 
 ## Die API-Aufrufe
 
