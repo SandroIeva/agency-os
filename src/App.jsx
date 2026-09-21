@@ -32855,15 +32855,22 @@ function AnalyticsTab({ theme, darkMode, appLanguage = "de", session, userOrg, p
             {kpis.map((k, i) => (
               <motion.div key={k.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 + i * 0.05, duration: 0.3 }} style={kpiCard}>
                 <div style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textDim, marginBottom: 8 }}>{k.label}</div>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                {/* Der Abstand hängt an den Nachzüglern, nicht am Zeilen-Gap:
+                    der Zuwachs gehört dicht an die Zahl, der Hinweis daneben
+                    nicht. Gemeinsame Grundlinie, damit beide auf derselben
+                    Höhe sitzen wie die Zahl selbst. */}
+                <div style={{ display: "flex", alignItems: "baseline" }}>
                   <span style={{ fontSize: 24, fontFamily: FONT, fontWeight: 600, color: theme.text }}>{numbersPending ? "…" : k.value}</span>
                   {k.delta != null && (
-                    <span style={{ fontSize: 11, fontFamily: FONT, fontWeight: 600, color: k.delta >= 0 ? "#00B894" : "#E86767" }}>
+                    /* Grau, nicht grün: das Vorzeichen sagt die Richtung schon,
+                       und eine Farbe daneben macht aus einer Randnotiz ein
+                       Urteil. */
+                    <span style={{ marginLeft: 4, fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.textDim }}>
                       {k.delta >= 0 ? "+" : ""}{fmtMetric(k.delta, de)}
                     </span>
                   )}
                   {!numbersPending && k.hint && (
-                    <span style={{ fontSize: 11.5, fontFamily: FONT, color: theme.textFaint }}>{k.hint}</span>
+                    <span style={{ marginLeft: 10, fontSize: 11.5, fontFamily: FONT, color: theme.textFaint }}>{k.hint}</span>
                   )}
                 </div>
               </motion.div>
