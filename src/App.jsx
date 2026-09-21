@@ -34159,8 +34159,13 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     const step = steps[stepIdx] || steps[0];
     onViewContext("createpost", {
       "Step": `${step[de ? "de" : "en"]} (${stepIdx + 1} of ${steps.length})`,
+      // Nur die Netzwerke, nicht die Kontonamen. Für den Rat, den das Modell
+      // geben soll, ist "instagram" die ganze Auskunft; der Handle dahinter war
+      // das einzige, was von Meta stammte und je an einen Modellanbieter ging.
+      // Ihn wegzulassen kostet nichts und macht die Antwort im Meta-Formular
+      // nach Datenverarbeitern schlicht: Supabase und Vercel, sonst niemand.
       "Channels chosen": selected.length
-        ? selected.map(a => `${a.platform}${a.username ? ` (@${a.username})` : ""}`).join(", ")
+        ? [...new Set(selected.map(a => a.platform))].join(", ")
         : "none yet, so no platform-specific advice can be given",
       "Character limit": charLimit,
       "Caption written so far": text.trim() || "nothing yet, the field is empty",
