@@ -57579,6 +57579,40 @@ export default function CircularMenu() {
   // reached for (see requireAiProvider), and otherwise on the way BACK to the
   // dashboard, once, after they have been somewhere and seen what the place is.
   const leftDashboardRef = useRef(false);
+  // Gesehen zu haben ist eine Tatsache über einen MENSCHEN, nicht über einen
+  // Browser. Sie stand nur in localStorage, und die räumt `ACCOUNT_LOCAL_KEYS`
+  // beim Kontowechsel ausdrücklich weg, damit der Nächste am selben Rechner
+  // keine fremden Schlüssel erbt. Folge: "Später" hielt bis zum Abmelden, auf
+  // dem zweiten Gerät gar nicht, und wer sich oft neu anmeldet, sah den Dialog
+  // jedes Mal wieder.
+  //
+  // null heißt "noch nicht gefragt", und solange sagen wir nichts. Die Zeile
+  // entscheidet, localStorage ist nur ihr Zwischenspeicher, genau wie bei
+  // `tour_seen_at`.
+  const [aiIntroSeen, setAiIntroSeen] = useState(null);
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid) { setAiIntroSeen(null); return; }
+    let on = true;
+    (async () => {
+      let seen = null;
+      try {
+        const { data, error } = await supabase.from("profiles")
+          .select("ai_intro_seen_at").eq("id", uid).maybeSingle();
+        if (!error) seen = Boolean(data?.ai_intro_seen_at);
+      } catch (_) { /* auf den Zwischenspeicher zurückfallen */ }
+      if (seen === null) {
+        try { seen = localStorage.getItem("agencyos-ai-key-intro") === "seen"; } catch (_) { seen = false; }
+      } else {
+        // In BEIDE Richtungen ehrlich halten, sonst kann ein aus der Datenbank
+        // zurückgesetztes Konto den Dialog nie wieder sehen.
+        try { seen ? localStorage.setItem("agencyos-ai-key-intro", "seen")
+                   : localStorage.removeItem("agencyos-ai-key-intro"); } catch (_) {}
+      }
+      if (on) setAiIntroSeen(seen);
+    })();
+    return () => { on = false; };
+  }, [session?.user?.id]);
   useEffect(() => {
     // Never while logging out, and never over the login screen.
     if (signingOutRef.current) return;
@@ -57589,11 +57623,14 @@ export default function CircularMenu() {
     if (onboardingStep || dashTourOpen) return;
     if (!leftDashboardRef.current) return;          // first arrival, say nothing
     if (!AI_INTRO_ALWAYS) {
-      if (localStorage.getItem("agencyos-ai-key-intro") === "seen") return;
+      // Nur bei einem ausdrücklichen Nein. `null` ist die Antwort "wir wissen
+      // es noch nicht", und darauf einen Dialog aufzumachen ist derselbe
+      // Fehler wie bei den Kanälen in Analytics.
+      if (aiIntroSeen !== false) return;
       if (hasAiProvider()) return;
     }
     setAiIntroOpen(true);
-  }, [session, onDashboard, onboardingStep, dashTourOpen, llmKeys, llmProvider]); // eslint-disable-line
+  }, [session, onDashboard, onboardingStep, dashTourOpen, llmKeys, llmProvider, aiIntroSeen]); // eslint-disable-line
   // A stored key for the chosen provider, and nothing else (aiReady). This
   // used to let a Google sign-in count for Gemini, so an account that signed
   // in with Google never saw the key dialog: the sphere opened and every
@@ -57619,7 +57656,17 @@ export default function CircularMenu() {
     openAiKeyIntro = () => setAiIntroOpen(true);
     return () => { openAiKeyIntro = null; };
   }, []);
-  const closeAiIntro = () => { localStorage.setItem("agencyos-ai-key-intro", "seen"); setAiIntroOpen(false); };
+  const closeAiIntro = () => {
+    try { localStorage.setItem("agencyos-ai-key-intro", "seen"); } catch (_) {}
+    setAiIntroSeen(true);
+    // Fire and forget, aber es MUSS auf ein then enden: ein supabase-js-Builder,
+    // der weder awaited noch thened ist, schickt die Anfrage nie ab.
+    if (session?.user?.id) {
+      supabase.from("profiles").update({ ai_intro_seen_at: new Date().toISOString() })
+        .eq("id", session.user.id).then(() => {});
+    }
+    setAiIntroOpen(false);
+  };
 
   // Re-read on every return to the dashboard, which is where the cards are: a
   // step finished elsewhere should be gone by the time you come back to it.
