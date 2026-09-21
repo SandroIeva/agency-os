@@ -30349,6 +30349,44 @@ function parseCSV(text) {
 // Channel colour/label lookup — reuse the same platform set + glyphs as Touchpoints.
 const CHANNEL_META = Object.fromEntries(TOUCHPOINT_PLATFORMS.map(p => [p.key, { label: p.label, color: p.color }]));
 
+// Ein signierter Bild-Link trägt sein Verfallsdatum in der Adresse mit sich.
+// LinkedIn schreibt es als `e=<Sekunden>`, Metas CDN als `oe=<Hex-Sekunden>`.
+// Danach antwortet der Server mit einem Fehler, und ein <img>, das scheitert,
+// zeigt das kaputte Symbol des Browsers.
+//
+// Das ist kein Randfall, sondern der Normalfall: die Zeile in
+// `audience_engagement` wird einmal geschrieben, wenn der Kommentar
+// vorbeikommt, und nie wieder angefasst. LinkedIns Link hält etwa drei Wochen.
+// Jedes Gesicht in Audience zerfällt also von selbst, und vorher nachsehen ist
+// billiger, als es zu sehen.
+function signedImageExpired(url) {
+  if (!url) return false;
+  const dec = /[?&]e=(\d{9,12})(?:&|$)/.exec(url);
+  if (dec) return Number(dec[1]) * 1000 < Date.now();
+  const hex = /[?&]oe=([0-9A-Fa-f]{6,12})(?:&|$)/.exec(url);
+  if (hex) return parseInt(hex[1], 16) * 1000 < Date.now();
+  return false;
+}
+
+// Ein Bild, das nicht lädt, wird zu den Initialen und nicht zum kaputten
+// Symbol. `referrerPolicy` bleibt, media.licdn.com antwortet auf eine verlinkte
+// Anfrage sonst mit nichts, aber das ist der andere Grund und nicht dieser.
+function PersonAvatar({ url, initials, color, size, style }) {
+  const [failed, setFailed] = useState(false);
+  const usable = url && !failed && !signedImageExpired(url);
+  const box = { width: size, height: size, borderRadius: "50%", flexShrink: 0, ...style };
+  if (usable) {
+    return <img src={url} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)}
+      style={{ ...box, objectFit: "cover" }} />;
+  }
+  return (
+    <div style={{ ...box, display: "flex", alignItems: "center", justifyContent: "center",
+      background: color + "2e", color, fontSize: size * 0.36, fontWeight: 600, fontFamily: FONT }}>
+      {initials}
+    </div>
+  );
+}
+
 function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef, userOrg, projectName = "" }) {
   const de = appLanguage === "de";
   const [view, setView] = useState("cards"); // "cards" | "list"
@@ -30592,12 +30630,8 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef,
   const statusLabel = (st) => st === "customer" ? (de ? "Kunde" : "Customer")
     : st === "engaged" ? (de ? "Engagiert" : "Engaged")
     : (de ? "Explorer" : "Explorer");
-  const avatar = (p, size) => p.avatar_url ? (
-    // Without this, media.licdn.com answers a hotlinked request with nothing.
-    <img src={p.avatar_url} alt="" referrerPolicy="no-referrer"
-      style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-  ) : (
-    <div style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: p.color + "2e", color: p.color, fontSize: size * 0.36, fontWeight: 600, fontFamily: FONT }}>{initials(p.name)}</div>
+  const avatar = (p, size) => (
+    <PersonAvatar url={p.avatar_url} initials={initials(p.name)} color={p.color} size={size} />
   );
   const tag = (st) => (
     <span style={{ fontSize: 11, fontFamily: FONT, fontWeight: 500, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", padding: "3px 10px", borderRadius: 999 }}>{statusLabel(st)}</span>
@@ -31832,11 +31866,20 @@ function SocialCommentsPanel({ theme, darkMode, de, session, orgId, platform, ca
             return (
               <div key={c.id + i} style={{ display: "flex", gap: 12, padding: "12px 0",
                 borderBottom: i < Math.min(shown, list.length) - 1 ? `1px solid ${theme.borderFaint}` : "none" }}>
-                <div style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
+                {/* Der Buchstabe liegt immer darunter, das Bild darüber. Auch
+                    diese Adressen sind signiert und laufen ab, und ein Kreis,
+                    der dann leer ist, sieht kaputter aus als einer mit einem
+                    Buchstaben darin. */}
+                <div style={{ position: "relative", width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
                   overflow: "hidden", color: "#fff", display: "flex", alignItems: "center",
                   justifyContent: "center", fontFamily: FONT, fontSize: 12, fontWeight: 600,
-                  background: avatar ? `center/cover no-repeat url(${avatar})` : "#15151c" }}>
-                  {avatar ? "" : initial}
+                  background: "#15151c" }}>
+                  {avatar && !signedImageExpired(avatar) && (
+                    <img src={avatar} alt="" referrerPolicy="no-referrer"
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                  )}
+                  {initial}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
