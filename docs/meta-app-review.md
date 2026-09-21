@@ -16,8 +16,8 @@ Review.
 | Business Verification | **erledigt** (Angabe des Owners, 20.09.2026) |
 | App-Icon 1024 × 1024 | **erledigt**: `public/i7os-app-icon-1024.png`, aus `logo-dark.svg` gerendert, weiß auf `#15151c`, keine Meta-Marken |
 | Datenschutz, Meta-Abschnitte und `#data-deletion` | **erledigt**, live auf i7os.com/privacy |
-| API-Aufruf je Berechtigung | Laut Konsole am 20.09. alle außer `threads_read_replies`, das an dem Tag erst dazukam. Dafür: Threads neu verbinden, dann Letzte Kommentare öffnen |
-| Bildschirmaufnahmen | offen, Drehbücher unten |
+| API-Aufruf je Berechtigung | **erledigt.** Instagram und Threads wurden am 21.09. neu verbunden, beide Tokens tragen alle vier Rechte (in `instagram_connections.scopes` bzw. `threads_connections.scopes` nachgelesen). Die Konsole meldet `threads_read_replies` als **Completed** |
+| Bildschirmaufnahmen | offen, Drehbücher unten. Jede braucht den OAuth-Ablauf vorne drin, sagt der Dialog ausdrücklich |
 | Prüfer-Zugang | offen: Konto anlegen, Workspace muss in `INSTAGRAM_DIRECT_ORGS` stehen |
 | Allowed usage, Data handling, Data protection | offen, in der Konsole auszufüllen |
 
@@ -120,6 +120,16 @@ Instagram **und** Threads einmal trennen und neu verbinden, dann die Ansicht
 Letzte Kommentare öffnen: `/{media-id}/comments` und `/{th-media-id}/replies`
 haben danach je einen Aufruf.
 
+**Die beiden Zähler stehen aus einem harmlosen Grund weit auseinander**, und
+das sah am 21.09. nach einem Fehler aus: 468 bei `threads_read_replies` gegen 1
+bei `instagram_business_manage_comments`. Threads fragt JEDEN Beitrag der
+letzten vier Wochen ab, bis zu zehn, ob jemand geantwortet hat oder nicht.
+Instagram fragt nur die, unter denen wirklich etwas steht, plus den neuesten.
+Ein Konto ohne Kommentare erzeugt dort also genau einen Aufruf je Öffnen. Eins
+genügt auch: Meta verlangt MINDESTENS einen in den 30 Tagen davor, nicht viele.
+Dazu ist der Zähler eine Tagessumme mit bis zu 24 Stunden Verzug, was die
+Konsole im Einreichungsdialog selbst sagt.
+
 Beide fragen den **neuesten Beitrag immer** ab, auch wenn nichts darunter
 steht. Sonst entsteht bei einem Konto, unter dem niemand schreibt, nie ein
 Aufruf, und genau daran hing `instagram_business_manage_comments` lange auf
@@ -154,39 +164,194 @@ zurück in i7OS, die Zeile zeigt das verbundene Konto.
 | 7 | `threads_content_publish` | Composer: reinen Textbeitrag auf Threads veröffentlichen, danach der Beitrag im Konto |
 | 8 | `threads_read_replies` | Analytics → Letzte Kommentare: die Antworten unter den eigenen Threads-Beiträgen, in derselben Liste wie die Instagram-Kommentare |
 
-## Der Text für die Prüfer
+## Der Text für die Prüfer, je Berechtigung
 
-Englisch, in das Feld "How will you use this permission?" je Berechtigung.
-Meta will wissen: was die App tut, wer sie nutzt, und warum die Berechtigung
-dafür nötig ist.
+Die Konsole fragt pro Berechtigung einzeln: *"Please provide a detailed
+description of how your app uses the permission or feature requested, how it
+adds value for a person using your app, and why it's necessary for app
+functionality."* Also acht Texte, nicht einer.
 
-> i7OS is a brand operating system for creative agencies. An agency connects
-> the social accounts it manages, sees how its posts perform, and publishes
-> from the same place it plans and creates them.
->
-> - `instagram_business_basic`: to show which Instagram account is connected
->   (name, picture, follower count) so the user knows whose numbers and posts
->   they are looking at.
-> - `instagram_business_manage_insights`: to show reach, impressions and
->   engagement of the connected account in our Analytics view.
-> - `instagram_business_content_publish`: to publish the image, carousel or
->   reel the user created in i7OS, and to read the 24-hour publishing limit so
->   we can tell them before a post is refused.
-> - `instagram_business_manage_comments`: to show the comments on the account's
->   own posts next to the numbers, so the agency can see the reaction without
->   leaving i7OS.
-> - `threads_basic`, `threads_manage_insights`, `threads_content_publish`: the
->   same three things for Threads, including text-only posts, which Instagram
->   does not accept.
-> - `threads_read_replies`: to show the replies to the account's own Threads
->   posts in the same list as the Instagram comments, so the agency reads the
->   reaction to both networks in one place. We only read them; i7OS never
->   writes, hides or approves a reply, which is why we do not ask for
->   `threads_manage_replies`.
->
-> Every connection is made by the account owner through the consent screen, is
-> stored per workspace, and can be removed in Settings → Account or from the
-> Meta side at any time.
+Jeder folgt derselben Gliederung, weil Meta genau danach fragt: was die App
+damit tut (mit dem Endpunkt beim Namen), was der Mensch davon hat, und warum es
+ohne die Berechtigung nicht geht. Der erste und der letzte Absatz sind überall
+gleich, dazwischen steht das Eigene.
+
+**Immer als erster Absatz:**
+
+```
+i7OS is a brand operating system used by creative agencies to plan, create,
+publish and review the content they produce for the accounts they manage.
+```
+
+**Immer als letzter Absatz:**
+
+```
+Every connection is made by the owner of the account through the consent
+screen, is stored per workspace, and can be removed at any time in i7OS under
+Settings, or from the Meta side. Data is shown only to members of the workspace
+that owns the connection, is never shared with third parties, never used for
+advertising, and is deleted when the connection is removed.
+```
+
+⚠ Im selben Dialog steht: *"make sure to incorporate the OAuth authorization
+flow in the screencast"*. Jede der acht Aufnahmen zeigt also vorne das
+Verbinden samt Zustimmungsfenster, nicht nur eine davon. Darum der gemeinsame
+Anfang weiter unten.
+
+Und der Haken darunter ("I agree that any data I receive through … will be used
+in accordance with the allowed usage") gehört zu jeder Einreichung dazu.
+
+### `instagram_business_basic`
+
+```
+After the user connects their own Instagram professional account through the
+Instagram Login consent screen, i7OS reads the account's id, username, name,
+profile picture and follower count and shows them at the top of our Analytics
+view and beside every place the account appears, for example when choosing
+which account a post goes to.
+
+Value for the user: an agency manages several accounts, and the numbers and
+posts on the screen are meaningless unless it is obvious whose they are. The
+name and the picture are what make that obvious at a glance.
+
+Why it is necessary: it is the only way to learn which account the token
+belongs to. Without it we would have to ask the user to type in their own
+handle and trust that it matches the account they just authorised.
+```
+
+### `instagram_business_manage_insights`
+
+```
+We call GET /{ig-user-id}/insights for the connected account and show reach,
+views, total interactions, likes, comments, shares, saves and accounts engaged
+in our Analytics view, over a period the user picks, together with the best
+performing recent posts.
+
+Value for the user: an agency has to report on what it publishes. Having the
+numbers in the same tool as the plan and the post means the next decision is
+made where the evidence already is, instead of in a separate export.
+
+Why it is necessary: these figures exist nowhere else. Likes and comment counts
+can be counted from the media list, but reach, views, saves and accounts
+engaged are only available through the insights endpoint.
+```
+
+### `instagram_business_content_publish`
+
+```
+i7OS has a composer in which the user writes the caption and prepares the
+picture, carousel, reel or story. When they publish, we create a media
+container through POST /{ig-user-id}/media, poll its status, and publish it
+with POST /{ig-user-id}/media_publish. We also read
+GET /{ig-user-id}/content_publishing_limit and show the remaining 24 hour quota
+in Analytics.
+
+Value for the user: the whole point of the product is that planning, creating
+and publishing happen in one place. Publishing straight from i7OS removes the
+step of exporting a file, opening Instagram and retyping the caption, which is
+where captions and hashtags get lost.
+
+Why it is necessary: there is no other way to publish to Instagram
+programmatically. The quota call is part of the same need: without it we can
+only let a post fail, instead of telling the user beforehand that they have
+reached the limit.
+```
+
+### `instagram_business_manage_comments`
+
+```
+We call GET /{ig-media-id}/comments for the connected account's own recent
+posts and show the comments, and the replies under them, in a panel called
+"Latest comments" in our Analytics view, in one list together with the Threads
+replies. We read the comment text, its timestamp, its like count and the
+author's username and profile picture.
+
+Value for the user: an agency managing several accounts otherwise has to open
+the Instagram app for each account to see whether anyone reacted. In i7OS the
+reaction sits beside the numbers for the same post, so the person writing the
+next post can see what the last one triggered.
+
+Why it is necessary: the media list reports how many comments a post has, but
+not what they say, and what they say is the part the user needs.
+
+Scope of use: read only. i7OS never writes, hides or deletes a comment.
+```
+
+### `threads_basic`
+
+```
+After the user connects their own Threads account through the Threads Login
+consent screen, i7OS reads the account's id, username, name, profile picture
+and follower count and shows them at the top of our Analytics view and beside
+every place the account appears, for example when choosing which account a post
+goes to.
+
+Value for the user: an agency manages several accounts, and the numbers and
+posts on the screen are meaningless unless it is obvious whose they are.
+
+Why it is necessary: it is the only way to learn which account the token
+belongs to, and it is the prerequisite for every other Threads call, since they
+all address the account by its id.
+```
+
+### `threads_manage_insights`
+
+```
+We call GET /{threads-user-id}/threads_insights and
+GET /{threads-media-id}/insights and show views, likes, replies, reposts,
+quotes, follower count and the countries and cities the followers come from, in
+our Analytics view, over a period the user picks, together with the best
+performing recent posts.
+
+Value for the user: an agency has to report on what it publishes, and Threads
+is now part of that report. Having the figures beside the Instagram ones means
+both networks are read in one place.
+
+Why it is necessary: these figures exist nowhere else. The posts list carries
+no performance data at all, so without this permission the Threads part of the
+view would be empty.
+```
+
+### `threads_content_publish`
+
+```
+i7OS has a composer in which the user writes the post and prepares any picture
+or video. When they publish, we create a container through
+POST /{threads-user-id}/threads, poll its status, and publish it with
+POST /{threads-user-id}/threads_publish, building a carousel child by child
+where the user made one. We also read
+GET /{threads-user-id}/threads_publishing_limit and show the remaining 24 hour
+quota in Analytics.
+
+Value for the user: planning, creating and publishing happen in one place.
+Threads also accepts text only posts, which Instagram does not, so for many
+agencies it is the network where the written idea goes first.
+
+Why it is necessary: there is no other way to publish to Threads
+programmatically. The quota call is part of the same need: without it we can
+only let a post fail, instead of warning the user beforehand.
+```
+
+### `threads_read_replies`
+
+```
+We call GET /{threads-media-id}/replies for the connected user's own recent
+posts and show the replies in one list, next to the Instagram comments on the
+same screen, in a panel called "Latest comments" in our Analytics view. We read
+the reply text, its timestamp, the author's username and profile picture, and
+whether the reply is owned by the connected user, so the list can mark the
+account's own answers.
+
+Value for the user: an agency managing several accounts otherwise has to open
+the Threads app for each account to find out whether anyone reacted. In i7OS
+the reaction sits directly beside the numbers for the same post.
+
+Why it is necessary: the insights endpoint reports how many replies a post has,
+but not what they say, and what they say is the part the user needs.
+
+Scope of use: read only. i7OS never writes, hides, deletes or approves a reply,
+which is why we do not request threads_manage_replies.
+```
 
 ## User data deletion
 
