@@ -52,16 +52,25 @@ export default async function handler(req) {
         Referer: new URL(target).origin + "/",
       },
     });
-    let res = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      ({ res } = await ask());
-      if (res.status !== 429 && res.status !== 503) break;
-      if (attempt === 2) break;
-      // Der Hoster darf sagen, wie lange. Sagt er nichts, warten wir kurz.
+    // GEWARTET WIRD IM BROWSER, NICHT HIER. Vorher schlief diese Funktion
+    // zwischen den Versuchen, bis zu fünf Sekunden je gedrosseltem Bild, und
+    // eine schlafende Edge-Funktion ist eine belegte Edge-Funktion. Am Tag, an
+    // dem Pixabay uns durchgehend mit 429 abwies, war das der Ausschlag in
+    // Vercels CPU-Kurve: viel Wartezeit, keine Arbeit.
+    //
+    // Also einmal fragen. Drosselt der Hoster, geht die Drosselung samt
+    // Retry-After an den Browser zurück, der wartet umsonst und fragt neu.
+    const { res } = await ask();
+    if (res.status === 429 || res.status === 503) {
       const said = Number(res.headers.get("retry-after"));
-      const wait = Math.min(2500, Number.isFinite(said) && said > 0 ? said * 1000 : 600 * (attempt + 1));
       try { await res.body?.cancel(); } catch (_) {}
-      await new Promise(r => setTimeout(r, wait));
+      return new Response("upstream is throttling", {
+        status: 429,
+        headers: {
+          "Retry-After": String(Number.isFinite(said) && said > 0 ? Math.min(30, said) : 2),
+          "Access-Control-Allow-Origin": "*",
+        },
+      });
     }
     if (!res.ok) {
       // Der Grund gehört ins Log, sonst steht in der App nur "konnte nicht
@@ -81,7 +90,13 @@ export default async function handler(req) {
       headers: {
         "Content-Type": ct,
         "Access-Control-Allow-Origin": "*",
-        "Cache-Control": "public, max-age=86400",
+        // Ein Jahr, nicht ein Tag. Die Adresse eines Bildes bei einem
+        // Bildanbieter zeigt immer auf dasselbe Bild: ändert sich der Inhalt,
+        // ändert sich die Adresse. Ein Tag hieß, dass dieselben Bytes täglich
+        // erneut durch diese Funktion laufen, obwohl sich nichts geändert hat.
+        // s-maxage ist der Anteil für Vercels CDN, das damit antwortet, ohne
+        // die Funktion überhaupt zu starten.
+        "Cache-Control": "public, max-age=31536000, s-maxage=31536000, immutable",
         // Belt and braces on top of the allow-list. nosniff stops a browser
         // deciding for itself that these bytes are really HTML, and the policy
         // leaves nothing for a document to do if one ever gets through.

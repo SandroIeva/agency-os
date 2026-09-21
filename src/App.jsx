@@ -1618,14 +1618,25 @@ async function saveStockImage(item, { orgId, userId, email }) {
   // Zwei Quellen, die grosse zuerst. Lehnt der Hoster die eine ab, ist ein
   // Beitrag mit dem kleineren Bild immer noch besser als eine Fehlermeldung,
   // und bei Pixabay liegen die beiden auf verschiedenen Rechnern.
+  // Gewartet wird HIER, nicht im Proxy. Der Proxy hat die Drosselung des
+  // Hosters früher selbst ausgesessen, und eine schlafende Edge-Funktion ist
+  // eine belegte Edge-Funktion, für die Vercel Rechenzeit berechnet. Ein
+  // wartender Browser kostet niemanden etwas.
   let blob = null;
   let upstream = 0;
+  outer:
   for (const src of [item.full, item.thumb].filter(Boolean)) {
-    try {
-      const r = await fetch(`/api/img-proxy?url=${encodeURIComponent(src)}`);
-      if (r.ok) { blob = await r.blob(); break; }
-      upstream = r.status;
-    } catch (_) { /* naechste Quelle */ }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const r = await fetch(`/api/img-proxy?url=${encodeURIComponent(src)}`);
+        if (r.ok) { blob = await r.blob(); break outer; }
+        upstream = r.status;
+        if (r.status !== 429 || attempt === 2) break;
+        const said = Number(r.headers.get("retry-after"));
+        await new Promise(go => setTimeout(go,
+          Math.min(5000, Number.isFinite(said) && said > 0 ? said * 1000 : 800 * (attempt + 1))));
+      } catch (_) { break; }   // diese Quelle antwortet nicht, die naechste versuchen
+    }
   }
   if (!blob) return { ok: false, reason: upstream === 502 ? "busy" : "fetch", status: upstream };
 
