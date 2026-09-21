@@ -2661,6 +2661,18 @@ function DashboardTour({ appLanguage = "de", darkMode = false, onClose }) {
 // design is settled, and it would be a toll gate in front of everybody.
 const AI_INTRO_ALWAYS = false;
 
+// Konten, die App Review durchlaufen. Meta prüft i7OS mit einem eigenen Login,
+// und der Prüfer nimmt dabei Bildschirmaufnahmen auf. Was in so einer Aufnahme
+// ungefragt aufgeht, steht im Video und muss erklärt werden, also geht hier
+// nichts ungefragt auf.
+//
+// Warum nicht über eine Zeile in der Datenbank: die wird beim ersten Wegklicken
+// gesetzt, und genau das ist zu spät. Der Dialog ist dann schon einmal im Bild
+// gewesen. Deshalb eine Liste, die schon vor dem ersten Klick gilt.
+const REVIEW_ACCOUNTS = ["review@i7os.com"];
+const isReviewAccount = (email) =>
+  !!email && REVIEW_ACCOUNTS.includes(String(email).trim().toLowerCase());
+
 // The App root owns the key dialog, but the features that need a key live in
 // components far below it: the chat agent, the skills, the personas, the
 // competitor lookup, the image prompts. One mirror rather than a prop threaded
@@ -65837,7 +65849,9 @@ export default function CircularMenu() {
         appLanguage={appLanguage}
       />
 
-      {aiIntroOpen && (
+      {/* Ein Tor, nicht sechs: der Dialog geht an fünf Stellen auf, und eine
+          davon zu vergessen hieße, ihn dem Prüfer doch wieder zu zeigen. */}
+      {aiIntroOpen && !isReviewAccount(session?.user?.email) && (
         <AiKeyIntro theme={theme} darkMode={darkMode} appLanguage={appLanguage}
           onDismiss={closeAiIntro}
           onSaveKey={(provider, key) => {
