@@ -11051,6 +11051,73 @@ function WhiteboardView({ onBack, session, userOrg, theme, darkMode, appLanguage
 // fixed once on their own, which is exactly how a fourth copy goes wrong again.
 //
 // On dark, ON inverts the way the nav pill does: light track, anthracite knob.
+// Die Frage nach Produkt-Updates wird VORERST nur dem Betreiber gezeigt,
+// damit er sie sich ansehen kann, bevor sie auf echte Nutzer losgeht. Wenn sie
+// bleiben soll, faellt diese Liste ersatzlos weg und alle bekommen sie.
+//
+// Die Adressen im Bundel sind hier unbedenklich: es ist keine Sicherheitsgrenze,
+// sondern ein Vorhang. Schlimmstenfalls sieht jemand eine Frage nach einem
+// Newsletter. Fuer echte Grenzen fragt die App `api/admin-stats` mit `whoami`,
+// und das kann der Browser nicht selbst beantworten.
+const NEWSLETTER_PREVIEW_EMAILS = [
+  "sandro.ieva@googlemail.com", "sandro.ieva@gmail.com", "sandro@minddraft.com",
+];
+const seesNewsletterAsk = (email) =>
+  NEWSLETTER_PREVIEW_EMAILS.includes(String(email || "").trim().toLowerCase());
+
+// Einmal fragen, zwei echte Antworten.
+//
+// Kein vorangekreuztes Kaestchen: eine vorausgewaehlte Einwilligung ist nach
+// dem EuGH-Urteil zu Planet49 keine Einwilligung. Und kein "Spaeter": das waere
+// eine Ausweichtaste, die sich hinterher nicht auswerten laesst, und sie
+// verschiebt die Frage nur auf den naechsten Besuch.
+function NewsletterIntro({ theme, darkMode, appLanguage, onAnswer }) {
+  const de = appLanguage === "de";
+  return createPortal(
+    <div style={{ position: "fixed", inset: 0, zIndex: 100003, background: "rgba(0,0,0,0.34)",
+      backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+        style={{ width: "min(430px, 100%)", padding: "34px 34px 26px", borderRadius: 26, boxSizing: "border-box",
+          background: darkMode ? "#1c1c24" : "#ffffff", fontFamily: FONT,
+          boxShadow: darkMode ? "0 40px 90px rgba(0,0,0,0.55)" : "0 40px 90px rgba(0,0,0,0.18)" }}>
+        {/* Briefumschlag, gezeichnet, nicht als Emoji. Derselbe Strich wie
+            ueberall sonst in der App. */}
+        <div style={{ width: 46, height: 46, borderRadius: 14, marginBottom: 18,
+          display: "flex", alignItems: "center", justifyContent: "center", color: theme.text,
+          background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2.5" /><path d="m22 7-10 5L2 7" />
+          </svg>
+        </div>
+        <div style={{ fontSize: 21, fontWeight: 600, color: theme.text, letterSpacing: -0.2, lineHeight: 1.25 }}>
+          {de ? "Sollen wir dir schreiben, wenn es Neues gibt?"
+              : "Shall we write when something new lands?"}
+        </div>
+        <div style={{ fontSize: 13.5, color: theme.textDim, lineHeight: 1.6, marginTop: 10 }}>
+          {de ? "Wir bauen i7OS gerade schnell aus. Ein paar Mal im Monat eine kurze Mail, was dazugekommen ist. Kein Verkauf, und du kannst jederzeit in den Einstellungen widerrufen."
+              : "We are building i7OS quickly right now. A short email a few times a month about what is new. No sales, and you can withdraw any time in Settings."}
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 26 }}>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={() => onAnswer(false)}
+            style={{ flex: 1, padding: "11px 16px", borderRadius: 999, cursor: "pointer",
+              border: `1px solid ${theme.border}`, background: "transparent", color: theme.text,
+              fontFamily: FONT, fontSize: 13, fontWeight: 500 }}>
+            {de ? "Nein danke" : "No thanks"}
+          </motion.button>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={() => onAnswer(true)}
+            style={{ ...primaryBtn(darkMode), flex: 1, padding: "11px 16px", borderRadius: 999,
+              border: "none", cursor: "pointer", fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>
+            {de ? "Ja, gerne" : "Yes, please"}
+          </motion.button>
+        </div>
+      </motion.div>
+    </div>,
+    document.body
+  );
+}
+
 function ToggleSwitch({ on, onClick, darkMode, disabled = false, style = {} }) {
   return (
     <div onClick={disabled ? undefined : onClick}
@@ -55538,15 +55605,54 @@ export default function CircularMenu() {
   const [orgDriveFolder, setOrgDriveFolder] = useState(null); // org-level shared drive folder
   const [driveConnecting, setDriveConnecting] = useState(false);
 
+  // Einwilligung in Produkt-Updates. undefined = noch nicht nachgesehen,
+  // null = noch nie gefragt, true/false = beantwortet.
+  const [marketingOptIn, setMarketingOptIn] = useState(undefined);
+  const [newsletterAskOpen, setNewsletterAskOpen] = useState(false);
+  // Eine Stelle schreibt, egal ob aus dem Dialog oder aus den Einstellungen.
+  // Mitgeschrieben wird WANN und WO: ein blosses Ja ist im Streitfall nichts
+  // wert, wenn niemand sagen kann, woher es stammt.
+  const answerNewsletter = (yes, source) => {
+    setMarketingOptIn(yes);
+    setNewsletterAskOpen(false);
+    if (!session?.user?.id) return;
+    supabase.from("profiles").update({
+      marketing_opt_in: yes,
+      marketing_opt_in_at: new Date().toISOString(),
+      marketing_opt_in_source: source,
+    }).eq("id", session.user.id).then(() => {});
+  };
+  // Dieselbe Stelle im Ablauf wie die Frage nach dem KI-Schluessel: nicht beim
+  // allerersten Ankommen, sondern wenn jemand schon irgendwo war und aufs
+  // Dashboard zurueckkommt. Vorher kennt er das Produkt nicht, von dem die
+  // Updates handeln sollen.
+  //
+  // Vorerst nur fuer den Betreiber, siehe seesNewsletterAsk.
+  const leftDashboardNewsRef = useRef(false);
+  useEffect(() => {
+    if (signingOutRef.current) return;
+    if (!session) { setNewsletterAskOpen(false); leftDashboardNewsRef.current = false; return; }
+    if (!seesNewsletterAsk(session.user?.email)) return;
+    if (!onDashboard) { leftDashboardNewsRef.current = true; return; }
+    if (onboardingStep || dashTourOpen || aiIntroOpen) return;
+    if (!leftDashboardNewsRef.current) return;
+    if (marketingOptIn !== null) return;      // undefined oder beantwortet: nichts fragen
+    setNewsletterAskOpen(true);
+  }, [session, onDashboard, onboardingStep, dashTourOpen, aiIntroOpen, marketingOptIn]); // eslint-disable-line
+
   // Load storage preferences from profile + org
   useEffect(() => {
     if (!session?.user?.id) return;
     (async () => {
       const { data: prof } = await supabase
         .from("profiles")
-        .select("drive_folder_id, drive_folder_name, drive_folder_type, drive_folder_drive_id, preferred_storage")
+        .select("drive_folder_id, drive_folder_name, drive_folder_type, drive_folder_drive_id, preferred_storage, marketing_opt_in")
         .eq("id", session.user.id)
         .maybeSingle();
+      // undefined heisst "noch nicht nachgesehen", null heisst "nachgesehen und
+      // noch nie gefragt". Nur beim zweiten darf der Dialog aufgehen, und
+      // genau diese Unterscheidung hat beim KI-Dialog gefehlt.
+      setMarketingOptIn(prof ? (prof.marketing_opt_in ?? null) : null);
       if (prof?.drive_folder_id) {
         setDriveFolder({
           id: prof.drive_folder_id,
@@ -64518,6 +64624,35 @@ export default function CircularMenu() {
                       background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)", color: theme.textDim }}>{appLanguage === "de" ? "Bald verfügbar" : "Coming soon"}</div>
                   </div>
 
+                  {/* Produkt-Updates. Die Zeile muss es unabhaengig vom Dialog
+                      geben: ein Widerruf muss jederzeit moeglich sein, nicht nur
+                      in dem Moment, in dem gefragt wurde. Vorerst nur fuer den
+                      Betreiber sichtbar, wie der Dialog. */}
+                  {seesNewsletterAsk(session?.user?.email) && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px", borderTop: `1px solid ${theme.borderFaint}` }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.svgStroke}
+                        strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="4" width="20" height="16" rx="2.5" /><path d="m22 7-10 5L2 7" />
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text }}>
+                        {appLanguage === "de" ? "Produkt-Updates per E-Mail" : "Product updates by email"}
+                      </div>
+                      <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginTop: 2 }}>
+                        {appLanguage === "de" ? "Ein paar Mal im Monat, was dazugekommen ist."
+                                              : "A few times a month, what is new."}
+                      </div>
+                    </div>
+                    <ToggleSwitch on={marketingOptIn === true} darkMode={darkMode}
+                      onClick={() => answerNewsletter(marketingOptIn !== true, "settings")} />
+                  </div>
+                  )}
+
                   {/* The tour, again: for the operator only (see isOperator).
                       Everybody else sees it once, on the way into a first
                       workspace, and that is all. */}
@@ -66211,6 +66346,13 @@ export default function CircularMenu() {
 
       {/* Ein Tor, nicht sechs: der Dialog geht an fünf Stellen auf, und eine
           davon zu vergessen hieße, ihn dem Prüfer doch wieder zu zeigen. */}
+      {/* Die Frage nach Produkt-Updates. Nie gleichzeitig mit dem
+          KI-Dialog, darum steht aiIntroOpen in ihrer Bedingung. */}
+      {newsletterAskOpen && (
+        <NewsletterIntro theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+          onAnswer={(yes) => answerNewsletter(yes, "dialog")} />
+      )}
+
       {aiIntroOpen && !isReviewAccount(session?.user?.email) && (
         <AiKeyIntro theme={theme} darkMode={darkMode} appLanguage={appLanguage}
           onDismiss={closeAiIntro}
