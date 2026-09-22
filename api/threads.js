@@ -361,7 +361,15 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     // Threads keeps no insight older than this; asking past it fails the call.
     const since = Math.max(1712991600, until - days * 86400);
 
-    const profile = await th(token, "/me", { fields: "id,username" });
+    // Mit Bild. Es stand hier nie drin, also kam es nie an, genau wie bei
+    // Instagram. Threads nennt das Feld threads_profile_picture_url, nicht
+    // profile_picture_url. Mit Rueckfallebene, weil ein abgelehntes Feld sonst
+    // die ganze Uebersicht mitnimmt.
+    let profile = await th(token, "/me", { fields: "id,username,name,threads_profile_picture_url" });
+    if (!profile.ok) {
+      console.error("[threads] profile fields refused", profile.status, JSON.stringify(profile.body?.error || null));
+      profile = await th(token, "/me", { fields: "id,username" });
+    }
     const quota = await th(token, `/${row.threads_user_id}/threads_publishing_limit`,
       { fields: "quota_usage,config" });
 
@@ -399,7 +407,14 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
     });
 
     return json({
-      account: { threadsUserId: row.threads_user_id, username: profile.body?.username || row.username },
+      account: {
+        threadsUserId: row.threads_user_id,
+        username: profile.body?.username || row.username,
+        name: profile.body?.name || null,
+        // Metas CDN-Adresse laeuft ab, sie kommt also bei jeder Uebersicht
+        // frisch mit und wird nirgends gespeichert.
+        picture: profile.body?.threads_profile_picture_url || null,
+      },
       days,
       metrics: Object.fromEntries((insights || []).map(m => [m.name, value(m)])),
       followers,

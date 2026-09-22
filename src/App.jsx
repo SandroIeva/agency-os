@@ -20727,6 +20727,22 @@ const boardsFromDoc = (doc, size, de) => {
 const nextBoardX = (list) =>
   list.reduce((acc, b) => Math.max(acc, (Number(b.x) || 0) + (Number(b.w) || 0)), 0) + BOARD_GAP;
 
+// Resizing keeps the existing workspace gaps. Move the whole trailing area
+// on each axis, rather than just the nearest board (which would hit the next).
+// Positions are workspace coordinates; every board's item coordinates stay local.
+const canvasResizeBoardPositions = (boards, active, next) => {
+  const before = boards[active];
+  if (!before) return boards;
+  const dx = next.w - before.w, dy = next.h - before.h;
+  const right = (before.x || 0) + before.w, bottom = (before.y || 0) + before.h;
+  return boards.map((b, i) => {
+    if (i === active) return { ...b, w: next.w, h: next.h };
+    const x = (b.x || 0) + ((b.x || 0) >= right ? dx : 0);
+    const y = (b.y || 0) + ((b.y || 0) >= bottom ? dy : 0);
+    return x === (b.x || 0) && y === (b.y || 0) ? b : { ...b, x, y };
+  });
+};
+
 // ── Canvas preview ───────────────────────────────────────────────────────────
 // A real picture of a canvas, small. Built from the saved document rather than
 // from a stored image, so it is never a version behind what is in the file and
@@ -20769,6 +20785,7 @@ const canvasMaskClip = (it, all) => {
 // a line carries two ends. A scaler that only knew about w and h would leave
 // the drawings behind while the rest moved.
 const scaleItemInBox = (it, g, sx, sy, nx, ny) => {
+  if (it.layoutAnchor) { const { layoutAnchor, ...rest } = it; it = rest; }
   const mx = (x) => nx + (x - g.x) * sx;
   const my = (y) => ny + (y - g.y) * sy;
   const s1 = (sx + sy) / 2;                       // for things with no axis
@@ -20889,13 +20906,13 @@ const canvasFrameAttach = (items, ids, capture = false, anchor = false) => {
       .filter(f => atX >= f.x && atX <= f.x + f.w && atY >= f.y && atY <= f.y + f.h)
       .sort((a, b) => a.w * a.h - b.w * b.h);
     const parent = candidates[0];
-    result = result.map(o => o.id === id ? { ...o, frameId: parent?.id } : o);
+    result = result.map(o => o.id === id ? { ...o, frameId: parent?.id, ...(o.frameId !== parent?.id ? { layoutAnchor: undefined } : {}) } : o);
     if (capture && it.isFrame) {
       result = result.map(o => {
         if (o.id === id || o.id === parent?.id || o.frameId !== parent?.id || o.type === "comment") return o;
         const box = canvasRenderBoxOf(o);
         return box.x >= it.x && box.y >= it.y && box.x + box.w <= it.x + it.w && box.y + box.h <= it.y + it.h
-          ? { ...o, frameId: id } : o;
+          ? { ...o, frameId: id, layoutAnchor: undefined } : o;
       });
     }
   }
@@ -20910,12 +20927,95 @@ const canvasFrameAttach = (items, ids, capture = false, anchor = false) => {
   result.forEach(visit);
   return ordered;
 };
-const canvasFrameLayout = (items, previous = [], suspend = false) => {
-  if (!items.some(it => it.isFrame || it.frameId)) return items;
-  const map = new Map(items.map(it => [it.id, it]));
+// Responsive rules are opt-in. Legacy artwork keeps its absolute geometry.
+// Text height always comes from wrapping; neither anchors nor fill scale type.
+const canvasFrameCanSize = it => ["rect", "ellipse", "image", "text", "sticky", "triangle", "diamond", "star", "polygon"].includes(it.type) || it.isFrame;
+// Orientation comes from the artboard by default: a square post and a story
+// can have the SAME width. Frame-width breakpoints are an optional local rule.
+const canvasFrameDirection = (it, width = it.w, artboard = null) => {
+  const cfg = it.autoLayout || {}, rule = cfg.responsive;
+  if (!rule?.enabled) return cfg.direction === "vertical" ? "vertical" : "horizontal";
+  if (rule.basis !== "frame" && (!artboard?.w || !artboard?.h)) return cfg.direction === "vertical" ? "vertical" : "horizontal";
+  const narrow = rule.basis === "frame" ? width <= Math.max(16, Number(rule.breakpoint) || 640) : artboard.h > artboard.w;
+  return (narrow ? rule.narrow || "vertical" : rule.wide || "horizontal") === "vertical" ? "vertical" : "horizontal";
+};
+const canvasFrameMode = (it, axis, parentAuto = false) => {
+  if (it.type === "text" && axis === "h") return "hug";
+  if (axis === "w" && it.isFrame && it.autoLayout?.enabled && it.autoLayout.responsive?.enabled && it.autoLayout.responsive.basis === "frame"
+    && (it.layoutSizing?.w === "hug" || (!it.layoutSizing?.w && it.autoLayout.hugW))) return "fixed";
+  if (it.layoutSizing?.[axis]) return it.layoutSizing[axis] === "fill" && !parentAuto ? "fixed" : it.layoutSizing[axis];
+  if (it.isFrame && it.autoLayout?.enabled && it.autoLayout[axis === "w" ? "hugW" : "hugH"]) return "hug";
+  if (it.type === "text" && axis === "w" && parentAuto && it.frameTextWidth !== "fixed") return "hug";
+  return "fixed";
+};
+const canvasFrameLimit = (it, axis, size) => {
+  const suffix = axis.toUpperCase(), cfg = it.layoutSizing || {};
+  const min = Math.max(1, Number(cfg["min" + suffix]) || 1);
+  const max = Number(cfg["max" + suffix]) > 0 ? Math.max(min, Number(cfg["max" + suffix])) : Infinity;
+  return Math.max(min, Math.min(max, Number.isFinite(size) ? size : min));
+};
+// Keep edge margins or centre offsets. A width change remeasures text before
+// the vertical anchor is applied, so a bottom-anchored caption stays at bottom.
+const canvasFrameAnchor = (it, before, after) => {
+  if (before.x === after.x && before.y === after.y && before.w === after.w && before.h === after.h) return it;
+  const box = canvasRenderBoxOf(it), rules = it.constraints || {};
+  const xRule = rules.x || "start", yRule = rules.y || "start";
+  const remembered = it.layoutAnchor;
+  const base = remembered && remembered.xRule === xRule && remembered.yRule === yRule
+    ? remembered : { x: box.x - before.x, y: box.y - before.y, w: box.w, h: box.h,
+      parentW: before.w, parentH: before.h, xRule, yRule };
+  let next = it;
+  if (canvasFrameCanSize(it)) {
+    if (xRule === "stretch") next = { ...next, w: canvasFrameLimit(it, "w", base.w + after.w - base.parentW) };
+    if (yRule === "stretch" && it.type !== "text") next = { ...next, h: canvasFrameLimit(it, "h", base.h + after.h - base.parentH) };
+  }
+  const measured = canvasRenderBoxOf(next);
+  const pos = (axis, rule) => {
+    const extent = axis === "x" ? "w" : "h", parentExtent = axis === "x" ? "parentW" : "parentH";
+    if (rule === "start") return box[axis] + after[axis] - before[axis];
+    const delta = after[extent] - base[parentExtent] - (measured[extent] - base[extent]);
+    return after[axis] + base[axis] + (rule === "end" ? delta : rule === "center" ? delta / 2 : 0);
+  };
+  next = canvasFrameMove(next, pos("x", xRule) - measured.x, pos("y", yRule) - measured.y);
+  // Keep the intended margins through min/max saturation and back again.
+  // Manual moves/resizes clear this reference in canvasFrameLayout below.
+  return xRule !== "start" || yRule !== "start" ? { ...next, layoutAnchor: { ...base } } : next;
+};
+// Equal shares with min/max saturation: space left by a capped child goes to
+// the other fill children. If minima cannot fit, keep them rather than squash.
+const canvasFrameFill = (children, axis, available) => {
+  const sizes = new Map(), pending = new Set(children);
+  let remaining = available;
+  while (pending.size) {
+    const share = remaining / pending.size;
+    const limited = [...pending].filter(it => Math.abs(canvasFrameLimit(it, axis, share) - share) > .0001);
+    if (!limited.length) { for (const it of pending) sizes.set(it.id, share); break; }
+    // Resolve minima first; maxima can only release more space afterwards.
+    const minima = limited.filter(it => canvasFrameLimit(it, axis, share) > share);
+    for (const it of minima.length ? minima : limited) {
+      const value = canvasFrameLimit(it, axis, share);
+      sizes.set(it.id, value); remaining -= value; pending.delete(it);
+    }
+  }
+  return sizes;
+};
+const canvasFrameLayout = (items, previous = [], suspend = false, artboard = null) => {
+  if (!items.some(it => it.isFrame || it.frameId || it.layoutSizing || it.constraints || it.layoutAnchor)) return items;
   const old = new Map(previous.map(it => [it.id, it]));
-  // Moving a frame transports descendants which weren't already moved by a
-  // multi-selection operation. Resizing changes its container, not its contents.
+  const map = new Map(items.map(it => {
+    const before = old.get(it.id);
+    if (before && it.layoutAnchor && it.layoutAnchor === before.layoutAnchor) {
+      const b = canvasRenderBoxOf(it), ob = canvasRenderBoxOf(before);
+      if (it.frameId !== before.frameId || b.x !== ob.x || b.y !== ob.y || b.w !== ob.w || b.h !== ob.h || it.constraints !== before.constraints) {
+        const { layoutAnchor, ...rest } = it;
+        return [it.id, rest];
+      }
+    }
+    return [it.id, it];
+  }));
+  const childrenOf = id => [...map.values()].filter(it => it.frameId === id);
+  // Explicit edits (multi-select move/scale, paste, etc.) take precedence over
+  // inferred parent changes. Loading/undo uses no previous document at all.
   const transported = new Set();
   const transport = id => {
     if (transported.has(id)) return;
@@ -20925,65 +21025,155 @@ const canvasFrameLayout = (items, previous = [], suspend = false) => {
     if (it.frameId && map.get(it.frameId)?.isFrame) {
       transport(it.frameId);
       const parent = map.get(it.frameId), before = old.get(it.frameId), ownBefore = old.get(id);
-      if (before && ownBefore) {
+      if (before && ownBefore && ownBefore.frameId === it.frameId) {
         const b = canvasRenderBoxOf(it), ob = canvasRenderBoxOf(ownBefore);
-        if (b.x === ob.x && b.y === ob.y) it = canvasFrameMove(it, parent.x - before.x, parent.y - before.y);
+        if (b.x === ob.x && b.y === ob.y && b.w === ob.w && b.h === ob.h) {
+          it = parent.autoLayout?.enabled
+            ? canvasFrameMove(it, parent.x - before.x, parent.y - before.y)
+            : canvasFrameAnchor(it, before, parent);
+        }
       }
-    } else if (it.frameId) it = { ...it, frameId: undefined };
+    } else if (it.frameId) it = { ...it, frameId: undefined, layoutAnchor: undefined };
     map.set(id, it);
   };
   items.forEach(it => transport(it.id));
   if (!suspend) {
-    const done = new Set();
-    const layout = id => {
-      if (done.has(id)) return;
-      done.add(id);
-      let f = map.get(id);
-      if (!f?.isFrame) return;
-      let children = [...map.values()].filter(it => it.frameId === id && !it.hidden);
-      children.forEach(it => { if (it.isFrame) layout(it.id); });
-      const cfg = f.autoLayout;
-      if (!cfg?.enabled) return;
-      const vertical = cfg.direction === "vertical", gap = Math.max(0, Number(cfg.gap) || 0);
-      const pad = canvasFramePadding(cfg), px = pad.left + pad.right, py = pad.top + pad.bottom;
-      children = children.map(it => {
-        let child = map.get(it.id);
-        if (child.type === "text" && child.frameTextWidth !== "fixed") {
-          const ctx = measureCtx();
-          if (ctx) {
-            let width = 0, max = 0;
-            const text = canvasText(child);
-            for (let i = 0; i < text.length; i++) {
-              if (text[i] === "\n") { max = Math.max(max, width); width = 0; continue; }
-              ctx.font = canvasFontAt(child, i);
-              width += ctx.measureText(text[i]).width + canvasLS(child);
-            }
-            child = { ...child, w: Math.max(1, Math.ceil(Math.max(max, width))) };
-            map.set(child.id, child);
+    // First measure intrinsic sizes bottom-up, then assign available space
+    // top-down. This avoids a fill/hug feedback loop and measures wrapped text
+    // at its allocated width before a vertical stack computes its height.
+    const natural = new Map(), measuring = new Set();
+    const measure = id => {
+      if (natural.has(id)) return natural.get(id);
+      const it = map.get(id), box = canvasRenderBoxOf(it);
+      if (measuring.has(id)) return box;
+      measuring.add(id);
+      const parentAuto = !!map.get(it.frameId)?.autoLayout?.enabled;
+      let w = box.w, h = box.h;
+      if (it.type === "text" && canvasFrameMode(it, "w", parentAuto) === "hug") {
+        const ctx = measureCtx();
+        if (ctx) {
+          let width = 0, max = 0;
+          const text = canvasText(it);
+          for (let i = 0; i < text.length; i++) {
+            if (text[i] === "\n") { max = Math.max(max, width); width = 0; continue; }
+            ctx.font = canvasFontAt(it, i);
+            width += ctx.measureText(text[i]).width + canvasLS(it);
           }
+          w = Math.max(1, Math.ceil(Math.max(max, width)));
         }
-        return child;
-      });
-      const boxes = children.map(canvasRenderBoxOf);
-      const main = boxes.reduce((n, b) => n + (vertical ? b.h : b.w), 0) + gap * Math.max(0, boxes.length - 1);
-      const cross = Math.max(0, ...boxes.map(b => vertical ? b.w : b.h));
-      f = { ...f, w: cfg.hugW ? Math.max(8, (vertical ? cross : main) + px) : f.w,
-        h: cfg.hugH ? Math.max(8, (vertical ? main : cross) + py) : f.h };
-      map.set(id, f);
-      let cursor = vertical ? pad.top : pad.left;
-      children.forEach((it, i) => {
-        const b = boxes[i], space = Math.max(0, (vertical ? f.w - px - b.w : f.h - py - b.h));
-        const offset = cfg.align === "end" ? space : cfg.align === "center" ? space / 2 : 0;
-        const x = f.x + (vertical ? pad.left + offset : cursor), y = f.y + (vertical ? cursor : pad.top + offset);
-        const dx = x - b.x, dy = y - b.y;
-        const ids = canvasFrameDescendants([...map.values()], [it.id]);
-        ids.forEach(cid => map.set(cid, canvasFrameMove(map.get(cid), dx, dy)));
-        cursor += (vertical ? b.h : b.w) + gap;
-      });
+        w = canvasFrameLimit(it, "w", w);
+        h = canvasRenderBoxOf({ ...it, w }).h;
+      }
+      if (it.isFrame && it.autoLayout?.enabled) {
+        const cfg = it.autoLayout, vertical = canvasFrameDirection(it, w, artboard) === "vertical", pad = canvasFramePadding(cfg);
+        const children = childrenOf(id).filter(child => !child.hidden);
+        const boxes = children.map(child => {
+          const b = { ...measure(child.id) };
+          // A fill item has no intrinsic claim on its hugging parent. Its
+          // minimum is the stable fallback for documents with a circular rule.
+          for (const axis of ["w", "h"]) if (canvasFrameMode(child, axis, true) === "fill") b[axis] = canvasFrameLimit(child, axis, 0);
+          return b;
+        });
+        const main = boxes.reduce((n, b) => n + (vertical ? b.h : b.w), 0) + Math.max(0, Number(cfg.gap) || 0) * Math.max(0, boxes.length - 1);
+        const cross = Math.max(0, ...boxes.map(b => vertical ? b.w : b.h));
+        if (canvasFrameMode(it, "w", parentAuto) === "hug") w = Math.max(8, (vertical ? cross : main) + pad.left + pad.right);
+        if (canvasFrameMode(it, "h", parentAuto) === "hug") h = Math.max(8, (vertical ? main : cross) + pad.top + pad.bottom);
+      }
+      const result = { w: canvasFrameCanSize(it) ? canvasFrameLimit(it, "w", w) : w,
+        h: it.type !== "text" && canvasFrameCanSize(it) ? canvasFrameLimit(it, "h", h) : h };
+      natural.set(id, result); measuring.delete(id); return result;
     };
-    items.filter(it => it.isFrame).forEach(it => layout(it.id));
+    items.forEach(it => measure(it.id));
+    const resolving = new Set();
+    const moveTree = (id, dx, dy) => canvasFrameDescendants([...map.values()], [id]).forEach(cid => map.set(cid, canvasFrameMove(map.get(cid), dx, dy)));
+    const resolve = (id, forced = {}) => {
+      if (resolving.has(id)) return;
+      resolving.add(id);
+      let it = map.get(id), before = it;
+      const b = natural.get(id), parentAuto = !!map.get(it.frameId)?.autoLayout?.enabled;
+      if (canvasFrameCanSize(it)) {
+        it = { ...it, w: canvasFrameLimit(it, "w", forced.w ?? b.w),
+          ...(it.type !== "text" ? { h: canvasFrameLimit(it, "h", forced.h ?? b.h) } : {}) };
+        map.set(id, it);
+      }
+      if (!it.isFrame) { resolving.delete(id); return; }
+      const allChildren = childrenOf(id), cfg = it.autoLayout;
+      if (!cfg?.enabled) {
+        for (const child of allChildren) {
+          const next = canvasFrameAnchor(child, before, it);
+          map.set(child.id, next);
+          // Descendants must see their own parent's resulting size and move.
+          const adapt = (a, z) => {
+            for (const c of childrenOf(a.id)) {
+              const n = canvasFrameAnchor(c, a, z); map.set(c.id, n);
+              if (c.isFrame) adapt(c, n);
+            }
+          };
+          if (child.isFrame) adapt(child, next);
+          // Anchors already assigned this geometry, including text wrapping.
+          resolve(child.id, {
+            ...(next.constraints?.x === "stretch" ? { w: next.w } : {}),
+            ...(next.constraints?.y === "stretch" ? { h: next.h } : {}) });
+        }
+        resolving.delete(id); return;
+      }
+      const children = allChildren.filter(child => !child.hidden), vertical = canvasFrameDirection(it, it.w, artboard) === "vertical";
+      const pad = canvasFramePadding(cfg), px = pad.left + pad.right, py = pad.top + pad.bottom;
+      const gap = Math.max(0, Number(cfg.gap) || 0), gaps = gap * Math.max(0, children.length - 1);
+      const hugW = forced.w == null && canvasFrameMode(it, "w", parentAuto) === "hug";
+      const hugH = forced.h == null && canvasFrameMode(it, "h", parentAuto) === "hug";
+      const allocate = (axis, space, main, hug) => {
+        const fill = children.filter(c => canvasFrameCanSize(c) && canvasFrameMode(c, axis, true) === "fill");
+        if (hug) return new Map(fill.map(c => [c.id, canvasFrameLimit(c, axis, 0)]));
+        if (!main) return new Map(fill.map(c => [c.id, canvasFrameLimit(c, axis, space)]));
+        const used = children.filter(c => !fill.includes(c)).reduce((n, c) => n + (axis === "w" ? natural.get(c.id).w : canvasRenderBoxOf(map.get(c.id)).h), 0);
+        return canvasFrameFill(fill, axis, space - gaps - used);
+      };
+      const widths = allocate("w", it.w - px, !vertical, hugW);
+      for (const child of children) resolve(child.id, { w: widths.get(child.id) });
+      if (hugW) it = { ...it, w: canvasFrameLimit(it, "w", Math.max(8, px + (vertical
+        ? Math.max(0, ...children.map(c => canvasRenderBoxOf(map.get(c.id)).w))
+        : children.reduce((n, c) => n + canvasRenderBoxOf(map.get(c.id)).w, gaps)))) };
+      if (hugH) it = { ...it, h: canvasFrameLimit(it, "h", Math.max(8, py + (vertical
+        ? children.reduce((n, c) => n + canvasRenderBoxOf(map.get(c.id)).h, gaps)
+        : Math.max(0, ...children.map(c => canvasRenderBoxOf(map.get(c.id)).h))))) };
+      const heights = allocate("h", it.h - py, vertical, hugH);
+      // Re-resolve only height-fill containers; preserve their allocated width.
+      for (const child of children) if (heights.has(child.id)) {
+        resolve(child.id, { w: map.get(child.id).w, h: heights.get(child.id) });
+      }
+      map.set(id, it);
+      let cursor = vertical ? pad.top : pad.left;
+      for (const child of children) {
+        const box = canvasRenderBoxOf(map.get(child.id));
+        const space = Math.max(0, vertical ? it.w - px - box.w : it.h - py - box.h);
+        const offset = cfg.align === "end" ? space : cfg.align === "center" ? space / 2 : 0;
+        moveTree(child.id, it.x + (vertical ? pad.left + offset : cursor) - box.x,
+          it.y + (vertical ? cursor : pad.top + offset) - box.y);
+        cursor += (vertical ? box.h : box.w) + gap;
+      }
+      // Hidden children are not in the flow, but their nested rules still load.
+      for (const child of allChildren.filter(c => c.hidden)) resolve(child.id);
+      resolving.delete(id);
+    };
+    items.filter(it => !map.get(it.frameId)?.isFrame).forEach(it => resolve(it.id));
   }
   return canvasFrameAttach(items.map(it => map.get(it.id)), []);
+};
+const canvasFrameManualSize = (it, change) => {
+  if (!it.layoutSizing && !it.autoLayout?.enabled && !(it.type === "text" && it.frameId)) return { ...it, ...change };
+  const axes = ["w", "h"].filter(axis => change[axis] != null && change[axis] !== it[axis]);
+  if (!axes.length) return { ...it, ...change };
+  const modes = Object.fromEntries(axes.map(axis => [axis, "fixed"]));
+  return { ...it, ...change, layoutSizing: { ...it.layoutSizing, ...modes },
+    ...(it.type === "text" && axes.includes("w") ? { frameTextWidth: "fixed" } : {}),
+    ...(it.isFrame && it.autoLayout ? { autoLayout: { ...it.autoLayout,
+      ...Object.fromEntries(axes.map(axis => [axis === "w" ? "hugW" : "hugH", false])) } } : {}) };
+};
+const canvasResizeArtboard = (items, before, after) => {
+  const from = { x: 0, y: 0, ...before }, to = { x: 0, y: 0, ...after };
+  const frames = new Set(items.filter(it => it.isFrame).map(it => it.id));
+  return canvasFrameLayout(items.map(it => frames.has(it.frameId) ? it : canvasFrameAnchor(it, from, to)), items, false, after);
 };
 
 const canvasExpand = (items, components) => {
@@ -22552,10 +22742,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   // opened with an empty canvas — and the first autosave wrote that emptiness
   // back over the real thing. boardsFromDoc has already folded the legacy shape
   // into board 0, so this one source covers both.
-  const [items, setItemsState] = useState(() => canvasFrameLayout(bootRef.current[0].items));
+  const [items, setItemsState] = useState(() => canvasFrameLayout(bootRef.current[0].items, [], false, bootRef.current[0]));
   const setItems = (update) => {
     const suspend = ["move", "create"].includes(dragRef.current?.mode);
-    setItemsState(previous => canvasFrameLayout(typeof update === "function" ? update(previous) : update, previous, suspend));
+    setItemsState(previous => canvasFrameLayout(typeof update === "function" ? update(previous) : update, previous, suspend, focus ? components?.[focus.cid] : frame));
   };
   // The component definitions belong to the DOCUMENT, not to a board: one
   // component is used on several boards, and a definition parked on board 0
@@ -22798,6 +22988,12 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   const docNow = () => canvasAssembleDoc({ boards, active, live: liveBoard(),
     components, focus, items, stage: stageBg });
   const boardsNow = () => docNow().boards;
+  const resizeArtboard = (next) => {
+    markChange();
+    setBoards(canvasResizeBoardPositions(boardsNow(), active, next));
+    setItemsState(list => canvasResizeArtboard(list, frame, next));
+    setFrame(next);
+  };
   const loadBoard = (b) => {
     setFrame({ w: b.w, h: b.h });
     // Or switching boards would carry the last one's answer onto this one.
@@ -22805,7 +23001,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     setBg(b.bg || palette[1] || "#FFFFFF");
     setFrameRadius(Number(b.radius) || 0);
     setFrameRadii(Array.isArray(b.radii) && b.radii.length === 4 ? b.radii : null);
-    setItems(Array.isArray(b.items) ? b.items : []);
+    setItemsState(canvasFrameLayout(Array.isArray(b.items) ? b.items : [], [], false, b));
     // A selection belongs to the board it was made on. Carrying ids across is
     // how a Delete on one board reaches into another — the whiteboard learned
     // that the hard way and it is written down in CLAUDE.md.
@@ -22988,7 +23184,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const def = focus ? d.components?.[focus.cid] : null;
     if (focus && def) {
       setFocus(f => ({ ...f, parked: list[k]?.items || [] }));
-      setItems(Array.isArray(def.items) ? def.items : []);
+      setItemsState(canvasFrameLayout(Array.isArray(def.items) ? def.items : [], [], false, def));
       setSel(null); setPick([]); setEnteredGroup(null); setEditing(null);
       return;
     }
@@ -23059,10 +23255,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
   }, []);
   const dragRef = useRef(null);
   useEffect(() => {
-    const reflow = () => setItemsState(list => canvasFrameLayout(list));
+    const reflow = () => setItemsState(list => canvasFrameLayout(list, [], false, focus ? components?.[focus.cid] : frame));
     document.fonts?.addEventListener("loadingdone", reflow);
     return () => document.fonts?.removeEventListener("loadingdone", reflow);
-  }, []);
+  }, [frame, focus, components]);
 
 
   // ── Live collaboration ────────────────────────────────────────────────────
@@ -23447,10 +23643,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     if (!have || have.includes(want)) return want;
     return have.reduce((best, w) => (Math.abs(w - want) < Math.abs(best - want) ? w : best), have[0]);
   };
-  const patch = (id, p) => { markChange(); setItems(list => list.map(i => (i.id === id ? { ...i, ...p } : i))); };
+  const patch = (id, p) => { markChange(); setItems(list => list.map(i => (i.id === id ? canvasFrameManualSize(i, p) : i))); };
   // The same write across several items in ONE history step, so undoing a group
   // effect takes it off the whole group rather than one member per press.
-  const patchMany = (ids, p) => { markChange(); setItems(list => list.map(i => (ids.includes(i.id) ? { ...i, ...p } : i))); };
+  const patchMany = (ids, p) => { markChange(); setItems(list => list.map(i => (ids.includes(i.id) ? canvasFrameManualSize(i, p) : i))); };
   const addItem = (it) => { markChange(); setItems(list => canvasFrameAttach([...list, it], [it.id], false, true)); setSel(it.id); setTool("select"); };
 
   // Picker content is inserted into the selected container, while drawing and
@@ -23963,7 +24159,10 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     } else {
       // The empty board simply becomes the frame. `liveBoard` reads w/h back
       // out of `frame`, so this is all it takes for the stored board to agree.
-      if (mode === "resize") setFrame({ w: fw, h: fh });
+      if (mode === "resize") {
+        setBoards(canvasResizeBoardPositions(boardsNow(), active, { w: fw, h: fh }));
+        setFrame({ w: fw, h: fh });
+      }
       setItems(list => [...list, ...made]);
     }
     setSel(null);
@@ -25048,7 +25247,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     if (focus) return;
     setComponents(c => ({ ...(c || {}), [def.id]: structuredClone(def) }));
     setFocus({ cid: def.id, instanceId: null, parked: items, cam });
-    setItems(structuredClone(def.items || [])); setSel(null); setPick([]); setEnteredGroup(null); setEditing(null);
+    setItemsState(canvasFrameLayout(structuredClone(def.items || []), [], false, def)); setSel(null); setPick([]); setEnteredGroup(null); setEditing(null);
     flyTo(camForBox({ x: 0, y: 0, w: def.w || 1, h: def.h || 1 }));
   };
   const dropLibraryComponent = e => {
@@ -25071,7 +25270,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const def = (components || {})[inst.componentId];
     if (!def || focus) return;
     setFocus({ cid: inst.componentId, instanceId: inst.id, parked: items, cam });
-    setItems(Array.isArray(def.items) ? def.items : []);
+    setItemsState(canvasFrameLayout(Array.isArray(def.items) ? def.items : [], [], false, def));
     setSel(null); setPick([]); setEnteredGroup(null); setEditing(null);
     flyTo(camForBox({ x: 0, y: 0, w: def.w || 1, h: def.h || 1 }));
   };
@@ -25080,7 +25279,7 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
     const { cid, instanceId, parked, cam: back } = focus;
     setComponents(c => ({ ...(c || {}), [cid]: { ...(c || {})[cid], items } }));
     if (!libraryRows.some(r => r.id === cid && r.deleted_at)) saveLibraryComponent(cid, { ...components[cid], items });
-    setItems(parked);
+    setItemsState(canvasFrameLayout(parked, [], false, frame));
     setFocus(null);
     setSel(instanceId); setPick([]); setEnteredGroup(null); setEditing(null);
     if (back) flyTo(back);
@@ -28203,13 +28402,13 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 return dropdown(`${W}×${H}`,
                   [...(known ? [] : [[`${W}×${H}`, de ? "Eigene" : "Custom"]]), ...groups],
                   (v) => { const [w2, h2] = v.split("×").map(Number);
-                    if (w2 && h2) { markChange(); setFrame({ w: w2, h: h2 }); } });
+                    if (w2 && h2) resizeArtboard({ w: w2, h: h2 }); });
               })()}
             </div>
 
             <div style={two}>
-              {num(W, v => { const n = Math.max(16, Math.round(v)); markChange(); setFrame(f => ({ ...f, w: n })); }, "W")}
-              {num(H, v => { const n = Math.max(16, Math.round(v)); markChange(); setFrame(f => ({ ...f, h: n })); }, "H")}
+              {num(W, v => { const n = Math.max(16, Math.round(v)); resizeArtboard({ ...frame, w: n }); }, "W")}
+              {num(H, v => { const n = Math.max(16, Math.round(v)); resizeArtboard({ ...frame, h: n }); }, "H")}
             </div>
 
             {label(de ? "Eckenradius" : "Corner radius")}
@@ -28561,7 +28760,17 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
             {selItem.isFrame && (() => {
               const cfg = { enabled: false, direction: "horizontal", gap: 12, paddingX: 16, paddingY: 16,
                 align: "center", hugW: true, hugH: true, ...selItem.autoLayout };
-              const put = change => set2({ autoLayout: { ...cfg, ...change } });
+              const put = change => {
+                if (change.enabled !== false) { set2({ autoLayout: { ...cfg, ...change } }); return; }
+                markChange();
+                setItems(list => list.map(it => it.id === selItem.id
+                  ? { ...it, autoLayout: { ...cfg, ...change }, layoutSizing: { ...it.layoutSizing,
+                    ...(canvasFrameMode(it, "w", true) === "hug" ? { w: "fixed" } : {}),
+                    ...(canvasFrameMode(it, "h", true) === "hug" ? { h: "fixed" } : {}) } }
+                  : it.frameId === selItem.id ? { ...it, layoutSizing: { ...it.layoutSizing,
+                    ...(it.layoutSizing?.w === "fill" ? { w: "fixed" } : {}),
+                    ...(it.layoutSizing?.h === "fill" ? { h: "fixed" } : {}) } } : it));
+              };
               const options = rows => rows.map(([value, label]) => ({ value, label }));
               const children = items.filter(it => it.frameId === selItem.id);
               const inp = { border: "none", borderRadius: 9, padding: "9px 10px", fontFamily: FONT, fontSize: 12,
@@ -28573,8 +28782,53 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   {cfg.enabled ? (de ? "Auto Layout entfernen" : "Remove auto layout") : (de ? "Auto Layout hinzufügen" : "Add auto layout")}
                 </button>
                 {cfg.enabled && <>
-                  <Dropdown triggerStyle={{ width: "100%", justifyContent: "space-between", borderRadius: 9 }} value={cfg.direction} onChange={direction => put({ direction })}
-                    options={options([["horizontal", "Horizontal"], ["vertical", de ? "Vertikal" : "Vertical"]])} theme={theme} darkMode={darkMode} />
+                  {!cfg.responsive?.enabled && <Dropdown triggerStyle={{ width: "100%", justifyContent: "space-between", borderRadius: 9 }} value={cfg.direction} onChange={direction => put({ direction })}
+                    options={options([["horizontal", "Horizontal"], ["vertical", de ? "Vertikal" : "Vertical"]])} theme={theme} darkMode={darkMode} />}
+                  {(() => {
+                    const rule = { basis: "artboard", breakpoint: 640, narrow: "vertical", wide: "horizontal", ...cfg.responsive };
+                    const context = focus ? components?.[focus.cid] : frame;
+                    const effective = canvasFrameDirection(selItem, selItem.w, context);
+                    const putRule = change => {
+                      const responsive = { ...rule, ...change };
+                      const freeze = responsive.enabled && responsive.basis === "frame" && canvasFrameMode(selItem, "w", !!items.find(it => it.id === selItem.frameId)?.autoLayout?.enabled) === "hug";
+                      set2({ autoLayout: { ...cfg, responsive,
+                        ...(change.enabled === false ? { direction: effective } : {}), ...(freeze ? { hugW: false } : {}) },
+                        ...(freeze ? { layoutSizing: { ...selItem.layoutSizing, w: "fixed" } } : {}) });
+                    };
+                    const layoutOptions = options([["horizontal", de ? "Nebeneinander" : "Side by side"], ["vertical", de ? "Untereinander" : "Stacked"]]);
+                    const trigger = { width: "100%", justifyContent: "space-between", borderRadius: 9 };
+                    return <div style={{ marginTop: 8 }}>
+                      <button type="button" role="switch" aria-checked={!!rule.enabled} aria-label={de ? "Automatische Anordnung" : "Automatic arrangement"}
+                        onClick={() => putRule({ enabled: !rule.enabled })}
+                        style={{ ...inp, width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}>
+                        <span>{de ? "Automatische Anordnung" : "Automatic arrangement"}</span>
+                        <span style={{ width: 28, height: 17, padding: 2, borderRadius: 20, display: "flex", flexShrink: 0,
+                          justifyContent: rule.enabled ? "flex-end" : "flex-start", background: rule.enabled ? (darkMode ? "#E5E5EB" : "#28283D") : (darkMode ? "#494952" : "#D3D3DA") }}>
+                          <span style={{ width: 13, height: 13, borderRadius: "50%", background: rule.enabled && darkMode ? "#28283D" : "#fff" }} />
+                        </span>
+                      </button>
+                      {rule.enabled && <div style={{ marginTop: 8 }}>
+                        <div role="group" aria-label={de ? "Wechsel abhängig von" : "Switch based on"}>
+                          <Dropdown triggerStyle={trigger} value={rule.basis} onChange={basis => putRule({ basis })}
+                            options={options([["artboard", de ? "Artboard-Format" : "Artboard format"], ["frame", de ? "Frame-Breite" : "Frame width"]])} theme={theme} darkMode={darkMode} />
+                        </div>
+                        {rule.basis === "frame" && <div style={{ marginTop: 8 }}>
+                          <SliderField label={de ? "Umschaltbreite" : "Switch width"} value={rule.breakpoint} min={16} max={1920} editMin={16} suffix="px"
+                            onChange={breakpoint => putRule({ breakpoint })} onCommit={breakpoint => putRule({ breakpoint: Math.max(16, Number(breakpoint) || 640) })} theme={theme} darkMode={darkMode} />
+                        </div>}
+                        {[["narrow", rule.basis === "frame" ? (de ? "Bis zur Umschaltbreite" : "At or below switch width") : (de ? "Hochformat" : "Portrait")],
+                          ["wide", rule.basis === "frame" ? (de ? "Über der Umschaltbreite" : "Above switch width") : (de ? "Quadrat & Querformat" : "Square & landscape")]].map(([key, title]) => <div key={key} role="group" aria-label={title} style={{ marginTop: 8 }}>
+                          <div style={{ fontSize: 11, color: theme.textDim, marginBottom: 5 }}>{title}</div>
+                          <Dropdown triggerStyle={trigger} value={rule[key]} onChange={value => putRule({ [key]: value })} options={layoutOptions} theme={theme} darkMode={darkMode} />
+                        </div>)}
+                        <p style={{ margin: "8px 0 0", color: theme.textDim, fontSize: 11, lineHeight: 1.5 }}>
+                          {de ? "Aktuell: " : "Current: "}{effective === "vertical" ? (de ? "Untereinander" : "Stacked") : (de ? "Nebeneinander" : "Side by side")}
+                          {rule.basis === "artboard" ? (de ? ". Wechselt beim Ändern des Artboard-Formats." : ". Switches when the artboard format changes.")
+                            : (de ? ". Wechselt mit der Breite dieses Frames." : ". Switches with this frame’s width.")}
+                        </p>
+                      </div>}
+                    </div>;
+                  })()}
                   <div style={{ marginTop: 8 }}><SliderField label={de ? "Abstand" : "Gap"} value={cfg.gap} min={0} max={120}
                     onChange={gap => put({ gap })} onCommit={gap => put({ gap })} theme={theme} darkMode={darkMode} /></div>
                   {label(de ? "Innenabstände" : "Padding")}
@@ -28588,11 +28842,6 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                   {label(de ? "Ausrichtung" : "Alignment")}
                   <Dropdown triggerStyle={{ width: "100%", justifyContent: "space-between", borderRadius: 9 }} value={cfg.align} onChange={align => put({ align })}
                     options={options([["start", de ? "Anfang" : "Start"], ["center", de ? "Mitte" : "Center"], ["end", de ? "Ende" : "End"]])} theme={theme} darkMode={darkMode} />
-                  {[["hugW", de ? "Breite" : "Width"], ["hugH", de ? "Höhe" : "Height"]].map(([key, title]) => <div key={key}>
-                    {label(title)}
-                    <Dropdown triggerStyle={{ width: "100%", justifyContent: "space-between", borderRadius: 9 }} value={cfg[key] ? "hug" : "fixed"} onChange={value => put({ [key]: value === "hug" })}
-                      options={options([["hug", de ? "An Inhalt anpassen" : "Hug contents"], ["fixed", de ? "Fest" : "Fixed"]])} theme={theme} darkMode={darkMode} />
-                  </div>)}
                 </>}
                 {label(de ? "Inhalt" : "Contents")}
                 {!children.length && <p style={{ color: theme.textDim, fontSize: 12, lineHeight: 1.5 }}>
@@ -28610,11 +28859,83 @@ function CanvasEditor({ size, title, doc, originRect, brand, orgId, session, use
                 </div>)}
               </>;
             })()}
-            {selItem.type === "text" && selItem.frameId && <>
-              {label(de ? "Textbreite im Frame" : "Text width in frame")}
-              <Dropdown triggerStyle={{ width: "100%", justifyContent: "space-between", borderRadius: 9 }} value={selItem.frameTextWidth || "hug"} onChange={frameTextWidth => set2({ frameTextWidth })}
-                options={[{ value: "hug", label: de ? "An Text anpassen" : "Hug text" }, { value: "fixed", label: de ? "Fest / Zeilenumbruch" : "Fixed / wrap" }]} theme={theme} darkMode={darkMode} />
-            </>}
+            {!panelBox && (() => {
+              const parent = items.find(it => it.isFrame && it.id === selItem.frameId);
+              const inFlow = !!parent?.autoLayout?.enabled;
+              const sizing = selItem.layoutSizing || {};
+              const canSize = canvasFrameCanSize(selItem);
+              const style = { width: "100%", justifyContent: "space-between", borderRadius: 9 };
+              const setSizing = change => {
+                markChange();
+                setItems(list => list.map(it => {
+                  if (it.id === selItem.id) return { ...it, layoutSizing: { ...sizing, ...change },
+                    ...((change.w === "hug" && it.constraints?.x === "stretch") || (change.h === "hug" && it.constraints?.y === "stretch")
+                      ? { constraints: { ...it.constraints, ...(change.w === "hug" && it.constraints?.x === "stretch" ? { x: "start" } : {}),
+                        ...(change.h === "hug" && it.constraints?.y === "stretch" ? { y: "start" } : {}) } } : {}),
+                    ...(it.type === "text" && change.w ? { frameTextWidth: change.w === "hug" ? "hug" : "fixed" } : {}),
+                    ...(it.isFrame && it.autoLayout ? { autoLayout: { ...it.autoLayout,
+                      ...(change.w ? { hugW: change.w === "hug" } : {}), ...(change.h ? { hugH: change.h === "hug" } : {}) } } : {}) };
+                  // A fill child needs a definite parent on that axis. Freeze
+                  // its current dimension once, instead of creating a hug loop.
+                  if (it.id === parent?.id && (change.w === "fill" || change.h === "fill")) return { ...it,
+                    layoutSizing: { ...it.layoutSizing, ...(change.w === "fill" ? { w: "fixed" } : {}), ...(change.h === "fill" ? { h: "fixed" } : {}) },
+                    autoLayout: { ...it.autoLayout, ...(change.w === "fill" ? { hugW: false } : {}), ...(change.h === "fill" ? { hugH: false } : {}) } };
+                  if (it.frameId === selItem.id && (change.w === "hug" || change.h === "hug")) return { ...it, layoutSizing: { ...it.layoutSizing,
+                    ...(change.w === "hug" && it.layoutSizing?.w === "fill" ? { w: "fixed" } : {}),
+                    ...(change.h === "hug" && it.layoutSizing?.h === "fill" ? { h: "fixed" } : {}) } };
+                  return it;
+                }));
+              };
+              return <>
+                {label(de ? "Größenanpassung" : "Resizing")}
+                {!inFlow && <div style={two}>
+                  {[["x", de ? "Horizontaler Anker" : "Horizontal anchor", [["start", de ? "Links" : "Left"], ["center", de ? "Mitte" : "Center"], ["end", de ? "Rechts" : "Right"], ...(canSize ? [["stretch", de ? "Links & rechts" : "Left & right"]] : [])]],
+                    ["y", de ? "Vertikaler Anker" : "Vertical anchor", [["start", de ? "Oben" : "Top"], ["center", de ? "Mitte" : "Center"], ["end", de ? "Unten" : "Bottom"], ...(canSize && selItem.type !== "text" ? [["stretch", de ? "Oben & unten" : "Top & bottom"]] : [])]]].map(([axis, title, options]) => <div key={axis} role="group" aria-label={title}>
+                      <Dropdown triggerStyle={style} value={selItem.constraints?.[axis] || "start"}
+                        options={options.map(([value, label]) => ({ value, label }))}
+                        onChange={value => set2({ constraints: { ...selItem.constraints, [axis]: value },
+                          ...(value === "stretch" ? { layoutSizing: { ...sizing, [axis === "x" ? "w" : "h"]: "fixed" },
+                            ...(selItem.isFrame && selItem.autoLayout ? { autoLayout: { ...selItem.autoLayout, [axis === "x" ? "hugW" : "hugH"]: false } } : {}),
+                            ...(selItem.type === "text" ? { frameTextWidth: "fixed" } : {}) } : {}) })}
+                        theme={theme} darkMode={darkMode} />
+                    </div>)}
+                </div>}
+                {canSize && ["w", "h"].filter(axis => axis !== "h" || selItem.type !== "text").map(axis => {
+                  const title = axis === "w" ? (de ? "Breite" : "Width") : (de ? "Höhe" : "Height");
+                  const canHug = (selItem.isFrame && selItem.autoLayout?.enabled && !(axis === "w" && selItem.autoLayout.responsive?.enabled && selItem.autoLayout.responsive.basis === "frame")) || (selItem.type === "text" && axis === "w");
+                  const options = [["fixed", de ? "Fest" : "Fixed"], ...(canHug ? [["hug", de ? "An Inhalt anpassen" : "Hug contents"]] : []), ...(inFlow ? [["fill", de ? "Platz ausfüllen" : "Fill container"]] : [])];
+                  return <div key={axis} role="group" aria-label={title + (de ? " anpassen" : " resizing")} style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 11, color: theme.textDim, marginBottom: 5 }}>{title}</div>
+                    <Dropdown triggerStyle={style} value={canvasFrameMode(selItem, axis, inFlow)}
+                      options={options.map(([value, label]) => ({ value, label }))}
+                      onChange={value => setSizing({ [axis]: value })} theme={theme} darkMode={darkMode} />
+                  </div>;
+                })}
+                {canSize && <details style={{ marginTop: 10, color: theme.textDim, fontSize: 12 }}>
+                  <summary style={{ cursor: "pointer" }}>{de ? "Mindest- und Maximalgröße" : "Minimum and maximum size"}</summary>
+                  {["w", "h"].filter(axis => axis !== "h" || selItem.type !== "text").map(axis => <div key={axis} style={two}>
+                    {[["min", de ? "Min." : "Min."], ["max", de ? "Max." : "Max."]].map(([bound, title]) => {
+                      const key = bound + axis.toUpperCase();
+                      const name = `${title} ${axis === "w" ? (de ? "Breite" : "width") : (de ? "Höhe" : "height")}`;
+                      return <label key={key} style={{ minWidth: 0, fontSize: 11 }}>
+                        {name}
+                        <input type="number" aria-label={name} min="1" value={sizing[key] ?? ""}
+                          placeholder={bound === "max" ? "∞" : "1"} onChange={e => {
+                            const value = e.target.value === "" ? undefined : Math.max(1, Number(e.target.value) || 1);
+                            const other = (bound === "min" ? "max" : "min") + axis.toUpperCase();
+                            setSizing({ [key]: value, ...(value != null && sizing[other] != null && (bound === "min" ? value > sizing[other] : value < sizing[other]) ? { [other]: value } : {}) });
+                          }} style={{ width: "100%", marginTop: 5, padding: "8px", borderRadius: 8, border: "none", fontFamily: FONT, color: theme.text, background: darkMode ? "rgba(255,255,255,0.06)" : "#F3F3F5" }} />
+                      </label>;
+                    })}
+                  </div>)}
+                </details>}
+                <p style={{ margin: "8px 0 0", fontSize: 11, lineHeight: 1.5, color: theme.textDim }}>
+                  {inFlow ? (de ? "Platz ausfüllen teilt den freien Raum im Frame. Text bricht automatisch um." : "Fill shares the available space inside the frame. Text wraps automatically.")
+                    : parent ? (de ? "Anker gelten beim Ändern der Frame-Größe." : "Anchors apply when the frame is resized.")
+                    : (de ? "Anker gelten beim Ändern des Artboard-Formats." : "Anchors apply when the artboard format changes.")}
+                </p>
+              </>;
+            })()}
             {panelBox ? (<>
               {label(de ? "Maße" : "Layout")}
               <div style={two}>
@@ -32103,6 +32424,33 @@ function InstagramDirectPanel({ theme, darkMode, de, card, secLabel, ig = null, 
     </div>
   );
 
+  // Das verbundene Konto mit Gesicht. Vorher stand hier nur "@name": das Bild
+  // wurde weder angefragt noch gezeichnet, und beides musste sich aendern,
+  // sonst passiert nichts Sichtbares.
+  //
+  // Metas CDN-Adressen laufen ab (oh= und oe= darin), deshalb derselbe Schutz
+  // wie ueberall sonst: abgelaufen wird gar nicht erst geladen, und was beim
+  // Laden scheitert, faellt auf den Buchstaben zurueck statt auf das kaputte
+  // Symbol des Browsers.
+  const accountLine = (acc) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
+      <div style={{ position: "relative", width: 26, height: 26, borderRadius: "50%",
+        flexShrink: 0, overflow: "hidden", display: "flex", alignItems: "center",
+        justifyContent: "center", background: "#15151c", color: "#fff",
+        fontFamily: FONT, fontSize: 11, fontWeight: 600 }}>
+        {acc?.picture && !signedImageExpired(acc.picture) && (
+          <img src={acc.picture} alt="" referrerPolicy="no-referrer"
+            onError={(e) => { e.currentTarget.style.display = "none"; }}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+        )}
+        {(acc?.username || "?").trim()[0]?.toUpperCase() || "?"}
+      </div>
+      <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim }}>
+        @{acc?.username}
+      </span>
+    </div>
+  );
+
   // Declared after `num` and `tile` on purpose: it uses both.
   const threadsBlock = thState && (
     <div style={{ marginTop: state ? 18 : 0, paddingTop: state ? 16 : 0,
@@ -32111,9 +32459,7 @@ function InstagramDirectPanel({ theme, darkMode, de, card, secLabel, ig = null, 
       {thState.error ? (
         <div style={{ fontSize: 12.5, fontFamily: FONT, color: "#E86767" }}>{thState.error}</div>
       ) : (<>
-        <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginBottom: 14 }}>
-          @{thState.account?.username}
-        </div>
+        {accountLine(thState.account)}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
           {tile(de ? "Follower" : "Followers", num(thState.followers))}
           {tile(de ? `Aufrufe, ${thState.days} Tage` : `Views, ${thState.days} days`, num(thState.metrics?.views))}
@@ -32168,9 +32514,7 @@ function InstagramDirectPanel({ theme, darkMode, de, card, secLabel, ig = null, 
       {state.error ? (
         <div style={{ fontSize: 12.5, fontFamily: FONT, color: "#E86767" }}>{state.error}</div>
       ) : (<>
-        <div style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textDim, marginBottom: 14 }}>
-          @{state.account?.username}
-        </div>
+        {accountLine(state.account)}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
           {tile(de ? "Follower" : "Followers", num(state.account?.followers))}
           {tile(de ? `Beiträge, ${state.days} Tage` : `Posts, ${state.days} days`,
