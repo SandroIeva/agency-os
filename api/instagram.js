@@ -584,39 +584,26 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
         picture: c.from?.profile_picture_url || null,
         isOwner: (c.from?.id && c.from.id === row.ig_user_id) || (!!username && username === row.username) };
     };
-    // Asked WITH the commenter's picture, and again without it if Meta refuses
-    // the field. Whether a commenter's picture is readable by the account they
-    // commented on is not something the docs answer plainly, and the cheapest
-    // honest way to find out is to ask and to cope with a no.
-    const WITH_PIC = "id,text,timestamp,like_count,username,from{id,username,profile_picture_url},replies.limit(10){id,text,timestamp,like_count,username,from{id,username,profile_picture_url}}";
+    // OHNE das Bild des Kommentierenden, und das ist Metas Entscheidung, nicht
+    // unsere. Gefragt wurde frueher mit `from{...profile_picture_url}`, und
+    // Meta lehnte die ganze Anfrage mit 400 ab; eine Rueckfallebene fragte dann
+    // ohne. Am 22.09.2026 gemessen, der Endpunkt schrieb es selbst auf:
+    //
+    //   {"askedWithPicture":false,"hasFrom":true,"fromKeys":["id","username"]}
+    //
+    // Es kommen `id` und `username`, sonst nichts. Dem Kontoinhaber gibt Meta
+    // das Gesicht fremder Leute nicht, auch nicht mit
+    // instagram_business_manage_comments. Bei Threads haengt das Bild an der
+    // ANTWORT statt am Autor, deshalb steht es dort.
+    //
+    // Also gar nicht erst danach fragen: jede Abfrage kostete sonst einen
+    // abgelehnten Versuch plus einen zweiten, je Beitrag und je Aufruf der
+    // Ansicht. Die Initiale im Kreis ist hier der Normalfall, kein Ausfall.
     const PLAIN = "id,text,timestamp,like_count,username,from{id,username},replies.limit(10){id,text,timestamp,like_count,username,from{id,username}}";
-    let picFields = true;
     let refused = null;
     const perPost = await Promise.all(posts.map(async (m) => {
-      let r = await ig(token, `/${m.id}/comments`, {
-        fields: picFields ? WITH_PIC : PLAIN,
-        limit: 25,
-      });
-      if (!r.ok && picFields && r.status === 400) {
-        picFields = false;
-        r = await ig(token, `/${m.id}/comments`, { fields: PLAIN, limit: 25 });
-      }
+      const r = await ig(token, `/${m.id}/comments`, { fields: PLAIN, limit: 25 });
       if (!r.ok) { refused = refused || r.body?.error || { message: "comments_failed" }; return []; }
-      // Warum die Gesichter unter Instagram-Kommentaren fehlen und unter
-      // Threads-Antworten nicht, hat genau zwei moegliche Gruende, und sie
-      // sehen in der App gleich aus: entweder lehnt Meta das Feld mit 400 ab
-      // (dann greift die Ruckfallebene oben), oder es liefert die Kommentare
-      // ohne das Feld, ohne etwas zu sagen. Das hier schreibt auf, welcher der
-      // beiden es ist, statt es zu vermuten.
-      const first = r.body?.data?.[0];
-      if (first) {
-        console.error("[instagram] comment author fields", JSON.stringify({
-          askedWithPicture: picFields,
-          hasFrom: !!first.from,
-          fromKeys: first.from ? Object.keys(first.from) : null,
-          hasPicture: !!first.from?.profile_picture_url,
-        }));
-      }
       const base = { platform: "instagram", postId: m.id, postPermalink: m.permalink || null,
         postContent: (m.caption || "").slice(0, 140) };
       const out = [];
