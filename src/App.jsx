@@ -11090,7 +11090,7 @@ function NewsletterIntro({ theme, darkMode, appLanguage, onAnswer }) {
       backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
       display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-        style={{ width: narrow ? "min(430px, 100%)" : "min(820px, 100%)",
+        style={{ width: narrow ? "min(430px, 100%)" : "min(800px, 100%)",
           minHeight: narrow ? 0 : 440, maxHeight: "calc(100vh - 48px)",
           display: "flex", padding: 16, borderRadius: 28, boxSizing: "border-box",
           background: darkMode ? "#1c1c24" : "#ffffff", fontFamily: FONT, overflow: "hidden",
@@ -11100,7 +11100,7 @@ function NewsletterIntro({ theme, darkMode, appLanguage, onAnswer }) {
             dem grauen Kasten ein <img> mit objectFit cover, damit es die Spalte
             fuellt, ohne verzerrt zu werden. Die Masse bleiben. */}
         {!narrow && (
-          <div style={{ width: 416, flexShrink: 0, borderRadius: 20,
+          <div style={{ width: 368, flexShrink: 0, borderRadius: 20,
             background: darkMode ? "rgba(255,255,255,0.05)" : "#ececef" }} />
         )}
 
@@ -11109,13 +11109,13 @@ function NewsletterIntro({ theme, darkMode, appLanguage, onAnswer }) {
             unter dem Absatz: mit `marginTop: auto` sitzen sie auf dem Boden der
             Karte, egal wie lang der Text in der jeweiligen Sprache wird. */}
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
-          padding: narrow ? "18px 16px 8px" : "44px 28px 26px 32px" }}>
-          <div style={{ fontSize: narrow ? 21 : 23, fontWeight: 600, color: theme.text,
+          padding: narrow ? "18px 16px 8px" : "44px 32px 26px 36px" }}>
+          <div style={{ fontSize: narrow ? 21 : 24, fontWeight: 600, color: theme.text,
             letterSpacing: -0.3, lineHeight: 1.22 }}>
             {de ? "Sollen wir dir schreiben, wenn es Neues gibt?"
                 : "Shall we write when something new lands?"}
           </div>
-          <div style={{ fontSize: 13.5, color: theme.textDim, lineHeight: 1.62, marginTop: 14 }}>
+          <div style={{ fontSize: 14, color: theme.textDim, lineHeight: 1.62, marginTop: 14 }}>
             {de ? "Wir bauen i7OS gerade schnell aus. Ein paar Mal im Monat eine kurze Mail, was dazugekommen ist. Kein Verkauf, und du kannst jederzeit in den Einstellungen widerrufen."
                 : "We are building i7OS quickly right now. A short email a few times a month about what is new. No sales, and you can withdraw any time in Settings."}
           </div>
