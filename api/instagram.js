@@ -433,8 +433,21 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
       metrics = metrics.filter(m => m !== bad);
     }
 
-    const profile = await ig(token, "/me",
-      { fields: "user_id,username,account_type,followers_count,follows_count,media_count" });
+    // Das Profilbild stand nie in dieser Liste, also kam es auch nie an: ein
+    // Feld, das man bei Meta nicht nennt, wird nicht geliefert. Threads heisst
+    // es anders (threads_profile_picture_url), hier schlicht
+    // profile_picture_url, und es gibt es nur fuer Business- und
+    // Creator-Konten.
+    //
+    // Mit Rueckfallebene, weil diese eine Abfrage sonst die ganze Uebersicht
+    // mitnimmt: lehnt Meta das Feld ab, wird ohne es gefragt und die Zahlen
+    // stehen trotzdem da.
+    const PROFILE_BASE = "user_id,username,account_type,followers_count,follows_count,media_count";
+    let profile = await ig(token, "/me", { fields: `${PROFILE_BASE},name,profile_picture_url` });
+    if (!profile.ok) {
+      console.error("[instagram] profile fields refused", profile.status, JSON.stringify(profile.body?.error || null));
+      profile = await ig(token, "/me", { fields: PROFILE_BASE });
+    }
 
     // Wo die Follower sitzen. Eigener Aufruf, weil er eine Aufschlüsselung
     // braucht und kein Zeitfenster akzeptiert, und weil Instagram ihn erst ab
@@ -457,6 +470,11 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
       account: {
         igUserId: row.ig_user_id,
         username: profile.body?.username || row.username,
+        name: profile.body?.name || null,
+        // Metas CDN-Adresse laeuft ab (oh= und oe= in der Adresse), sie gehoert
+        // also nicht in die Datenbank. Sie kommt bei jeder Uebersicht frisch
+        // mit und wird nur angezeigt.
+        picture: profile.body?.profile_picture_url || null,
         followers,
         followersDelta: delta,
         following: profile.body?.follows_count ?? null,
@@ -584,6 +602,21 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
         r = await ig(token, `/${m.id}/comments`, { fields: PLAIN, limit: 25 });
       }
       if (!r.ok) { refused = refused || r.body?.error || { message: "comments_failed" }; return []; }
+      // Warum die Gesichter unter Instagram-Kommentaren fehlen und unter
+      // Threads-Antworten nicht, hat genau zwei moegliche Gruende, und sie
+      // sehen in der App gleich aus: entweder lehnt Meta das Feld mit 400 ab
+      // (dann greift die Ruckfallebene oben), oder es liefert die Kommentare
+      // ohne das Feld, ohne etwas zu sagen. Das hier schreibt auf, welcher der
+      // beiden es ist, statt es zu vermuten.
+      const first = r.body?.data?.[0];
+      if (first) {
+        console.error("[instagram] comment author fields", JSON.stringify({
+          askedWithPicture: picFields,
+          hasFrom: !!first.from,
+          fromKeys: first.from ? Object.keys(first.from) : null,
+          hasPicture: !!first.from?.profile_picture_url,
+        }));
+      }
       const base = { platform: "instagram", postId: m.id, postPermalink: m.permalink || null,
         postContent: (m.caption || "").slice(0, 140) };
       const out = [];
