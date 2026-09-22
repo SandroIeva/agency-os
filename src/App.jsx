@@ -11073,44 +11073,65 @@ const seesNewsletterAsk = (email) =>
 // verschiebt die Frage nur auf den naechsten Besuch.
 function NewsletterIntro({ theme, darkMode, appLanguage, onAnswer }) {
   const de = appLanguage === "de";
+  // Dieselbe Zweiteilung wie beim KI-Dialog: Bild links, Text rechts. Unter 780
+  // Pixeln faellt die Bildspalte weg, statt auf Briefmarkengroesse zu schrumpfen.
+  // Ein Listener und keine einmalige Messung, sonst behaelt jemand, der das
+  // Fenster bei offenem Dialog schmaler zieht, ein Bild, das nicht mehr passt.
+  const [narrow, setNarrow] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth < 780);
+  useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth < 780);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   return createPortal(
     <div style={{ position: "fixed", inset: 0, zIndex: 100003, background: "rgba(0,0,0,0.34)",
       backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
       display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-        style={{ width: "min(430px, 100%)", padding: "34px 34px 26px", borderRadius: 26, boxSizing: "border-box",
-          background: darkMode ? "#1c1c24" : "#ffffff", fontFamily: FONT,
+        style={{ width: narrow ? "min(430px, 100%)" : "min(780px, 100%)",
+          minHeight: narrow ? 0 : 440, maxHeight: "calc(100vh - 48px)",
+          display: "flex", padding: 16, borderRadius: 28, boxSizing: "border-box",
+          background: darkMode ? "#1c1c24" : "#ffffff", fontFamily: FONT, overflow: "hidden",
           boxShadow: darkMode ? "0 40px 90px rgba(0,0,0,0.55)" : "0 40px 90px rgba(0,0,0,0.18)" }}>
-        {/* Briefumschlag, gezeichnet, nicht als Emoji. Derselbe Strich wie
-            ueberall sonst in der App. */}
-        <div style={{ width: 46, height: 46, borderRadius: 14, marginBottom: 18,
-          display: "flex", alignItems: "center", justifyContent: "center", color: theme.text,
-          background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="4" width="20" height="16" rx="2.5" /><path d="m22 7-10 5L2 7" />
-          </svg>
-        </div>
-        <div style={{ fontSize: 21, fontWeight: 600, color: theme.text, letterSpacing: -0.2, lineHeight: 1.25 }}>
-          {de ? "Sollen wir dir schreiben, wenn es Neues gibt?"
-              : "Shall we write when something new lands?"}
-        </div>
-        <div style={{ fontSize: 13.5, color: theme.textDim, lineHeight: 1.6, marginTop: 10 }}>
-          {de ? "Wir bauen i7OS gerade schnell aus. Ein paar Mal im Monat eine kurze Mail, was dazugekommen ist. Kein Verkauf, und du kannst jederzeit in den Einstellungen widerrufen."
-              : "We are building i7OS quickly right now. A short email a few times a month about what is new. No sales, and you can withdraw any time in Settings."}
-        </div>
-        <div style={{ display: "flex", gap: 10, marginTop: 26 }}>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={() => onAnswer(false)}
-            style={{ flex: 1, padding: "11px 16px", borderRadius: 999, cursor: "pointer",
-              border: `1px solid ${theme.border}`, background: "transparent", color: theme.text,
-              fontFamily: FONT, fontSize: 13, fontWeight: 500 }}>
-            {de ? "Nein danke" : "No thanks"}
-          </motion.button>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={() => onAnswer(true)}
-            style={{ ...primaryBtn(darkMode), flex: 1, padding: "11px 16px", borderRadius: 999,
-              border: "none", cursor: "pointer", fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>
-            {de ? "Ja, gerne" : "Yes, please"}
-          </motion.button>
+
+        {/* PLATZHALTER. Hier kommt das Bild hin, sobald es da ist: dann wird aus
+            dem grauen Kasten ein <img> mit objectFit cover, damit es die Spalte
+            fuellt, ohne verzerrt zu werden. Die Masse bleiben. */}
+        {!narrow && (
+          <div style={{ width: 320, flexShrink: 0, borderRadius: 20,
+            background: darkMode ? "rgba(255,255,255,0.05)" : "#ececef" }} />
+        )}
+
+        {/* RECHTS: der Text traegt die Entscheidung, also bekommt er Luft und
+            eine Zeilenlaenge, die man liest. Die Knoepfe unten, nicht direkt
+            unter dem Absatz: mit `marginTop: auto` sitzen sie auf dem Boden der
+            Karte, egal wie lang der Text in der jeweiligen Sprache wird. */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
+          padding: narrow ? "18px 16px 8px" : "44px 34px 26px 38px" }}>
+          <div style={{ fontSize: narrow ? 21 : 25, fontWeight: 600, color: theme.text,
+            letterSpacing: -0.3, lineHeight: 1.22 }}>
+            {de ? "Sollen wir dir schreiben, wenn es Neues gibt?"
+                : "Shall we write when something new lands?"}
+          </div>
+          <div style={{ fontSize: 14, color: theme.textDim, lineHeight: 1.62, marginTop: 14, maxWidth: 360 }}>
+            {de ? "Wir bauen i7OS gerade schnell aus. Ein paar Mal im Monat eine kurze Mail, was dazugekommen ist. Kein Verkauf, und du kannst jederzeit in den Einstellungen widerrufen."
+                : "We are building i7OS quickly right now. A short email a few times a month about what is new. No sales, and you can withdraw any time in Settings."}
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: narrow ? 24 : "auto", paddingTop: 24 }}>
+            <motion.button whileTap={{ scale: 0.97 }} onClick={() => onAnswer(false)}
+              style={{ flex: 1, padding: "12px 16px", borderRadius: 999, cursor: "pointer",
+                border: `1px solid ${theme.border}`, background: "transparent", color: theme.text,
+                fontFamily: FONT, fontSize: 13.5, fontWeight: 500 }}>
+              {de ? "Nein danke" : "No thanks"}
+            </motion.button>
+            <motion.button whileTap={{ scale: 0.97 }} onClick={() => onAnswer(true)}
+              style={{ ...primaryBtn(darkMode), flex: 1, padding: "12px 16px", borderRadius: 999,
+                border: "none", cursor: "pointer", fontFamily: FONT, fontSize: 13.5, fontWeight: 600 }}>
+              {de ? "Ja, gerne" : "Yes, please"}
+            </motion.button>
+          </div>
         </div>
       </motion.div>
     </div>,
