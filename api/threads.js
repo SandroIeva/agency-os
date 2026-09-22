@@ -73,6 +73,21 @@ const enabledOrgs = () =>
   (process.env.THREADS_DIRECT_ORGS || process.env.INSTAGRAM_DIRECT_ORGS || "")
     .split(",").map(s => s.trim()).filter(Boolean);
 
+// Darf dieser Workspace den direkten Weg gehen? Zwei Quellen, und eine reicht:
+// die Liste in der Umgebung, die es seit dem ersten Tag gibt, und der Schalter
+// im Admin-Dashboard (organizations.social_direct), mit dem ein Tester ohne
+// Deploy dazukommt.
+//
+// Die Umgebungsvariable zuerst, weil sie ohne Datenbankabfrage antwortet: fuer
+// den Workspace, der ohnehin dort steht, kostet das nichts.
+const directEnabled = async (db, orgId) => {
+  if (!orgId) return false;
+  if (enabledOrgs().includes(orgId)) return true;
+  const { data } = await db.from("organizations")
+    .select("social_direct").eq("id", orgId).maybeSingle();
+  return data?.social_direct === true;
+};
+
 async function usableToken(db, row) {
   const msLeft = new Date(row.token_expires_at).getTime() - Date.now();
   if (msLeft <= 0) return null;
@@ -205,7 +220,7 @@ export default async function handler(req) {
     const { data: stillAMember } = await db.from("org_members").select("user_id")
       .eq("org_id", tok.org_id).eq("user_id", tok.user_id).maybeSingle();
     if (!stillAMember) return back("forbidden");
-    if (!enabledOrgs().includes(tok.org_id)) return back("not_enabled");
+    if (!(await directEnabled(db, tok.org_id))) return back("not_enabled");
 
     // Authorization code → short-lived token. Form-encoded, on the graph host.
     const shortRes = await fetch(`${GRAPH_ROOT}/oauth/access_token`, {
@@ -308,7 +323,7 @@ p{margin:0 0 10px}code{font-size:13px;color:#6b6b76}</style>
   if (!member) return json({ error: "Not a member of this workspace", code: "forbidden" }, 403);
   }
 
-  if (!enabledOrgs().includes(orgId)) {
+  if (!(await directEnabled(db, orgId))) {
     return json({ enabled: false, connected: false, accounts: [], code: "not_enabled" });
   }
 

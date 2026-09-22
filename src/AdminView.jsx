@@ -110,6 +110,32 @@ export default function AdminView() {
     }
   }, []);
 
+  // Einen Workspace fuer den direkten Weg zu Meta freischalten. Die Zeile
+  // aendert sich sofort, ohne die ganze Tabelle neu zu laden: der Server ist die
+  // Wahrheit, aber ein Haken, der eine Sekunde lang nichts tut, wird zweimal
+  // geklickt. Geht es schief, springt er zurueck und sagt warum.
+  const [busyOrg, setBusyOrg] = useState(null);
+  const setSocialDirect = async (orgId, on) => {
+    setBusyOrg(orgId);
+    setState(st => st.status !== "ready" ? st : { ...st, data: { ...st.data,
+      workspaces: st.data.workspaces.map(w => w.workspace_id === orgId ? { ...w, social_direct: on } : w) } });
+    try {
+      const { data } = await supabase.auth.getSession();
+      const r = await fetch("/api/admin-stats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${data?.session?.access_token || ""}` },
+        body: JSON.stringify({ mode: "social-direct", orgId, on }),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error || `Fehler ${r.status}`);
+    } catch (e) {
+      setState(st => st.status !== "ready" ? st : { ...st, data: { ...st.data,
+        workspaces: st.data.workspaces.map(w => w.workspace_id === orgId ? { ...w, social_direct: !on } : w) } });
+      alert(`Konnte den Schalter nicht setzen: ${e?.message || e}`);
+    } finally {
+      setBusyOrg(null);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     // Initial read happens OUTSIDE any auth callback, so it's safe here.
@@ -232,6 +258,28 @@ export default function AdminView() {
             { key: "projekte", label: "Projekte", right: true },
             { key: "speicher_mb", label: "Speicher", right: true, render: r => fmtMB(r.speicher_mb) },
             { key: "angelegt", label: "Angelegt", dim: true },
+            // Der einzige Schalter auf dieser Seite. Er oeffnet Instagram und
+            // Threads direkt ueber Meta, also Verbinden, Zahlen lesen,
+            // veroeffentlichen. Sonst nichts, und einen Plan ersetzt er nicht.
+            { key: "social_direct", label: "Meta direkt", render: r => {
+              const on = r.social_direct === true;
+              const busy = busyOrg === r.workspace_id;
+              return (
+                <div role="checkbox" aria-checked={on} tabIndex={0}
+                  title={on ? "Darf Instagram und Threads direkt verbinden" : "Nutzt Zernio"}
+                  onClick={() => { if (!busy) setSocialDirect(r.workspace_id, !on); }}
+                  onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !busy) { e.preventDefault(); setSocialDirect(r.workspace_id, !on); } }}
+                  style={{ width: 18, height: 18, borderRadius: 5, cursor: busy ? "wait" : "pointer",
+                    opacity: busy ? 0.45 : 1, display: "flex", alignItems: "center", justifyContent: "center",
+                    border: on ? "none" : `1px solid ${LINE}`,
+                    background: on ? "rgba(244,244,247,0.95)" : "transparent" }}>
+                  {on && (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#15151c"
+                      strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  )}
+                </div>
+              );
+            } },
           ]}
         />
       </div>

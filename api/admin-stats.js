@@ -69,6 +69,24 @@ export default async function handler(req) {
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 
+  // Einen Workspace fuer den direkten Weg zu Meta freischalten, oder ihn wieder
+  // zunehmen. Steht hier und nicht in einer Umgebungsvariablen, weil ein Tester
+  // sonst einen Deploy kostet.
+  //
+  // Der Schalter oeffnet genau zwei Dinge: Instagram und Threads direkt
+  // verbinden, deren Zahlen lesen, darauf veroeffentlichen. Er ist kein Plan
+  // und schaltet nichts anderes frei. Das darf er auch, weil dieser Weg uns pro
+  // Nutzung nichts kostet, anders als Zernio.
+  if (body?.mode === "social-direct") {
+    const orgId = String(body.orgId || "");
+    if (!/^[0-9a-f-]{36}$/i.test(orgId)) return json({ error: "Bad workspace id" }, 400);
+    const on = body.on === true;
+    const { error } = await admin.from("organizations")
+      .update({ social_direct: on }).eq("id", orgId);
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, orgId, social_direct: on });
+  }
+
   const [summary, workspaces, users, website] = await Promise.all([
     admin.from("admin_summary").select("*").maybeSingle(),
     admin.from("admin_workspaces").select("*").order("angelegt", { ascending: false }),
