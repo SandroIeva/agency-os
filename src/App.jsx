@@ -3553,6 +3553,125 @@ function renderTextWithLinks(text, isUserBubble, accentColor) {
   return out;
 }
 
+// Markdown aus einer Modellantwort, so weit gerendert, wie eine Unterhaltung es
+// braucht: Absätze, Listen, Zitate, Überschriften, fett und kursiv, Code.
+//
+// Kein Paket dafür. Ein Markdown-Parser kann hundert Dinge, von denen hier drei
+// vorkommen, und er kommt mit eigenem HTML-Styling, das gegen das der App
+// arbeitet. Was unten steht, ist die Teilmenge, die ein Modell in einem Chat
+// tatsächlich schreibt.
+//
+// Bis hierher wurde alles roh angezeigt: "**fett**" stand als Sternchen da, ein
+// Zitat als Größerzeichen, eine Nummerierung lief in den Fließtext. Man konnte
+// damit nicht arbeiten.
+const MD_INLINE = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*\n]+\*|_[^_\n]+_|`[^`]+`)/g;
+
+function mdInline(text, isUser, accent, theme, darkMode, keyBase) {
+  const out = [];
+  let i = 0;
+  for (const piece of String(text).split(MD_INLINE)) {
+    if (!piece) continue;
+    const k = `${keyBase}-${i++}`;
+    if (/^(\*\*|__).+(\*\*|__)$/.test(piece)) {
+      out.push(<strong key={k} style={{ fontWeight: 650 }}>{piece.slice(2, -2)}</strong>);
+    } else if (/^[*_].+[*_]$/.test(piece)) {
+      out.push(<em key={k}>{piece.slice(1, -1)}</em>);
+    } else if (/^`.+`$/.test(piece)) {
+      out.push(<code key={k} style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+        fontSize: "0.92em", padding: "1px 5px", borderRadius: 5,
+        background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }}>{piece.slice(1, -1)}</code>);
+    } else {
+      out.push(<span key={k}>{renderTextWithLinks(piece, isUser, accent)}</span>);
+    }
+  }
+  return out;
+}
+
+function renderMarkdown(text, isUser, accent, theme, darkMode) {
+  if (!text) return null;
+  // Absätze trennen sich an einer Leerzeile. Ein Modell, das keine setzt,
+  // bekommt trotzdem eine lesbare Antwort: eine Zeile, die mit einer Nummer
+  // oder einem Strich beginnt, ist ohnehin ein eigener Block.
+  const blocks = String(text).replace(/\r/g, "").split(/\n{2,}/);
+  const nodes = [];
+  blocks.forEach((raw, bi) => {
+    const block = raw.replace(/^\n+|\n+$/g, "");
+    if (!block.trim()) return;
+    const lines = block.split("\n");
+
+    if (/^\s*(\*\s*){3,}$|^\s*(-\s*){3,}$|^\s*(_\s*){3,}$/.test(block)) {
+      nodes.push(<div key={`hr-${bi}`} style={{ height: 1, margin: "12px 0",
+        background: darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)" }} />);
+      return;
+    }
+
+    const heading = block.match(/^(#{1,4})\s+(.*)$/s);
+    if (heading && lines.length === 1) {
+      const level = heading[1].length;
+      nodes.push(
+        <div key={`h-${bi}`} style={{ fontSize: level <= 2 ? 15 : 14.5, fontWeight: 650,
+          marginTop: nodes.length ? 6 : 0, lineHeight: 1.4 }}>
+          {mdInline(heading[2], isUser, accent, theme, darkMode, `h${bi}`)}
+        </div>
+      );
+      return;
+    }
+
+    // Zitat: jede Zeile beginnt mit >. Verschachtelte (> >) werden flach
+    // gezogen, ein Zitat im Zitat sagt in einer Antwort nichts Zusätzliches.
+    if (lines.every(l => /^\s*>/.test(l))) {
+      const inner = lines.map(l => l.replace(/^\s*>+\s?/, "")).join("\n");
+      nodes.push(
+        <div key={`q-${bi}`} style={{ margin: "2px 0", paddingLeft: 12,
+          borderLeft: `2px solid ${isUser ? "rgba(255,255,255,0.45)" : (darkMode ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.14)")}`,
+          color: isUser ? "rgba(255,255,255,0.92)" : theme.textSub, whiteSpace: "pre-wrap" }}>
+          {mdInline(inner, isUser, accent, theme, darkMode, `q${bi}`)}
+        </div>
+      );
+      return;
+    }
+
+    const bulleted = lines.filter(l => /^\s*[-*•]\s+/.test(l));
+    const numbered = lines.filter(l => /^\s*\d+[.)]\s+/.test(l));
+    if (bulleted.length && bulleted.length === lines.filter(l => l.trim()).length) {
+      nodes.push(
+        <div key={`ul-${bi}`} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {bulleted.map((l, li) => (
+            <div key={li} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{ opacity: 0.5, lineHeight: 1.55 }}>•</span>
+              <span style={{ flex: 1 }}>{mdInline(l.replace(/^\s*[-*•]\s+/, ""), isUser, accent, theme, darkMode, `ul${bi}-${li}`)}</span>
+            </div>
+          ))}
+        </div>
+      );
+      return;
+    }
+    if (numbered.length && numbered.length === lines.filter(l => l.trim()).length) {
+      nodes.push(
+        <div key={`ol-${bi}`} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {numbered.map((l, li) => {
+            const m = l.match(/^\s*(\d+)[.)]\s+(.*)$/);
+            return (
+              <div key={li} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <span style={{ opacity: 0.55, minWidth: 16, lineHeight: 1.55 }}>{m[1]}.</span>
+                <span style={{ flex: 1 }}>{mdInline(m[2], isUser, accent, theme, darkMode, `ol${bi}-${li}`)}</span>
+              </div>
+            );
+          })}
+        </div>
+      );
+      return;
+    }
+
+    nodes.push(
+      <div key={`p-${bi}`} style={{ whiteSpace: "pre-wrap" }}>
+        {mdInline(block, isUser, accent, theme, darkMode, `p${bi}`)}
+      </div>
+    );
+  });
+  return <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{nodes}</div>;
+}
+
 function ChatBubble({ message, theme, darkMode, appLanguage, onUploadStorage, onUploadDrive }) {
   const isUser = message.role === "user";
   const fullText = message.content || "";
@@ -3597,7 +3716,9 @@ function ChatBubble({ message, theme, darkMode, appLanguage, onUploadStorage, on
           : (message.error ? (darkMode ? "rgba(232,67,147,0.12)" : "rgba(232,67,147,0.08)") : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)")),
         color: isUser ? "#fff" : (message.error ? "#E84393" : theme.text),
         fontSize: 14, fontFamily: FONT, lineHeight: 1.55,
-        whiteSpace: "pre-wrap", wordBreak: "break-word",
+        // Der Assistent bekommt seine Absaetze vom Renderer, nicht von
+        // pre-wrap. Beides zusammen doppelt die Leerzeilen.
+        whiteSpace: isUser ? "pre-wrap" : "normal", wordBreak: "break-word",
         borderBottomRightRadius: isUser ? 6 : 18,
         borderBottomLeftRadius: isUser ? 18 : 6,
         boxShadow: isUser ? `0 4px 14px ${theme.accent}30` : "none",
@@ -3605,7 +3726,9 @@ function ChatBubble({ message, theme, darkMode, appLanguage, onUploadStorage, on
       }}>
         {visible && (
           <div style={{ padding: images.length > 0 ? "4px 8px 0" : 0 }}>
-            {renderTextWithLinks(visible, isUser, theme.accent)}
+            {isUser
+              ? renderTextWithLinks(visible, isUser, theme.accent)
+              : renderMarkdown(visible, isUser, theme.accent, theme, darkMode)}
             {stillTyping && (
               <span style={{
                 display: "inline-block", width: 6, height: 14, marginLeft: 2,
