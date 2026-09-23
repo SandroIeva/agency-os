@@ -636,6 +636,66 @@ export const uploadTracked = async (db, { bucket, path, body, contentType, orgId
 // it dies; a shorter one here would be a picture that goes dark on its own.
 export const SIGNED_URL_YEAR = 60 * 60 * 24 * 365;
 
+// ── Aus dem Messenger in die sozialen Kanäle ────────────────────────────────
+//
+// Welche Kanäle dieser Workspace direkt bespielen kann. Gefragt wird die
+// Verbindungstabelle und nicht die Freischaltliste: eine Verbindung gibt es nur,
+// wenn sie erlaubt war, und wer sie hat, darf posten.
+export const socialTargetsFor = async (db, orgId) => {
+  const [ig, th] = await Promise.all([
+    db.from("instagram_connections").select("ig_user_id, username").eq("org_id", orgId),
+    db.from("threads_connections").select("threads_user_id, username").eq("org_id", orgId),
+  ]);
+  return [
+    ...(ig.data || []).map(r => ({ provider: "instagram", igUserId: r.ig_user_id, username: r.username })),
+    ...(th.data || []).map(r => ({ provider: "threads", threadsUserId: r.threads_user_id, username: r.username })),
+  ];
+};
+
+// Ein Bild aus einem Messenger wird ein geplanter Beitrag, und sonst nichts.
+//
+// Der Bot spricht NICHT selbst mit Meta. Er legt eine Zeile in scheduled_posts,
+// und der Takt, der ohnehin läuft, veröffentlicht sie. "Jetzt" ist dann nur ein
+// publish_at von jetzt plus ein Anstoß.
+//
+// Der Grund ist nicht Bequemlichkeit: Container bauen, Status abfragen,
+// Karussell, Story, Wiederholung nach einem Fehler steht alles schon in
+// api/publish-due. Ein zweiter Weg dorthin wäre ein zweiter Ort, an dem ein
+// Beitrag doppelt rausgehen kann.
+export const queueSocialPost = async (db, { userId, orgId, name, contentType, bytes, caption, targets, publishAt }) => {
+  if (!userId || !orgId || !bytes?.byteLength || !targets?.length) return { ok: false, reason: "incomplete" };
+  const size = bytes.byteLength;
+
+  const room = await storageRoomFor(db, orgId, size);
+  if (!room.ok) return { ok: false, reason: "no_room", room };
+  if (await orgIsReadOnly(db, orgId)) return { ok: false, reason: "read_only" };
+  const { data: member } = await db.from("org_members").select("id")
+    .eq("org_id", orgId).eq("user_id", userId).maybeSingle();
+  if (!member) return { ok: false, reason: "denied" };
+
+  // In brand-assets und nicht in user-files: Instagram holt sich das Bild selbst
+  // über eine signierte Adresse, und das ist der Eimer, den der Composer dafür
+  // auch benutzt.
+  const ext = (String(contentType || "").split("/")[1] || "jpg").replace("jpeg", "jpg").split("+")[0];
+  const path = `social/${orgId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const put = await uploadTracked(db, {
+    bucket: "brand-assets", path, body: bytes, contentType,
+    orgId, userId, sizeBytes: size,
+  });
+  if (!put.ok) return { ok: false, reason: "failed" };
+
+  const { data: row, error } = await db.from("scheduled_posts").insert({
+    org_id: orgId,
+    created_by: userId,
+    publish_at: new Date(publishAt || Date.now()).toISOString(),
+    body: caption ? String(caption).slice(0, 2200) : null,
+    targets,
+    media: [{ bucket: "brand-assets", path, kind: "IMAGE" }],
+  }).select("id, publish_at").maybeSingle();
+  if (error) return { ok: false, reason: "failed", message: error.message };
+  return { ok: true, post: row, size };
+};
+
 export const addAssetFile = async (db, { userId, orgId, projectId, name, contentType, bytes }) => {
   if (!userId || !orgId || !bytes?.byteLength) return { ok: false, reason: "incomplete" };
   const size = bytes.byteLength;

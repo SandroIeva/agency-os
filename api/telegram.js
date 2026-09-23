@@ -22,6 +22,7 @@ import {
   splitDraft, workspacesFor, projectsFor, createTask, DEFAULT_TYPES, typeWanted, attachedImage, linkify, createNote, addAssetFile, humanSize,
   asLinkRequest, LINK_PREFIX, linkFoldersFor, createWorkspaceLink,
   moodboardsFor, addMoodboardImage,
+  socialTargetsFor, queueSocialPost,
   draftStep, draftDone, PRIORITY_CODES, dueDateFor, timezoneOf,
   replyTarget, describeTask, addChecklist, commentOnTask,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
@@ -110,6 +111,18 @@ const T = {
     fileWhat: (name) => `<b>${name}</b>\n\nWohin damit?`,
     fileToAssets: "In die Assets",
     fileToMood: "Auf ein Moodboard",
+    fileToSocial: "Als Social Post",
+    socialNoChannel: "In diesem Workspace ist weder Instagram noch Threads verbunden.",
+    socialWhich: "Auf welchen Kanal?",
+    socialBoth: "Beide",
+    socialWhen: "Wann soll es raus?",
+    socialNow: "Jetzt posten",
+    socialIn1h: "In einer Stunde",
+    socialTonight: "Heute 18:00",
+    socialTomorrow: "Morgen 9:00",
+    socialQueued: (who, when) => `Geht an ${who}, ${when}.`,
+    socialSent: (who) => `Geht jetzt an ${who} raus.`,
+    socialNoText: "Ohne Text. Schick das Bild das n\u00e4chste Mal mit Bildunterschrift, dann steht die im Beitrag.",
     fileNoBoards: "Es gibt noch kein Moodboard.",
     moodAsk: "Auf welches Moodboard?",
     moodSaved: (board, size) => `Auf "${board}" gelegt (${size}).`,
@@ -184,6 +197,18 @@ const T = {
     fileWhat: (name) => `<b>${name}</b>\n\nWhere to?`,
     fileToAssets: "Into Assets",
     fileToMood: "Onto a moodboard",
+    fileToSocial: "As a social post",
+    socialNoChannel: "Neither Instagram nor Threads is connected in this workspace.",
+    socialWhich: "Which channel?",
+    socialBoth: "Both",
+    socialWhen: "When should it go out?",
+    socialNow: "Post now",
+    socialIn1h: "In an hour",
+    socialTonight: "Today 18:00",
+    socialTomorrow: "Tomorrow 9:00",
+    socialQueued: (who, when) => `Going to ${who}, ${when}.`,
+    socialSent: (who) => `Going to ${who} now.`,
+    socialNoText: "No caption. Next time send the picture with a caption and it becomes the post text.",
     fileNoBoards: "There is no moodboard yet.",
     moodAsk: "Which moodboard?",
     moodSaved: (board, size) => `Added to "${board}" (${size}).`,
@@ -656,7 +681,12 @@ export default async function handler(req) {
       return answer(t.cancelled);
     }
 
-    if (action === "k" || action === "u" || action === "s" || action === "m" || action === "j") {
+    if (action === "k" || action === "u" || action === "s" || action === "m" || action === "j"
+        // o = welcher Workspace, l = welcher Kanal, r = wann. NICHT p, c oder
+        // w: p reicht eine Aufgabe weiter, c schiebt sie in eine Spalte. Ein
+        // Buchstabe doppelt belegt heisst, dass ein Knopf unter einer
+        // Benachrichtigung etwas voellig anderes tut, als er sagt.
+        || action === "o" || action === "l" || action === "r") {
       // The picture is on the message this one replies to, so nothing had to be
       // held anywhere between the question and the answer.
       const src = cb.message?.reply_to_message;
@@ -673,8 +703,139 @@ export default async function handler(req) {
       const one = orgs.length === 1 ? orgs[0] : null;
       const cancelRow = [{ text: t.cancel, callback_data: "k:x" }];
 
-      // "k" is the answer to the first question. From here the two paths part.
+      // ── Social Post: Kanal, Zeitpunkt, fertig ──────────────────────────
+      //
+      // Der Bot spricht nicht selbst mit Meta. Er schreibt eine Zeile in
+      // scheduled_posts, und der Takt veroeffentlicht sie. "Jetzt" ist ein
+      // publish_at von jetzt plus ein Anstoss an api/publish-due, damit es
+      // nicht bis zum naechsten Takt dauert.
+      const askChannels = async (org) => {
+        const found = await socialTargetsFor(db, org.id);
+        if (!found.length) return answer(t.socialNoChannel, true);
+        const hint = org.id.slice(0, ID_HINT);
+        const hasIg = found.some(x => x.provider === "instagram");
+        const hasTh = found.some(x => x.provider === "threads");
+        const rows = [];
+        if (hasIg) rows.push([{ text: "Instagram", callback_data: `l:${hint}:i` }]);
+        if (hasTh) rows.push([{ text: "Threads", callback_data: `l:${hint}:t` }]);
+        if (hasIg && hasTh) rows.push([{ text: t.socialBoth, callback_data: `l:${hint}:b` }]);
+        rows.push(cancelRow);
+        await api(botToken, "editMessageReplyMarkup", {
+          chat_id: cbChat, message_id: cb.message.message_id,
+          reply_markup: { inline_keyboard: rows },
+        });
+        return answer(t.socialWhich);
+      };
+
+      if (action === "o") {
+        const org = resolveHint(orgs, notifId);
+        if (!org) return answer(t.newDenied, true);
+        return askChannels(org);
+      }
+
+      if (action === "l") {
+        const org = resolveHint(orgs, notifId);
+        if (!org) return answer(t.newDenied, true);
+        const ch = (parts[2] || "b");
+        const hint = org.id.slice(0, ID_HINT);
+        await api(botToken, "editMessageReplyMarkup", {
+          chat_id: cbChat, message_id: cb.message.message_id,
+          reply_markup: { inline_keyboard: [
+            [{ text: t.socialNow, callback_data: `r:${hint}:${ch}:n` }],
+            [{ text: t.socialIn1h, callback_data: `r:${hint}:${ch}:1` }],
+            [{ text: t.socialTonight, callback_data: `r:${hint}:${ch}:e` }],
+            [{ text: t.socialTomorrow, callback_data: `r:${hint}:${ch}:m` }],
+            cancelRow,
+          ] },
+        });
+        return answer(t.socialWhen);
+      }
+
+      if (action === "r") {
+        const org = resolveHint(orgs, notifId);
+        if (!org) return answer(t.newDenied, true);
+        const ch = parts[2] || "b";
+        const when = parts[3] || "n";
+        const found = await socialTargetsFor(db, org.id);
+        const targets = found.filter(x =>
+          ch === "b" || (ch === "i" && x.provider === "instagram") || (ch === "t" && x.provider === "threads"));
+        if (!targets.length) return answer(t.socialNoChannel, true);
+
+        // Feste Zeiten aus Knoepfen statt getippter Datumsangaben: in einem
+        // Messenger ist "morgen 9" eine Antwort und kein Formular. Gerechnet
+        // wird in Berliner Zeit, weil dort die Leute sitzen, die das tippen.
+        const berlinNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Berlin" }));
+        const at = new Date();
+        if (when === "1") at.setTime(at.getTime() + 3600000);
+        else if (when === "e" || when === "m") {
+          const target = new Date(berlinNow);
+          if (when === "m") { target.setDate(target.getDate() + 1); target.setHours(9, 0, 0, 0); }
+          else target.setHours(18, 0, 0, 0);
+          // Schon vorbei? Dann derselbe Zeitpunkt am naechsten Tag, sonst
+          // stuende ein Beitrag in der Vergangenheit und ginge sofort raus.
+          if (target <= berlinNow) target.setDate(target.getDate() + 1);
+          at.setTime(at.getTime() + (target.getTime() - berlinNow.getTime()));
+        }
+
+        const info = await api(botToken, "getFile", { file_id: file.id });
+        if (!info?.ok || !info.result?.file_path) return answer(t.fileTooBig, true);
+        const res = await fetch(`https://api.telegram.org/file/bot${botToken}/${info.result.file_path}`);
+        if (!res.ok) return answer(t.fileGone, true);
+        const bytes = new Uint8Array(await res.arrayBuffer());
+
+        // Die Bildunterschrift IST der Beitragstext. Sie steht auf der
+        // Nachricht mit dem Bild, also genau dort, wo sie jemand getippt hat.
+        const caption = (src?.caption || "").trim();
+        const queued = await queueSocialPost(db, {
+          userId: link.user_id, orgId: org.id, name: file.name, contentType: file.type,
+          bytes, caption, targets, publishAt: at.getTime(),
+        });
+        if (!queued.ok) {
+          return answer(queued.reason === "read_only" ? t.newReadOnly
+            : queued.reason === "denied" ? t.newDenied
+            : queued.reason === "no_room" ? t.fileNoRoom(humanSize(queued.room.used), humanSize(queued.room.limit))
+            : t.newFailed, true);
+        }
+
+        // Jetzt heisst jetzt: der Takt wird angestossen, statt bis zu fuenf
+        // Minuten zu warten. Schlaegt der Anstoss fehl, geht es trotzdem raus,
+        // nur eben beim naechsten Durchgang.
+        const publishSecret = process.env.PUBLISH_SECRET;
+        if (when === "n" && appUrl && publishSecret) {
+          await fetch(`${appUrl}/api/publish-due`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-i7-hook-secret": publishSecret },
+            body: JSON.stringify({}),
+          }).catch(() => {});
+        }
+
+        const who = targets.map(x => x.provider === "instagram" ? "Instagram" : "Threads").join(" + ");
+        const whenText = when === "n" ? "" : new Intl.DateTimeFormat(link?.lang === "en" ? "en-GB" : "de-DE",
+          { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Berlin" }).format(at);
+        const line = when === "n" ? t.socialSent(who) : t.socialQueued(who, whenText);
+        await api(botToken, "editMessageText", {
+          chat_id: cbChat, message_id: cb.message.message_id,
+          text: `<b>${esc(headLine(org.name, who))}</b>\n<i>${esc(line)}</i>`
+            + (caption ? "" : `\n\n<i>${esc(t.socialNoText)}</i>`),
+          parse_mode: "HTML",
+        });
+        return answer(line);
+      }
+
+      // "k" is the answer to the first question. From here the paths part.
       if (action === "k") {
+        if (notifId === "p") {
+          if (!one) {
+            return api(botToken, "editMessageReplyMarkup", {
+              chat_id: cbChat, message_id: cb.message.message_id,
+              reply_markup: { inline_keyboard: [
+                ...orgs.map(o => [{ text: o.name.slice(0, 60), callback_data: `o:${o.id.slice(0, ID_HINT)}` }]),
+                cancelRow,
+              ] },
+            }).then(() => answer(""));
+          }
+          return askChannels(one);
+        }
         const wantsMood = notifId === "m";
         if (!one) {
           return api(botToken, "editMessageReplyMarkup", {
@@ -1236,6 +1397,7 @@ export default async function handler(req) {
       reply_markup: { inline_keyboard: [
         [{ text: t.fileToAssets, callback_data: "k:a" }],
         [{ text: t.fileToMood, callback_data: "k:m" }],
+        [{ text: t.fileToSocial, callback_data: "k:p" }],
         [{ text: t.cancel, callback_data: "k:x" }],
       ] },
     }).then(() => json({ ok: true }));
