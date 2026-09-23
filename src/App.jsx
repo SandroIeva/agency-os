@@ -15535,7 +15535,14 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
           history: history.slice(0, -1).map(m => ({
             role: m.agent_id ? "assistant" : "user", content: m.text || "",
           })),
-          systemPrompt: agent.brief[de ? "de" : "en"],
+          // Jeder Agent hat seinen eigenen Auftrag, aber wie eine Antwort
+          // GESETZT wird, ist bei allen dasselbe und gehoert nicht in
+          // vierzehn Briefings kopiert. Ohne diesen Zusatz kam eine Textwand
+          // ohne eine einzige Leerzeile, und ohne Leerzeilen gibt es nichts
+          // zu rendern, egal wie gut der Renderer ist.
+          systemPrompt: agent.brief[de ? "de" : "en"] + (de
+            ? "\n\nFormat: Du wirst in einer Chat-Blase auf einem Bildschirm gelesen. Trenne JEDEN Absatz, jede Liste und jedes Zitat durch eine LEERZEILE. Gerendert werden **fett**, *kursiv*, `Code`, \"- \" als Aufzaehlung, \"1. \" als Nummerierung, \"> \" als Zitat und \"#\" als Ueberschrift. Fett nur sparsam, fuer das eine Wort, das den Satz traegt. Keine Trennlinien, keine Emojis."
+            : "\n\nFormat: you are read in a chat bubble on a screen. Separate EVERY paragraph, list and quote with a BLANK LINE. Rendered: **bold**, *italic*, `code`, \"- \" bullets, \"1. \" numbers, \"> \" quotes, \"#\" headings. Use bold sparingly, for the one word that carries the sentence. No horizontal rules, no emojis."),
           provider: llmProvider || "gemini",
           apiKey: apiKey || undefined,
           oauthToken: oauthToken || undefined,
@@ -16204,7 +16211,11 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
                         )}
                         {msg.text && (
                           <div style={{ padding: msg.attachment_url ? "0 12px 6px" : 0, wordBreak: "break-word" }}>
-                            {renderTextWithLinks(msg.text, false, isMe ? "#fff" : "#15151c")}
+                            {/* Nur Agenten schreiben Markdown. Ein Mensch, der
+                                **so** tippt, meint die Sternchen. */}
+                            {msg.agent_id
+                              ? renderMarkdown(msg.text, false, theme.accent, theme, darkMode)
+                              : renderTextWithLinks(msg.text, false, isMe ? "#fff" : "#15151c")}
                             {(() => { const u = firstUrlIn(msg.text); return u ? <LinkPreviewCard url={u} theme={theme} darkMode={darkMode} /> : null; })()}
                           </div>
                         )}
