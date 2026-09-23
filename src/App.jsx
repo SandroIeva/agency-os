@@ -2336,7 +2336,7 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
 //
 // The slides above say what the app is FOR. This says where things ARE, on the
 // dashboard itself: everything but one element goes dark, the sphere reads out
-// what it is, and the light moves on. It runs straight after the slides, and
+// what it is, and the light moves on. It starts five seconds after arriving on the dashboard, and
 // again whenever the slides are replayed from Settings.
 //
 // The words and the recordings live in src/dashboardTour.js, which the server
@@ -55234,8 +55234,24 @@ export default function CircularMenu() {
   // The second half of the tour: the dashboard itself, one element at a time.
   // Declared up here because the key dialog's effect below has to wait for it.
   const [dashTourOpen, setDashTourOpen] = useState(false);
+  const [dashTourPendingUser, setDashTourPendingUser] = useState(null);
+  // Give the dashboard time to settle. Cleanup cancels the timer on navigation,
+  // logout and StrictMode remounts; returning starts a fresh five-second wait.
+  useEffect(() => {
+    if (!dashTourPendingUser) return;
+    if (dashTourPendingUser !== session?.user?.id) {
+      setDashTourPendingUser(null);
+      return;
+    }
+    if (authLoading || orgLoading || onboardingStep || !onDashboard) return;
+    const timer = setTimeout(() => {
+      setDashTourPendingUser(null);
+      setDashTourOpen(true);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [dashTourPendingUser, session?.user?.id, authLoading, orgLoading, onboardingStep, onDashboard]);
 
-  // Where onboarding goes once there IS a workspace. Five places arrive here,
+  // Feature introduction before choosing a workspace. Five completion paths follow,
   // two ways of creating one and three of joining, and a step added to four of
   // them is a step half the people never see. Same reasoning as
   // insertOrganization, which exists because the same arithmetic got copied.
@@ -55248,7 +55264,8 @@ export default function CircularMenu() {
   // test account reset from the database could not clear it, because it was
   // never in the database. localStorage is still written and still believed,
   // as a fast local answer and as the fallback when the row cannot be read.
-  const finishOnboarding = async () => {
+  const tourWorkspaceStepRef = useRef(null);
+  const beginOnboarding = async (workspaceStep = "choose") => {
     // The ROW decides, and localStorage is only its cache. Asking the browser
     // first would mean a stale local flag can never be cleared from anywhere,
     // which is precisely the state that made a reset look like it had not
@@ -55269,7 +55286,18 @@ export default function CircularMenu() {
       // the browser too the next time round.
       try { seen ? localStorage.setItem(TOUR_SEEN, "1") : localStorage.removeItem(TOUR_SEEN); } catch (_) {}
     }
-    setOnboardingStep(seen ? null : "tour");
+    tourWorkspaceStepRef.current = seen ? null : workspaceStep;
+    setOnboardingStep(seen ? workspaceStep : "tour");
+  };
+  // Creating/joining a workspace now follows the feature slides.
+  const finishOnboarding = () => {
+    tourWorkspaceStepRef.current = null;
+    setOnboardingStep(null);
+    setMenuOpen(false);
+    setPanelOpen(false);
+    setTasksOpen(false);
+    setCurrentView("dashboard");
+    setDashTourPendingUser(session?.user?.id || null);
   };
   // Watching it again. It does NOT clear tour_seen_at: having seen it is still
   // true, and clearing it would bring the tour back unasked the next time a
@@ -55278,7 +55306,12 @@ export default function CircularMenu() {
   // The view underneath is not changed while the slides show. Closing them now
   // ends on the dashboard all the same, because the tour's second half IS the
   // dashboard: the light moving over the logo, the bell, the sphere and the bar.
-  const replayTour = () => setOnboardingStep("tour");
+  const replayTour = () => {
+    tourWorkspaceStepRef.current = null;
+    setDashTourPendingUser(null);
+    setDashTourOpen(false);
+    setOnboardingStep("tour");
+  };
   // Replaying the tour is for the operator only (the owner, 2026-09-19): the
   // accounts in ADMIN_USER_IDS, the same list that guards /?admin. The browser
   // cannot know that list, so it asks once per person, and only when Settings
@@ -55339,7 +55372,7 @@ export default function CircularMenu() {
     // well, because its last slide WAS that dialog; that slide is gone, so
     // doing it now would mean nobody is ever asked for a key, and the tour
     // would have quietly swallowed the one thing half the app needs.
-    // AiKeyIntro comes up on the dashboard the moment this closes.
+    // Workspace setup comes next; dashboard prompts wait until that is done.
     try { localStorage.setItem(TOUR_SEEN, "1"); } catch (_) {}
     // Fire and forget, but it must END in a then: a supabase-js builder that is
     // neither awaited nor thened never sends the request at all.
@@ -55347,12 +55380,13 @@ export default function CircularMenu() {
       supabase.from("profiles").update({ tour_seen_at: new Date().toISOString() })
         .eq("id", session.user.id).then(() => {});
     }
-    setOnboardingStep(null);
-    setMenuOpen(false);
-    setPanelOpen(false);
-    setTasksOpen(false);
-    setCurrentView("dashboard");
-    setDashTourOpen(true);
+    const workspaceStep = tourWorkspaceStepRef.current;
+    tourWorkspaceStepRef.current = null;
+    if (workspaceStep) {
+      setOnboardingStep(workspaceStep);
+      return;
+    }
+    finishOnboarding();
   };
   const [orgMembers, setOrgMembers] = useState([]);          // team members for chat etc.
   const [docDeepLink, setDocDeepLink] = useState(null);      // open a document from a notification: { documentId, blockId, ts }
@@ -55867,11 +55901,11 @@ export default function CircularMenu() {
     if (!session) { setNewsletterAskOpen(false); leftDashboardNewsRef.current = false; return; }
     if (!seesNewsletterAsk(session.user?.email)) return;
     if (!onDashboard) { leftDashboardNewsRef.current = true; return; }
-    if (onboardingStep || dashTourOpen || aiIntroOpen) return;
+    if (onboardingStep || dashTourPendingUser || dashTourOpen || aiIntroOpen) return;
     if (!leftDashboardNewsRef.current) return;
     if (marketingOptIn !== null) return;      // undefined oder beantwortet: nichts fragen
     setNewsletterAskOpen(true);
-  }, [session, onDashboard, onboardingStep, dashTourOpen, aiIntroOpen, marketingOptIn]); // eslint-disable-line
+  }, [session, onDashboard, onboardingStep, dashTourPendingUser, dashTourOpen, aiIntroOpen, marketingOptIn]); // eslint-disable-line
 
   // Load storage preferences from profile + org
   useEffect(() => {
@@ -56216,17 +56250,11 @@ export default function CircularMenu() {
 
           // Check if user arrived via invite link
           const urlInvite = new URLSearchParams(window.location.search).get("invite") || inviteCode;
-          if (urlInvite) {
-            setOnboardingStep("join");
-          } else if (invites && invites.length > 0) {
-            setOnboardingStep("choose");
-          } else {
-            setOnboardingStep("choose");
-          }
+          await beginOnboarding(urlInvite ? "join" : "choose");
         }
       } catch (e) {
         console.warn("[Onboarding] Error:", e.message);
-        setOnboardingStep("choose");
+        await beginOnboarding("choose");
       } finally {
         setOrgLoading(false);
       }
@@ -58331,7 +58359,7 @@ export default function CircularMenu() {
     if (!onDashboard) { leftDashboardRef.current = true; return; }
     // Nor in the middle of the dashboard tour, which would put a key form on
     // top of the sphere while it is introducing itself.
-    if (onboardingStep || dashTourOpen) return;
+    if (onboardingStep || dashTourPendingUser || dashTourOpen) return;
     if (!leftDashboardRef.current) return;          // first arrival, say nothing
     if (!AI_INTRO_ALWAYS) {
       // Nur bei einem ausdrücklichen Nein. `null` ist die Antwort "wir wissen
@@ -58341,7 +58369,7 @@ export default function CircularMenu() {
       if (hasAiProvider()) return;
     }
     setAiIntroOpen(true);
-  }, [session, onDashboard, onboardingStep, dashTourOpen, llmKeys, llmProvider, aiIntroSeen]); // eslint-disable-line
+  }, [session, onDashboard, onboardingStep, dashTourPendingUser, dashTourOpen, llmKeys, llmProvider, aiIntroSeen]); // eslint-disable-line
   // A stored key for the chosen provider, and nothing else (aiReady). This
   // used to let a Google sign-in count for Gemini, so an account that signed
   // in with Google never saw the key dialog: the sphere opened and every
