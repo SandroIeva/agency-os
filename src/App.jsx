@@ -2211,8 +2211,8 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
       body: "Ein Gedanke, fünf Kanäle, ein Klick. Und ein paar Tage später weißt du, ob er angekommen ist, statt es zu vermuten." },
     // Die einzige Folie, die etwas FRAGT statt etwas zu zeigen. Deshalb steht
     // sie am Ende: erst weiß jemand, wovon die Updates handeln würden.
-    { art: "news", tint: "#5B8DEF", image: "/Updates.jpg", kicker: "Updates", asks: true,
-      title: "Sollen wir dir schreiben, wenn es Neues gibt?",
+    { art: "news", tint: "#5B8DEF", image: "/Newsletter-Visual.jpg", kicker: "Updates", asks: true,
+      title: <>Sag mir direkt Bescheid,<br />wenn es etwas Neues gibt.</>,
       body: "Wir bauen i7OS gerade schnell aus. Ein paar Mal im Monat eine kurze Mail, was dazugekommen ist. Kein Verkauf, und du kannst jederzeit in den Einstellungen widerrufen." },
   ] : [
     { art: "brand", tint: "#5B8DEF", image: "/Brand.jpg", kicker: "Brand",
@@ -2230,8 +2230,8 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
     { art: "reach", tint: "#8B7AFF", image: "/Analyse.jpg", kicker: "Social Media",
       title: "Post it, then see what it did",
       body: "One thought, five channels, one click. And a few days later you know whether it landed, instead of guessing at it." },
-    { art: "news", tint: "#5B8DEF", image: "/Updates.jpg", kicker: "Updates", asks: true,
-      title: "Shall we write when something new lands?",
+    { art: "news", tint: "#5B8DEF", image: "/Newsletter-Visual.jpg", kicker: "Updates", asks: true,
+      title: <>Show me right when<br />something new lands.</>,
       body: "We are building i7OS quickly right now. A short email a few times a month about what is new. No sales, and you can withdraw any time in Settings." },
   ];
 
@@ -2316,7 +2316,7 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
           <motion.button whileTap={{ scale: 0.97 }}
             onClick={() => { onUpdatesAnswer?.(true); onFinish?.(); }}
             style={solid}>
-            {de ? "Ja, gerne" : "Yes, please"}
+            {de ? "Klingt gut" : "Sounds great"}
           </motion.button>
         </>) : (<>
           <motion.button whileTap={{ scale: 0.97 }} onClick={onFinish}
