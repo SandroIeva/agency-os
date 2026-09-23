@@ -2128,6 +2128,14 @@ function TourArt({ kind, tint, theme, darkMode }) {
       <path d="M74 26l7 7-7 7" {...stroke} />
       <path d="M72 58h20M72 66h14" {...stroke} />
     </>),
+    // Updates: a window with a line of news in it, and a small pulse.
+    news: (<>
+      <rect x="14" y="18" width="56" height="44" rx="5" {...stroke} />
+      <path d="M24 30h34M24 40h26M24 50h30" {...stroke} />
+      <path d="M78 24v34" {...stroke} />
+      <circle cx="78" cy="18" r="4" {...stroke} />
+      <path d="M86 30a10 10 0 000 16M92 26a16 16 0 000 24" {...stroke} />
+    </>),
     // Keeping: stacked sheets and a folder tab.
     keep: (<>
       <path d="M12 24v34a3 3 0 003 3h34a3 3 0 003-3V22a3 3 0 00-3-3H30l-4-5H15a3 3 0 00-3 3z" {...stroke} />
@@ -2173,7 +2181,7 @@ function TourArt({ kind, tint, theme, darkMode }) {
   );
 }
 
-function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = true, onFinish }) {
+function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = true, onFinish, onUpdatesAnswer }) {
   const de = appLanguage === "de";
   const [idx, setIdx] = useState(0);
   // A picture that 404s falls back to the drawing rather than leaving a hole,
@@ -2201,6 +2209,11 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
     { art: "reach", tint: "#8B7AFF", image: "/Analyse.jpg", kicker: "Social Media",
       title: "Posten, und sehen was es gebracht hat",
       body: "Ein Gedanke, fünf Kanäle, ein Klick. Und ein paar Tage später weißt du, ob er angekommen ist, statt es zu vermuten." },
+    // Die einzige Folie, die etwas FRAGT statt etwas zu zeigen. Deshalb steht
+    // sie am Ende: erst weiß jemand, wovon die Updates handeln würden.
+    { art: "news", tint: "#5B8DEF", image: "/Updates.jpg", kicker: "Updates", asks: true,
+      title: "Sollen wir dir schreiben, wenn es Neues gibt?",
+      body: "Wir bauen i7OS gerade schnell aus. Ein paar Mal im Monat eine kurze Mail, was dazugekommen ist. Kein Verkauf, und du kannst jederzeit in den Einstellungen widerrufen." },
   ] : [
     { art: "brand", tint: "#5B8DEF", image: "/Brand.jpg", kicker: "Brand",
       title: "Your brand, in one place",
@@ -2217,6 +2230,9 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
     { art: "reach", tint: "#8B7AFF", image: "/Analyse.jpg", kicker: "Social Media",
       title: "Post it, then see what it did",
       body: "One thought, five channels, one click. And a few days later you know whether it landed, instead of guessing at it." },
+    { art: "news", tint: "#5B8DEF", image: "/Updates.jpg", kicker: "Updates", asks: true,
+      title: "Shall we write when something new lands?",
+      body: "We are building i7OS quickly right now. A short email a few times a month about what is new. No sales, and you can withdraw any time in Settings." },
   ];
 
   const LAST = SLIDES.length - 1;
@@ -2286,13 +2302,31 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
         </div>
         {/* No Back. The dots go anywhere, both ways, and a third button beside
             them was spending the row on a direction nobody walks. */}
-        <motion.button whileTap={{ scale: 0.97 }} onClick={onFinish}
-          style={{ ...ghost, border: "none", color: theme.textFaint }}>
-          {de ? "Überspringen" : "Skip"}
-        </motion.button>
-        <motion.button whileTap={{ scale: 0.97 }} onClick={next} style={solid}>
-          {idx === LAST ? (de ? "Loslegen" : "Get started") : (de ? "Weiter" : "Next")}
-        </motion.button>
+        {/* Auf der Frage-Folie sind es zwei echte Antworten statt eines
+            Weiter-Knopfes. Kein vorangekreuztes Kästchen: eine vorausgewählte
+            Einwilligung ist nach dem EuGH-Urteil zu Planet49 keine. Und
+            "Überspringen" fällt hier weg, weil es dasselbe wäre wie "nein",
+            nur ohne es zu sagen: dann gäbe es drei Knöpfe für zwei Antworten. */}
+        {slide.asks ? (<>
+          <motion.button whileTap={{ scale: 0.97 }}
+            onClick={() => { onUpdatesAnswer?.(false); onFinish?.(); }}
+            style={ghost}>
+            {de ? "Nein danke" : "No thanks"}
+          </motion.button>
+          <motion.button whileTap={{ scale: 0.97 }}
+            onClick={() => { onUpdatesAnswer?.(true); onFinish?.(); }}
+            style={solid}>
+            {de ? "Ja, gerne" : "Yes, please"}
+          </motion.button>
+        </>) : (<>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={onFinish}
+            style={{ ...ghost, border: "none", color: theme.textFaint }}>
+            {de ? "Überspringen" : "Skip"}
+          </motion.button>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={next} style={solid}>
+            {de ? "Weiter" : "Next"}
+          </motion.button>
+        </>)}
       </div>
     </div>
   );
@@ -61243,7 +61277,8 @@ export default function CircularMenu() {
 
               {onboardingStep === "tour" && (
                 <OnboardingTour appLanguage={appLanguage} userName={userName}
-                  theme={theme} darkMode={darkMode} onFinish={closeTour} />
+                  theme={theme} darkMode={darkMode} onFinish={closeTour}
+                  onUpdatesAnswer={(yes) => answerNewsletter(yes, "tour")} />
               )}
 
               {/* ── Step: Choose ── */}
