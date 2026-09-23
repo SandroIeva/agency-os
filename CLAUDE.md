@@ -465,6 +465,21 @@ FigJam-style infinite canvas (`WhiteboardView`), reachable via Erstellen → Bra
 - **One unsupported metric kills the whole Instagram insights call**, and the error names it. `overview` narrows the list and retries until what is left works, then says which ones dropped out - a tile showing a dash because Meta retired the metric looks exactly like a tile showing a dash because nothing happened.
 - **Adding a top-level callback route means adding the name to `RESERVED_SLUGS` FIRST.** `figma` was missed when `/figma/callback` shipped and was caught up later; nobody had taken it, which was luck.
 - **A dependency array may not name a `const` declared below it.** `}, [stepIdx, canPublish, de, busy]);` placed above `const canPublish = …` builds green and throws `Cannot access 'pn' before initialization` the moment the step renders. This is the `de is not defined` family: it resolves at RUN time, in source order, and the build never looks. `npm run check:tdz` catches it now; it is deliberately narrow, counting only declarations at component scope (exactly two spaces of indent), because a `const` inside a callback lives and dies there and cannot be what a component-level dependency names.
+- **A component DEFINED INSIDE another component's render loses its children's
+  focus on every keystroke.** `const Timeline = ({editable}) => (…)` used as
+  `<Timeline editable />` creates a NEW function identity on every render, so
+  React sees a new component TYPE, unmounts the whole subtree and mounts a
+  fresh one. Any `<input>` or `<textarea>` in it is a new DOM node each time,
+  and the caret is gone. Typing into Brand Vision left `"Goo"` in the field:
+  three characters, three clicks back into it. It does NOT matter whether the
+  field sits inside the component or is passed in as `children` (`Box` +
+  `BoxArea` had the same bug) - they hang off the same subtree. The fix is to
+  CALL it rather than render it: `const timelineRail = (editable) => (…)` and
+  `{timelineRail(true)}`, which is plain JSX in place and keeps the same DOM
+  node across renders. The aspiration field two lines below worked the whole
+  time because it was written directly in the parent's JSX. Sweep for it with
+  `grep -nE "^ +const [A-Z][A-Za-z0-9]* = \(\{" src/App.jsx`: every hit that
+  is used as `<Name …/>` AND contains a form field is this bug.
 - `whiteboards.updated_at` is only bumped by title edits, not item changes.
 - **A hardcoded `.is("project_id", null)` inside anything reachable from a project brand is a silent wrong answer.** `BrandView` is ONE component scoped by `projectId`, so any panel under it can be standing in a customer's brand. A read pinned to `project_id is null` still returns a row, so nothing errors and nothing looks wrong: the website scan compared a customer's site against the AGENCY's positioning, and the LinkedIn page fallback read the agency's channels, both without a word on screen. Take `projectId` as a prop and scope with `projectId ? q.eq("project_id", projectId) : q.is("project_id", null)`. Where a feature genuinely IS workspace-wide (Zernio connects one set of social accounts per workspace, so People and social analytics have no per-brand data), say so in the UI rather than letting a customer's brand imply the numbers are theirs.
 - Lists that mix saved DB rows with unsaved local rows (`_localId` pattern, e.g. the Kanban new-task checklist) must never compare raw `item.id` — `undefined === undefined` matches every unsaved row. Use an identity helper (`id ?? _localId`) and skip DB calls for unsaved rows.

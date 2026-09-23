@@ -48382,14 +48382,19 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
     const bareArea = { width: "100%", background: "transparent", border: "none", outline: "none", resize: "vertical", fontFamily: FONT, fontSize: 13, lineHeight: 1.6, color: theme.text, padding: 0 };
     const headInput = { ...inputStyle, background: darkMode ? "rgba(255,255,255,0.04)" : "#fff" };
     // A labelled grey box (same look as the read-only accordions) wrapping an editable control.
-    const Box = ({ label, children }) => (
+    // Aufgerufen, nicht gerendert. Als eigene Komponente war es bei jedem
+    // Render ein neuer Komponententyp, React hat den Teilbaum abgehaengt und
+    // neu gebaut, und die Eingabefelder DARIN gingen mit: Fokus weg nach jedem
+    // Zeichen. Dass die Felder als `children` hereinkommen und nicht in der
+    // Box selbst stehen, aendert daran nichts, sie haengen am selben Teilbaum.
+    const box = (label, children) => (
       <div style={{ borderRadius: 12, background: boxBg, padding: "13px 16px" }}>
         <div style={{ fontSize: 12, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 9 }}>{label}</div>
         {children}
       </div>
     );
-    const BoxArea = (label, field, rows = 3, placeholder = "") => (
-      <Box label={label}><textarea value={draft[field] || ""} onChange={e => setF({ [field]: e.target.value })} rows={rows} placeholder={placeholder} style={bareArea} /></Box>
+    const BoxArea = (label, field, rows = 3, placeholder = "") => box(label,
+      <textarea value={draft[field] || ""} onChange={e => setF({ [field]: e.target.value })} rows={rows} placeholder={placeholder} style={bareArea} />
     );
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
@@ -48417,18 +48422,18 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
             {BoxArea(de ? "Produkte & Services" : "Products & services", "products")}
             {BoxArea("Core Focus", "core_focus")}
             {BoxArea(de ? "Direkte Wettbewerber" : "Direct competitors", "direct_competitors")}
-            <Box label="CEO">
+            {box("CEO",
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <input value={draft.ceo_name || ""} onChange={e => setF({ ceo_name: e.target.value })} style={{ ...inputStyle, fontWeight: 600 }} placeholder="Name" />
                 <textarea value={draft.ceo_info || ""} onChange={e => setF({ ceo_info: e.target.value })} rows={2} placeholder={de ? "Kurze Info zur Person…" : "A short note on the person…"} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} />
               </div>
-            </Box>
+            )}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {BoxArea("Audience", "audience")}
             {BoxArea(de ? "Stärken" : "Strengths", "strengths")}
             {BoxArea(de ? "Schwächen" : "Weaknesses", "weaknesses")}
-            <Box label="Social Media">
+            {box("Social Media",
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {(draft.socials || []).map((s, i) => (
                   <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -48441,12 +48446,12 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
                 <button onClick={() => setDraft(d => ({ ...d, socials: [...(d.socials || []), { platform: "", url: "" }] }))}
                   style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>{de ? "+ Social-Kanal" : "+ Social channel"}</button>
               </div>
-            </Box>
+            )}
           </div>
         </div>
 
         {/* Strategic Recommendations — full width */}
-        <Box label="Strategic Recommendations">
+        {box("Strategic Recommendations",
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {(draft.recommendations || []).map((r, i) => (
               <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -48458,7 +48463,7 @@ function BrandCompetitors({ value, onChange, generateCompetitor, cp, accent, the
             <button onClick={() => setDraft(d => ({ ...d, recommendations: [...(d.recommendations || []), ""] }))}
               style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 9, border: `1px dashed ${theme.borderFaint}`, background: "transparent", color: theme.textSub, fontSize: 12, fontFamily: FONT, cursor: "pointer" }}>{de ? "+ Empfehlung" : "+ Recommendation"}</button>
           </div>
-        </Box>
+        )}
 
         <div style={{ display: "flex", alignItems: "center", paddingTop: 4 }}>
           {!draftIsNew ? (
@@ -48640,7 +48645,25 @@ function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange
   ];
 
   // Vertical timeline rail (shared by edit + saved). `editable` swaps text for inputs.
-  const Timeline = ({ editable }) => (
+  //
+  // EINE FUNKTION, DIE JSX ZURUECKGIBT, UND KEINE KOMPONENTE. Der Unterschied
+  // ist hier nicht Geschmack, er war der Fehler:
+  //
+  // Als `const Timeline = (...) => ...` mit `<Timeline editable />` benutzt,
+  // erzeugt jeder Render der Elternkomponente eine NEUE Funktion, also fuer
+  // React einen neuen Komponententyp. React haengt den alten Teilbaum dann ab
+  // und baut ihn neu auf, statt ihn zu aktualisieren. Das Textfeld wird also bei
+  // jedem Tastendruck weggeworfen und neu erzeugt, und mit ihm der Fokus.
+  //
+  // Und getippt wird in `draft`, was die Eltern rendern laesst: nach dem ersten
+  // Zeichen war der Cursor weg. Im Feld stand "Goo" statt "Google", weil jemand
+  // drei Mal hintereinander hineingeklickt hat.
+  //
+  // Aufgerufen statt gerendert bleibt es einfaches JSX an Ort und Stelle, und
+  // das Textfeld ist ueber alle Renders hinweg dasselbe DOM-Element. Das
+  // Aspiration-Feld darunter stand schon immer direkt im JSX, deshalb war es
+  // als einziges tippbar.
+  const timelineRail = (editable) => (
     <div style={{ position: "relative", paddingLeft: 30 }}>
       <div style={{ position: "absolute", left: 7, top: 12, bottom: 12, width: 2, background: theme.borderFaint }} />
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -48662,7 +48685,7 @@ function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange
   if (editing) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
-        <Timeline editable />
+        {timelineRail(true)}
         <div>
           <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 4 }}>Aspiration</div>
           <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginBottom: 10 }}>
@@ -48711,7 +48734,7 @@ function BrandVision({ value, onChange, accent, theme, darkMode, onEditingChange
           style={{ padding: "8px 16px", borderRadius: 10, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, color: theme.textSub, fontSize: 12, fontWeight: 500, fontFamily: FONT, alignSelf: "flex-start" }}>{de ? "Bearbeiten" : "Edit"}</motion.button>
         )}
       </div>
-      <Timeline editable={false} />
+      {timelineRail(false)}
       {v.aspiration && (
         <div>
           <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 700, color: theme.text, marginBottom: 8 }}>Aspiration</div>
@@ -53245,7 +53268,12 @@ If you don't know a field, infer a plausible value. Write all text values in the
       };
       const removeAccent = (c) => setForm(prev => ({ ...prev, color_palette: { ...prev.color_palette, accents: prev.color_palette.accents.filter(x => x !== c) } }));
 
-      const RoleSlot = ({ role, label, hint, value }) => (
+      // Aufgerufen, nicht gerendert, aus demselben Grund wie ueberall sonst
+      // hier: als eigene Komponente wird der Teilbaum bei jedem Render der
+      // Eltern neu gebaut. Beim Farbwaehler faellt das anders auf als bei einem
+      // Textfeld, aber es ist dieselbe Ursache: das native Fenster haengt an
+      // einem <input>, das es danach nicht mehr gibt.
+      const roleSlot = ({ role, label, hint, value }) => (
         <div style={{
           padding: 16, borderRadius: 16,
           background: value ? `linear-gradient(135deg, ${value}15, transparent 70%)` : (darkMode ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)"),
@@ -53296,14 +53324,12 @@ If you don't know a field, infer a plausible value. Write all text values in the
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <RoleSlot role="primary" label={t("brand.colors.primarySlot")}
-              hint={t("brand.colors.pickHint")}
-              value={form.color_palette.primary}
-            />
-            <RoleSlot role="secondary" label={t("brand.colors.secondarySlot")}
-              hint={t("brand.colors.pickHint")}
-              value={form.color_palette.secondary}
-            />
+            {roleSlot({ role: "primary", label: t("brand.colors.primarySlot"),
+              hint: t("brand.colors.pickHint"),
+              value: form.color_palette.primary })}
+            {roleSlot({ role: "secondary", label: t("brand.colors.secondarySlot"),
+              hint: t("brand.colors.pickHint"),
+              value: form.color_palette.secondary })}
           </div>
 
           {/* Accents — optional */}
