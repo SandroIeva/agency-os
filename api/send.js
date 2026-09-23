@@ -6,6 +6,7 @@
 //   mode "push-setup"      → "enable push" setup email (Resend)
 //   mode "push"            → web-push notification (VAPID)
 import webpush from "web-push";
+import { saveNewsletterPreference } from "../server/newsletter.js";
 import { getAdminSupabase, requireUser } from "../server/billing.js";
 
 // Everything that reaches an email template goes through this first. The
@@ -162,6 +163,10 @@ export default async function handler(req, res) {
   const admin = getAdminSupabase();
 
   try {
+    if (mode === "newsletter") {
+      const { status, ...result } = await saveNewsletterPreference({ user, body: req.body, admin });
+      return res.status(status).json(result);
+    }
     if (mode === "invite") {
       const { token } = req.body;
       if (!token) return res.status(400).json({ error: "Missing token" });

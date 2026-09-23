@@ -2309,12 +2309,12 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
             nur ohne es zu sagen: dann gäbe es drei Knöpfe für zwei Antworten. */}
         {slide.asks ? (<>
           <motion.button whileTap={{ scale: 0.97 }}
-            onClick={() => { onUpdatesAnswer?.(false); onFinish?.(); }}
+            onClick={async () => { if (await onUpdatesAnswer?.(false) !== false) onFinish?.(); }}
             style={ghost}>
             {de ? "Nein danke" : "No thanks"}
           </motion.button>
           <motion.button whileTap={{ scale: 0.97 }}
-            onClick={() => { onUpdatesAnswer?.(true); onFinish?.(); }}
+            onClick={async () => { if (await onUpdatesAnswer?.(true) !== false) onFinish?.(); }}
             style={solid}>
             {de ? "Klingt gut" : "Sounds great"}
           </motion.button>
@@ -55831,15 +55831,29 @@ export default function CircularMenu() {
   // Eine Stelle schreibt, egal ob aus dem Dialog oder aus den Einstellungen.
   // Mitgeschrieben wird WANN und WO: ein blosses Ja ist im Streitfall nichts
   // wert, wenn niemand sagen kann, woher es stammt.
-  const answerNewsletter = (yes, source) => {
-    setMarketingOptIn(yes);
-    setNewsletterAskOpen(false);
-    if (!session?.user?.id) return;
-    supabase.from("profiles").update({
-      marketing_opt_in: yes,
-      marketing_opt_in_at: new Date().toISOString(),
-      marketing_opt_in_source: source,
-    }).eq("id", session.user.id).then(() => {});
+  const newsletterSavingRef = useRef(false);
+  const answerNewsletter = async (yes, source) => {
+    if (newsletterSavingRef.current || !session?.user?.id) return false;
+    newsletterSavingRef.current = true;
+    try {
+      const response = await fetch("/api/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({ mode: "newsletter", subscribed: yes, source }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.saved ? "sync" : "save");
+      setMarketingOptIn(yes);
+      setNewsletterAskOpen(false);
+      return true;
+    } catch (error) {
+      alert(appLanguage === "de"
+        ? (error.message === "sync" ? "Deine Auswahl wurde gespeichert, aber die Übertragung zur Mailingliste ist fehlgeschlagen. Bitte klicke erneut, um es noch einmal zu versuchen."
+          : "Deine Auswahl konnte nicht gespeichert werden. Bitte versuche es erneut.")
+        : (error.message === "sync" ? "Your preference was saved, but syncing the mailing list failed. Please click again to retry."
+          : "Your preference could not be saved. Please try again."));
+      return false;
+    } finally { newsletterSavingRef.current = false; }
   };
   // Dieselbe Stelle im Ablauf wie die Frage nach dem KI-Schluessel: nicht beim
   // allerersten Ankommen, sondern wenn jemand schon irgendwo war und aufs
@@ -64846,9 +64860,8 @@ export default function CircularMenu() {
 
                   {/* Produkt-Updates. Die Zeile muss es unabhaengig vom Dialog
                       geben: ein Widerruf muss jederzeit moeglich sein, nicht nur
-                      in dem Moment, in dem gefragt wurde. Vorerst nur fuer den
-                      Betreiber sichtbar, wie der Dialog. */}
-                  {seesNewsletterAsk(session?.user?.email) && (
+                      in dem Moment, in dem gefragt wurde. */}
+                  {session?.user?.id && (
                   <div style={{ display: "flex", alignItems: "center", gap: 14,
                     padding: "16px 20px", borderTop: `1px solid ${theme.borderFaint}` }}>
                     <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0,
