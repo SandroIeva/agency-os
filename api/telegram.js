@@ -112,6 +112,7 @@ const T = {
     fileToAssets: "In die Assets",
     fileToMood: "Auf ein Moodboard",
     fileToSocial: "Als Social Post",
+    socialWorkspace: "Aus welchem Workspace posten?",
     socialNoChannel: "In diesem Workspace ist weder Instagram noch Threads verbunden.",
     socialWhich: "Auf welchen Kanal?",
     socialBoth: "Beide",
@@ -198,6 +199,7 @@ const T = {
     fileToAssets: "Into Assets",
     fileToMood: "Onto a moodboard",
     fileToSocial: "As a social post",
+    socialWorkspace: "Post from which workspace?",
     socialNoChannel: "Neither Instagram nor Threads is connected in this workspace.",
     socialWhich: "Which channel?",
     socialBoth: "Both",
@@ -640,7 +642,10 @@ export default async function handler(req) {
     // n and w belong to a NEW task and carry a workspace id where the others
     // carry a notification id, so they are handled before anything tries to
     // load a notification that was never involved.
-    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w", "x", "y", "z", "q", "v", "u", "s", "k", "m", "j"].includes(action)) return answer("");
+    // o, l und r gehoeren zum Social Post. Fehlen sie hier, zuckt der Handler
+    // mit den Schultern und kehrt um, BEVOR er den Block unten erreicht: der
+    // Knopf sieht dann aus, als sei er tot.
+    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w", "x", "y", "z", "q", "v", "u", "s", "k", "m", "j", "o", "l", "r"].includes(action)) return answer("");
 
     // The chat is the identity. A button is only ever pressed in the chat the
     // message was sent to, so nobody else can reach this task through it.
@@ -720,8 +725,9 @@ export default async function handler(req) {
         if (hasTh) rows.push([{ text: "Threads", callback_data: `l:${hint}:t` }]);
         if (hasIg && hasTh) rows.push([{ text: t.socialBoth, callback_data: `l:${hint}:b` }]);
         rows.push(cancelRow);
-        await api(botToken, "editMessageReplyMarkup", {
+        await api(botToken, "editMessageText", {
           chat_id: cbChat, message_id: cb.message.message_id,
+          text: `<b>${esc(file.name)}</b>\n\n${esc(t.socialWhich)}`, parse_mode: "HTML",
           reply_markup: { inline_keyboard: rows },
         });
         return answer(t.socialWhich);
@@ -738,8 +744,9 @@ export default async function handler(req) {
         if (!org) return answer(t.newDenied, true);
         const ch = (parts[2] || "b");
         const hint = org.id.slice(0, ID_HINT);
-        await api(botToken, "editMessageReplyMarkup", {
+        await api(botToken, "editMessageText", {
           chat_id: cbChat, message_id: cb.message.message_id,
+          text: `<b>${esc(file.name)}</b>\n\n${esc(t.socialWhen)}`, parse_mode: "HTML",
           reply_markup: { inline_keyboard: [
             [{ text: t.socialNow, callback_data: `r:${hint}:${ch}:n` }],
             [{ text: t.socialIn1h, callback_data: `r:${hint}:${ch}:1` }],
@@ -826,13 +833,17 @@ export default async function handler(req) {
       if (action === "k") {
         if (notifId === "p") {
           if (!one) {
-            return api(botToken, "editMessageReplyMarkup", {
+            // "Wohin damit?" war die Frage davor. Jetzt ist es eine andere, und
+            // sie gehoert in den Text: ein Knopfbrett ohne passende Frage
+            // darueber laesst raten, was gerade gewaehlt wird.
+            return api(botToken, "editMessageText", {
               chat_id: cbChat, message_id: cb.message.message_id,
+              text: `<b>${esc(file.name)}</b>\n\n${esc(t.socialWorkspace)}`, parse_mode: "HTML",
               reply_markup: { inline_keyboard: [
                 ...orgs.map(o => [{ text: o.name.slice(0, 60), callback_data: `o:${o.id.slice(0, ID_HINT)}` }]),
                 cancelRow,
               ] },
-            }).then(() => answer(""));
+            }).then(() => answer(t.socialWorkspace));
           }
           return askChannels(one);
         }
