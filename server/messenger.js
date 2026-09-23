@@ -663,11 +663,18 @@ export const socialTargetsFor = async (db, orgId) => {
 // api/publish-due. Ein zweiter Weg dorthin wäre ein zweiter Ort, an dem ein
 // Beitrag doppelt rausgehen kann.
 export const queueSocialPost = async (db, { userId, orgId, name, contentType, bytes, caption, targets, publishAt }) => {
-  if (!userId || !orgId || !bytes?.byteLength || !targets?.length) return { ok: false, reason: "incomplete" };
-  const size = bytes.byteLength;
+  if (!userId || !orgId || !targets?.length) return { ok: false, reason: "incomplete" };
+  // Ein Beitrag ohne Bild ist bei Threads ein ganz normaler Beitrag. Instagram
+  // nimmt ihn nicht, und deshalb wird dort auch keiner angeboten, siehe die
+  // Kanalauswahl im Messenger.
+  const hasMedia = !!bytes?.byteLength;
+  if (!hasMedia && !String(caption || "").trim()) return { ok: false, reason: "incomplete" };
+  const size = hasMedia ? bytes.byteLength : 0;
 
-  const room = await storageRoomFor(db, orgId, size);
-  if (!room.ok) return { ok: false, reason: "no_room", room };
+  if (hasMedia) {
+    const room = await storageRoomFor(db, orgId, size);
+    if (!room.ok) return { ok: false, reason: "no_room", room };
+  }
   if (await orgIsReadOnly(db, orgId)) return { ok: false, reason: "read_only" };
   const { data: member } = await db.from("org_members").select("id")
     .eq("org_id", orgId).eq("user_id", userId).maybeSingle();
@@ -676,13 +683,17 @@ export const queueSocialPost = async (db, { userId, orgId, name, contentType, by
   // In brand-assets und nicht in user-files: Instagram holt sich das Bild selbst
   // über eine signierte Adresse, und das ist der Eimer, den der Composer dafür
   // auch benutzt.
-  const ext = (String(contentType || "").split("/")[1] || "jpg").replace("jpeg", "jpg").split("+")[0];
-  const path = `social/${orgId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const put = await uploadTracked(db, {
-    bucket: "brand-assets", path, body: bytes, contentType,
-    orgId, userId, sizeBytes: size,
-  });
-  if (!put.ok) return { ok: false, reason: "failed" };
+  let media = [];
+  if (hasMedia) {
+    const ext = (String(contentType || "").split("/")[1] || "jpg").replace("jpeg", "jpg").split("+")[0];
+    const path = `social/${orgId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const put = await uploadTracked(db, {
+      bucket: "brand-assets", path, body: bytes, contentType,
+      orgId, userId, sizeBytes: size,
+    });
+    if (!put.ok) return { ok: false, reason: "failed" };
+    media = [{ bucket: "brand-assets", path, kind: "IMAGE" }];
+  }
 
   const { data: row, error } = await db.from("scheduled_posts").insert({
     org_id: orgId,
@@ -690,7 +701,7 @@ export const queueSocialPost = async (db, { userId, orgId, name, contentType, by
     publish_at: new Date(publishAt || Date.now()).toISOString(),
     body: caption ? String(caption).slice(0, 2200) : null,
     targets,
-    media: [{ bucket: "brand-assets", path, kind: "IMAGE" }],
+    media,
   }).select("id, publish_at").maybeSingle();
   if (error) return { ok: false, reason: "failed", message: error.message };
   return { ok: true, post: row, size };

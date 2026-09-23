@@ -46,6 +46,7 @@ const COMMANDS = {
   de: [
     { command: "aufgabe", description: "Neue Aufgabe anlegen" },
     { command: "notiz", description: "Notiz aufschreiben" },
+    { command: "post", description: "Social Post schreiben" },
     { command: "status", description: "Verbindung anzeigen" },
     { command: "stop", description: "Verbindung trennen" },
     { command: "help", description: "Was der Bot kann" },
@@ -53,6 +54,7 @@ const COMMANDS = {
   en: [
     { command: "task", description: "Create a task" },
     { command: "note", description: "Write a note" },
+    { command: "post", description: "Write a social post" },
     { command: "status", description: "Show the connection" },
     { command: "stop", description: "Disconnect" },
     { command: "help", description: "What this bot does" },
@@ -113,6 +115,8 @@ const T = {
     fileToMood: "Auf ein Moodboard",
     fileToSocial: "Als Social Post",
     socialWorkspace: "Aus welchem Workspace posten?",
+    postWhat: "Was soll im Beitrag stehen?",
+    postTextOnly: "Beitrag ohne Bild",
     socialNoChannel: "In diesem Workspace ist weder Instagram noch Threads verbunden.",
     socialWhich: "Auf welchen Kanal?",
     socialBoth: "Beide",
@@ -204,6 +208,8 @@ const T = {
     fileToMood: "Onto a moodboard",
     fileToSocial: "As a social post",
     socialWorkspace: "Post from which workspace?",
+    postWhat: "What should the post say?",
+    postTextOnly: "Post without a picture",
     socialNoChannel: "Neither Instagram nor Threads is connected in this workspace.",
     socialWhich: "Which channel?",
     socialBoth: "Both",
@@ -709,7 +715,15 @@ export default async function handler(req) {
         ? { id: doc.file_id, name: doc.file_name || "bild.jpg", type: doc.mime_type }
         : photo ? { id: photo.file_id, name: `foto-${new Date().toISOString().slice(0, 10)}.jpg`, type: "image/jpeg" }
         : null;
-      if (!file) return answer(t.fileGone, true);
+      // Der Text des Beitrags: die Bildunterschrift, oder bei /post die
+      // Nachricht selbst ohne den Befehl davor.
+      const postText = String(src?.caption || src?.text || "")
+        .replace(/^\/(post|beitrag)(@\w+)?\s*/i, "").trim();
+      const isSocial = action === "o" || action === "l" || action === "r"
+        || (action === "k" && notifId === "p");
+      // Ohne Bild ist ein Social Post ein Textbeitrag, kein Fehler. Fuer Assets
+      // und Moodboard bleibt ein fehlendes Bild einer.
+      if (!file && !(isSocial && postText)) return answer(t.fileGone, true);
 
       const orgs = await workspacesFor(db, link.user_id);
       if (!orgs.length) return answer(t.newNoWorkspace, true);
@@ -726,8 +740,11 @@ export default async function handler(req) {
         const found = await socialTargetsFor(db, org.id);
         if (!found.length) return answer(t.socialNoChannel, true);
         const hint = org.id.slice(0, ID_HINT);
-        const hasIg = found.some(x => x.provider === "instagram");
+        // Instagram nimmt keinen Beitrag ohne Bild. Statt ihn anzubieten und
+        // spaeter abzulehnen, steht er gar nicht erst zur Wahl.
+        const hasIg = !!file && found.some(x => x.provider === "instagram");
         const hasTh = found.some(x => x.provider === "threads");
+        if (!hasIg && !hasTh) return answer(t.socialNoChannel, true);
         const rows = [];
         if (hasIg) rows.push([{ text: "Instagram", callback_data: `l:${hint}:i` }]);
         if (hasTh) rows.push([{ text: "Threads", callback_data: `l:${hint}:t` }]);
@@ -735,7 +752,7 @@ export default async function handler(req) {
         rows.push(cancelRow);
         await api(botToken, "editMessageText", {
           chat_id: cbChat, message_id: cb.message.message_id,
-          text: `<b>${esc(file.name)}</b>\n\n${esc(t.socialWhich)}`, parse_mode: "HTML",
+          text: `<b>${esc(file?.name || t.postTextOnly)}</b>\n\n${esc(t.socialWhich)}`, parse_mode: "HTML",
           reply_markup: { inline_keyboard: rows },
         });
         return answer(t.socialWhich);
@@ -754,7 +771,7 @@ export default async function handler(req) {
         const hint = org.id.slice(0, ID_HINT);
         await api(botToken, "editMessageText", {
           chat_id: cbChat, message_id: cb.message.message_id,
-          text: `<b>${esc(file.name)}</b>\n\n${esc(t.socialWhen)}`, parse_mode: "HTML",
+          text: `<b>${esc(file?.name || t.postTextOnly)}</b>\n\n${esc(t.socialWhen)}`, parse_mode: "HTML",
           reply_markup: { inline_keyboard: [
             [{ text: t.socialNow, callback_data: `r:${hint}:${ch}:n` }],
             [{ text: t.socialIn1h, callback_data: `r:${hint}:${ch}:1` }],
@@ -792,17 +809,22 @@ export default async function handler(req) {
           at.setTime(at.getTime() + (target.getTime() - berlinNow.getTime()));
         }
 
-        const info = await api(botToken, "getFile", { file_id: file.id });
-        if (!info?.ok || !info.result?.file_path) return answer(t.fileTooBig, true);
-        const res = await fetch(`https://api.telegram.org/file/bot${botToken}/${info.result.file_path}`);
-        if (!res.ok) return answer(t.fileGone, true);
-        const bytes = new Uint8Array(await res.arrayBuffer());
+        // Ohne Bild gibt es nichts zu holen: ein /post ist reiner Text.
+        let bytes = null;
+        if (file) {
+          const info = await api(botToken, "getFile", { file_id: file.id });
+          if (!info?.ok || !info.result?.file_path) return answer(t.fileTooBig, true);
+          const res = await fetch(`https://api.telegram.org/file/bot${botToken}/${info.result.file_path}`);
+          if (!res.ok) return answer(t.fileGone, true);
+          bytes = new Uint8Array(await res.arrayBuffer());
+        }
 
         // Die Bildunterschrift IST der Beitragstext. Sie steht auf der
         // Nachricht mit dem Bild, also genau dort, wo sie jemand getippt hat.
-        const caption = (src?.caption || "").trim();
+        // Bei /post ist es die Nachricht selbst, ohne den Befehl davor.
+        const caption = postText;
         const queued = await queueSocialPost(db, {
-          userId: link.user_id, orgId: org.id, name: file.name, contentType: file.type,
+          userId: link.user_id, orgId: org.id, name: file?.name || null, contentType: file?.type || null,
           bytes, caption, targets, publishAt: at.getTime(),
         });
         if (!queued.ok) {
@@ -814,7 +836,9 @@ export default async function handler(req) {
 
         const who = targets.map(x => x.provider === "instagram" ? "Instagram" : "Threads").join(" + ");
         const head = `<b>${esc(headLine(org.name, who))}</b>`;
-        const footer = caption ? "" : `\n\n<i>${esc(t.socialNoText)}</i>`;
+        // Der Hinweis gilt nur, wenn ein BILD ohne Unterschrift kam. Bei einem
+        // reinen Textbeitrag waere er Unsinn, da ist der Text ja alles.
+        const footer = (file && !caption) ? `\n\n<i>${esc(t.socialNoText)}</i>` : "";
         const edit = (body) => api(botToken, "editMessageText", {
           chat_id: cbChat, message_id: cb.message.message_id,
           text: `${head}\n${body}${footer}`, parse_mode: "HTML", disable_web_page_preview: true,
@@ -873,7 +897,7 @@ export default async function handler(req) {
             // darueber laesst raten, was gerade gewaehlt wird.
             return api(botToken, "editMessageText", {
               chat_id: cbChat, message_id: cb.message.message_id,
-              text: `<b>${esc(file.name)}</b>\n\n${esc(t.socialWorkspace)}`, parse_mode: "HTML",
+              text: `<b>${esc(file?.name || t.postTextOnly)}</b>\n\n${esc(t.socialWorkspace)}`, parse_mode: "HTML",
               reply_markup: { inline_keyboard: [
                 ...orgs.map(o => [{ text: o.name.slice(0, 60), callback_data: `o:${o.id.slice(0, ID_HINT)}` }]),
                 cancelRow,
@@ -1337,6 +1361,47 @@ export default async function handler(req) {
     // of the person behind on our side either.
     await db.from("messenger_links").delete().eq("id", link.id);
     return reply(t.stopped);
+  }
+
+  // /post, oder /beitrag. Ein Beitrag ohne Bild: Threads nimmt reinen Text,
+  // Instagram nicht, und deshalb steht Instagram in der Kanalauswahl dann gar
+  // nicht erst zur Wahl.
+  //
+  // Wie ueberall hier wird nichts zwischengespeichert. Die Frage antwortet AUF
+  // die Nachricht mit dem Text, und Telegram reicht sie bei jedem Knopfdruck
+  // wieder mit. Der Text des Beitrags wird also am Ende dort gelesen, wo ihn
+  // jemand getippt hat.
+  const asPost = /^\/(post|beitrag)(@\w+)?\b/i.exec(text);
+  const repliedPost = (msg.reply_to_message?.text || "").trim();
+  const answeringPost = !!msg.reply_to_message?.from?.is_bot
+    && (repliedPost === T.de.postWhat || repliedPost === T.en.postWhat);
+  if (asPost || answeringPost) {
+    if (!link?.user_id) return reply(t.notLinked);
+    const bodyText = (answeringPost ? text : text.slice(asPost[0].length)).trim();
+    if (!bodyText) {
+      // Fragen statt die Schreibweise erklaeren, genau wie bei der Notiz.
+      return api(botToken, "sendMessage", {
+        chat_id: chatId, text: t.postWhat,
+        reply_to_message_id: msg.message_id,
+        reply_markup: { force_reply: true, selective: true },
+      }).then(() => json({ ok: true }));
+    }
+    const orgs = await workspacesFor(db, link.user_id);
+    if (!orgs.length) return reply(t.newNoWorkspace);
+    const one = orgs.length === 1 ? orgs[0] : null;
+    // Bei genau einem Workspace faellt die Frage danach weg. Sonst waere der
+    // erste Schritt eine Wahl ohne Alternative.
+    return api(botToken, "sendMessage", {
+      chat_id: chatId,
+      text: `<b>${esc(t.postTextOnly)}</b>\n\n${esc(one ? t.socialWhich : t.socialWorkspace)}`,
+      parse_mode: "HTML",
+      reply_to_message_id: msg.message_id,
+      reply_markup: { inline_keyboard: one
+        ? [[{ text: "Threads", callback_data: `l:${one.id.slice(0, ID_HINT)}:t` }],
+           [{ text: t.cancel, callback_data: "k:x" }]]
+        : [...orgs.map(o => [{ text: o.name.slice(0, 60), callback_data: `o:${o.id.slice(0, ID_HINT)}` }]),
+           [{ text: t.cancel, callback_data: "k:x" }]] },
+    }).then(() => json({ ok: true }));
   }
 
   // /notiz, or /note. A note needs no wizard: the RLS policies on notes are all
