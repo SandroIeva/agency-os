@@ -123,6 +123,10 @@ const T = {
     socialTomorrow: "Morgen 9:00",
     socialQueued: (who, when) => `Geht an ${who}, ${when}.`,
     socialSent: (who) => `Geht jetzt an ${who} raus.`,
+    socialSending: "Wird veröffentlicht…",
+    socialWorking: "Wird noch verarbeitet. Sobald es durch ist, steht es im Kanal.",
+    socialDone: (who) => `Veröffentlicht auf ${who}.`,
+    socialFailed: (why) => `Hat nicht geklappt${why ? `: ${why}` : "."}`,
     socialNoText: "Ohne Text. Schick das Bild das n\u00e4chste Mal mit Bildunterschrift, dann steht die im Beitrag.",
     fileNoBoards: "Es gibt noch kein Moodboard.",
     moodAsk: "Auf welches Moodboard?",
@@ -210,6 +214,10 @@ const T = {
     socialTomorrow: "Tomorrow 9:00",
     socialQueued: (who, when) => `Going to ${who}, ${when}.`,
     socialSent: (who) => `Going to ${who} now.`,
+    socialSending: "Publishing…",
+    socialWorking: "Still processing. It appears in the channel once it is through.",
+    socialDone: (who) => `Published on ${who}.`,
+    socialFailed: (why) => `That did not work${why ? `: ${why}` : "."}`,
     socialNoText: "No caption. Next time send the picture with a caption and it becomes the post text.",
     fileNoBoards: "There is no moodboard yet.",
     moodAsk: "Which moodboard?",
@@ -804,11 +812,34 @@ export default async function handler(req) {
             : t.newFailed, true);
         }
 
-        // Jetzt heisst jetzt: der Takt wird angestossen, statt bis zu fuenf
-        // Minuten zu warten. Schlaegt der Anstoss fehl, geht es trotzdem raus,
-        // nur eben beim naechsten Durchgang.
+        const who = targets.map(x => x.provider === "instagram" ? "Instagram" : "Threads").join(" + ");
+        const head = `<b>${esc(headLine(org.name, who))}</b>`;
+        const footer = caption ? "" : `\n\n<i>${esc(t.socialNoText)}</i>`;
+        const edit = (body) => api(botToken, "editMessageText", {
+          chat_id: cbChat, message_id: cb.message.message_id,
+          text: `${head}\n${body}${footer}`, parse_mode: "HTML", disable_web_page_preview: true,
+        });
+
+        // Geplant ist geplant: der Takt holt es ab, hier ist nichts zu warten.
+        if (when !== "n") {
+          const whenText = new Intl.DateTimeFormat(link?.lang === "en" ? "en-GB" : "de-DE",
+            { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Berlin" }).format(at);
+          const queuedLine = t.socialQueued(who, whenText);
+          await edit(`<i>${esc(queuedLine)}</i>`);
+          return answer(queuedLine);
+        }
+
+        // "Jetzt" heisst: erst Bescheid sagen, dann arbeiten, dann das Ergebnis
+        // nachreichen. Vorher stand die Bestaetigung HINTER dem Veroeffentlichen,
+        // und das dauert bei Meta seine Zeit: der Knopf drehte sich, der Beitrag
+        // war laengst drin, und die Nachricht kam erst Sekunden spaeter. Der
+        // Rueckruf wird sofort quittiert, sonst laeuft Telegram in eine
+        // Zeitueberschreitung und faerbt den Knopf rot.
+        await api(botToken, "answerCallbackQuery", { callback_query_id: cb.id, text: t.socialSending });
+        await edit(`<i>${esc(t.socialSending)}</i>`);
+
         const publishSecret = process.env.PUBLISH_SECRET;
-        if (when === "n" && appUrl && publishSecret) {
+        if (appUrl && publishSecret) {
           await fetch(`${appUrl}/api/publish-due`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-i7-hook-secret": publishSecret },
@@ -816,17 +847,21 @@ export default async function handler(req) {
           }).catch(() => {});
         }
 
-        const who = targets.map(x => x.provider === "instagram" ? "Instagram" : "Threads").join(" + ");
-        const whenText = when === "n" ? "" : new Intl.DateTimeFormat(link?.lang === "en" ? "en-GB" : "de-DE",
-          { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Berlin" }).format(at);
-        const line = when === "n" ? t.socialSent(who) : t.socialQueued(who, whenText);
-        await api(botToken, "editMessageText", {
-          chat_id: cbChat, message_id: cb.message.message_id,
-          text: `<b>${esc(headLine(org.name, who))}</b>\n<i>${esc(line)}</i>`
-            + (caption ? "" : `\n\n<i>${esc(t.socialNoText)}</i>`),
-          parse_mode: "HTML",
-        });
-        return answer(line);
+        // Das Ergebnis steht in der Zeile, die der Takt gerade geschrieben hat,
+        // samt Permalink. Gefragt wird sie danach, statt es zu vermuten.
+        const { data: done } = await db.from("scheduled_posts")
+          .select("status, result, last_error").eq("id", queued.post?.id).maybeSingle();
+        const plats = Array.isArray(done?.result?.platforms) ? done.result.platforms : [];
+        const links = plats.filter(x => x.url)
+          .map(x => `<a href="${x.url}">${esc(x.platform === "instagram" ? "Instagram" : "Threads")}</a>`);
+        const failed = plats.filter(x => x.status === "failed");
+
+        let body;
+        if (links.length) body = `<i>${esc(t.socialDone(who))}</i>\n${links.join(" · ")}`;
+        else if (failed.length) body = `<i>${esc(t.socialFailed(failed[0].error || ""))}</i>`;
+        else body = `<i>${esc(t.socialWorking)}</i>`;   // rechnet noch, der Takt bleibt dran
+        await edit(body);
+        return json({ ok: true });
       }
 
       // "k" is the answer to the first question. From here the paths part.
