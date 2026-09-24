@@ -2336,7 +2336,7 @@ function OnboardingTour({ appLanguage = "de", userName = "", theme, darkMode = t
 //
 // The slides above say what the app is FOR. This says where things ARE, on the
 // dashboard itself: everything but one element goes dark, the sphere reads out
-// what it is, and the light moves on. It starts five seconds after arriving on the dashboard, and
+// what it is, and the light moves on. It starts seven seconds after arriving on the dashboard, and
 // again whenever the slides are replayed from Settings.
 //
 // The words and the recordings live in src/dashboardTour.js, which the server
@@ -55228,6 +55228,7 @@ export default function CircularMenu() {
   const [createWsOpen, setCreateWsOpen] = useState(false);   // create-workspace modal
   const [newWsName, setNewWsName] = useState("");
   const [creatingWs, setCreatingWs] = useState(false);
+  const [onboardingReadyUser, setOnboardingReadyUser] = useState(null);
   const [orgLoading, setOrgLoading] = useState(true);       // loading org check
   const [onboardingStep, setOnboardingStep] = useState(null); // null = skip, "choose" | "create" | "join" | "tour"
   const [onboardingError, setOnboardingError] = useState(null);
@@ -55236,7 +55237,7 @@ export default function CircularMenu() {
   const [dashTourOpen, setDashTourOpen] = useState(false);
   const [dashTourPendingUser, setDashTourPendingUser] = useState(null);
   // Give the dashboard time to settle. Cleanup cancels the timer on navigation,
-  // logout and StrictMode remounts; returning starts a fresh five-second wait.
+  // logout and StrictMode remounts; returning starts a fresh seven-second wait.
   useEffect(() => {
     if (!dashTourPendingUser) return;
     if (dashTourPendingUser !== session?.user?.id) {
@@ -55247,7 +55248,7 @@ export default function CircularMenu() {
     const timer = setTimeout(() => {
       setDashTourPendingUser(null);
       setDashTourOpen(true);
-    }, 5000);
+    }, 7000);
     return () => clearTimeout(timer);
   }, [dashTourPendingUser, session?.user?.id, authLoading, orgLoading, onboardingStep, onDashboard]);
 
@@ -55307,6 +55308,7 @@ export default function CircularMenu() {
   // ends on the dashboard all the same, because the tour's second half IS the
   // dashboard: the light moving over the logo, the bell, the sphere and the bar.
   const replayTour = () => {
+    if (!isOperator) return;
     tourWorkspaceStepRef.current = null;
     setDashTourPendingUser(null);
     setDashTourOpen(false);
@@ -55317,17 +55319,15 @@ export default function CircularMenu() {
   // cannot know that list, so it asks once per person, and only when Settings
   // is actually opened. Anything but a clear yes hides the row.
   //
-  // Local development always shows it: `npm run dev` serves no api/ functions,
-  // so the question has nobody to answer it there, and localhost is only ever
-  // the people building the app.
-  const [isOperator, setIsOperator] = useState(!!import.meta.env.DEV);
-  const operatorAskedRef = useRef(null);
+  // No localhost exception. Bind the verdict to the account so switching users
+  // hides the row immediately, before the next effect or network response.
+  const [operatorUserId, setOperatorUserId] = useState(null);
+  const isOperator = !!session?.user?.id && operatorUserId === session.user.id;
   useEffect(() => {
     const uid = session?.user?.id;
-    if (import.meta.env.DEV) return;
-    if (!uid) { operatorAskedRef.current = null; setIsOperator(false); return; }
-    if (currentView !== "settings" || operatorAskedRef.current === uid) return;
-    operatorAskedRef.current = uid;
+    setOperatorUserId(null);
+    if (!uid || currentView !== "settings") return;
+    let active = true;
     (async () => {
       try {
         const r = await fetch("/api/admin-stats", {
@@ -55336,9 +55336,10 @@ export default function CircularMenu() {
           body: JSON.stringify({ mode: "whoami" }),
         });
         const j = r.ok ? await r.json() : null;
-        if (operatorAskedRef.current === uid) setIsOperator(j?.admin === true);
-      } catch (_) { /* no answer, no row */ }
+        if (active && j?.admin === true) setOperatorUserId(uid);
+      } catch (_) { /* no verified answer: keep the row hidden */ }
     })();
+    return () => { active = false; };
   }, [session?.user?.id, currentView]);
 
   // The models each key can reach, for the picker under KI & Modelle. Asked
@@ -56163,7 +56164,9 @@ export default function CircularMenu() {
 
   // ── Auto-create profile + check org membership after login ──
   useEffect(() => {
-    if (!session?.user) { setOrgLoading(false); return; }
+    if (!session?.user) { setOnboardingReadyUser(null); setOrgLoading(false); return; }
+    let active = true;
+    setOrgLoading(true);
     const uid = session.user.id;
     const meta = session.user.user_metadata || {};
 
@@ -56256,9 +56259,13 @@ export default function CircularMenu() {
         console.warn("[Onboarding] Error:", e.message);
         await beginOnboarding("choose");
       } finally {
-        setOrgLoading(false);
+        if (active) {
+          setOrgLoading(false);
+          setOnboardingReadyUser(uid);
+        }
       }
     })();
+    return () => { active = false; };
   }, [session?.user?.id]);
 
   // ── Refresh org members helper — used by realtime + settings navigation ──
@@ -61007,26 +61014,19 @@ export default function CircularMenu() {
       <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet" />
       <DotGrid darkMode={darkMode} />
 
-      {/* AUTH LOADING */}
-      <AnimatePresence>
-        {authLoading && (
-          <motion.div
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.4 }}
-            style={{
-              position: "absolute", inset: 0, zIndex: 101,
-              background: "#111117",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            <motion.div
-              animate={{ opacity: [0.3, 0.8, 0.3] }}
-              transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-              style={{ fontSize: 13, fontFamily: FONT, color: "#ffffff40", letterSpacing: 2 }}
-            >AGENCY OS</motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Keep the app mounted for layout refs, but never expose it before routing resolves. */}
+      {(authLoading || (session?.user && (orgLoading || onboardingReadyUser !== session.user.id))) && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: theme.bg }}>
+          <DotGrid darkMode={darkMode} />
+        </div>
+      )}
+
+      {/* Opaque backing remains while onboarding cards animate in. */}
+      {session && (!hasDisplayName || onboardingStep) && (
+        <div aria-hidden="true" style={{ position: "absolute", inset: 0, zIndex: 98, background: theme.bg }}>
+          <DotGrid darkMode={darkMode} />
+        </div>
+      )}
 
       {/* LOGIN SCREEN */}
       <AnimatePresence>
