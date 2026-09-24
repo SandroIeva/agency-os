@@ -39558,6 +39558,18 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
 // soloTab: render exactly one of its tabs and no tab bar at all. Creations
 // shows the moodboards this way, under its own tabs, and two rows of tabs for
 // one screen is one row too many.
+// Append a horizontal row beyond the right edge of the existing freeform
+// arrangement. Widths matter, not item count: users can move and resize tiles.
+function moodboardImportPlacement(existing, index = 0) {
+  const gap = 32, width = 240, margin = 40;
+  const right = existing.reduce((edge, item) => {
+    const x = Number.isFinite(item.x) ? item.x : 0;
+    const w = Number.isFinite(item.w) && item.w > 0 ? item.w : width;
+    return Math.max(edge, x + w);
+  }, margin - gap);
+  return { x: right + gap + index * (width + gap), y: margin, w: width };
+}
+
 function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage, onUploadStorage, onUploadDrive, orgMembers, createNotification, docDeepLink, assetDeepLink, openTab = null, openWebImport = null, docFullscreen, setDocFullscreen, getProviderToken, ensureValidToken, autoReLogin, llmProvider, llmKeys, projectId = null, embedded = false, headerSlotRef = null, projectName = "", projectLogoUrl = "", projectColor = "", onOpenWhiteboard = null, soloTab = null }) {
   // Embedded: action buttons portal into BrandView's header slot once it exists.
   const [assetSlotReady, setAssetSlotReady] = useState(false);
@@ -39864,7 +39876,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
         board_id: picker.target.boardId, org_id: picker.target.orgId, created_by: session?.user?.id,
         type: "image", url: pn.url, source: "pinterest", colors: [],
         name: pinName(pn, base + i), position: base + i,
-        x: 40 + ((base + i) % 5) * 60, y: 40 + Math.floor((base + i) / 5) * 60, w: 240,
+        ...moodboardImportPlacement(items, i),
         metadata: { pinId: pn.id, sourcePinId: pn.pinId || pn.id, mediaIndex: pn.mediaIndex ?? null, sourceUrl: pn.link || null, title: pn.title || null, board: board.name },
       }));
       if (!rows.length) { closePinPick(); return; }
@@ -39941,7 +39953,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           || (pn.description || "").trim().split(/\r?\n/)[0].trim().slice(0, 80)
           || `${boardName || "Pinterest"} ${base + i + 1}`,
         position: base + i,
-        x: 40 + ((base + i) % 5) * 60, y: 40 + Math.floor((base + i) / 5) * 60, w: 240,
+        ...moodboardImportPlacement(items, i),
         metadata: { pinId: pn.id, sourcePinId: pn.pinId || pn.id, mediaIndex: pn.mediaIndex ?? null, sourceUrl: pn.link || null, title: pn.title || null, board: boardName || null },
       }));
       const { data, error } = await supabase.from("moodboard_items").insert(rows).select();
@@ -40019,7 +40031,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
           board_id: made.id, org_id: userOrg.id, created_by: session?.user?.id,
           type: "image", url: pn.url, source: "pinterest", colors: [],
           name: pinName(pn, i),
-          position: i, x: 40 + (i % 5) * 60, y: 40 + Math.floor(i / 5) * 60, w: 240,
+          position: i, ...moodboardImportPlacement([], i),
           // Where it came from, so a picture is traceable to its pin later.
           metadata: { pinId: pn.id, sourcePinId: pn.pinId || pn.id, mediaIndex: pn.mediaIndex ?? null, sourceUrl: pn.link || null, title: pn.title || null, board: board.name },
         }));
@@ -40099,7 +40111,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
       const { data, error } = await supabase.from("moodboard_items").insert({
         board_id: activeBoard.id, org_id: userOrg.id, created_by: session?.user?.id,
         type: "image", url, source: "upload", colors,
-        position: pos++, x: 40 + (pos % 5) * 60, y: 40 + Math.floor(pos / 5) * 60, w: 240,
+        position: pos++, ...moodboardImportPlacement(items, newItems.length),
       }).select().single();
       if (!error && data) newItems.push(data);
     }
@@ -40120,7 +40132,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     const { data, error } = await supabase.from("moodboard_items").insert({
       board_id: activeBoard.id, org_id: userOrg.id, created_by: session?.user?.id,
       type: isImage ? "image" : "link", url, source: "url", colors,
-      position: pos, x: 40 + (pos % 5) * 60, y: 40 + Math.floor(pos / 5) * 60, w: 240,
+      position: pos, ...moodboardImportPlacement(items),
       metadata: { sourceUrl: url },
     }).select().single();
     setBusy(false); setUrlInput(""); setShowUrlInput(false);
