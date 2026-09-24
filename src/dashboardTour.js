@@ -71,3 +71,12 @@ export function tourClipPath(lang, step) {
   // recording, exactly as changing the words is.
   return `tour/${l}/${step.key}-${textHash(`${TOUR_VOICE}|${TOUR_SPEED}|${step[l]}`)}.mp3`;
 }
+
+// Shared first-name greeting for the display and authenticated narration.
+export function personalizeTourStep(step, displayName = "") {
+  const firstName = String(displayName || "").trim().split(/\s+/)[0]
+    .replace(/[^\p{L}\p{M}'’\-]/gu, "").slice(0, 50);
+  if (step.key !== "logo" || !firstName) return step;
+  return { ...step, de: step.de.replace(/^Hey,/, `Hey ${firstName},`),
+    en: step.en.replace(/^Hey,/, `Hey ${firstName},`) };
+}

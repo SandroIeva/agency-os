@@ -12,7 +12,7 @@
 // a loop — but the spend now belongs to a named account instead of to the
 // internet.
 import { HttpError, requireUser, getAdminSupabase } from "../server/billing.js";
-import { TOUR_BUCKET, TOUR_VOICE, TOUR_SPEED, TOUR_STEPS, tourClipPath } from "../src/dashboardTour.js";
+import { TOUR_BUCKET, TOUR_VOICE, TOUR_SPEED, TOUR_STEPS, tourClipPath, personalizeTourStep } from "../src/dashboardTour.js";
 
 // Fish charges per character. The longest thing the app actually reads out is
 // an assistant reply; anything past this is not a sentence, it is a bill.
@@ -40,7 +40,7 @@ async function fishMp3(apiKey, text, voiceId, speed) {
 // Existence is asked of the storage API, not by fetching the public url: a
 // CDN that has once answered 404 for a url may keep saying so for a while
 // after the file appears, and the browser is about to fetch exactly that url.
-async function tourClips(apiKey, lang) {
+async function tourClips(apiKey, lang, displayName) {
   const l = lang === "de" ? "de" : "en";
   const bucket = getAdminSupabase().storage.from(TOUR_BUCKET);
   const { data: listed, error: listError } = await bucket.list(`tour/${l}`, { limit: 1000 });
@@ -70,10 +70,20 @@ async function tourClips(apiKey, lang) {
   // Two at a time, not eight. All eight at once is what the first tour ever
   // did, and Fish turned three of them away: the sphere's own line among them,
   // so the step where it introduces itself showed its words and said nothing.
-  const queue = [...TOUR_STEPS];
+  const greeting = personalizeTourStep(TOUR_STEPS[0], displayName);
+  const personalized = greeting !== TOUR_STEPS[0];
+  const queue = TOUR_STEPS.filter(step => !personalized || step.key !== "logo");
   await Promise.all([0, 1].map(async () => {
     while (queue.length) await record(queue.shift());
   }));
+  if (personalized) {
+    // Personal audio is returned only to this authenticated user, never uploaded
+    // to the public bucket used by the generic tour recordings.
+    try {
+      const mp3 = await fishWithRetry(apiKey, greeting[l]);
+      urls.logo = `data:audio/mpeg;base64,${mp3.toString("base64")}`;
+    } catch { console.error("[tts tour] personalized greeting unavailable"); }
+  }
   return urls;
 }
 
@@ -97,8 +107,9 @@ export default async function handler(req, res) {
   // `*` here was an invitation.
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
+  let user;
   try {
-    await requireUser(req);
+    user = await requireUser(req);
   } catch (e) {
     const status = e instanceof HttpError ? e.status : 401;
     return res.status(status).json({ error: e.message || "Authentication required", code: "unauthorized" });
@@ -110,7 +121,11 @@ export default async function handler(req, res) {
     const apiKey = process.env.FISH_API_KEY;
     if (!apiKey) return res.status(500).json({ error: "FISH_API_KEY not set in environment" });
     try {
-      return res.status(200).json({ clips: await tourClips(apiKey, lang) });
+      const { data: profile, error } = await getAdminSupabase().from("profiles")
+        .select("display_name").eq("id", user.id).maybeSingle();
+      if (error) throw error;
+      res.setHeader("Cache-Control", "private, no-store");
+      return res.status(200).json({ clips: await tourClips(apiKey, lang, profile?.display_name) });
     } catch (e) {
       console.error("[tts tour]", e);
       return res.status(500).json({ error: e.message || "Tour audio failed" });

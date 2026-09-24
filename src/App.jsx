@@ -24,7 +24,7 @@ import { createPinterestImageCounter } from "./pinterestImageCounts.js";
 // diffed against the source it was taken from.
 import ORB_WGSL from "./liquidOrb.wgsl?raw";
 import { PLAN_ENTITLEMENTS, PLAN_NAMES, PLAN_PRICES, STORAGE_GB, limitsFor, planFeatures } from "./entitlements";
-import { TOUR_STEPS } from "./dashboardTour.js";
+import { TOUR_STEPS, personalizeTourStep } from "./dashboardTour.js";
 import { AI_DEFAULT_MODEL } from "./aiModels.js";
 import { useCreateBlockNote, getDefaultReactSlashMenuItems, SuggestionMenuController, createReactBlockSpec, FormattingToolbar, FormattingToolbarController, getFormattingToolbarItems, useComponentsContext } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
@@ -2435,21 +2435,21 @@ function tourHole(t, key, vw, vh) {
 // mounts twice in development, and on the very first tour ever each of those
 // would otherwise have asked the server to record the same eight lines.
 const tourClipRequests = {};
-function loadTourClips(lang) {
-  if (!tourClipRequests[lang]) {
-    tourClipRequests[lang] = (async () => {
+function loadTourClips(lang, cacheKey) {
+  if (!tourClipRequests[cacheKey]) {
+    tourClipRequests[cacheKey] = (async () => {
       const res = await fetch("/api/tts", {
         method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({ mode: "tour", lang }),
       });
       if (!res.ok) throw new Error(String(res.status));
       return (await res.json()).clips || {};
-    })().catch(() => { delete tourClipRequests[lang]; return {}; });
+    })().catch(() => { delete tourClipRequests[cacheKey]; return {}; });
   }
-  return tourClipRequests[lang];
+  return tourClipRequests[cacheKey];
 }
 
-function DashboardTour({ appLanguage = "de", darkMode = false, onClose }) {
+function DashboardTour({ appLanguage = "de", darkMode = false, userName = "", userId, onClose }) {
   const de = appLanguage === "de";
   const lang = de ? "de" : "en";
   const LAST = TOUR_STEPS.length - 1;
@@ -2472,7 +2472,8 @@ function DashboardTour({ appLanguage = "de", darkMode = false, onClose }) {
   // The browser refused to play before anybody had clicked. The next press
   // anywhere on the tour is the gesture it wants.
   const blockedRef = useRef(false);
-  const step = TOUR_STEPS[idx];
+  const step = personalizeTourStep(TOUR_STEPS[idx], userName);
+  const clipCacheKey = JSON.stringify([userId, userName, lang]);
 
   useEffect(() => { const t = setTimeout(() => setShown(true), 650); return () => clearTimeout(t); }, []);
 
@@ -2576,21 +2577,21 @@ function DashboardTour({ appLanguage = "de", darkMode = false, onClose }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      let c = await loadTourClips(lang);
+      let c = await loadTourClips(lang, clipCacheKey);
       if (!alive) return;
       clipsRef.current = c;
       setClipsReady(true);
       if (TOUR_STEPS.every(s => c[s.key])) return;
-      delete tourClipRequests[lang];
+      delete tourClipRequests[clipCacheKey];
       await new Promise(r => setTimeout(r, 1500));
       if (!alive) return;
-      c = await loadTourClips(lang);
+      c = await loadTourClips(lang, clipCacheKey);
       if (!alive) return;
       clipsRef.current = { ...clipsRef.current, ...c };
       if (waitingRef.current >= 0 && waitingRef.current === idxRef.current) playRef.current(idxRef.current);
     })();
     return () => { alive = false; };
-  }, [lang]);
+  }, [lang, clipCacheKey]);
 
   // The first line, once the light is on AND the recordings are known. The
   // recordings take a few seconds only the very first time anybody takes the
@@ -66638,7 +66639,7 @@ export default function CircularMenu() {
       )}
 
       {dashTourOpen && currentView === "dashboard" && (
-        <DashboardTour appLanguage={appLanguage} darkMode={darkMode} onClose={() => setDashTourOpen(false)} />
+        <DashboardTour key={session?.user?.id} userId={session?.user?.id} userName={userName} appLanguage={appLanguage} darkMode={darkMode} onClose={() => setDashTourOpen(false)} />
       )}
 
       {/* Bottom bar — in document fullscreen only the AI orb floats above the overlay */}
