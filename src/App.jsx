@@ -34196,6 +34196,34 @@ async function renderPostArtboard(board, type = "image/png") {
 
 }
 
+// "bild-2" vor "bild-10", nicht danach.
+//
+// Der Dateiauswahl-Dialog eines Browsers gibt die Dateien NICHT in der
+// Reihenfolge zurueck, in der jemand sie angeklickt hat, und eine reine
+// Textsortierung stellt die 10 vor die 2, weil "1" kleiner ist als "2". Wer
+// seine Bilder durchnummeriert, meint aber die Zahl.
+//
+// Intl.Collator mit numeric vergleicht Ziffernfolgen als Zahl und alles andere
+// als Text. `sensitivity: base` sorgt dafuer, dass Gross- und Kleinschreibung
+// die Reihenfolge nicht durcheinander bringt.
+const NAME_COLLATOR = typeof Intl !== "undefined"
+  ? new Intl.Collator(undefined, { numeric: true, sensitivity: "base" })
+  : null;
+const byNaturalName = (a, b) => {
+  const an = String(a?.name || a || ""), bn = String(b?.name || b || "");
+  return NAME_COLLATOR ? NAME_COLLATOR.compare(an, bn) : an.localeCompare(bn);
+};
+// Dieselbe Sortierung fuer eine Adresse: verglichen wird der Dateiname darin,
+// nicht der ganze Pfad mit seinen Zufallszeichen.
+const fileNameIn = (u) => {
+  try { return decodeURIComponent(String(u).split("?")[0].split("/").pop() || ""); }
+  catch (_) { return String(u); }
+};
+const byNaturalUrl = (a, b) => byNaturalName(fileNameIn(a), fileNameIn(b));
+
+// Wer die Reihenfolge im Composer aendern darf, solange das neu ist.
+const seesSlideOrder = (email) => seesNewsletterAsk(email);
+
 function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage = "de", incomingVisual = null, onViewContext = null }) {
   const de = appLanguage === "de";
   const L = (o) => (de ? o.de : o.en);
@@ -35074,8 +35102,11 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     if (!picked.length || mediaImportRef.current) return;
     const over = tooBig(picked);
     if (over) { setError(tooBigError(over)); return; }
-    const videos = picked.filter(f => f.type.startsWith("video/"));
-    const images = picked.filter(f => f.type.startsWith("image/"));
+    // Nach Namen sortiert, bevor daraus Folien werden: der Dialog liefert die
+    // Dateien in seiner eigenen Reihenfolge, und die ist nicht die, in der
+    // jemand sie angeklickt hat.
+    const videos = picked.filter(f => f.type.startsWith("video/")).sort(byNaturalName);
+    const images = picked.filter(f => f.type.startsWith("image/")).sort(byNaturalName);
     // Videos and pictures in one go: the first video leads, the rest queue up
     // behind it. It used to be refused outright, which made a mixed carousel
     // impossible to even assemble.
@@ -35092,7 +35123,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     setAssetOpen(false);
     await withMediaImport(async () => {
       if (urls.length > 10) throw postImageLimitError();
-      return Promise.all(urls.map(fileFromAsset));
+      return Promise.all([...urls].sort(byNaturalUrl).map(fileFromAsset));
     });
   };
   const adoptArtboards = async () => {
@@ -35131,7 +35162,13 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     if (over) { setError(tooBigError(over)); return; }
     if (1 + extras.length + files.length > 10) { setError(postImageLimitError()); return; }
     if (mediaImportRef.current) return;
+    files.sort(byNaturalName);
+    // Zur ersten neu hinzugefügten Folie springen. Wer ein Bild hinzufügt, will
+    // es sehen; vorher blieb die Ansicht stehen, wo sie war, und das sah aus,
+    // als sei nichts passiert.
+    const landAt = slides.length;
     setExtras(list => [...list, ...files.map(asExtra)]);
+    setSlideIdx(landAt);
   };
   const removeExtra = (id) => setExtras(list => {
     const hit = list.find(x => x.id === id);
@@ -35174,6 +35211,74 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     removeExtra(slides[slideIdx].key);
     setSlideIdx(i => Math.max(0, i - 1));
   };
+  // ── Die Reihenfolge der Folien ändern ──────────────────────────────────
+  //
+  // Die Folien sind keine Liste, sondern `visual` plus `extras`: die erste ist
+  // etwas anderes als die übrigen. Umsortieren heißt deshalb immer, beides neu
+  // zu schreiben, und nicht ein Array zu verschieben.
+  //
+  // Zwei Dinge hängen am Folienschlüssel und müssen mitwandern: die platzierten
+  // Texte und Emojis (`overlays`) und der Zuschnitt (`crops`). Die führende
+  // Folie heißt immer "main", also ändert sich ihr Schlüssel, sobald eine
+  // andere nach vorn rückt. Ohne die Umschlüsselung stünde der Text plötzlich
+  // auf dem falschen Bild.
+  const [orderOpen, setOrderOpen] = useState(false);
+  const [dragKey, setDragKey] = useState(null);
+  const reorderSlides = (nextKeys) => {
+    // Führt ein Video, ist es ein Reel und kein Karussell. Da gibt es nichts zu
+    // sortieren, und das Menü bietet es dort auch nicht an.
+    if (reel || !visual) return;
+    const lead = { id: "main", file: imageFileRef.current, url: visual.url,
+      w: visual.w, h: visual.h, orig: visual.orig };
+    const byKey = new Map([["main", lead], ...extras.map(x => [x.id, x])]);
+    const items = nextKeys.map(k => byKey.get(k)).filter(Boolean);
+    // Fehlt etwas, lieber gar nichts tun als eine Folie verlieren.
+    if (items.length !== byKey.size) return;
+
+    const [first, ...rest] = items;
+    // Der alte Anführer braucht eine eigene id, sobald er nach hinten rückt:
+    // "main" ist reserviert für die Folie, die vorne steht.
+    const renamed = new Map([[first.id, "main"]]);
+    const restWithIds = rest.map(it => {
+      const id = it.id === "main" ? crypto.randomUUID() : it.id;
+      renamed.set(it.id, id);
+      return { ...it, id };
+    });
+    const remap = (prev) => {
+      const out = {};
+      for (const [oldKey, value] of Object.entries(prev || {})) {
+        const k = renamed.has(oldKey) ? renamed.get(oldKey) : oldKey;
+        if (value != null) out[k] = value;
+      }
+      return out;
+    };
+    setOverlays(remap);
+    setCrops(remap);
+    setSelOverlay(null);
+    setExtras(restWithIds);
+    imageFileRef.current = first.file;
+    // Die Maße stehen nicht an jeder Folie, `asExtra` kennt sie nicht. Also
+    // gemessen, genau wie beim Nachrücken einer Folie.
+    if (first.w && first.h) {
+      setVisual({ url: first.url, w: first.w, h: first.h, orig: first.orig });
+    } else {
+      const img = new Image();
+      img.onload = () => setVisual({ url: first.url, w: img.naturalWidth, h: img.naturalHeight, orig: first.orig });
+      img.src = first.url;
+    }
+    setSlideIdx(0);
+  };
+  // Eine Folie an eine andere Stelle ziehen. Beide Schlüssel genügen: die Liste
+  // dazwischen rückt von selbst nach.
+  const moveSlide = (fromKey, toKey) => {
+    if (!fromKey || !toKey || fromKey === toKey) return;
+    const keys = slides.map(s => s.key);
+    const from = keys.indexOf(fromKey), to = keys.indexOf(toKey);
+    if (from < 0 || to < 0) return;
+    keys.splice(to, 0, keys.splice(from, 1)[0]);
+    reorderSlides(keys);
+  };
+
   // Text oder Emoji auf dem Bild. Beides ist dieselbe Sache: Zeichen, die beim
   // Veröffentlichen fest ins Bild gerechnet werden. Ein Emoji ist nur ein Text
   // mit einem Zeichen, also braucht es dafür keinen zweiten Elementtyp.
@@ -37112,6 +37217,23 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                                 {de ? "Zuschnitt aufheben" : "Remove the crop"}
                               </div>
                             )}
+                            {/* Reihenfolge ändern: nur wenn es überhaupt mehr als
+                                eine Folie gibt, und nicht wenn ein Video führt,
+                                denn ein Reel ist kein Karussell. */}
+                            {slides.length > 1 && !reel && seesSlideOrder(session?.user?.email) && (<>
+                              <div style={{ height: 1, background: theme.borderFaint, margin: "6px 10px" }} />
+                              <div className="hover-row"
+                                onClick={() => { setSlideMenu(false); setOrderOpen(true); }}
+                                style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 12px",
+                                  borderRadius: 12, cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
+                                  fontWeight: 600, color: theme.text }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                  strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.75 }}>
+                                  <path d="M4 7h11M4 12h16M4 17h8" /><path d="m17 14 3 3-3 3" />
+                                </svg>
+                                {de ? "Reihenfolge ändern" : "Change the order"}
+                              </div>
+                            </>)}
                             {!curSlide?.video && !igStory && (
                               <div style={{ height: 1, background: theme.borderFaint, margin: "6px 10px" }} />
                             )}
@@ -37482,6 +37604,73 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       {/* Artboards, as a sheet of their own. The shared image browser lists
           user_files, and an artboard is not one of those: it is a document
           whose picture lives beside it. */}
+      {/* Die Reihenfolge, zum Ziehen. Waagerecht und nicht untereinander: ein
+          Karussell wird waagerecht gelesen, und so sieht man die Abfolge so,
+          wie sie später erscheint.
+
+          Portal an document.body, weil dieser Bereich ein animierendes
+          motion.div ist: ein zurückgebliebenes transform macht daraus den
+          Bezugsrahmen für alles, was darin position fixed ist, und das Overlay
+          wäre dann nur so groß wie der Kasten. */}
+      {orderOpen && createPortal(
+        <div onClick={() => { setOrderOpen(false); setDragKey(null); }}
+          style={{ position: "fixed", inset: 0, zIndex: 100005, background: "rgba(0,0,0,0.42)",
+            backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <motion.div initial={{ opacity: 0, y: 10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: "min(720px, 100%)", padding: 24, borderRadius: 22, boxSizing: "border-box",
+              background: darkMode ? "#1c1c24" : "#ffffff", fontFamily: FONT,
+              boxShadow: "0 40px 90px rgba(0,0,0,0.35)" }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: theme.text, marginBottom: 4 }}>
+              {de ? "Reihenfolge ändern" : "Change the order"}
+            </div>
+            <div style={{ fontSize: 12.5, color: theme.textDim, lineHeight: 1.55, marginBottom: 18 }}>
+              {de ? "Zieh die Folien an ihren Platz. Die erste ist das Titelbild."
+                  : "Drag the slides into place. The first one is the cover."}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+              {slides.map((s, i) => (
+                <div key={s.key}
+                  draggable
+                  onDragStart={(e) => { setDragKey(s.key); e.dataTransfer.effectAllowed = "move"; }}
+                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                  onDrop={(e) => { e.preventDefault(); moveSlide(dragKey, s.key); setDragKey(null); }}
+                  onDragEnd={() => setDragKey(null)}
+                  style={{ position: "relative", width: 104, height: 104, borderRadius: 14,
+                    overflow: "hidden", cursor: "grab", flexShrink: 0,
+                    opacity: dragKey === s.key ? 0.4 : 1,
+                    outline: dragKey === s.key ? `2px solid ${theme.text}` : "none",
+                    background: darkMode ? "rgba(255,255,255,0.05)" : "#f1f1f4" }}>
+                  {s.video
+                    ? <video src={s.url} muted playsInline
+                        style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }} />
+                    : <img src={s.url} alt="" draggable={false}
+                        style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }} />}
+                  {/* Die Nummer ist der ganze Punkt der Übung, also steht sie
+                      auf jeder Folie und nicht nur auf der ersten. */}
+                  <div style={{ position: "absolute", left: 6, top: 6, minWidth: 20, height: 20,
+                    padding: "0 6px", borderRadius: 999, background: "rgba(21,21,28,0.78)",
+                    color: "#fff", fontSize: 11.5, fontWeight: 700, display: "flex",
+                    alignItems: "center", justifyContent: "center", backdropFilter: "blur(6px)" }}>
+                    {i + 1}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 22 }}>
+              <motion.button whileTap={{ scale: 0.97 }}
+                onClick={() => { setOrderOpen(false); setDragKey(null); }}
+                style={{ ...primaryBtn(darkMode), padding: "10px 22px", borderRadius: 999,
+                  border: "none", cursor: "pointer", fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>
+                {de ? "Fertig" : "Done"}
+              </motion.button>
+            </div>
+          </motion.div>
+        </div>,
+        document.body
+      )}
+
       {boardsOpen && createPortal(
         <div onClick={() => setBoardsOpen(false)}
           style={{ position: "fixed", inset: 0, zIndex: 100010, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
