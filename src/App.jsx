@@ -34221,8 +34221,6 @@ const fileNameIn = (u) => {
 };
 const byNaturalUrl = (a, b) => byNaturalName(fileNameIn(a), fileNameIn(b));
 
-// Wer die Reihenfolge im Composer aendern darf, solange das neu ist.
-const seesSlideOrder = (email) => seesNewsletterAsk(email);
 
 function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage = "de", incomingVisual = null, onViewContext = null }) {
   const de = appLanguage === "de";
@@ -37220,7 +37218,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                             {/* Reihenfolge ändern: nur wenn es überhaupt mehr als
                                 eine Folie gibt, und nicht wenn ein Video führt,
                                 denn ein Reel ist kein Karussell. */}
-                            {slides.length > 1 && !reel && seesSlideOrder(session?.user?.email) && (<>
+                            {slides.length > 1 && !reel && (<>
                               <div style={{ height: 1, background: theme.borderFaint, margin: "6px 10px" }} />
                               <div className="hover-row"
                                 onClick={() => { setSlideMenu(false); setOrderOpen(true); }}
