@@ -35220,8 +35220,37 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
   // Folie heißt immer "main", also ändert sich ihr Schlüssel, sobald eine
   // andere nach vorn rückt. Ohne die Umschlüsselung stünde der Text plötzlich
   // auf dem falschen Bild.
+  // Die Reihenfolge wird im Overlay gesammelt und erst beim Schliessen
+  // uebernommen. Zwei Gruende: `reorderSlides` schreibt `visual` und `extras`
+  // neu, das bei jedem Vorbeiziehen zu tun ist unnoetig teuer. Und solange
+  // nichts uebernommen ist, ist Abbrechen wirklich ein Abbruch.
   const [orderOpen, setOrderOpen] = useState(false);
+  const [orderKeys, setOrderKeys] = useState([]);
   const [dragKey, setDragKey] = useState(null);
+  const dragFrom = useRef(null);
+  const openOrder = () => { setOrderKeys(slides.map(s => s.key)); setOrderOpen(true); };
+  const closeOrder = (apply) => {
+    setOrderOpen(false); setDragKey(null); dragFrom.current = null;
+    if (apply) reorderSlides(orderKeys);
+  };
+  // Zeigerereignisse statt der Drag-and-Drop-Technik des Browsers: die gibt es
+  // auf Touch-Geraeten nicht, und der Composer wird auch am Tablet benutzt.
+  // Welche Kachel unter dem Finger liegt, beantwortet elementFromPoint, nicht
+  // ein Ereignis der Kachel selbst: waehrend eines Zeigerfangs bekommt nur die
+  // gefangene Kachel Ereignisse, die darunter nie.
+  const dragOverTile = (e) => {
+    if (!dragFrom.current) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const over = el?.closest?.("[data-slide-key]")?.getAttribute("data-slide-key");
+    if (!over || over === dragFrom.current) return;
+    setOrderKeys(list => {
+      const from = list.indexOf(dragFrom.current), to = list.indexOf(over);
+      if (from < 0 || to < 0) return list;
+      const next = [...list];
+      next.splice(to, 0, next.splice(from, 1)[0]);
+      return next;
+    });
+  };
   const reorderSlides = (nextKeys) => {
     // Führt ein Video, ist es ein Reel und kein Karussell. Da gibt es nichts zu
     // sortieren, und das Menü bietet es dort auch nicht an.
@@ -35266,17 +35295,6 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
     }
     setSlideIdx(0);
   };
-  // Eine Folie an eine andere Stelle ziehen. Beide Schlüssel genügen: die Liste
-  // dazwischen rückt von selbst nach.
-  const moveSlide = (fromKey, toKey) => {
-    if (!fromKey || !toKey || fromKey === toKey) return;
-    const keys = slides.map(s => s.key);
-    const from = keys.indexOf(fromKey), to = keys.indexOf(toKey);
-    if (from < 0 || to < 0) return;
-    keys.splice(to, 0, keys.splice(from, 1)[0]);
-    reorderSlides(keys);
-  };
-
   // Text oder Emoji auf dem Bild. Beides ist dieselbe Sache: Zeichen, die beim
   // Veröffentlichen fest ins Bild gerechnet werden. Ein Emoji ist nur ein Text
   // mit einem Zeichen, also braucht es dafür keinen zweiten Elementtyp.
@@ -37221,7 +37239,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                             {slides.length > 1 && !reel && (<>
                               <div style={{ height: 1, background: theme.borderFaint, margin: "6px 10px" }} />
                               <div className="hover-row"
-                                onClick={() => { setSlideMenu(false); setOrderOpen(true); }}
+                                onClick={() => { setSlideMenu(false); openOrder(); }}
                                 style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 12px",
                                   borderRadius: 12, cursor: "pointer", fontFamily: FONT, fontSize: 12.5,
                                   fontWeight: 600, color: theme.text }}>
@@ -37611,7 +37629,7 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
           Bezugsrahmen für alles, was darin position fixed ist, und das Overlay
           wäre dann nur so groß wie der Kasten. */}
       {orderOpen && createPortal(
-        <div onClick={() => { setOrderOpen(false); setDragKey(null); }}
+        <div onClick={() => closeOrder(true)}
           style={{ position: "fixed", inset: 0, zIndex: 100005, background: "rgba(0,0,0,0.42)",
             backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
             display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -37628,17 +37646,27 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                   : "Drag the slides into place. The first one is the cover."}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-              {slides.map((s, i) => (
+              {orderKeys.map((key, i) => {
+                const s = slides.find(x => x.key === key);
+                if (!s) return null;
+                return (
                 <div key={s.key}
-                  draggable
-                  onDragStart={(e) => { setDragKey(s.key); e.dataTransfer.effectAllowed = "move"; }}
-                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
-                  onDrop={(e) => { e.preventDefault(); moveSlide(dragKey, s.key); setDragKey(null); }}
-                  onDragEnd={() => setDragKey(null)}
+                  data-slide-key={s.key}
+                  onPointerDown={(e) => {
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    dragFrom.current = s.key; setDragKey(s.key);
+                  }}
+                  onPointerMove={dragOverTile}
+                  onPointerUp={() => { dragFrom.current = null; setDragKey(null); }}
+                  onPointerCancel={() => { dragFrom.current = null; setDragKey(null); }}
                   style={{ position: "relative", width: 104, height: 104, borderRadius: 14,
-                    overflow: "hidden", cursor: "grab", flexShrink: 0,
-                    opacity: dragKey === s.key ? 0.4 : 1,
+                    overflow: "hidden", cursor: dragKey === s.key ? "grabbing" : "grab", flexShrink: 0,
+                    // Ohne das scrollt der Browser die Seite, statt die Kachel
+                    // ziehen zu lassen.
+                    touchAction: "none",
+                    opacity: dragKey === s.key ? 0.45 : 1,
                     outline: dragKey === s.key ? `2px solid ${theme.text}` : "none",
+                    transition: "opacity .15s ease",
                     background: darkMode ? "rgba(255,255,255,0.05)" : "#f1f1f4" }}>
                   {s.video
                     ? <video src={s.url} muted playsInline
@@ -37654,11 +37682,12 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
                     {i + 1}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 22 }}>
               <motion.button whileTap={{ scale: 0.97 }}
-                onClick={() => { setOrderOpen(false); setDragKey(null); }}
+                onClick={() => closeOrder(true)}
                 style={{ ...primaryBtn(darkMode), padding: "10px 22px", borderRadius: 999,
                   border: "none", cursor: "pointer", fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>
                 {de ? "Fertig" : "Done"}
