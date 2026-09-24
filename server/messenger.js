@@ -636,6 +636,31 @@ export const uploadTracked = async (db, { bucket, path, body, contentType, orgId
 // it dies; a shorter one here would be a picture that goes dark on its own.
 export const SIGNED_URL_YEAR = 60 * 60 * 24 * 365;
 
+// Ein halb fertiger Beitrag, während der Bot nach dem Text fragt.
+//
+// Sonst kommt hier alles ohne Zwischenspeicher aus: der Zustand steckt in den
+// Knöpfen und in der Antwort-Verkettung. Freier Text bricht diese Kette, weil
+// eine Antwort nur EINE Ebene zurückreicht: die Nachricht mit dem Bild ist dann
+// nicht mehr erreichbar.
+//
+// Eingelöst wird genau einmal. Das Löschen steht VOR dem Zurückgeben, damit
+// zwei Antworten auf dieselbe Frage nicht zwei Beiträge ergeben.
+export const putDraft = async (db, key, userId, payload) => {
+  await db.from("messenger_drafts")
+    .upsert({ key, user_id: userId, payload, created_at: new Date().toISOString() },
+            { onConflict: "key" });
+  // Was einen Tag lang niemand beantwortet hat, beantwortet auch niemand mehr.
+  db.from("messenger_drafts").delete()
+    .lt("created_at", new Date(Date.now() - 864e5).toISOString()).then(() => {});
+};
+export const takeDraft = async (db, key, userId) => {
+  const { data } = await db.from("messenger_drafts")
+    .select("payload, user_id").eq("key", key).maybeSingle();
+  if (!data || data.user_id !== userId) return null;
+  await db.from("messenger_drafts").delete().eq("key", key);
+  return data.payload || null;
+};
+
 // ── Aus dem Messenger in die sozialen Kanäle ────────────────────────────────
 //
 // Welche Kanäle dieser Workspace direkt bespielen kann. Gefragt wird die

@@ -22,7 +22,7 @@ import {
   splitDraft, workspacesFor, projectsFor, createTask, DEFAULT_TYPES, typeWanted, attachedImage, linkify, createNote, addAssetFile, humanSize,
   asLinkRequest, LINK_PREFIX, linkFoldersFor, createWorkspaceLink,
   moodboardsFor, addMoodboardImage,
-  socialTargetsFor, queueSocialPost,
+  socialTargetsFor, queueSocialPost, putDraft, takeDraft,
   draftStep, draftDone, PRIORITY_CODES, dueDateFor, timezoneOf,
   replyTarget, describeTask, addChecklist, commentOnTask,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
@@ -117,6 +117,11 @@ const T = {
     socialWorkspace: "Aus welchem Workspace posten?",
     postWhat: "Was soll im Beitrag stehen?",
     postTextOnly: "Beitrag ohne Bild",
+    socialAskText: "Möchtest du einen Text dazuschreiben?",
+    socialWriteText: "Text schreiben",
+    socialSkipText: "Ohne Text",
+    socialTypeText: "Schreib den Text für den Beitrag. Er erscheint unter dem Bild.",
+    socialDraftGone: "Dieser Entwurf ist abgelaufen. Schick das Bild noch einmal.",
     socialNoChannel: "In diesem Workspace ist weder Instagram noch Threads verbunden.",
     socialWhich: "Auf welchen Kanal?",
     socialBoth: "Beide",
@@ -210,6 +215,11 @@ const T = {
     socialWorkspace: "Post from which workspace?",
     postWhat: "What should the post say?",
     postTextOnly: "Post without a picture",
+    socialAskText: "Do you want to add some text?",
+    socialWriteText: "Write the text",
+    socialSkipText: "No text",
+    socialTypeText: "Write the text for the post. It appears under the picture.",
+    socialDraftGone: "That draft has expired. Send the picture again.",
     socialNoChannel: "Neither Instagram nor Threads is connected in this workspace.",
     socialWhich: "Which channel?",
     socialBoth: "Both",
@@ -659,7 +669,7 @@ export default async function handler(req) {
     // o, l und r gehoeren zum Social Post. Fehlen sie hier, zuckt der Handler
     // mit den Schultern und kehrt um, BEVOR er den Block unten erreicht: der
     // Knopf sieht dann aus, als sei er tot.
-    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w", "x", "y", "z", "q", "v", "u", "s", "k", "m", "j", "o", "l", "r"].includes(action)) return answer("");
+    if (!cbChat || !notifId || !["c", "d", "f", "p", "b", "n", "w", "x", "y", "z", "q", "v", "u", "s", "k", "m", "j", "o", "l", "r", "e", "t"].includes(action)) return answer("");
 
     // The chat is the identity. A button is only ever pressed in the chat the
     // message was sent to, so nobody else can reach this task through it.
@@ -705,7 +715,8 @@ export default async function handler(req) {
         // w: p reicht eine Aufgabe weiter, c schiebt sie in eine Spalte. Ein
         // Buchstabe doppelt belegt heisst, dass ein Knopf unter einer
         // Benachrichtigung etwas voellig anderes tut, als er sagt.
-        || action === "o" || action === "l" || action === "r") {
+        || action === "o" || action === "l" || action === "r"
+        || action === "e" || action === "t") {
       // The picture is on the message this one replies to, so nothing had to be
       // held anywhere between the question and the answer.
       const src = cb.message?.reply_to_message;
@@ -764,29 +775,81 @@ export default async function handler(req) {
         return askChannels(org);
       }
 
-      if (action === "l") {
-        const org = resolveHint(orgs, notifId);
-        if (!org) return answer(t.newDenied, true);
-        const ch = (parts[2] || "b");
-        const hint = org.id.slice(0, ID_HINT);
+      // Die Wann-Frage kommt jetzt von drei Stellen: direkt nach der
+      // Kanalwahl, nach "ohne Text", und nach einem getippten Text. Also einmal
+      // beschrieben, dreimal gerufen.
+      const askWhen = async (prefix) => {
         await api(botToken, "editMessageText", {
           chat_id: cbChat, message_id: cb.message.message_id,
           text: `<b>${esc(file?.name || t.postTextOnly)}</b>\n\n${esc(t.socialWhen)}`, parse_mode: "HTML",
           reply_markup: { inline_keyboard: [
-            [{ text: t.socialNow, callback_data: `r:${hint}:${ch}:n` }],
-            [{ text: t.socialIn1h, callback_data: `r:${hint}:${ch}:1` }],
-            [{ text: t.socialTonight, callback_data: `r:${hint}:${ch}:e` }],
-            [{ text: t.socialTomorrow, callback_data: `r:${hint}:${ch}:m` }],
+            [{ text: t.socialNow, callback_data: `${prefix}:n` }],
+            [{ text: t.socialIn1h, callback_data: `${prefix}:1` }],
+            [{ text: t.socialTonight, callback_data: `${prefix}:e` }],
+            [{ text: t.socialTomorrow, callback_data: `${prefix}:m` }],
             cancelRow,
           ] },
         });
         return answer(t.socialWhen);
+      };
+
+      if (action === "l" || action === "t") {
+        const org = resolveHint(orgs, notifId);
+        if (!org) return answer(t.newDenied, true);
+        const ch = (parts[2] || "b");
+        const hint = org.id.slice(0, ID_HINT);
+        // Kommt ein Bild ohne Unterschrift, wird gefragt statt stillschweigend
+        // ohne Text zu posten. "t" ist die Antwort "ohne Text" und ueberspringt
+        // diese Frage.
+        if (action === "l" && file && !postText) {
+          await api(botToken, "editMessageText", {
+            chat_id: cbChat, message_id: cb.message.message_id,
+            text: `<b>${esc(file.name)}</b>\n\n${esc(t.socialAskText)}`, parse_mode: "HTML",
+            reply_markup: { inline_keyboard: [
+              [{ text: t.socialWriteText, callback_data: `e:${hint}:${ch}` }],
+              [{ text: t.socialSkipText, callback_data: `t:${hint}:${ch}` }],
+              cancelRow,
+            ] },
+          });
+          return answer(t.socialAskText);
+        }
+        return askWhen(`r:${hint}:${ch}`);
+      }
+
+      // "Text schreiben": die Frage geht als eigene Nachricht raus, mit dem
+      // Antwortfeld schon offen. Was der Beitrag bis hierher ist, wandert in
+      // einen Entwurf, denn eine Antwort reicht nur EINE Ebene zurueck: die
+      // Nachricht mit dem Bild waere von dort aus nicht mehr erreichbar.
+      if (action === "e") {
+        const org = resolveHint(orgs, notifId);
+        if (!org) return answer(t.newDenied, true);
+        const ch = (parts[2] || "b");
+        const asked = await api(botToken, "sendMessage", {
+          chat_id: cbChat, text: t.socialTypeText,
+          reply_markup: { force_reply: true, selective: true },
+        });
+        const mid = asked?.result?.message_id;
+        if (!mid) return answer(t.newFailed, true);
+        await putDraft(db, `telegram:${cbChat}:${mid}`, link.user_id, {
+          orgId: org.id, ch, fileId: file?.id || null,
+          fileName: file?.name || null, fileType: file?.type || null,
+        });
+        await api(botToken, "editMessageText", {
+          chat_id: cbChat, message_id: cb.message.message_id,
+          text: `<b>${esc(file?.name || t.postTextOnly)}</b>\n<i>${esc(t.socialTypeText)}</i>`,
+          parse_mode: "HTML",
+        });
+        return answer("");
       }
 
       if (action === "r") {
-        const org = resolveHint(orgs, notifId);
+        // Zwei Formen: `r:<org>:<kanal>:<wann>` wie bisher, und nach einem
+        // getippten Text `r:d:<entwurf>:<wann>`, wo alles im Entwurf steht.
+        const fromDraft = notifId === "d" ? await takeDraft(db, `tg:${parts[2]}`, link.user_id) : null;
+        if (notifId === "d" && !fromDraft) return answer(t.socialDraftGone, true);
+        const org = fromDraft ? orgs.find(o => o.id === fromDraft.orgId) : resolveHint(orgs, notifId);
         if (!org) return answer(t.newDenied, true);
-        const ch = parts[2] || "b";
+        const ch = fromDraft ? fromDraft.ch : (parts[2] || "b");
         const when = parts[3] || "n";
         const found = await socialTargetsFor(db, org.id);
         const targets = found.filter(x =>
@@ -810,9 +873,10 @@ export default async function handler(req) {
         }
 
         // Ohne Bild gibt es nichts zu holen: ein /post ist reiner Text.
+        const fileId = fromDraft ? fromDraft.fileId : file?.id;
         let bytes = null;
-        if (file) {
-          const info = await api(botToken, "getFile", { file_id: file.id });
+        if (fileId) {
+          const info = await api(botToken, "getFile", { file_id: fileId });
           if (!info?.ok || !info.result?.file_path) return answer(t.fileTooBig, true);
           const res = await fetch(`https://api.telegram.org/file/bot${botToken}/${info.result.file_path}`);
           if (!res.ok) return answer(t.fileGone, true);
@@ -822,9 +886,11 @@ export default async function handler(req) {
         // Die Bildunterschrift IST der Beitragstext. Sie steht auf der
         // Nachricht mit dem Bild, also genau dort, wo sie jemand getippt hat.
         // Bei /post ist es die Nachricht selbst, ohne den Befehl davor.
-        const caption = postText;
+        const caption = fromDraft ? String(fromDraft.caption || "") : postText;
         const queued = await queueSocialPost(db, {
-          userId: link.user_id, orgId: org.id, name: file?.name || null, contentType: file?.type || null,
+          userId: link.user_id, orgId: org.id,
+          name: fromDraft ? fromDraft.fileName : (file?.name || null),
+          contentType: fromDraft ? fromDraft.fileType : (file?.type || null),
           bytes, caption, targets, publishAt: at.getTime(),
         });
         if (!queued.ok) {
@@ -836,9 +902,9 @@ export default async function handler(req) {
 
         const who = targets.map(x => x.provider === "instagram" ? "Instagram" : "Threads").join(" + ");
         const head = `<b>${esc(headLine(org.name, who))}</b>`;
-        // Der Hinweis gilt nur, wenn ein BILD ohne Unterschrift kam. Bei einem
-        // reinen Textbeitrag waere er Unsinn, da ist der Text ja alles.
-        const footer = (file && !caption) ? `\n\n<i>${esc(t.socialNoText)}</i>` : "";
+        // Kein Hinweis mehr auf die fehlende Unterschrift: es wird jetzt
+        // gefragt, wer trotzdem ohne Text postet, hat sich dafuer entschieden.
+        const footer = "";
         const edit = (body) => api(botToken, "editMessageText", {
           chat_id: cbChat, message_id: cb.message.message_id,
           text: `${head}\n${body}${footer}`, parse_mode: "HTML", disable_web_page_preview: true,
@@ -1361,6 +1427,35 @@ export default async function handler(req) {
     // of the person behind on our side either.
     await db.from("messenger_links").delete().eq("id", link.id);
     return reply(t.stopped);
+  }
+
+  // Die Antwort auf "Schreib den Text": der Entwurf liegt unter der Nachricht,
+  // auf die geantwortet wurde, und Telegram reicht sie mit. Erkannt wird sie an
+  // ihrem eigenen Wortlaut, genau wie die Notiz-Frage weiter unten.
+  const repliedSocial = (msg.reply_to_message?.text || "").trim();
+  if (!!msg.reply_to_message?.from?.is_bot
+      && (repliedSocial === T.de.socialTypeText || repliedSocial === T.en.socialTypeText)) {
+    if (!link?.user_id) return reply(t.notLinked);
+    const draft = await takeDraft(db, `telegram:${chatId}:${msg.reply_to_message.message_id}`, link.user_id);
+    if (!draft) return reply(t.socialDraftGone);
+    const body = text.trim();
+    if (!body) return reply(t.socialTypeText);
+    // Unter einem kurzen Schluessel neu ablegen: er muss in die 64 Zeichen
+    // eines Knopfes passen, und der lange Schluessel von eben tut das nicht.
+    const short = crypto.randomUUID().slice(0, 8);
+    await putDraft(db, `tg:${short}`, link.user_id, { ...draft, caption: body });
+    return api(botToken, "sendMessage", {
+      chat_id: chatId,
+      text: `<b>${esc(draft.fileName || t.postTextOnly)}</b>\n\n${esc(t.socialWhen)}`,
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: [
+        [{ text: t.socialNow, callback_data: `r:d:${short}:n` }],
+        [{ text: t.socialIn1h, callback_data: `r:d:${short}:1` }],
+        [{ text: t.socialTonight, callback_data: `r:d:${short}:e` }],
+        [{ text: t.socialTomorrow, callback_data: `r:d:${short}:m` }],
+        [{ text: t.cancel, callback_data: "k:x" }],
+      ] },
+    }).then(() => json({ ok: true }));
   }
 
   // /post, oder /beitrag. Ein Beitrag ohne Bild: Threads nimmt reinen Text,
