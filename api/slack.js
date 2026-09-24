@@ -24,6 +24,7 @@ import {
   typeWanted, attachedImage, linkify, createNote, addAssetFile, humanSize,
   asLinkRequest, linkFoldersFor, createWorkspaceLink,
   moodboardsFor, addMoodboardImage,
+  socialTargetsFor, queueSocialPost,
   nextQuestion, PRIORITY_CODES, dueDateFor, timezoneOf,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
@@ -94,6 +95,20 @@ const T = {
     fileWhat: "Wohin damit?",
     fileToAssets: "In die Assets",
     fileToMood: "Auf ein Moodboard",
+    fileToSocial: "Als Social Post",
+    socialNoChannel: "In diesem Workspace ist weder Instagram noch Threads verbunden.",
+    socialWhich: "Auf welchen Kanal?",
+    socialBoth: "Beide",
+    socialWhen: "Wann soll es raus?",
+    socialNow: "Jetzt posten",
+    socialIn1h: "In einer Stunde",
+    socialTonight: "Heute 18:00",
+    socialTomorrow: "Morgen 9:00",
+    socialSending: "Wird veröffentlicht…",
+    socialWorking: "Wird noch verarbeitet. Sobald es durch ist, steht es im Kanal.",
+    socialDone: (who) => `Veröffentlicht auf ${who}.`,
+    socialQueued: (who, when) => `Geht an ${who}, ${when}.`,
+    socialFailed: (why) => `Hat nicht geklappt${why ? `: ${why}` : "."}`,
     fileNoBoards: "Es gibt noch kein Moodboard.",
     moodAsk: "Auf welches Moodboard?",
     moodSaved: (board, size) => `Auf "${board}" gelegt (${size}).`,
@@ -163,6 +178,20 @@ const T = {
     fileWhat: "Where to?",
     fileToAssets: "Into Assets",
     fileToMood: "Onto a moodboard",
+    fileToSocial: "As a social post",
+    socialNoChannel: "Neither Instagram nor Threads is connected in this workspace.",
+    socialWhich: "Which channel?",
+    socialBoth: "Both",
+    socialWhen: "When should it go out?",
+    socialNow: "Post now",
+    socialIn1h: "In an hour",
+    socialTonight: "Today 18:00",
+    socialTomorrow: "Tomorrow 9:00",
+    socialSending: "Publishing…",
+    socialWorking: "Still processing. It appears in the channel once it is through.",
+    socialDone: (who) => `Published on ${who}.`,
+    socialQueued: (who, when) => `Going to ${who}, ${when}.`,
+    socialFailed: (why) => `That did not work${why ? `: ${why}` : "."}`,
     fileNoBoards: "There is no moodboard yet.",
     moodAsk: "Which moodboard?",
     moodSaved: (board, size) => `Added to "${board}" (${size}).`,
@@ -625,6 +654,7 @@ export default async function handler(req) {
       const options = [
         { key: "d", label: t.fileToAssets, set: { d: "a" } },
         { key: "d", label: t.fileToMood, set: { d: "m" } },
+        { key: "d", label: t.fileToSocial, set: { d: "s" } },
         { key: "x", label: t.cancel, set: { x: 1 } },
       ];
       // The question goes to the person's own chat with the bot, because that
@@ -896,9 +926,111 @@ export default async function handler(req) {
       return replace(t.fileWhat, asAsset(draftBlocks(t, { ...st, chosen: org.name }, t.fileWhat, [
         { key: "d", label: t.fileToAssets, set: { d: "a" } },
         { key: "d", label: t.fileToMood, set: { d: "m" } },
+        { key: "d", label: t.fileToSocial, set: { d: "s" } },
         cancel,
       ], t.fileTitle)));
     }
+    // ── Social Post: Kanal, Zeitpunkt, fertig ──────────────────────────────
+    //
+    // Wie bei Telegram spricht der Bot nicht selbst mit Meta. Er legt eine Zeile
+    // in scheduled_posts, und der Takt veroeffentlicht sie. "Jetzt" ist ein
+    // publish_at von jetzt plus ein Anstoss, damit es nicht bis zum naechsten
+    // Durchgang dauert.
+    if (st.d === "s") {
+      const found = await socialTargetsFor(db, org.id);
+      if (!found.length) return replace(t.socialNoChannel);
+      const hasIg = found.some(x => x.provider === "instagram");
+      const hasTh = found.some(x => x.provider === "threads");
+
+      if (!st.c) {
+        const choices = [];
+        if (hasIg) choices.push({ key: "c", label: "Instagram", set: { c: "i" } });
+        if (hasTh) choices.push({ key: "c", label: "Threads", set: { c: "t" } });
+        if (hasIg && hasTh) choices.push({ key: "c", label: t.socialBoth, set: { c: "b" } });
+        return replace(t.socialWhich, asAsset(draftBlocks(t, { ...st, chosen: org.name },
+          t.socialWhich, [...choices, cancel], t.fileTitle)));
+      }
+      if (!st.w) {
+        return replace(t.socialWhen, asAsset(draftBlocks(t, { ...st, chosen: org.name }, t.socialWhen, [
+          { key: "w", label: t.socialNow, set: { w: "n" } },
+          { key: "w", label: t.socialIn1h, set: { w: "1" } },
+          { key: "w", label: t.socialTonight, set: { w: "e" } },
+          { key: "w", label: t.socialTomorrow, set: { w: "m" } },
+          cancel,
+        ], t.fileTitle)));
+      }
+
+      const targets = found.filter(x => st.c === "b"
+        || (st.c === "i" && x.provider === "instagram")
+        || (st.c === "t" && x.provider === "threads"));
+      if (!targets.length) return replace(t.socialNoChannel);
+
+      // Feste Zeiten aus Knoepfen statt getippter Datumsangaben, gerechnet in
+      // Berliner Zeit. Ein Zeitpunkt, der heute schon vorbei ist, rutscht auf
+      // morgen, statt in der Vergangenheit zu stehen und sofort rauszugehen.
+      const berlinNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Berlin" }));
+      const at = new Date();
+      if (st.w === "1") at.setTime(at.getTime() + 3600000);
+      else if (st.w === "e" || st.w === "m") {
+        const target = new Date(berlinNow);
+        if (st.w === "m") { target.setDate(target.getDate() + 1); target.setHours(9, 0, 0, 0); }
+        else target.setHours(18, 0, 0, 0);
+        if (target <= berlinNow) target.setDate(target.getDate() + 1);
+        at.setTime(at.getTime() + (target.getTime() - berlinNow.getTime()));
+      }
+
+      const info2 = await slackForm(inst.bot_token, "files.info", { file: st.f });
+      const url2 = info2?.ok ? info2.file?.url_private_download || info2.file?.url_private : null;
+      if (!url2) return replace(t.fileGone);
+      const res2 = await fetch(url2, { headers: { Authorization: `Bearer ${inst.bot_token}` } });
+      if (!res2.ok) return replace(t.fileGone);
+      const bytes2 = new Uint8Array(await res2.arrayBuffer());
+      // Der Kommentar, den jemand beim Hochladen mitschickt, IST der
+      // Beitragstext. Genau wie die Bildunterschrift bei Telegram: dort, wo er
+      // ohnehin getippt wird.
+      const caption = String(info2.file?.initial_comment?.comment || info2.file?.title || "").trim();
+
+      const queued = await queueSocialPost(db, {
+        userId: link.user_id, orgId: org.id, name: st.n,
+        contentType: info2.file?.mimetype || "image/jpeg",
+        bytes: bytes2, caption, targets, publishAt: at.getTime(),
+      });
+      if (!queued.ok) {
+        return replace(queued.reason === "read_only" ? t.newReadOnly
+          : queued.reason === "denied" ? t.newDenied
+          : queued.reason === "no_room" ? t.fileNoRoom(humanSize(queued.room.used), humanSize(queued.room.limit))
+          : t.newFailed);
+      }
+
+      const who = targets.map(x => x.provider === "instagram" ? "Instagram" : "Threads").join(" + ");
+      if (st.w !== "n") {
+        const whenText = new Intl.DateTimeFormat(link?.lang === "en" ? "en-GB" : "de-DE",
+          { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Berlin" }).format(at);
+        return replace(`${headLine(org.name, who)}\n${t.socialQueued(who, whenText)}`);
+      }
+
+      const publishSecret = process.env.PUBLISH_SECRET;
+      if (appUrl && publishSecret) {
+        await fetch(`${appUrl}/api/publish-due`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-i7-hook-secret": publishSecret },
+          body: JSON.stringify({}),
+        }).catch(() => {});
+      }
+      // Das Ergebnis steht in der Zeile, die der Takt gerade geschrieben hat,
+      // samt Permalink. Gefragt wird sie danach, statt es zu vermuten.
+      const { data: done } = await db.from("scheduled_posts")
+        .select("status, result").eq("id", queued.post?.id).maybeSingle();
+      const plats = Array.isArray(done?.result?.platforms) ? done.result.platforms : [];
+      const links = plats.filter(x => x.url)
+        .map(x => `<${x.url}|${x.platform === "instagram" ? "Instagram" : "Threads"}>`);
+      const failed = plats.filter(x => x.status === "failed");
+      const line = links.length ? `${t.socialDone(who)}\n${links.join("  ·  ")}`
+        : failed.length ? t.socialFailed(failed[0].error || "")
+        : t.socialWorking;
+      return replace(`${headLine(org.name, who)}\n${line}`);
+    }
+
     if (st.d === "m" && !st.b) {
       const boards = await moodboardsFor(db, link.user_id, org.id);
       if (!boards.length) return replace(t.fileNoBoards);
