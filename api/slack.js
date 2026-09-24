@@ -24,7 +24,7 @@ import {
   typeWanted, attachedImage, linkify, createNote, addAssetFile, humanSize,
   asLinkRequest, linkFoldersFor, createWorkspaceLink,
   moodboardsFor, addMoodboardImage,
-  socialTargetsFor, queueSocialPost,
+  socialTargetsFor, queueSocialPost, putDraft, takeDraft,
   nextQuestion, PRIORITY_CODES, dueDateFor, timezoneOf,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
@@ -109,6 +109,11 @@ const T = {
     socialDone: (who) => `Veröffentlicht auf ${who}.`,
     socialQueued: (who, when) => `Geht an ${who}, ${when}.`,
     socialFailed: (why) => `Hat nicht geklappt${why ? `: ${why}` : "."}`,
+    socialAskText: "Möchtest du einen Text dazuschreiben?",
+    socialWriteText: "Text schreiben",
+    socialSkipText: "Ohne Text",
+    socialTextTitle: "Beitragstext",
+    socialTextLabel: "Was soll unter dem Bild stehen?",
     fileNoBoards: "Es gibt noch kein Moodboard.",
     moodAsk: "Auf welches Moodboard?",
     moodSaved: (board, size) => `Auf "${board}" gelegt (${size}).`,
@@ -192,6 +197,11 @@ const T = {
     socialDone: (who) => `Published on ${who}.`,
     socialQueued: (who, when) => `Going to ${who}, ${when}.`,
     socialFailed: (why) => `That did not work${why ? `: ${why}` : "."}`,
+    socialAskText: "Do you want to add some text?",
+    socialWriteText: "Write the text",
+    socialSkipText: "No text",
+    socialTextTitle: "Post text",
+    socialTextLabel: "What should appear under the picture?",
     fileNoBoards: "There is no moodboard yet.",
     moodAsk: "Which moodboard?",
     moodSaved: (board, size) => `Added to "${board}" (${size}).`,
@@ -826,6 +836,35 @@ export default async function handler(req) {
       return done.ok ? new Response("", { status: 200 }) : fail(done.msg);
     }
 
+    // Das Eingabefenster fuer den Beitragstext kam zurueck. Der Text kann lang
+    // sein, ein Knopfwert fasst nur knapp 2000 Zeichen: also wandert er in
+    // messenger_drafts und im Knopf steht nur ein kurzer Schluessel.
+    if (p.view?.callback_id === "social_text") {
+      const said = fieldOf("s").trim();
+      if (!said) return fail(mt.socialTextLabel);
+      let st; try { st = JSON.parse(p.view.private_metadata || "{}"); } catch { return fail(mt.newFailed); }
+      const { data: instS } = await db.from("slack_installations")
+        .select("bot_token").eq("team_id", p.team?.id).maybeSingle();
+      if (!instS?.bot_token) return fail(mt.newFailed);
+      const short = crypto.randomUUID().slice(0, 8);
+      await putDraft(db, `slack:${short}`, mlink.user_id, { caption: said });
+      const next = { ...st, m: short };
+      // Das Fenster hat die urspruengliche Nachricht nicht ersetzt, also geht
+      // die Wann-Frage als neue Nachricht in denselben Verlauf.
+      const blocks = draftBlocks(mt, next, mt.socialWhen, [
+        { key: "w", label: mt.socialNow, set: { w: "n" } },
+        { key: "w", label: mt.socialIn1h, set: { w: "1" } },
+        { key: "w", label: mt.socialTonight, set: { w: "e" } },
+        { key: "w", label: mt.socialTomorrow, set: { w: "m" } },
+        { key: "x", label: mt.cancel, set: { x: 1 } },
+      ], mt.fileTitle).map(b => (b.type === "actions"
+        ? { ...b, elements: b.elements.map(e => ({ ...e, action_id: e.action_id.replace("draft_", "asset_") })) }
+        : b));
+      await slack(instS.bot_token, "chat.postMessage",
+        { channel: mlink.chat_id, text: mt.socialWhen, blocks });
+      return new Response("", { status: 200 });
+    }
+
     // The note modal came back. It carries only the text: where the note goes
     // is the same question the slash command asks, answered by the same
     // buttons, so nothing about the note flow exists twice.
@@ -950,6 +989,39 @@ export default async function handler(req) {
         return replace(t.socialWhich, asAsset(draftBlocks(t, { ...st, chosen: org.name },
           t.socialWhich, [...choices, cancel], t.fileTitle)));
       }
+      // Kommt ein Bild ohne Kommentar, wird gefragt statt stillschweigend ohne
+      // Text zu posten. `a` haelt die Antwort fest: "w" schreiben, "0" ohne.
+      if (!st.w && st.a === undefined) {
+        const peek = await slackForm(inst.bot_token, "files.info", { file: st.f });
+        const cap = String(peek?.file?.initial_comment?.comment || peek?.file?.title || "").trim();
+        if (!cap) {
+          return replace(t.socialAskText, asAsset(draftBlocks(t, { ...st, chosen: org.name }, t.socialAskText, [
+            { key: "a", label: t.socialWriteText, set: { a: "w" } },
+            { key: "a", label: t.socialSkipText, set: { a: "0" } },
+            cancel,
+          ], t.fileTitle)));
+        }
+      }
+      // "Text schreiben": Slacks eigenes Eingabefenster. private_metadata
+      // traegt den Stand mit, dafuer ist es da, also braucht es hier keinen
+      // Umweg ueber einen Schluessel.
+      if (st.a === "w" && !st.m) {
+        await slack(inst.bot_token, "views.open", {
+          trigger_id: p.trigger_id,
+          view: {
+            type: "modal", callback_id: "social_text",
+            private_metadata: JSON.stringify({ ...st, chosen: undefined }).slice(0, 2900),
+            title: { type: "plain_text", text: t.socialTextTitle.slice(0, 24) },
+            submit: { type: "plain_text", text: "OK" },
+            blocks: [{
+              type: "input", block_id: "s",
+              label: { type: "plain_text", text: t.socialTextLabel.slice(0, 2000) },
+              element: { type: "plain_text_input", action_id: "v", multiline: true },
+            }],
+          },
+        });
+        return json({ ok: true });
+      }
       if (!st.w) {
         return replace(t.socialWhen, asAsset(draftBlocks(t, { ...st, chosen: org.name }, t.socialWhen, [
           { key: "w", label: t.socialNow, set: { w: "n" } },
@@ -988,7 +1060,10 @@ export default async function handler(req) {
       // Der Kommentar, den jemand beim Hochladen mitschickt, IST der
       // Beitragstext. Genau wie die Bildunterschrift bei Telegram: dort, wo er
       // ohnehin getippt wird.
-      const caption = String(info2.file?.initial_comment?.comment || info2.file?.title || "").trim();
+      const typedText = st.m ? await takeDraft(db, `slack:${st.m}`, link.user_id) : null;
+      const caption = typedText?.caption
+        ? String(typedText.caption)
+        : String(info2.file?.initial_comment?.comment || info2.file?.title || "").trim();
 
       const queued = await queueSocialPost(db, {
         userId: link.user_id, orgId: org.id, name: st.n,
