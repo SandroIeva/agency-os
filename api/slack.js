@@ -114,6 +114,8 @@ const T = {
     socialSkipText: "Ohne Text",
     socialTextTitle: "Beitragstext",
     socialTextLabel: "Was soll unter dem Bild stehen?",
+    postTextOnly: "Beitrag ohne Bild",
+    postLabel: "Was soll im Beitrag stehen?",
     fileNoBoards: "Es gibt noch kein Moodboard.",
     moodAsk: "Auf welches Moodboard?",
     moodSaved: (board, size) => `Auf "${board}" gelegt (${size}).`,
@@ -202,6 +204,8 @@ const T = {
     socialSkipText: "No text",
     socialTextTitle: "Post text",
     socialTextLabel: "What should appear under the picture?",
+    postTextOnly: "Post without a picture",
+    postLabel: "What should the post say?",
     fileNoBoards: "There is no moodboard yet.",
     moodAsk: "Which moodboard?",
     moodSaved: (board, size) => `Added to "${board}" (${size}).`,
@@ -704,6 +708,57 @@ export default async function handler(req) {
     // "notiz …" or "note …" as the first word. A subcommand rather than a
     // second slash command, which would mean a new manifest, a new scope
     // prompt, and every existing install having to approve it again.
+    // "post …" oder "beitrag …": ein Beitrag ohne Bild. Threads nimmt reinen
+    // Text, Instagram nicht, und deshalb steht Instagram spaeter gar nicht erst
+    // zur Wahl. Unterbefehl aus demselben Grund wie die Notiz: ein zweiter
+    // Slash-Befehl hiesse neues Manifest und eine neue Freigabe fuer jede
+    // bestehende Installation.
+    const asPost = /^\s*(post|beitrag)\b\s*/i.exec(said);
+    if (asPost) {
+      const body = said.slice(asPost[0].length).trim();
+      const { data: instP } = await db.from("slack_installations")
+        .select("bot_token").eq("team_id", teamId).maybeSingle();
+      if (!instP?.bot_token) return ephemeral(t.newFailed);
+      if (!body) {
+        // Fragen statt die Schreibweise erklaeren, genau wie bei der Notiz.
+        await slack(instP.bot_token, "views.open", {
+          trigger_id: params.get("trigger_id"),
+          view: {
+            type: "modal", callback_id: "social_post_text",
+            private_metadata: JSON.stringify({ ch: params.get("channel_id") || "" }),
+            title: { type: "plain_text", text: t.socialTextTitle.slice(0, 24) },
+            submit: { type: "plain_text", text: "OK" },
+            blocks: [{
+              type: "input", block_id: "s",
+              label: { type: "plain_text", text: t.postLabel.slice(0, 2000) },
+              element: { type: "plain_text_input", action_id: "v", multiline: true },
+            }],
+          },
+        });
+        return json({ response_type: "ephemeral", text: "" });
+      }
+      const orgs = await workspacesFor(db, link.user_id);
+      if (!orgs.length) return ephemeral(t.newNoWorkspace);
+      const short = crypto.randomUUID().slice(0, 8);
+      await putDraft(db, `slack:${short}`, link.user_id, { caption: body });
+      const one = orgs.length === 1;
+      const st = { d: "s", m: short, n: t.postTextOnly, t: body.slice(0, 140),
+        ...(one ? { o: orgs[0].id.slice(0, ID_HINT) } : {}) };
+      const question = one ? t.socialWhich : t.askWorkspace;
+      const options = one
+        ? [{ key: "c", label: "Threads", set: { c: "t" } }, { key: "x", label: t.cancel, set: { x: 1 } }]
+        : [...orgs.map(o => ({ key: "o", label: o.name, set: { o: o.id.slice(0, ID_HINT) } })),
+           { key: "x", label: t.cancel, set: { x: 1 } }];
+      // Die Antwort auf einen Slash-Befehl IST die Nachricht, und ein Knopf
+      // darin traegt seine response_url mit: replace_original ersetzt sie
+      // spaeter, genau wie im Datei-Ablauf.
+      const blocks = draftBlocks(t, { ...st, chosen: one ? orgs[0].name : "" }, question, options, t.postTextOnly)
+        .map(b => (b.type === "actions"
+          ? { ...b, elements: b.elements.map(e => ({ ...e, action_id: e.action_id.replace("draft_", "asset_") })) }
+          : b));
+      return ephemeral(question, blocks);
+    }
+
     const asNote = /^\s*(notiz|note)\b\s*/i.exec(said);
     if (asNote) {
       const body = said.slice(asNote[0].length);
@@ -834,6 +889,36 @@ export default async function handler(req) {
       const done = await finishTask(db, inst2.bot_token, mlink, mt, appUrl,
         { ...st, d: typed || "-", c: listed || "" }, null);
       return done.ok ? new Response("", { status: 200 }) : fail(done.msg);
+    }
+
+    // "/i7os post" ohne Text: das Fenster kommt mit dem Beitragstext zurueck,
+    // und ab hier ist es derselbe Ablauf wie mit Text hinter dem Befehl.
+    if (p.view?.callback_id === "social_post_text") {
+      const said2 = fieldOf("s").trim();
+      if (!said2) return fail(mt.postLabel);
+      const { data: instQ } = await db.from("slack_installations")
+        .select("bot_token").eq("team_id", p.team?.id).maybeSingle();
+      if (!instQ?.bot_token) return fail(mt.newFailed);
+      const orgs2 = await workspacesFor(db, mlink.user_id);
+      if (!orgs2.length) return fail(mt.newNoWorkspace);
+      const short2 = crypto.randomUUID().slice(0, 8);
+      await putDraft(db, `slack:${short2}`, mlink.user_id, { caption: said2 });
+      const one2 = orgs2.length === 1;
+      const st2 = { d: "s", m: short2, n: mt.postTextOnly, t: said2.slice(0, 140),
+        ...(one2 ? { o: orgs2[0].id.slice(0, ID_HINT) } : {}) };
+      const q2 = one2 ? mt.socialWhich : mt.askWorkspace;
+      const opts2 = one2
+        ? [{ key: "c", label: "Threads", set: { c: "t" } }, { key: "x", label: mt.cancel, set: { x: 1 } }]
+        : [...orgs2.map(o => ({ key: "o", label: o.name, set: { o: o.id.slice(0, ID_HINT) } })),
+           { key: "x", label: mt.cancel, set: { x: 1 } }];
+      const blocks2 = draftBlocks(mt, { ...st2, chosen: one2 ? orgs2[0].name : "" }, q2, opts2, mt.postTextOnly)
+        .map(b => (b.type === "actions"
+          ? { ...b, elements: b.elements.map(e => ({ ...e, action_id: e.action_id.replace("draft_", "asset_") })) }
+          : b));
+      let meta2 = {}; try { meta2 = JSON.parse(p.view.private_metadata || "{}"); } catch { /* der Direktkanal ist die Rueckfallebene */ }
+      await slack(instQ.bot_token, "chat.postMessage",
+        { channel: meta2.ch || mlink.chat_id, text: q2, blocks: blocks2 });
+      return new Response("", { status: 200 });
     }
 
     // Das Eingabefenster fuer den Beitragstext kam zurueck. Der Text kann lang
@@ -978,8 +1063,13 @@ export default async function handler(req) {
     if (st.d === "s") {
       const found = await socialTargetsFor(db, org.id);
       if (!found.length) return replace(t.socialNoChannel);
-      const hasIg = found.some(x => x.provider === "instagram");
+      // Ohne Datei ist es ein reiner Textbeitrag, und den nimmt Instagram
+      // nicht. Statt ihn anzubieten und spaeter abzulehnen, steht er gar nicht
+      // erst zur Wahl.
+      const isText = !st.f;
+      const hasIg = !isText && found.some(x => x.provider === "instagram");
       const hasTh = found.some(x => x.provider === "threads");
+      if (!hasIg && !hasTh) return replace(t.socialNoChannel);
 
       if (!st.c) {
         const choices = [];
@@ -991,7 +1081,7 @@ export default async function handler(req) {
       }
       // Kommt ein Bild ohne Kommentar, wird gefragt statt stillschweigend ohne
       // Text zu posten. `a` haelt die Antwort fest: "w" schreiben, "0" ohne.
-      if (!st.w && st.a === undefined) {
+      if (!st.w && !isText && st.a === undefined) {
         const peek = await slackForm(inst.bot_token, "files.info", { file: st.f });
         const cap = String(peek?.file?.initial_comment?.comment || peek?.file?.title || "").trim();
         if (!cap) {
@@ -1005,7 +1095,7 @@ export default async function handler(req) {
       // "Text schreiben": Slacks eigenes Eingabefenster. private_metadata
       // traegt den Stand mit, dafuer ist es da, also braucht es hier keinen
       // Umweg ueber einen Schluessel.
-      if (st.a === "w" && !st.m) {
+      if (st.a === "w" && !st.m && !isText) {
         await slack(inst.bot_token, "views.open", {
           trigger_id: p.trigger_id,
           view: {
@@ -1051,23 +1141,26 @@ export default async function handler(req) {
         at.setTime(at.getTime() + (target.getTime() - berlinNow.getTime()));
       }
 
-      const info2 = await slackForm(inst.bot_token, "files.info", { file: st.f });
-      const url2 = info2?.ok ? info2.file?.url_private_download || info2.file?.url_private : null;
-      if (!url2) return replace(t.fileGone);
-      const res2 = await fetch(url2, { headers: { Authorization: `Bearer ${inst.bot_token}` } });
-      if (!res2.ok) return replace(t.fileGone);
-      const bytes2 = new Uint8Array(await res2.arrayBuffer());
+      let info2 = null, bytes2 = null;
+      if (!isText) {
+        info2 = await slackForm(inst.bot_token, "files.info", { file: st.f });
+        const url2 = info2?.ok ? info2.file?.url_private_download || info2.file?.url_private : null;
+        if (!url2) return replace(t.fileGone);
+        const res2 = await fetch(url2, { headers: { Authorization: `Bearer ${inst.bot_token}` } });
+        if (!res2.ok) return replace(t.fileGone);
+        bytes2 = new Uint8Array(await res2.arrayBuffer());
+      }
       // Der Kommentar, den jemand beim Hochladen mitschickt, IST der
       // Beitragstext. Genau wie die Bildunterschrift bei Telegram: dort, wo er
       // ohnehin getippt wird.
       const typedText = st.m ? await takeDraft(db, `slack:${st.m}`, link.user_id) : null;
       const caption = typedText?.caption
         ? String(typedText.caption)
-        : String(info2.file?.initial_comment?.comment || info2.file?.title || "").trim();
+        : String(info2?.file?.initial_comment?.comment || info2?.file?.title || "").trim();
 
       const queued = await queueSocialPost(db, {
         userId: link.user_id, orgId: org.id, name: st.n,
-        contentType: info2.file?.mimetype || "image/jpeg",
+        contentType: info2?.file?.mimetype || "image/jpeg",
         bytes: bytes2, caption, targets, publishAt: at.getTime(),
       });
       if (!queued.ok) {
