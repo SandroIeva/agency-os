@@ -12085,14 +12085,20 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                     <div style={{ display: "flex", flexDirection: "column", gap: 3, overflow: "hidden", flex: 1 }}>
                       {events.slice(0, 3).map((e, ei) => (
                         <div key={ei} style={{
-                          fontSize: 11, fontFamily: FONT, color: e.color,
-                          background: e.color + "15", borderRadius: 4,
-                          padding: "2px 5px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                          borderLeft: `2px solid ${e.color}`,
-                        }}>{e.title}</div>
+                          fontSize: 13, fontFamily: FONT, color: e.color,
+                          background: e.color + "15", borderRadius: 6,
+                          padding: "4px 8px", whiteSpace: "nowrap", overflow: "hidden",
+                          display: "flex", alignItems: "center", gap: 6,
+                        }}>
+                          {/* Ein Punkt statt der Linie am Rand: die Linie sass
+                              an der Kante der Flaeche und las sich als deren
+                              Rahmen, nicht als Farbe des Termins. */}
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: e.color, flexShrink: 0 }} />
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.title}</span>
+                        </div>
                       ))}
                       {events.length > 3 && (
-                        <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint }}>+{events.length - 3} mehr</div>
+                        <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>+{events.length - 3} {de ? "mehr" : "more"}</div>
                       )}
                     </div>
                   </motion.div>
