@@ -41131,9 +41131,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 
           <ConfirmDelete open={!!boardToDelete} theme={theme} darkMode={darkMode} appLanguage={appLanguage}
             title={appLanguage === "de" ? "Moodboard löschen?" : "Delete moodboard?"}
-            note={boardToDelete && (appLanguage === "de"
-              ? `„${boardToDelete.title}" wird mit allem darauf unwiderruflich gelöscht.`
-              : `"${boardToDelete.title}" and everything on it will be permanently deleted.`)}
+            name={boardToDelete?.title}
             onCancel={() => setBoardToDelete(null)} onConfirm={performDeleteBoard} />
 
           {/* Pick a Pinterest board to import. Portalled, because this panel
