@@ -39961,6 +39961,23 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     if (activeMoodboardRef.current?.boardId !== board.id || activeMoodboardRef.current?.orgId !== orgId) return;
     setItems(data || []);
     setLoadingItems(false);
+
+    // Die Farbpalette entstand bisher nur beim Hinzufuegen oder Loeschen eines
+    // Bildes. Ein Board, an dem seit ihrer Einfuehrung niemand etwas geaendert
+    // hat, hatte deshalb keine, und es sah aus, als koennten manche Boards das
+    // und andere nicht. Also einmal beim Oeffnen nachholen, und nur dann:
+    // steht schon eine da, bleibt sie, wie sie ist.
+    if (!(board.color_palette?.length)) {
+      const freq = {};
+      (data || []).forEach(it => (it.colors || []).forEach(c => { freq[c] = (freq[c] || 0) + 1; }));
+      const palette = Object.entries(freq).sort((x, y) => y[1] - x[1]).slice(0, 8).map(([c]) => c);
+      if (palette.length) {
+        setActiveBoard(prev => (prev?.id === board.id ? { ...prev, color_palette: palette } : prev));
+        setBoards(prev => (prev || []).map(b => b.id === board.id ? { ...b, color_palette: palette } : b));
+        // Ohne updated_at: das Oeffnen eines Boards ist keine Aenderung daran.
+        await supabase.from("moodboards").update({ color_palette: palette }).eq("id", board.id);
+      }
+    }
   };
 
   const closeBoard = () => {
