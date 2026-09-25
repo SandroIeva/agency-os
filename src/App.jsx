@@ -12087,7 +12087,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                         <div key={ei} style={{
                           fontSize: 13, fontFamily: FONT, color: e.color,
                           background: e.color + "15", borderRadius: 6,
-                          padding: "8px 10px", whiteSpace: "nowrap", overflow: "hidden",
+                          padding: "7px 10px 8px", whiteSpace: "nowrap", overflow: "hidden",
                           display: "flex", alignItems: "center", gap: 6,
                         }}>
                           {/* Ein Punkt statt der Linie am Rand: die Linie sass
