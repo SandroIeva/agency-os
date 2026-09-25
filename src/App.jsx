@@ -16862,6 +16862,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
   const dictationStartContentRef = useRef("");
   const saveTimersRef = useRef({});
   const rotationMapRef = useRef({}); // stable random rotation per note id
+  const noteBodyRef = useRef(null);  // Enter im Titel springt hierher
 
   // Load notes
   useEffect(() => {
@@ -17745,11 +17746,41 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                 </div>
               </div>
 
-              <textarea
-                value={expandedNote.content}
-                onChange={(e) => updateContent(expandedNote.id, e.target.value)}
-                placeholder={de ? "Titel der Notiz...\n\nDann hier weiterschreiben." : "Note title...\n\nThen keep writing here."}
+              {/* Titel und Text sind ZWEI Felder, aber weiter EINE Zeichenkette
+                  in `content`: erste Zeile Titel, Rest Text, genau wie
+                  splitContent es auf der Karte liest. Ein einzelnes textarea
+                  kann seine erste Zeile nicht anders setzen als den Rest, und
+                  auf der Karte steht der Titel gross und fett. */}
+              <input
+                value={splitContent(expandedNote.content).title}
+                onChange={(e) => {
+                  const body = splitContent(expandedNote.content).body;
+                  const line = e.target.value.replace(/\n/g, " ");
+                  updateContent(expandedNote.id, body ? `${line}\n\n${body}` : line);
+                }}
+                onKeyDown={(e) => {
+                  // Enter geht in den Text, statt eine zweite Titelzeile zu
+                  // versuchen, die es nicht geben kann.
+                  if (e.key === "Enter") { e.preventDefault(); noteBodyRef.current?.focus(); }
+                }}
+                placeholder={de ? "Titel der Notiz" : "Note title"}
                 autoFocus
+                style={{
+                  background: "transparent", border: "none", outline: "none", width: "100%",
+                  fontFamily: FONT, fontSize: 17, fontWeight: 700, letterSpacing: "-0.2px", lineHeight: 1.25,
+                  color: darkMode ? "#fff" : "#15151c",
+                  caretColor: expandedPalette.accent,
+                  marginBottom: 10,
+                }}
+              />
+              <textarea
+                ref={noteBodyRef}
+                value={splitContent(expandedNote.content).body}
+                onChange={(e) => {
+                  const title = splitContent(expandedNote.content).title;
+                  updateContent(expandedNote.id, `${title}\n\n${e.target.value}`);
+                }}
+                placeholder={de ? "Hier weiterschreiben." : "Keep writing here."}
                 style={{
                   flex: 1, minHeight: 200, maxHeight: "70vh",
                   background: "transparent", border: "none", outline: "none", resize: "none",
