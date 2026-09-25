@@ -39810,27 +39810,11 @@ function IdeasTab({ session, userOrg, theme, darkMode, appLanguage = "de", orgMe
           </motion.div>, document.body)}
 
       {/* Delete-board confirm modal */}
-        {boardToDelete && createPortal(
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
-            onClick={() => !deletingBoard && setBoardToDelete(null)}
-            style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-            <motion.div initial={{ scale: 0.95, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 8 }}
-              transition={{ duration: 0.2, ease: [0.22, 0.68, 0.35, 1.0] }} onClick={e => e.stopPropagation()}
-              style={{ width: "100%", maxWidth: 420, background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, boxShadow: "0 25px 80px rgba(0,0,0,0.4)" }}>
-              <div style={{ fontSize: 18, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8, letterSpacing: -0.2 }}>{de ? "Board löschen?" : "Delete board?"}</div>
-              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 22, lineHeight: 1.55 }}>
-                {de ? <>„{boardToDelete.name || "Brainstorm"}" wird mit allen Inhalten unwiderruflich gelöscht.</> : <>“{boardToDelete.name || "Brainstorm"}” and everything on it will be permanently deleted.</>}
-              </div>
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-                <motion.button onClick={() => !deletingBoard && setBoardToDelete(null)} whileTap={{ scale: 0.97 }}
-                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: deletingBoard ? "not-allowed" : "pointer", background: "transparent", border: `1px solid ${theme.border}`, color: theme.textSub, fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: deletingBoard ? 0.5 : 1 }}
-                >{de ? "Abbrechen" : "Cancel"}</motion.button>
-                <motion.button onClick={performDeleteBoard} whileTap={{ scale: 0.97 }} disabled={deletingBoard}
-                  style={{ padding: "11px 24px 12px", borderRadius: 999, cursor: deletingBoard ? "not-allowed" : "pointer", minWidth: 128, boxSizing: "border-box", textAlign: "center", background: "#EF4444", border: "none", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 600, opacity: deletingBoard ? 0.6 : 1 }}
-                >{deletingBoard ? (de ? "Löscht…" : "Deleting…") : (de ? "Löschen" : "Delete")}</motion.button>
-              </div>
-            </motion.div>
-          </motion.div>, document.body)}
+        <ConfirmDelete open={!!boardToDelete} theme={theme} darkMode={darkMode} appLanguage={appLanguage} busy={deletingBoard}
+          title={de ? "Board löschen?" : "Delete board?"}
+          name={boardToDelete?.name || "Brainstorm"}
+          confirmLabel={deletingBoard ? (de ? "Löscht…" : "Deleting…") : undefined}
+          onCancel={() => setBoardToDelete(null)} onConfirm={performDeleteBoard} />
     </div>
   );
 }
