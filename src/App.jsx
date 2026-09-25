@@ -57965,6 +57965,60 @@ export default function CircularMenu() {
     setThBusy(false);
   };
 
+  // ── LinkedIn, ueber Zernio ─────────────────────────────────────────────────
+  // Dieselben fuenf Teile wie bei den direkten Kanaelen, nur liegt die
+  // Verbindung nicht bei uns: LinkedIn haengt an Zernio, und deshalb ist der
+  // Endpunkt /api/zernio statt /api/linkedin.
+  //
+  // Die Zeile stand hier bisher nicht, obwohl man LinkedIn im Composer
+  // auswaehlen konnte. Damit gab es einen Weg hinein und keinen hinaus: eine
+  // Verbindung, die man nicht mehr braucht, blieb fuer immer stehen.
+  const [liConn, setLiConn] = useState(null);
+  const [liBusy, setLiBusy] = useState(false);
+  const [liErr, setLiErr] = useState("");
+
+  const readLinkedIn = useCallback(async () => {
+    if (!userOrg?.id) return null;
+    try {
+      const d = await zernioRequest(session, { mode: "status", orgId: userOrg.id });
+      return (d?.accounts || []).filter(a => a.platform === "linkedin");
+    } catch { return null; }
+  }, [userOrg?.id, session?.access_token]); // eslint-disable-line
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const list = await readLinkedIn();
+      if (alive) setLiConn(list);
+    })();
+    return () => { alive = false; };
+  }, [readLinkedIn]);
+
+  const startLinkedInConnect = async () => {
+    setLiBusy(true); setLiErr("");
+    try {
+      const r = await zernioRequest(session, { mode: "connect", orgId: userOrg.id, platform: "linkedin" });
+      if (r?.authUrl) window.location.assign(r.authUrl);
+      else throw new Error("no authUrl");
+    } catch (e) {
+      // Der Endpunkt sagt selbst, warum: kein Plan, kein Platz, kein Recht.
+      setLiErr(e?.message || (appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection."));
+      setLiBusy(false);
+    }
+  };
+
+  const disconnectLinkedIn = async (accountId) => {
+    if (!userOrg?.id) return;
+    setLiBusy(true); setLiErr("");
+    try {
+      await zernioRequest(session, { mode: "disconnect", orgId: userOrg.id, accountId });
+      setLiConn(await readLinkedIn());
+    } catch (e) {
+      setLiErr(appLanguage === "de" ? "Trennen hat nicht funktioniert." : "Disconnecting did not work.");
+    }
+    setLiBusy(false);
+  };
+
   // ── TikTok, directly ───────────────────────────────────────────────────────
   // The same five pieces every direct channel here has: what the endpoint says,
   // a reader, a starter, a stopper, and the handler for coming back from the
@@ -66020,6 +66074,57 @@ export default function CircularMenu() {
                   )}
                   {thErr && (
                     <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{thErr}</div>
+                  )}
+                  {/* LinkedIn. Liegt bei Zernio und nicht bei uns, sieht hier
+                      aber aus wie jeder andere Kanal: wer eine Verbindung
+                      herstellen kann, muss sie auch loesen koennen.
+
+                      `liConn` ist null, solange Zernio nicht geantwortet hat,
+                      und bleibt null, wenn es gar nicht eingerichtet ist. Dann
+                      steht die Zeile nicht da und verspricht auch nichts. */}
+                  {liConn !== null && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "16px 20px", borderTop: `1px solid ${theme.borderFaint}`,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <div style={{ width: 23, height: 23, borderRadius: 7, background: "#0A66C2", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <svg width={tpGlyphSize("linkedin", 14)} height={tpGlyphSize("linkedin", 14)} viewBox="0 0 24 24">{touchpointGlyph("linkedin")}</svg>
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>LinkedIn</div>
+                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {liConn?.length
+                          ? (appLanguage === "de"
+                              ? `Verbunden${liConn[0].displayName ? ` als ${liConn[0].displayName}` : ""}. Gilt für diesen Workspace.`
+                              : `Connected${liConn[0].displayName ? ` as ${liConn[0].displayName}` : ""}. Applies to this workspace.`)
+                          : (appLanguage === "de"
+                              ? "Beiträge veröffentlichen, auch reine Textbeiträge."
+                              : "Publish posts, text-only posts included.")}
+                      </div>
+                    </div>
+                    <motion.button whileTap={{ scale: 0.97 }}
+                      onClick={liBusy ? undefined : (liConn?.length
+                        ? () => disconnectLinkedIn(liConn[0].id)
+                        : startLinkedInConnect)}
+                      style={{ padding: "8px 14px", borderRadius: 10, cursor: liBusy ? "wait" : "pointer",
+                        border: `1px solid ${liConn?.length ? theme.borderFaint : "transparent"}`,
+                        background: liConn?.length ? "transparent" : "#15151c",
+                        color: liConn?.length ? theme.text : "#fff",
+                        fontFamily: FONT, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0,
+                        opacity: liBusy ? 0.6 : 1 }}>
+                      {liConn?.length ? (appLanguage === "de" ? "Trennen" : "Disconnect")
+                        : (appLanguage === "de" ? "Verbinden" : "Connect")}
+                    </motion.button>
+                  </div>
+                  )}
+                  {liErr && (
+                    <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{liErr}</div>
                   )}
                   {/* TikTok. Its own client, its own review, its own row, for
                       the same reason Instagram and Threads have three. */}
