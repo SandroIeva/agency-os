@@ -1,0 +1,56 @@
+display_information:
+  name: i7OS
+  description: Notifications from your i7OS workspace, with buttons that act without opening the app.
+  background_color: "#15151c"
+features:
+  bot_user:
+    display_name: i7OS
+    always_online: true
+  slash_commands:
+    - command: /i7-post
+      url: https://app.i7os.com/api/slack
+      description: Post to Threads or Instagram
+      usage_hint: the text of the post
+      should_escape: false
+    - command: /i7-task
+      url: https://app.i7os.com/api/slack
+      description: Create a task in i7OS
+      usage_hint: describe the task
+      should_escape: false
+    - command: /i7-note
+      url: https://app.i7os.com/api/slack
+      description: Write a note
+      usage_hint: what to remember
+      should_escape: false
+    - command: /i7-status
+      url: https://app.i7os.com/api/slack
+      description: Show your i7OS connection
+      should_escape: false
+    - command: /i7-help
+      url: https://app.i7os.com/api/slack
+      description: What i7OS can do here
+      should_escape: false
+  app_home:
+    home_tab_enabled: false
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
+oauth_config:
+  redirect_urls:
+    - https://app.i7os.com/slack/callback
+  scopes:
+    bot:
+      - chat:write
+      - im:write
+      - commands
+      - files:read
+settings:
+  interactivity:
+    is_enabled: true
+    request_url: https://app.i7os.com/api/slack
+  event_subscriptions:
+    request_url: https://app.i7os.com/api/slack
+    bot_events:
+      - file_shared
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
