@@ -5577,76 +5577,10 @@ function KanbanBoard({ onBack, session, theme: themeIn, darkMode, t, appLanguage
       {/* New / Edit Task Modal — Portal to body so it covers everything */}
       {taskModalPortal}
 
-      {/* Custom Delete Confirm Dialog — Portal to body */}
-      {createPortal(<AnimatePresence>
-        {confirmDelete && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            onClick={() => setConfirmDelete(null)}
-            style={{
-              position: "fixed", inset: 0, zIndex: 110,
-              background: "rgba(0,0,0,0.55)", backdropFilter: "blur(10px)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.92, y: 8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.92, y: 8 }}
-              transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
-              onClick={e => e.stopPropagation()}
-              style={{
-                width: 360, background: darkMode ? "rgba(22, 22, 30, 0.96)" : "rgba(255, 255, 255, 0.97)",
-                backdropFilter: "blur(40px)", border: `1px solid ${theme.border}`,
-                borderRadius: 20, padding: "28px 28px 22px", textAlign: "center",
-              }}
-            >
-              {/* Warning icon */}
-              <div style={{
-                width: 48, height: 48, borderRadius: 14, margin: "0 auto 16px",
-                background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.2)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 9v4M12 17h.01" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" />
-                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#EF4444" strokeWidth="1.5" fill="none" />
-                </svg>
-              </div>
-              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>
-                {de ? "Task löschen?" : "Delete task?"}
-              </div>
-              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 24, lineHeight: 1.5 }}>
-                {de ? <>„{confirmDelete.title}“ wird unwiderruflich gelöscht.</> : <>“{confirmDelete.title}” will be permanently deleted.</>}
-              </div>
-              <div style={{ display: "flex", gap: 10 }}>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => setConfirmDelete(null)}
-                  style={{
-                    flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer",
-                    background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`,
-                    fontSize: 13, fontFamily: FONT, color: theme.textSub, fontWeight: 500,
-                  }}
-                >{t("common.cancel")}</motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={confirmDeleteTask}
-                  style={{
-                    flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer",
-                    background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)",
-                    fontSize: 13, fontFamily: FONT, color: "#EF4444", fontWeight: 600,
-                  }}
-                >{t("common.delete")}</motion.button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>, document.body)}
+      <ConfirmDelete open={!!confirmDelete} theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+        title={de ? "Aufgabe löschen?" : "Delete task?"}
+        name={confirmDelete?.title}
+        onCancel={() => setConfirmDelete(null)} onConfirm={confirmDeleteTask} />
 
       {/* Project Editor Modal */}
       {createPortal(<AnimatePresence>
@@ -12672,68 +12606,18 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
       )}
 
       {/* Delete/Cancel Event Confirmation — rendered via Portal */}
-      {confirmDeleteEvent && createPortal(
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={() => !deletingEvent && setConfirmDeleteEvent(null)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center" }}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ duration: 0.25, ease: [0.22, 0.68, 0.35, 1.0] }}
-            onClick={e => e.stopPropagation()}
-            style={{ width: 380, background: darkMode ? "rgba(28,26,42,0.95)" : "rgba(255,255,255,0.97)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`, borderRadius: 20, padding: "28px 28px 24px", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
-          >
-            {/* Warning icon */}
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(232,67,67,0.12)", color: "#E84343", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3.6L1.8 20.4h20.4z"/><path d="M12 10v4.4M12 17.6h.01"/></svg>
-            </div>
-
-            <div style={{ fontSize: 17, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8, letterSpacing: -0.3 }}>{t("cal.cancelEvent")}</div>
-
-            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, marginBottom: 6, lineHeight: 1.5 }}>
-              {(de ? "Möchtest du dieses Event wirklich löschen?" : "Do you really want to delete this event?")}
-            </div>
-
-            {/* Event preview */}
-            <div style={{ padding: "10px 14px", borderRadius: 10, background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`, marginBottom: 20, borderLeft: `3px solid ${confirmDeleteEvent.color}` }}>
-              <div style={{ fontSize: 14, fontFamily: FONT, fontWeight: 500, color: theme.text }}>{confirmDeleteEvent.title}</div>
-              {confirmDeleteEvent.start && !confirmDeleteEvent.allDay && (
-                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginTop: 3 }}>
-                  {new Date(confirmDeleteEvent.start).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })}
-                  {confirmDeleteEvent.end && ` – ${new Date(confirmDeleteEvent.end).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })}`}
-                </div>
-              )}
-              {confirmDeleteEvent.allDay && (
-                <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textFaint, marginTop: 3 }}>{(de ? "Ganztägig" : "All day")}</div>
-              )}
-            </div>
-
-            <div style={{ fontSize: 11, fontFamily: FONT, color: theme.textDim, marginBottom: 16 }}>
-              {(de ? "Alle Teilnehmer werden per E-Mail benachrichtigt." : "All guests will be notified by email.")}
-            </div>
-
-            {/* Buttons */}
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                onClick={() => !deletingEvent && setConfirmDeleteEvent(null)}
-                style={{ cursor: "pointer", padding: "9px 20px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${theme.borderFaint}` }}>
-                {(de ? "Behalten" : "Keep")}
-              </motion.div>
-              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                onClick={() => deleteGoogleEvent(confirmDeleteEvent)}
-                style={{ cursor: deletingEvent ? "wait" : "pointer", padding: "9px 24px", borderRadius: 10, fontSize: 13, fontFamily: FONT, color: "#fff", fontWeight: 500, background: deletingEvent ? "rgba(232,67,67,0.15)" : "rgba(232,67,67,0.25)", border: "1px solid rgba(232,67,67,0.4)", opacity: deletingEvent ? 0.5 : 1 }}>
-                {deletingEvent ? t("cal.deleting") : t("cal.cancelEventBtn")}
-              </motion.div>
-            </div>
-          </motion.div>
-        </motion.div>,
-        document.body
-      )}
+      {/* Die Uhrzeit steht im Text, weil sie hier die Sache unterscheidet:
+          zwei Termine an einem Tag heissen oft gleich. */}
+      <ConfirmDelete open={!!confirmDeleteEvent} theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+        title={t("cal.cancelEvent")}
+        name={confirmDeleteEvent?.title}
+        note={confirmDeleteEvent && confirmDeleteEvent.start && !confirmDeleteEvent.allDay
+          ? (de
+              ? `„${confirmDeleteEvent.title}" um ${new Date(confirmDeleteEvent.start).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })} wird unwiderruflich gelöscht.`
+              : `"${confirmDeleteEvent.title}" at ${new Date(confirmDeleteEvent.start).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })} will be permanently deleted.`)
+          : null}
+        onCancel={() => setConfirmDeleteEvent(null)}
+        onConfirm={() => deleteGoogleEvent(confirmDeleteEvent)} />
     </motion.div>
   );
 }
