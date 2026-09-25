@@ -18950,18 +18950,35 @@ async function extractColors(url, count = 5) {
         const ctx = cv.getContext("2d");
         ctx.drawImage(img, 0, 0, w, h);
         const data = ctx.getImageData(0, 0, w, h).data;
+        // Reine Haeufigkeit taugt nicht: ein dunkles Bild besteht zu neun
+        // Zehnteln aus Anthrazit, und die Palette zeigte dann fuenfmal fast
+        // dasselbe Grau, waehrend das Blau, das das Bild ausmacht, unterging.
+        //
+        // Also zwei Korrekturen. Erstens zaehlt ein Pixel nach Farbigkeit:
+        // fast-Schwarz und fast-Weiss mit einem Sechstel, Graustufen mit einem
+        // Drittel, farbige nach ihrer Saettigung. Sie verschwinden nicht, ein
+        // schwarzes Bild darf Schwarz zeigen, sie muessen sich nur gegen eine
+        // echte Farbe behaupten. Zweitens braucht jede weitere Farbe Abstand zu
+        // den schon gewaehlten, sonst stehen fuenf Nuancen desselben Tons da.
         const buckets = {};
         for (let i = 0; i < data.length; i += 4) {
           if (data[i + 3] < 200) continue;
           const r = data[i], g = data[i + 1], b = data[i + 2];
-          const key = `${r >> 5},${g >> 5},${b >> 5}`;
+          const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+          const l = (mx + mn) / 510;
+          const sat = mx === mn ? 0 : (mx - mn) / (255 - Math.abs(mx + mn - 255));
+          const w8 = (l < 0.10 || l > 0.94) ? 0.15 : (sat < 0.12 ? 0.3 : 1 + sat);
+          const key = `${r >> 4},${g >> 4},${b >> 4}`;
           (buckets[key] || (buckets[key] = { c: 0, r: 0, g: 0, b: 0 }));
-          const bk = buckets[key]; bk.c++; bk.r += r; bk.g += g; bk.b += b;
+          const bk = buckets[key]; bk.c += w8; bk.r += r * w8; bk.g += g * w8; bk.b += b * w8;
         }
-        const out = Object.values(buckets)
-          .sort((a, b) => b.c - a.c).slice(0, count)
-          .map(bk => "#" + [bk.r, bk.g, bk.b].map(x => Math.round(x / bk.c).toString(16).padStart(2, "0")).join(""));
-        resolve(out);
+        const out = [];
+        for (const bk of Object.values(buckets).sort((x, y) => y.c - x.c)) {
+          if (out.length >= count) break;
+          const c = [bk.r / bk.c, bk.g / bk.c, bk.b / bk.c];
+          if (out.every(o => Math.abs(o[0] - c[0]) + Math.abs(o[1] - c[1]) + Math.abs(o[2] - c[2]) > 90)) out.push(c);
+        }
+        resolve(out.map(c => "#" + c.map(x => Math.round(x).toString(16).padStart(2, "0")).join("")));
       } catch (e) { resolve([]); }
     };
     img.onerror = () => resolve([]);
@@ -40001,9 +40018,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             supabase.from("moodboard_items").update({ colors }).eq("id", id)));
         }
       }
-      const freq = {};
-      rows.forEach(it => (it.colors || []).forEach(c => { freq[c] = (freq[c] || 0) + 1; }));
-      const palette = Object.entries(freq).sort((x, y) => y[1] - x[1]).slice(0, 8).map(([c]) => c);
+      const palette = boardPalette(rows);
       if (palette.length) {
         setActiveBoard(prev => (prev?.id === board.id ? { ...prev, color_palette: palette } : prev));
         setBoards(prev => (prev || []).map(b => b.id === board.id ? { ...b, color_palette: palette } : b));
@@ -40402,11 +40417,32 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
   // ── Aggregate the board palette from all item colors (most frequent first) ──
   const recomputePalette = async (allItems) => {
     if (!activeBoard) return;
-    const freq = {};
-    allItems.forEach(it => (it.colors || []).forEach(c => { freq[c] = (freq[c] || 0) + 1; }));
-    const palette = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([c]) => c);
+    const palette = boardPalette(allItems);
     setActiveBoard(prev => ({ ...prev, color_palette: palette }));
     await supabase.from("moodboards").update({ color_palette: palette, updated_at: new Date().toISOString() }).eq("id", activeBoard.id);
+  };
+
+  // Die Palette eines Boards aus den Farben seiner Bilder. Haeufigkeit
+  // entscheidet, aber jede weitere Farbe braucht Abstand zu den schon
+  // gewaehlten: sonst stehen acht Nuancen desselben Tons da, und acht fast
+  // gleiche Farben sind keine Palette.
+  const boardPalette = (allItems) => {
+    const freq = {};
+    (allItems || []).forEach(it => (it.colors || []).forEach(c => { freq[c] = (freq[c] || 0) + 1; }));
+    const rgb = (h) => {
+      const m = /^#?([0-9a-f]{6})$/i.exec(String(h || ""));
+      if (!m) return null;
+      const n = parseInt(m[1], 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    };
+    const out = [];
+    for (const [hex] of Object.entries(freq).sort((x, y) => y[1] - x[1])) {
+      if (out.length >= 8) break;
+      const c = rgb(hex);
+      if (!c) continue;
+      if (out.every(o => Math.abs(o.c[0] - c[0]) + Math.abs(o.c[1] - c[1]) + Math.abs(o.c[2] - c[2]) > 80)) out.push({ hex, c });
+    }
+    return out.map(o => o.hex);
   };
 
   // ── Add items ──
