@@ -17316,15 +17316,15 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
               onClick={(e) => e.stopPropagation()}
             >
               <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => togglePin(note.id)} title={note.pinned ? (de ? "Entpinnen" : "Unpin") : (de ? "Pinnen" : "Pin")}
-                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 6, color: darkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)", width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 6, color: darkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={note.pinned ? "2" : "1.6"} strokeLinecap="round" strokeLinejoin="round"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z"/></svg>
               </motion.button>
               <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => setColorPickerId(showColorPicker ? null : note.id)} title={(de ? "Farbe" : "Colour")}
-                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 6, lineHeight: 1, width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 6, lineHeight: 1, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <div style={{ width: 12, height: 12, borderRadius: "50%", background: accent }} />
               </motion.button>
               <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => setConfirmDelete(note)} title={(de ? "Löschen" : "Delete")}
-                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 6, color: darkMode ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.5)", width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 6, color: darkMode ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.5)", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </motion.button>
             </motion.div>
