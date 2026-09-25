@@ -17577,25 +17577,25 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                   <motion.button whileTap={{ scale: 0.9 }} onClick={() => togglePin(expandedNote.id)}
                     title={expandedNote.pinned ? (de ? "Entpinnen" : "Unpin") : (de ? "Pinnen" : "Pin")}
                     style={{
-                      width: 32, height: 32, borderRadius: 10, cursor: "pointer",
+                      width: 40, height: 40, borderRadius: 11, cursor: "pointer",
                       background: expandedNote.pinned ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)") : "transparent",
                       border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
                       color: darkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)",
                     }}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={expandedNote.pinned ? "2" : "1.5"} strokeLinecap="round" strokeLinejoin="round"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={expandedNote.pinned ? "2" : "1.5"} strokeLinecap="round" strokeLinejoin="round"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z"/></svg>
                   </motion.button>
                   {/* Project chooser */}
                   <div style={{ position: "relative" }}>
                     <motion.button whileTap={{ scale: 0.95 }} onClick={() => setProjectMenuOpenFor(projectMenuOpenFor === expandedNote.id ? null : expandedNote.id)}
                       title={(de ? "Projekt" : "Project")}
                       style={{
-                        height: 32, padding: "0 12px", borderRadius: 10, cursor: "pointer",
+                        height: 40, padding: "0 14px", borderRadius: 11, cursor: "pointer",
                         background: expandedNote.project_name ? expandedPalette.accent + "15" : "transparent",
                         border: `1px solid ${expandedNote.project_name ? expandedPalette.accent + "30" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)")}`,
                         display: "flex", alignItems: "center", gap: 6,
-                        fontSize: 12, fontFamily: FONT, fontWeight: 500,
+                        fontSize: 13, fontFamily: FONT, fontWeight: 500,
                         color: expandedNote.project_name ? expandedPalette.accent : (darkMode ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)"),
                       }}
                     >
@@ -17629,7 +17629,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                             onClick={() => setNoteProject(expandedNote.id, null)}
                             style={{ padding: "8px 10px", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: FONT, color: !expandedNote.project_name ? theme.accent : theme.text, fontWeight: !expandedNote.project_name ? 600 : 400 }}
                           >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                             {(de ? "Privat" : "Private")}
                             {!expandedNote.project_name && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ marginLeft: "auto" }}><path d="M5 13l4 4L19 7" stroke={theme.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                           </motion.div>
@@ -17654,7 +17654,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                   <div style={{ position: "relative" }}>
                     <motion.button whileTap={{ scale: 0.9 }} onClick={() => setColorPickerId(colorPickerId === expandedNote.id ? null : expandedNote.id)}
                       style={{
-                        width: 32, height: 32, borderRadius: 10, cursor: "pointer",
+                        width: 40, height: 40, borderRadius: 11, cursor: "pointer",
                         background: "transparent",
                         border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
                         display: "flex", alignItems: "center", justifyContent: "center",
@@ -17696,7 +17696,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                     animate={isRecording ? { scale: [1, 1.06, 1] } : { scale: 1 }}
                     transition={isRecording ? { repeat: Infinity, duration: 1.2 } : { duration: 0.2 }}
                     style={{
-                      width: 32, height: 32, borderRadius: 10, cursor: "pointer",
+                      width: 40, height: 40, borderRadius: 11, cursor: "pointer",
                       background: isRecording ? "rgba(239, 68, 68, 0.12)" : (polishing ? expandedPalette.accent + "15" : "transparent"),
                       border: `1px solid ${isRecording ? "rgba(239, 68, 68, 0.35)" : (polishing ? expandedPalette.accent + "30" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"))}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
@@ -17705,32 +17705,32 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                   >
                     {polishing ? (
                       <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
                       </motion.div>
                     ) : (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 19v3M8 22h8"/></svg>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 19v3M8 22h8"/></svg>
                     )}
                   </motion.button>
                   <motion.button whileTap={{ scale: 0.9 }} onClick={() => setConfirmDelete(expandedNote)}
                     title={(de ? "Löschen" : "Delete")}
                     style={{
-                      width: 32, height: 32, borderRadius: 10, cursor: "pointer",
+                      width: 40, height: 40, borderRadius: 11, cursor: "pointer",
                       background: "transparent",
                       border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
                       color: darkMode ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.5)",
                     }}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </motion.button>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ fontSize: 11, fontFamily: FONT, color: darkMode ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.45)" }}>
+                  <div style={{ fontSize: 13, fontFamily: FONT, color: darkMode ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.45)" }}>
                     {new Date(expandedNote.updated_at).toLocaleString("de-DE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                   </div>
                   <motion.button whileTap={{ scale: 0.9 }} onClick={() => { stopDictation(); setExpandedId(null); }}
                     style={{
-                      width: 32, height: 32, borderRadius: 10, cursor: "pointer",
+                      width: 40, height: 40, borderRadius: 11, cursor: "pointer",
                       background: "transparent",
                       border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
