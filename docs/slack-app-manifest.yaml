@@ -9,7 +9,7 @@ features:
   slash_commands:
     - command: /i7-post
       url: https://app.i7os.com/api/slack
-      description: Post to Threads or Instagram
+      description: Post to Threads
       usage_hint: what you want to say
       should_escape: false
     - command: /i7-task
