@@ -63794,7 +63794,7 @@ export default function CircularMenu() {
                   whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                   style={{
                     display: "flex", alignItems: "center", gap: 8,
-                    padding: "7px 14px 7px 11px", borderRadius: 10, cursor: "pointer",
+                    height: 42, padding: "0 17px 0 14px", borderRadius: 10, cursor: "pointer",
                     userSelect: "none", whiteSpace: "nowrap",
                     // Open, it is the anthracite pill the rest of the app uses for
                     // a selected state, inverted on dark like the nav.
@@ -63807,7 +63807,7 @@ export default function CircularMenu() {
                     color: newTaskOpen
                       ? (darkMode ? "#15151c" : "#ffffff")
                       : (darkMode ? "#ffffffdd" : "#1a1a2eDD"),
-                    fontSize: 12, fontFamily: FONT, fontWeight: 400,
+                    fontSize: 13, fontFamily: FONT, fontWeight: 400,
                     transition: "background 0.2s ease, border-color 0.2s ease, color 0.2s ease",
                   }}>
                   <motion.svg width="15" height="15" viewBox="0 0 24 24" fill="none"
