@@ -715,7 +715,19 @@ export default async function handler(req) {
     // einen Satz pro App. Deshalb sind die deutschen und die englischen Namen
     // beide angemeldet und landen hier auf demselben Weg. Die ANTWORTEN sind
     // weiterhin in der Sprache der Person, die steht an messenger_links.lang.
-    const cmdName = (params.get("command") || "").replace(/^\//, "").toLowerCase();
+    // Alle Befehle tragen "i7-" vorweg, damit ein getipptes /i7 sie in Slacks
+    // Menue alle zeigt. Das Praefix faellt hier weg, dahinter ist es derselbe
+    // Befehl.
+    //
+    // Es muss auch sein: /status und /help sind bei Slack SYSTEMBEFEHLE (den
+    // Profilstatus setzen, die eingebaute Hilfe), eine App darf sie nicht
+    // belegen. Genau daran ist das Manifest gescheitert, und der Fehlermarker
+    // sass dabei auf dem ersten Listeneintrag statt auf dem schuldigen.
+    //
+    // Der Trenner ist im Muster Pflicht: sonst wuerde aus "/i7os" ein leerer
+    // Name und der alte Sammelbefehl verloere seine Bedeutung.
+    const cmdName = (params.get("command") || "")
+      .replace(/^\//, "").replace(/^i7(os)?[-_]/, "").toLowerCase();
     const rawSaid = params.get("text") || "";
     const AS_SUB = { post: "post", beitrag: "post", notiz: "notiz", note: "notiz" };
     const said = AS_SUB[cmdName] ? `${AS_SUB[cmdName]} ${rawSaid}` : rawSaid;
