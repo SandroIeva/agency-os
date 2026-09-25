@@ -1971,6 +1971,49 @@ const VOICE_SPEEDS = [
 let uiLanguage = "de";
 const uiDe = () => uiLanguage !== "en";
 
+// Ein Loeschen wird ueberall gleich gefragt.
+//
+// Es gab dafuer vier Abschriften, die auseinandergelaufen waren: eine mit Icon,
+// eine ohne, eine mit dem Namen der Sache im Text und eine mit "kann nicht
+// rueckgaengig gemacht werden". Wer zweimal am Tag etwas loescht, sah zwei
+// verschiedene Dialoge und musste zweimal hinsehen.
+//
+// `name` ist die Sache selbst. Steht sie da, sagt der Text ihren Namen, und der
+// Satz heisst dann auch wirklich, was gleich passiert. Der Titel kommt vom
+// Aufrufer, weil nur der weiss, ob es eine Datei, eine Notiz oder ein Ordner
+// ist.
+//
+// Portal direkt, nicht in eine AnimatePresence gewickelt: die laesst ein Portal
+// fallen, und der Dialog waere gebaut und weg, bevor er im DOM ankommt.
+function ConfirmDelete({ open, title, name, note, confirmLabel, onCancel, onConfirm, theme, darkMode, appLanguage = "de", busy = false }) {
+  if (!open) return null;
+  const de = appLanguage === "de";
+  return createPortal(
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={busy ? undefined : onCancel}
+      style={{ position: "fixed", inset: 0, zIndex: 100005, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(10px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <motion.div initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }}
+        transition={{ type: "spring", stiffness: 280, damping: 22 }} onClick={(e) => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 380, padding: 28, borderRadius: 20,
+          background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)",
+          border: `1px solid ${theme.border}`, textAlign: "center" }}>
+        <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{title}</div>
+        <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 24, lineHeight: 1.5 }}>
+          {note || (name
+            ? (de ? <>„{name}" wird unwiderruflich gelöscht.</> : <>"{name}" will be permanently deleted.</>)
+            : (de ? "Das lässt sich nicht rückgängig machen." : "This cannot be undone."))}
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={busy ? undefined : onCancel}
+            style={{ flex: 1, height: 42, borderRadius: 12, cursor: busy ? "default" : "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, fontWeight: 500, opacity: busy ? 0.5 : 1 }}
+          >{de ? "Abbrechen" : "Cancel"}</motion.button>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={busy ? undefined : onConfirm}
+            style={{ flex: 1, height: 42, borderRadius: 12, cursor: busy ? "wait" : "pointer", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", fontSize: 13, fontFamily: FONT, color: "#EF4444", fontWeight: 600, opacity: busy ? 0.6 : 1 }}
+          >{confirmLabel || (de ? "Löschen" : "Delete")}</motion.button>
+        </div>
+      </motion.div>
+    </motion.div>, document.body);
+}
+
 function Dropdown({ value, onChange, options = [], placeholder = uiDe() ? "Auswählen" : "Select", theme, darkMode,
   leadingIcon = null, minWidth = 200, align = "left", maxTriggerWidth, disabled = false, triggerStyle = {}, footer = null, maxHeight = 280,
   chevronColor }) {
@@ -17832,43 +17875,11 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
       </AnimatePresence>
 
       {/* Delete confirm */}
-      {createPortal(<AnimatePresence>
-        {confirmDelete && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={() => setConfirmDelete(null)}
-            style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(10px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }}
-              transition={{ type: "spring", stiffness: 280, damping: 22 }}
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                width: "100%", maxWidth: 380, padding: 28, borderRadius: 20,
-                background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)",
-                border: `1px solid ${theme.border}`,
-                textAlign: "center",
-              }}
-            >
-              <div style={{ width: 48, height: 48, borderRadius: 14, margin: "0 auto 16px", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </div>
-              <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{(de ? "Notiz löschen?" : "Delete note?")}</div>
-              <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 24, lineHeight: 1.5 }}>
-                {(de ? "Diese Aktion kann nicht rückgängig gemacht werden." : "This cannot be undone.")}
-              </div>
-              <div style={{ display: "flex", gap: 10 }}>
-                <motion.button whileTap={{ scale: 0.97 }} onClick={() => setConfirmDelete(null)}
-                  style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, fontWeight: 500 }}
-                >{(de ? "Abbrechen" : "Cancel")}</motion.button>
-                <motion.button whileTap={{ scale: 0.97 }} onClick={() => deleteNote(confirmDelete.id)}
-                  style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", fontSize: 13, fontFamily: FONT, color: "#EF4444", fontWeight: 600 }}
-                >{(de ? "Löschen" : "Delete")}</motion.button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>, document.body)}
+      <ConfirmDelete open={!!confirmDelete} theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+        title={de ? "Notiz löschen?" : "Delete note?"}
+        name={confirmDelete ? splitContent(confirmDelete.content).title : ""}
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={() => deleteNote(confirmDelete.id)} />
     </motion.div>
   );
 }
@@ -42902,23 +42913,10 @@ function CreationsTab({ session, userOrg, theme, darkMode, accent, grad, glow, t
         />
       )}
 
-      {confirmDel && createPortal(
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setConfirmDel(null)}
-          style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(10px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} onClick={(e) => e.stopPropagation()}
-            style={{ width: "100%", maxWidth: 380, padding: 28, borderRadius: 20, background: darkMode ? "rgba(22,22,30,0.98)" : "rgba(255,255,255,0.99)", border: `1px solid ${theme.border}`, textAlign: "center" }}>
-            <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{appLanguage === "de" ? "Datei löschen?" : "Delete file?"}</div>
-            <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, marginBottom: 24, lineHeight: 1.5 }}>
-              {appLanguage === "de" ? `„${confirmDel.name || "Datei"}" wird unwiderruflich gelöscht.` : `"${confirmDel.name || "File"}" will be permanently deleted.`}
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setConfirmDel(null)}
-                style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}`, fontSize: 13, fontFamily: FONT, color: theme.textSub, fontWeight: 500 }}>{appLanguage === "de" ? "Abbrechen" : "Cancel"}</motion.button>
-              <motion.button whileTap={{ scale: 0.97 }} onClick={performDelete}
-                style={{ flex: 1, padding: "11px 0", borderRadius: 12, cursor: "pointer", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", fontSize: 13, fontFamily: FONT, color: "#EF4444", fontWeight: 600 }}>{appLanguage === "de" ? "Löschen" : "Delete"}</motion.button>
-            </div>
-          </motion.div>
-        </motion.div>, document.body)}
+      <ConfirmDelete open={!!confirmDel} theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+        title={appLanguage === "de" ? "Datei löschen?" : "Delete file?"}
+        name={confirmDel?.name || (appLanguage === "de" ? "Datei" : "File")}
+        onCancel={() => setConfirmDel(null)} onConfirm={performDelete} />
 
       {/* New-folder modal — custom overlay (replaces window.prompt) */}
         {folderModalOpen && createPortal(
