@@ -5200,7 +5200,7 @@ function KanbanBoard({ onBack, session, theme: themeIn, darkMode, t, appLanguage
               onClick={() => setFilter(p)}
               style={{
                 display: "flex", alignItems: "center", gap: 7,
-                fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: logo ? "8px 15px 8px 11px" : "8px 15px", borderRadius: 999, cursor: "pointer",
+                fontSize: 13, fontFamily: FONT, fontWeight: 500, height: 42, padding: logo ? "0 18px 0 14px" : "0 18px", borderRadius: 999, cursor: "pointer",
                 background: filter === p ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
                 border: "none",
                 color: filter === p ? "#fff" : theme.textSub,
@@ -5219,11 +5219,11 @@ function KanbanBoard({ onBack, session, theme: themeIn, darkMode, t, appLanguage
             onClick={() => setShowMemberDropdown(prev => !prev)}
             style={{
               display: "flex", alignItems: "center", gap: 9, cursor: "pointer",
-              padding: "8px 11px 8px 15px", borderRadius: 999,
+              height: 42, padding: "0 14px 0 18px", borderRadius: 999,
               background: memberFilter !== "all" ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
               border: "none",
               color: memberFilter !== "all" ? "#fff" : theme.textSub,
-              fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
+              fontSize: 13, fontFamily: FONT, fontWeight: 500,
               transition: "background 0.2s ease, color 0.2s ease",
             }}
           >
@@ -5349,7 +5349,7 @@ function KanbanBoard({ onBack, session, theme: themeIn, darkMode, t, appLanguage
             onClick={() => setNewMenuOpen(o => !o)}
             style={{
               display: "inline-flex", alignItems: "center", gap: 7,
-              fontSize: 12.5, fontFamily: FONT, fontWeight: 500, padding: "8px 14px 9px 11px", borderRadius: 999, cursor: "pointer",
+              fontSize: 13, fontFamily: FONT, fontWeight: 500, height: 42, padding: "0 17px 0 14px", borderRadius: 999, cursor: "pointer",
               background: "#23232b", border: "none", color: "#fff",
             }}
           >
