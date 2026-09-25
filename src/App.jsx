@@ -38180,6 +38180,10 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
     if (error) setErr(planLimitError(error, de) || error.message);
   };
 
+  const [canvasToDelete, setCanvasToDelete] = useState(null);
+
+  // Gefragt wird vorher. Ein Artboard ist Arbeit von Stunden, und der
+  // Loeschknopf sitzt auf der Karte, also einen Daumen neben dem Oeffnen.
   const removeCanvas = async (row) => {
     setRows(list => (list || []).filter(r => r.id !== row.id));
     await supabase.from("brand_canvases").delete().eq("id", row.id);
@@ -38262,7 +38266,7 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
   // the click there, and there is no reason to rediscover that here.
   const delBtn = (r) => canEdit && (
     <button type="button" title={de ? "Löschen" : "Delete"}
-      onClick={(e) => { e.stopPropagation(); e.preventDefault(); removeCanvas(r); }}
+      onClick={(e) => { e.stopPropagation(); e.preventDefault(); setCanvasToDelete(r); }}
       style={{ width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center",
         justifyContent: "center", color: darkMode ? "#e8e8ee" : "#23232b", cursor: "pointer",
         border: "none", background: "transparent", padding: 0, flexShrink: 0 }}>
@@ -38973,6 +38977,11 @@ function CreationsView({ onBack, session, userOrg, brand, theme, darkMode, t, ap
       </AnimatePresence>,
       document.body)}
       </div>
+      <ConfirmDelete open={!!canvasToDelete} theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+        title={de ? "Artboard löschen?" : "Delete artboard?"}
+        name={canvasToDelete?.name}
+        onCancel={() => setCanvasToDelete(null)}
+        onConfirm={() => { const r = canvasToDelete; setCanvasToDelete(null); removeCanvas(r); }} />
     </motion.div>
   );
 }
@@ -41120,40 +41129,12 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 
           {pinterestDialogs}
 
-          {boardToDelete && createPortal(
-            <div onClick={() => setBoardToDelete(null)}
-              style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(3px)",
-                display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-              <div onClick={e => e.stopPropagation()}
-                style={{ width: "min(420px, 100%)", borderRadius: 20, padding: 24, display: "flex", flexDirection: "column", gap: 10,
-                  background: darkMode ? "#16161e" : "#fff", border: `1px solid ${theme.borderFaint}` }}>
-                <div style={{ fontSize: 16, fontFamily: FONT, fontWeight: 600, color: theme.text }}>
-                  {appLanguage === "de" ? "Moodboard löschen" : "Delete moodboard"}
-                </div>
-                {/* Two lines, not one paragraph. Run together, the warning
-                    started mid-line and broke across the wrap, so the sentence
-                    that matters was the one split in half. */}
-                <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6 }}>
-                  {appLanguage === "de"
-                    ? `„${boardToDelete.title}" wird mit allem darauf gelöscht.`
-                    : `"${boardToDelete.title}" and everything on it will be deleted.`}
-                </div>
-                <div style={{ fontSize: 13, fontFamily: FONT, color: theme.textDim, lineHeight: 1.6, marginTop: -4 }}>
-                  {appLanguage === "de"
-                    ? "Das lässt sich nicht rückgängig machen."
-                    : "This cannot be undone."}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
-                  <div style={{ flex: 1 }} />
-                  <motion.div whileTap={{ scale: 0.97 }} onClick={() => setBoardToDelete(null)}
-                    style={{ padding: "9px 16px", borderRadius: 999, cursor: "pointer", border: `1px solid ${theme.borderFaint}`,
-                      color: theme.textDim, fontSize: 12.5, fontFamily: FONT }}>{appLanguage === "de" ? "Abbrechen" : "Cancel"}</motion.div>
-                  <motion.div whileTap={{ scale: 0.97 }} onClick={performDeleteBoard}
-                    style={{ padding: "9px 18px", borderRadius: 999, cursor: "pointer", background: "#e5484d", color: "#fff",
-                      fontSize: 12.5, fontFamily: FONT, fontWeight: 600 }}>{appLanguage === "de" ? "Löschen" : "Delete"}</motion.div>
-                </div>
-              </div>
-            </div>, document.body)}
+          <ConfirmDelete open={!!boardToDelete} theme={theme} darkMode={darkMode} appLanguage={appLanguage}
+            title={appLanguage === "de" ? "Moodboard löschen?" : "Delete moodboard?"}
+            note={boardToDelete && (appLanguage === "de"
+              ? `„${boardToDelete.title}" wird mit allem darauf unwiderruflich gelöscht.`
+              : `"${boardToDelete.title}" and everything on it will be permanently deleted.`)}
+            onCancel={() => setBoardToDelete(null)} onConfirm={performDeleteBoard} />
 
           {/* Pick a Pinterest board to import. Portalled, because this panel
               lives inside a view whose root is an animating motion.div, and a
