@@ -16883,19 +16883,22 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
 //
 // `light` und `dark` faerben die AUFGEKLAPPTE Notiz, `cardDark`/`cardDarkTo`
 // und `light`/`lightTo` die Karte im Raster, `glow` den Schein darunter.
+// Die dunklen Werte sind aus einer Vorlage des Eigentuemers ausgemessen
+// (Orange, Lila, Petrol und Grau Pixel fuer Pixel, der Rest im selben Muster:
+// hohe Saettigung, Helligkeit um 45 Prozent, der Verlauf 12 Punkte tiefer).
 // Im Dunkeln sind es eigene, satte Toene statt eines durchscheinenden Pastells:
 // 10 Prozent Farbe auf Anthrazit ergab ein Braungrau, in dem alle acht Farben
 // gleich aussahen. Die aufgeklappte Notiz bleibt dort bewusst zurueckgenommen,
 // weil hinter ihr ein ganzer Text steht und nicht zwei Zeilen.
 const NOTE_COLORS = {
-  sand:     { light: "#FFE7C4", lightTo: "#FFD09A", dark: "rgba(245, 200, 120, 0.16)", glow: "rgba(255, 176, 94, 0.50)",  cardDark: "#BD9D32", cardDarkTo: "#8D7525", glowDark: "rgba(229,191,67,0.30)", accent: "#D4A85A", border: "rgba(212, 168, 90, 0.25)" },
-  rose:     { light: "#FFD8DC", lightTo: "#FFB9C4", dark: "rgba(255, 150, 170, 0.16)", glow: "rgba(255, 140, 160, 0.48)", cardDark: "#B13E53", cardDarkTo: "#842E3E", glowDark: "rgba(219,77,103,0.30)", accent: "#D67885", border: "rgba(214, 120, 133, 0.25)" },
-  mint:     { light: "#C6F3DF", lightTo: "#A2E9C6", dark: "rgba(120, 230, 180, 0.16)", glow: "rgba(110, 222, 172, 0.48)", cardDark: "#389979", cardDarkTo: "#286C55", glowDark: "rgba(54,211,159,0.30)", accent: "#5BA889", border: "rgba(91, 168, 137, 0.25)" },
-  sky:      { light: "#CDE6FB", lightTo: "#A7D3F7", dark: "rgba(140, 200, 255, 0.16)", glow: "rgba(108, 178, 240, 0.48)", cardDark: "#328D9F", cardDarkTo: "#236470", glowDark: "rgba(47,190,218,0.30)", accent: "#5C8FB8", border: "rgba(92, 143, 184, 0.25)" },
-  lavender: { light: "#E0D8FA", lightTo: "#C6B7F5", dark: "rgba(180, 160, 240, 0.16)", glow: "rgba(160, 132, 240, 0.45)", cardDark: "#704DAC", cardDarkTo: "#553A82", glowDark: "rgba(138,96,210,0.30)", accent: "#7E6FB5", border: "rgba(126, 111, 181, 0.25)" },
-  peach:    { light: "#FFD8CB", lightTo: "#FFBBA6", dark: "rgba(255, 180, 130, 0.16)", glow: "rgba(255, 150, 120, 0.48)", cardDark: "#BA5936", cardDarkTo: "#8A4228", glowDark: "rgba(226,111,70,0.30)", accent: "#C68460", border: "rgba(198, 132, 96, 0.25)" },
-  sage:     { light: "#DDEAD0", lightTo: "#C2DAB0", dark: "rgba(170, 200, 140, 0.16)", glow: "rgba(150, 190, 120, 0.45)", cardDark: "#5F8E43", cardDarkTo: "#43652F", glowDark: "rgba(115,199,67,0.30)", accent: "#7A9560", border: "rgba(122, 149, 96, 0.25)" },
-  stone:    { light: "#EDEAE6", lightTo: "#DCD6CF", dark: "rgba(180, 175, 170, 0.16)", glow: "rgba(150, 140, 130, 0.38)", cardDark: "#7F7771", cardDarkTo: "#5F5954", glowDark: "rgba(174,146,122,0.30)", accent: "#7A7570", border: "rgba(122, 117, 112, 0.25)" },
+  sand:     { light: "#FFE7C4", lightTo: "#FFD09A", dark: "rgba(245, 200, 120, 0.16)", glow: "rgba(255, 176, 94, 0.50)",  cardDark: "#D49A11", cardDarkTo: "#9C710D", glowDark: "rgba(248,193,63,0.30)", accent: "#D4A85A", border: "rgba(212, 168, 90, 0.25)" },
+  rose:     { light: "#FFD8DC", lightTo: "#FFB9C4", dark: "rgba(255, 150, 170, 0.16)", glow: "rgba(255, 140, 160, 0.48)", cardDark: "#BE2D53", cardDarkTo: "#8C213E", glowDark: "rgba(226,90,126,0.30)", accent: "#D67885", border: "rgba(214, 120, 133, 0.25)" },
+  mint:     { light: "#C6F3DF", lightTo: "#A2E9C6", dark: "rgba(120, 230, 180, 0.16)", glow: "rgba(110, 222, 172, 0.48)", cardDark: "#1A936F", cardDarkTo: "#115F48", glowDark: "rgba(28,227,167,0.30)", accent: "#5BA889", border: "rgba(91, 168, 137, 0.25)" },
+  sky:      { light: "#CDE6FB", lightTo: "#A7D3F7", dark: "rgba(140, 200, 255, 0.16)", glow: "rgba(108, 178, 240, 0.48)", cardDark: "#0E748B", cardDarkTo: "#084654", glowDark: "rgba(12,184,223,0.30)", accent: "#5C8FB8", border: "rgba(92, 143, 184, 0.25)" },
+  lavender: { light: "#E0D8FA", lightTo: "#C6B7F5", dark: "rgba(180, 160, 240, 0.16)", glow: "rgba(160, 132, 240, 0.45)", cardDark: "#783BB5", cardDarkTo: "#592C87", glowDark: "rgba(161,105,216,0.30)", accent: "#7E6FB5", border: "rgba(126, 111, 181, 0.25)" },
+  peach:    { light: "#FFD8CB", lightTo: "#FFBBA6", dark: "rgba(255, 180, 130, 0.16)", glow: "rgba(255, 150, 120, 0.48)", cardDark: "#D7800F", cardDarkTo: "#9D5E0B", glowDark: "rgba(250,168,61,0.30)", accent: "#C68460", border: "rgba(198, 132, 96, 0.25)" },
+  sage:     { light: "#DDEAD0", lightTo: "#C2DAB0", dark: "rgba(170, 200, 140, 0.16)", glow: "rgba(150, 190, 120, 0.45)", cardDark: "#48822B", cardDarkTo: "#2F541C", glowDark: "rgba(103,201,54,0.30)", accent: "#7A9560", border: "rgba(122, 149, 96, 0.25)" },
+  stone:    { light: "#EDEAE6", lightTo: "#DCD6CF", dark: "rgba(180, 175, 170, 0.16)", glow: "rgba(150, 140, 130, 0.38)", cardDark: "#7F786C", cardDarkTo: "#5E5950", glowDark: "rgba(174,163,143,0.30)", accent: "#7A7570", border: "rgba(122, 117, 112, 0.25)" },
 };
 
 function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", ensureValidToken, llmKeys, llmProvider }) {
