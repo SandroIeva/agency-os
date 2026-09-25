@@ -17417,7 +17417,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                 onClick={() => setFilterMode(chip.id)}
                 style={{
                   height: 42, padding: (chip.logo || chip.icon) ? "0 18px 0 14px" : "0 18px", borderRadius: 999, cursor: "pointer",
-                  fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
+                  fontSize: 13, fontFamily: FONT, fontWeight: 500,
                   background: active ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
                   color: active ? "#fff" : theme.textSub,
                   border: "none",
@@ -17436,7 +17436,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                 )}
                 {chip.label}
                 {chip.count > 0 && (
-                  <span style={{ fontSize: 10.5, fontWeight: 600, opacity: active ? 0.75 : 0.55 }}>{chip.count}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, opacity: active ? 0.75 : 0.55 }}>{chip.count}</span>
                 )}
               </motion.div>
             );
@@ -17544,7 +17544,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
           style={{
             height: 42, padding: "0 19px 0 16px", borderRadius: 999,
             background: "#23232b", border: "none",
-            color: "#fff", fontSize: 12.5, fontWeight: 500, fontFamily: FONT,
+            color: "#fff", fontSize: 13, fontWeight: 500, fontFamily: FONT,
             cursor: "pointer", display: "flex", alignItems: "center", gap: 7,
           }}
         >
