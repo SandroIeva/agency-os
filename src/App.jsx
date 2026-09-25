@@ -11985,7 +11985,7 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
       </div>
 
       {/* Navigation + View Switcher */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 32px 8px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 32px 18px" }}>
         <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={navigatePrev}
           style={{ cursor: "pointer", color: theme.textDim, fontSize: 18, fontFamily: FONT, padding: "4px 8px" }}>‹</motion.div>
         <motion.div
