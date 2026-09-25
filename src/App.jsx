@@ -17567,7 +17567,12 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                 borderRadius: 24,
                 padding: "28px 32px 24px",
                 display: "flex", flexDirection: "column",
-                boxShadow: darkMode ? "0 30px 80px rgba(0,0,0,0.6)" : "0 30px 80px rgba(0,0,0,0.18)",
+                // Derselbe farbige Schein wie auf der Karte, aus der sie
+                // aufgeklappt wurde, nur groesser. Ein grauer Schatten liess
+                // die Notiz unterwegs ihre Farbe verlieren.
+                boxShadow: darkMode
+                  ? `0 40px 90px -20px ${expandedPalette.glowDark}, 0 30px 80px rgba(0,0,0,0.55)`
+                  : `0 40px 90px -20px ${expandedPalette.glow}, 0 20px 50px rgba(0,0,0,0.10)`,
                 overflow: "hidden",
               }}
             >
