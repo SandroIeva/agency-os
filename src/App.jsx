@@ -6505,7 +6505,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
               <span style={{ fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{de ? "Alle Items" : "All items"}</span>
             </div>
-            <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, fontWeight: 600 }}>{items.length}</span>
+            <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textFaint, fontWeight: 600 }}>{items.length}</span>
           </motion.div>
         </div>
 
@@ -6544,7 +6544,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                     {isChecked && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                   </motion.div>
                   <span style={{ flex: 1, fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
-                  {count > 0 && <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, fontWeight: 600 }}>{count}</span>}
+                  {count > 0 && <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textFaint, fontWeight: 600 }}>{count}</span>}
                 </div>
                 {/* Team avatars under project name */}
                 {projMembers.length > 0 && (
