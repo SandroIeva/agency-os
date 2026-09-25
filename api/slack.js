@@ -1113,13 +1113,15 @@ export default async function handler(req) {
       const hasIg = !isText && found.some(x => x.provider === "instagram");
       const hasTh = found.some(x => x.provider === "threads");
       const hasLi = found.some(x => x.provider === "linkedin");
-      if (!hasIg && !hasTh && !hasLi) return replace(t.socialNoChannel);
+      const hasX = found.some(x => x.provider === "twitter");
+      if (!hasIg && !hasTh && !hasLi && !hasX) return replace(t.socialNoChannel);
 
       if (!st.c) {
         const choices = [];
         if (hasIg) choices.push({ key: "c", label: "Instagram", set: { c: "i" } });
         if (hasTh) choices.push({ key: "c", label: "Threads", set: { c: "t" } });
         if (hasLi) choices.push({ key: "c", label: "LinkedIn", set: { c: "l" } });
+        if (hasX) choices.push({ key: "c", label: "X", set: { c: "x" } });
         if (choices.length > 1) choices.push({ key: "c", label: choices.length > 2 ? t.socialAll : t.socialBoth, set: { c: "b" } });
         return replace(t.socialWhich, asAsset(draftBlocks(t, { ...st, chosen: org.name },
           t.socialWhich, [...choices, cancel], t.fileTitle)));
@@ -1170,7 +1172,8 @@ export default async function handler(req) {
       const targets = found.filter(x => (st.c === "b" && !(isText && x.provider === "instagram"))
         || (st.c === "i" && x.provider === "instagram")
         || (st.c === "t" && x.provider === "threads")
-        || (st.c === "l" && x.provider === "linkedin"));
+        || (st.c === "l" && x.provider === "linkedin")
+        || (st.c === "x" && x.provider === "twitter"));
       if (!targets.length) return replace(t.socialNoChannel);
 
       // Feste Zeiten aus Knoepfen statt getippter Datumsangaben, gerechnet in

@@ -689,12 +689,16 @@ export const socialTargetsFor = async (db, orgId) => {
 //
 // Faellt Zernio aus, kommt eine leere Liste zurueck und nicht ein Fehler: dann
 // bietet der Bot Instagram und Threads an, statt gar nichts zu tun.
-const ZERNIO_IN_MESSENGER = new Set(["linkedin"]);
+// Zernios eigene Namen, nicht unsere: `a.platform` wandert unveraendert in
+// scheduled_posts.targets und von dort zurueck an Zernio. X heisst dort
+// "twitter", und nur die Beschriftung sagt X.
+const ZERNIO_IN_MESSENGER = new Set(["linkedin", "twitter"]);
 
 // Wie ein Kanal heisst, wenn er jemandem gezeigt wird. An einer Stelle, weil
 // Telegram und Slack dieselbe Antwort geben muessen.
 export const providerLabel = (p) => ({
   instagram: "Instagram", threads: "Threads", linkedin: "LinkedIn",
+  x: "X", twitter: "X",
 }[p] || p);
 const zernioTargets = async (db, orgId) => {
   const secret = process.env.PUBLISH_SECRET;
@@ -759,7 +763,10 @@ export const queueSocialPost = async (db, { userId, orgId, name, contentType, by
       orgId, userId, sizeBytes: size,
     });
     if (!put.ok) return { ok: false, reason: "failed" };
-    media = [{ bucket: "brand-assets", path, kind: "IMAGE" }];
+    // Was es IST, nicht was es meistens ist: ein Video als Bild angemeldet
+    // wird bei Meta am Container abgelehnt und bei Zernio falsch eingestellt.
+    media = [{ bucket: "brand-assets", path,
+      kind: String(contentType || "").startsWith("video/") ? "VIDEO" : "IMAGE" }];
   }
 
   const { data: row, error } = await db.from("scheduled_posts").insert({

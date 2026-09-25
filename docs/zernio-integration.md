@@ -253,3 +253,22 @@ nur ohne Browser davor.
 Ein Beitrag aus reinem Text ist bei LinkedIn und Threads normal, bei Instagram
 unmöglich. Deshalb fällt in der Kanalauswahl nur Instagram weg, wenn kein Bild
 dabei ist, und "Alle" heißt alle, die diesen Beitrag auch nehmen.
+
+## X
+
+X läuft über Zernio und nicht über die eigene API, und zwar aus einem Grund,
+der sich nachrechnen lässt: **X verkauft seit 2026 keine Tarife mehr, sondern
+rechnet pro Aufruf ab** (0,015 $ je Beitrag, 0,200 $ wenn er einen Link
+enthält, 0,001 $ je gelesenem eigenen Datensatz), und **Zernio reicht genau
+diese Sätze ohne Aufschlag durch** ("X/Twitter API passed through at X's exact
+rates, zero markup"). Eigener Code spart hier also nichts an laufenden Kosten,
+anders als bei Instagram und Threads, wo Meta pro Beitrag nichts nimmt.
+Zernios eigener Preis ist allein die Kontostaffel (1 bis 2 kostenlos, 3 bis 10
+je 6 $, 11 bis 100 je 3 $, ab 101 je 1 $).
+
+Bezahlt wird trotzdem pro Beitrag, von uns. X gehört deshalb hinter
+einen bezahlten Plan, und ein Limit je Workspace fehlt noch.
+
+In i7OS heißt die Plattform in der Oberfläche `x` und bei Zernio `twitter`.
+**In `scheduled_posts.targets` und im Messenger steht Zernios Name**, weil der
+Wert von dort unverändert zurück an Zernio geht; nur `providerLabel` schreibt X.

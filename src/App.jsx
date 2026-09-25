@@ -31667,7 +31667,13 @@ function PeopleTab({ theme, darkMode, accent, appLanguage = "de", headerSlotRef,
 // What Zernio is OFFERED for. X is deliberately not on it (owner, 2026-09-20):
 // it comes back when we actually want it. An account already connected there
 // keeps showing and keeps working; this list only decides what can be added.
-const ZERNIO_UI_PLATFORMS = ["linkedin", "instagram", "threads", "pinterest"];
+const ZERNIO_UI_PLATFORMS = ["linkedin", "instagram", "threads", "pinterest", "x"];
+
+// Welche davon in den Einstellungen KEINE eigene Zeile bekommen: Instagram,
+// Threads und Pinterest stehen dort schon, verbunden auf dem direkten Weg zu
+// ihrer eigenen API. Zweimal dieselbe Plattform in einer Liste waere die Frage,
+// welche der beiden Zeilen gilt.
+const ZERNIO_HIDDEN_IN_SETTINGS = new Set(["instagram", "threads", "pinterest"]);
 
 // Connecting a network straight through its own API: Instagram, Threads and
 // TikTok. THREE places offer a connection - Settings, Analytics and the post
@@ -35854,12 +35860,15 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       setError(new Error(de ? "Instagram braucht ein Bild oder ein Video." : "Instagram needs an image or a video."));
       return;
     }
-    // A video only has somewhere to go on the direct path. Said here rather
-    // than letting Zernio receive a post whose picture silently went missing.
-    if (reel && zernSel.length) {
+    // Ein Video geht auch ueber Zernio, seit X dazugekommen ist: hochgeladen
+    // wie ein Bild, nur als `type: "video"`. Was NICHT geht, ist ein Video, das
+    // fuer den Zwischenspeicher zu gross war: dessen Adresse gehoert dem Relay
+    // und Zernio kaeme nicht daran. Das wird gesagt, statt einen Beitrag
+    // loszuschicken, dessen Film unterwegs verschwindet.
+    if ((reel?.file?.size || 0) > 45 * 1048576 && zernSel.length) {
       setError(new Error(de
-        ? "Ein Video geht nur an die direkten Kanäle: Instagram, Threads, TikTok. Nimm die anderen raus."
-        : "A video can only go to the direct channels: Instagram, Threads, TikTok. Take the others out."));
+        ? "Dieses Video ist zu groß für die Kanäle über Zernio. Es geht nur an Instagram, Threads und TikTok."
+        : "This video is too large for the channels that go through Zernio. It can only go to Instagram, Threads and TikTok."));
       return;
     }
     if (extras.length && zernSel.length) {
@@ -35893,6 +35902,18 @@ function CreatePostView({ onBack, userOrg, session, theme, darkMode, appLanguage
       // `kind` travels with each slide: both networks decide per CHILD
       // whether it is an image or a video, and a video sent as an image is
       // refused at the container.
+      // Das Video fuer Zernio, denselben Weg wie das Bild: Zernio nimmt keine
+      // Bytes, sondern eine Adresse aus dem eigenen Speicher. Es ersetzt das
+      // gerenderte Bild, weil ein Beitrag entweder das eine oder das andere
+      // traegt und nicht beides.
+      if (zernSel.length && reel) {
+        const vf = reel.file;
+        const pre = await zernioRequest(session, { mode: "presign", orgId, filename: vf.name || "video.mp4", contentType: vf.type || "video/mp4", size: vf.size });
+        const up = await fetch(pre.uploadUrl, { method: "PUT", headers: { "Content-Type": vf.type || "video/mp4" }, body: vf });
+        if (!up.ok) throw new Error(de ? "Video-Upload fehlgeschlagen." : "Video upload failed.");
+        mediaItems = [{ type: "video", url: pre.publicUrl, filename: vf.name || "video.mp4" }];
+      }
+
       let metaExtras = [];
       if ((metaSel.length || thrSel.length) && extras.length) {
         metaExtras = await Promise.all(extras.map(async x => {
@@ -57965,58 +57986,59 @@ export default function CircularMenu() {
     setThBusy(false);
   };
 
-  // ── LinkedIn, ueber Zernio ─────────────────────────────────────────────────
+  // ── Was bei Zernio haengt: LinkedIn und X ──────────────────────────────────
   // Dieselben fuenf Teile wie bei den direkten Kanaelen, nur liegt die
-  // Verbindung nicht bei uns: LinkedIn haengt an Zernio, und deshalb ist der
-  // Endpunkt /api/zernio statt /api/linkedin.
+  // Verbindung nicht bei uns. Eine Liste und eine Schleife statt einer Kopie je
+  // Plattform: zwei Saetze derselben Funktionen waeren zwei Orte, an denen der
+  // naechste Umbau haengenbleibt.
   //
-  // Die Zeile stand hier bisher nicht, obwohl man LinkedIn im Composer
+  // Die Zeilen standen hier bisher nicht, obwohl man die Kanaele im Composer
   // auswaehlen konnte. Damit gab es einen Weg hinein und keinen hinaus: eine
   // Verbindung, die man nicht mehr braucht, blieb fuer immer stehen.
-  const [liConn, setLiConn] = useState(null);
-  const [liBusy, setLiBusy] = useState(false);
-  const [liErr, setLiErr] = useState("");
+  const [znConn, setZnConn] = useState(null);   // null = Zernio hat noch nicht geantwortet
+  const [znBusy, setZnBusy] = useState(null);   // die Plattform, die gerade arbeitet
+  const [znErr, setZnErr] = useState("");
 
-  const readLinkedIn = useCallback(async () => {
+  const readZernio = useCallback(async () => {
     if (!userOrg?.id) return null;
     try {
       const d = await zernioRequest(session, { mode: "status", orgId: userOrg.id });
-      return (d?.accounts || []).filter(a => a.platform === "linkedin");
+      return d?.accounts || [];
     } catch { return null; }
   }, [userOrg?.id, session?.access_token]); // eslint-disable-line
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const list = await readLinkedIn();
-      if (alive) setLiConn(list);
+      const list = await readZernio();
+      if (alive) setZnConn(list);
     })();
     return () => { alive = false; };
-  }, [readLinkedIn]);
+  }, [readZernio]);
 
-  const startLinkedInConnect = async () => {
-    setLiBusy(true); setLiErr("");
+  const startZernioConnect = async (uiKey) => {
+    setZnBusy(uiKey); setZnErr("");
     try {
-      const r = await zernioRequest(session, { mode: "connect", orgId: userOrg.id, platform: "linkedin" });
+      const r = await zernioRequest(session, { mode: "connect", orgId: userOrg.id, platform: zernioKeyFor(uiKey) });
       if (r?.authUrl) window.location.assign(r.authUrl);
       else throw new Error("no authUrl");
     } catch (e) {
       // Der Endpunkt sagt selbst, warum: kein Plan, kein Platz, kein Recht.
-      setLiErr(e?.message || (appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection."));
-      setLiBusy(false);
+      setZnErr(e?.message || (appLanguage === "de" ? "Verbindung konnte nicht vorbereitet werden." : "Could not prepare the connection."));
+      setZnBusy(null);
     }
   };
 
-  const disconnectLinkedIn = async (accountId) => {
+  const disconnectZernio = async (uiKey, accountId) => {
     if (!userOrg?.id) return;
-    setLiBusy(true); setLiErr("");
+    setZnBusy(uiKey); setZnErr("");
     try {
       await zernioRequest(session, { mode: "disconnect", orgId: userOrg.id, accountId });
-      setLiConn(await readLinkedIn());
+      setZnConn(await readZernio());
     } catch (e) {
-      setLiErr(appLanguage === "de" ? "Trennen hat nicht funktioniert." : "Disconnecting did not work.");
+      setZnErr(appLanguage === "de" ? "Trennen hat nicht funktioniert." : "Disconnecting did not work.");
     }
-    setLiBusy(false);
+    setZnBusy(null);
   };
 
   // ── TikTok, directly ───────────────────────────────────────────────────────
@@ -66075,56 +66097,67 @@ export default function CircularMenu() {
                   {thErr && (
                     <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{thErr}</div>
                   )}
-                  {/* LinkedIn. Liegt bei Zernio und nicht bei uns, sieht hier
-                      aber aus wie jeder andere Kanal: wer eine Verbindung
-                      herstellen kann, muss sie auch loesen koennen.
+                  {/* LinkedIn und X. Liegen bei Zernio und nicht bei uns,
+                      sehen hier aber aus wie jeder andere Kanal: wer eine
+                      Verbindung herstellen kann, muss sie auch loesen koennen.
 
-                      `liConn` ist null, solange Zernio nicht geantwortet hat,
+                      `znConn` ist null, solange Zernio nicht geantwortet hat,
                       und bleibt null, wenn es gar nicht eingerichtet ist. Dann
-                      steht die Zeile nicht da und verspricht auch nichts. */}
-                  {liConn !== null && (
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: 14,
-                    padding: "16px 20px", borderTop: `1px solid ${theme.borderFaint}`,
-                  }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 10,
-                      background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}>
-                      <div style={{ width: 23, height: 23, borderRadius: 7, background: "#0A66C2", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <svg width={tpGlyphSize("linkedin", 14)} height={tpGlyphSize("linkedin", 14)} viewBox="0 0 24 24">{touchpointGlyph("linkedin")}</svg>
+                      stehen die Zeilen nicht da und versprechen auch nichts. */}
+                  {znConn !== null && ZERNIO_UI_PLATFORMS.filter(k => !ZERNIO_HIDDEN_IN_SETTINGS.has(k)).map(uiKey => {
+                    const pm = TOUCHPOINT_PLATFORMS.find(x => x.key === uiKey) || { label: uiKey, color: "#15151c" };
+                    const mine = znConn.filter(a => uiKeyFor(a.platform) === uiKey);
+                    const busy = znBusy === uiKey;
+                    // Schwarz auf Anthrazit ist keine Kachel. X und TikTok
+                    // tragen dieselbe Farbe, also bekommt sie im Dunkeln eine
+                    // helle Flaeche statt einer unsichtbaren.
+                    const tile = (pm.color === "#111111" && darkMode) ? "rgba(255,255,255,0.16)" : pm.color;
+                    return (
+                      <div key={uiKey}>
+                        <div style={{
+                          display: "flex", alignItems: "center", gap: 14,
+                          padding: "16px 20px", borderTop: `1px solid ${theme.borderFaint}`,
+                        }}>
+                          <div style={{
+                            width: 36, height: 36, borderRadius: 10,
+                            background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                          }}>
+                            <div style={{ width: 23, height: 23, borderRadius: 7, background: tile, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <svg width={tpGlyphSize(uiKey, 14)} height={tpGlyphSize(uiKey, 14)} viewBox="0 0 24 24">{touchpointGlyph(uiKey)}</svg>
+                            </div>
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>{pm.label}</div>
+                            <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {mine.length
+                                ? (appLanguage === "de"
+                                    ? `Verbunden${mine[0].displayName ? ` als ${mine[0].displayName}` : ""}. Gilt für diesen Workspace.`
+                                    : `Connected${mine[0].displayName ? ` as ${mine[0].displayName}` : ""}. Applies to this workspace.`)
+                                : (appLanguage === "de"
+                                    ? "Beiträge veröffentlichen, mit Text, Bild oder Video."
+                                    : "Publish posts, with text, an image or a video.")}
+                            </div>
+                          </div>
+                          <motion.button whileTap={{ scale: 0.97 }}
+                            onClick={busy ? undefined : (mine.length
+                              ? () => disconnectZernio(uiKey, mine[0].id)
+                              : () => startZernioConnect(uiKey))}
+                            style={{ padding: "8px 14px", borderRadius: 10, cursor: busy ? "wait" : "pointer",
+                              border: `1px solid ${mine.length ? theme.borderFaint : "transparent"}`,
+                              background: mine.length ? "transparent" : "#15151c",
+                              color: mine.length ? theme.text : "#fff",
+                              fontFamily: FONT, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0,
+                              opacity: busy ? 0.6 : 1 }}>
+                            {mine.length ? (appLanguage === "de" ? "Trennen" : "Disconnect")
+                              : (appLanguage === "de" ? "Verbinden" : "Connect")}
+                          </motion.button>
+                        </div>
                       </div>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontFamily: FONT, color: theme.text, fontWeight: 500 }}>LinkedIn</div>
-                      <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {liConn?.length
-                          ? (appLanguage === "de"
-                              ? `Verbunden${liConn[0].displayName ? ` als ${liConn[0].displayName}` : ""}. Gilt für diesen Workspace.`
-                              : `Connected${liConn[0].displayName ? ` as ${liConn[0].displayName}` : ""}. Applies to this workspace.`)
-                          : (appLanguage === "de"
-                              ? "Beiträge veröffentlichen, auch reine Textbeiträge."
-                              : "Publish posts, text-only posts included.")}
-                      </div>
-                    </div>
-                    <motion.button whileTap={{ scale: 0.97 }}
-                      onClick={liBusy ? undefined : (liConn?.length
-                        ? () => disconnectLinkedIn(liConn[0].id)
-                        : startLinkedInConnect)}
-                      style={{ padding: "8px 14px", borderRadius: 10, cursor: liBusy ? "wait" : "pointer",
-                        border: `1px solid ${liConn?.length ? theme.borderFaint : "transparent"}`,
-                        background: liConn?.length ? "transparent" : "#15151c",
-                        color: liConn?.length ? theme.text : "#fff",
-                        fontFamily: FONT, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0,
-                        opacity: liBusy ? 0.6 : 1 }}>
-                      {liConn?.length ? (appLanguage === "de" ? "Trennen" : "Disconnect")
-                        : (appLanguage === "de" ? "Verbinden" : "Connect")}
-                    </motion.button>
-                  </div>
-                  )}
-                  {liErr && (
-                    <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{liErr}</div>
+                    );
+                  })}
+                  {znErr && (
+                    <div style={{ padding: "0 20px 14px", fontSize: 11.5, fontFamily: FONT, color: "#E86767" }}>{znErr}</div>
                   )}
                   {/* TikTok. Its own client, its own review, its own row, for
                       the same reason Instagram and Threads have three. */}

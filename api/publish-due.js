@@ -80,7 +80,7 @@ export default async function handler(req) {
   // Welche Kanaele nicht bei Meta liegen, sondern bei Zernio. Eine Menge und
   // keine Abfrage auf "linkedin", damit der naechste Kanal von dort nur hier
   // eingetragen werden muss.
-  const ZERNIO_PROVIDERS = new Set(["linkedin", "facebook", "x", "tiktok", "youtube", "pinterest"]);
+  const ZERNIO_PROVIDERS = new Set(["linkedin", "twitter", "facebook", "tiktok", "youtube", "pinterest"]);
 
   // Ein Medium aus unserem Speicher in Zernios Speicher. Signierte Adresse,
   // Bytes holen, Platz bei Zernio erfragen, hochladen, deren Adresse behalten.

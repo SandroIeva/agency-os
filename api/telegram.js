@@ -758,11 +758,13 @@ export default async function handler(req) {
         const hasIg = !!file && found.some(x => x.provider === "instagram");
         const hasTh = found.some(x => x.provider === "threads");
         const hasLi = found.some(x => x.provider === "linkedin");
-        if (!hasIg && !hasTh && !hasLi) return answer(t.socialNoChannel, true);
+        const hasX = found.some(x => x.provider === "twitter");
+        if (!hasIg && !hasTh && !hasLi && !hasX) return answer(t.socialNoChannel, true);
         const rows = [];
         if (hasIg) rows.push([{ text: "Instagram", callback_data: `l:${hint}:i` }]);
         if (hasTh) rows.push([{ text: "Threads", callback_data: `l:${hint}:t` }]);
         if (hasLi) rows.push([{ text: "LinkedIn", callback_data: `l:${hint}:l` }]);
+        if (hasX) rows.push([{ text: "X", callback_data: `l:${hint}:x` }]);
         if (rows.length > 1) rows.push([{ text: rows.length > 2 ? t.socialAll : t.socialBoth, callback_data: `l:${hint}:b` }]);
         rows.push(cancelRow);
         await api(botToken, "editMessageText", {
@@ -863,7 +865,8 @@ export default async function handler(req) {
           (ch === "b" && !(!withMedia && x.provider === "instagram"))
           || (ch === "i" && x.provider === "instagram")
           || (ch === "t" && x.provider === "threads")
-          || (ch === "l" && x.provider === "linkedin"));
+          || (ch === "l" && x.provider === "linkedin")
+          || (ch === "x" && x.provider === "twitter"));
         if (!targets.length) return answer(t.socialNoChannel, true);
 
         // Feste Zeiten aus Knoepfen statt getippter Datumsangaben: in einem
