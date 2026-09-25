@@ -17606,7 +17606,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                     style={{
                       width: 40, height: 40, borderRadius: 11, cursor: "pointer",
                       background: expandedNote.pinned ? (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)") : "transparent",
-                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
+                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.20)" : "rgba(21,21,28,0.16)"}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
                       color: darkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)",
                     }}
@@ -17620,7 +17620,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                       style={{
                         height: 40, padding: "0 14px", borderRadius: 11, cursor: "pointer",
                         background: expandedNote.project_name ? expandedPalette.accent + "15" : "transparent",
-                        border: `1px solid ${expandedNote.project_name ? expandedPalette.accent + "30" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)")}`,
+                        border: `1px solid ${expandedNote.project_name ? expandedPalette.accent + "30" : (darkMode ? "rgba(255,255,255,0.20)" : "rgba(21,21,28,0.16)")}`,
                         display: "flex", alignItems: "center", gap: 6,
                         fontSize: 13, fontFamily: FONT, fontWeight: 500,
                         color: expandedNote.project_name ? expandedPalette.accent : (darkMode ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)"),
@@ -17683,7 +17683,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                       style={{
                         width: 40, height: 40, borderRadius: 11, cursor: "pointer",
                         background: "transparent",
-                        border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
+                        border: `1px solid ${darkMode ? "rgba(255,255,255,0.20)" : "rgba(21,21,28,0.16)"}`,
                         display: "flex", alignItems: "center", justifyContent: "center",
                       }}
                     >
@@ -17725,7 +17725,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                     style={{
                       width: 40, height: 40, borderRadius: 11, cursor: "pointer",
                       background: isRecording ? "rgba(239, 68, 68, 0.12)" : (polishing ? expandedPalette.accent + "15" : "transparent"),
-                      border: `1px solid ${isRecording ? "rgba(239, 68, 68, 0.35)" : (polishing ? expandedPalette.accent + "30" : (darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"))}`,
+                      border: `1px solid ${isRecording ? "rgba(239, 68, 68, 0.35)" : (polishing ? expandedPalette.accent + "30" : (darkMode ? "rgba(255,255,255,0.20)" : "rgba(21,21,28,0.16)"))}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
                       color: isRecording ? "#EF4444" : (polishing ? expandedPalette.accent : (darkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)")),
                     }}
@@ -17743,7 +17743,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                     style={{
                       width: 40, height: 40, borderRadius: 11, cursor: "pointer",
                       background: "transparent",
-                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
+                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.20)" : "rgba(21,21,28,0.16)"}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
                       color: darkMode ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.5)",
                     }}
@@ -17759,7 +17759,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                     style={{
                       width: 40, height: 40, borderRadius: 11, cursor: "pointer",
                       background: "transparent",
-                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
+                      border: `1px solid ${darkMode ? "rgba(255,255,255,0.20)" : "rgba(21,21,28,0.16)"}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
                       color: theme.textDim, fontSize: 16,
                     }}
