@@ -16888,14 +16888,14 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
 // gleich aussahen. Die aufgeklappte Notiz bleibt dort bewusst zurueckgenommen,
 // weil hinter ihr ein ganzer Text steht und nicht zwei Zeilen.
 const NOTE_COLORS = {
-  sand:     { light: "#FFE7C4", lightTo: "#FFD09A", dark: "rgba(245, 200, 120, 0.16)", glow: "rgba(255, 176, 94, 0.50)",  cardDark: "#E2B628", cardDarkTo: "#B48F18", glowDark: "rgba(250,208,71,0.55)", accent: "#D4A85A", border: "rgba(212, 168, 90, 0.25)" },
-  rose:     { light: "#FFD8DC", lightTo: "#FFB9C4", dark: "rgba(255, 150, 170, 0.16)", glow: "rgba(255, 140, 160, 0.48)", cardDark: "#CD3753", cardDarkTo: "#9F283E", glowDark: "rgba(236,81,109,0.55)", accent: "#D67885", border: "rgba(214, 120, 133, 0.25)" },
-  mint:     { light: "#C6F3DF", lightTo: "#A2E9C6", dark: "rgba(120, 230, 180, 0.16)", glow: "rgba(110, 222, 172, 0.48)", cardDark: "#35B185", cardDarkTo: "#278262", glowDark: "rgba(60,226,168,0.55)", accent: "#5BA889", border: "rgba(91, 168, 137, 0.25)" },
-  sky:      { light: "#CDE6FB", lightTo: "#A7D3F7", dark: "rgba(140, 200, 255, 0.16)", glow: "rgba(108, 178, 240, 0.48)", cardDark: "#2E85D1", cardDarkTo: "#23659F", glowDark: "rgba(72,161,239,0.55)", accent: "#5C8FB8", border: "rgba(92, 143, 184, 0.25)" },
-  lavender: { light: "#E0D8FA", lightTo: "#C6B7F5", dark: "rgba(180, 160, 240, 0.16)", glow: "rgba(160, 132, 240, 0.45)", cardDark: "#7D4CCD", cardDarkTo: "#5F30AB", glowDark: "rgba(153,102,234,0.55)", accent: "#7E6FB5", border: "rgba(126, 111, 181, 0.25)" },
-  peach:    { light: "#FFD8CB", lightTo: "#FFBBA6", dark: "rgba(255, 180, 130, 0.16)", glow: "rgba(255, 150, 120, 0.48)", cardDark: "#DD773C", cardDarkTo: "#BA5921", glowDark: "rgba(246,147,90,0.55)", accent: "#C68460", border: "rgba(198, 132, 96, 0.25)" },
-  sage:     { light: "#DDEAD0", lightTo: "#C2DAB0", dark: "rgba(170, 200, 140, 0.16)", glow: "rgba(150, 190, 120, 0.45)", cardDark: "#65A540", cardDarkTo: "#4A792F", glowDark: "rgba(124,215,71,0.55)", accent: "#7A9560", border: "rgba(122, 149, 96, 0.25)" },
-  stone:    { light: "#EDEAE6", lightTo: "#DCD6CF", dark: "rgba(180, 175, 170, 0.16)", glow: "rgba(150, 140, 130, 0.38)", cardDark: "#7F7771", cardDarkTo: "#5F5954", glowDark: "rgba(176,146,120,0.55)", accent: "#7A7570", border: "rgba(122, 117, 112, 0.25)" },
+  sand:     { light: "#FFE7C4", lightTo: "#FFD09A", dark: "rgba(245, 200, 120, 0.16)", glow: "rgba(255, 176, 94, 0.50)",  cardDark: "#BD9D32", cardDarkTo: "#8D7525", glowDark: "rgba(229,191,67,0.30)", accent: "#D4A85A", border: "rgba(212, 168, 90, 0.25)" },
+  rose:     { light: "#FFD8DC", lightTo: "#FFB9C4", dark: "rgba(255, 150, 170, 0.16)", glow: "rgba(255, 140, 160, 0.48)", cardDark: "#B13E53", cardDarkTo: "#842E3E", glowDark: "rgba(219,77,103,0.30)", accent: "#D67885", border: "rgba(214, 120, 133, 0.25)" },
+  mint:     { light: "#C6F3DF", lightTo: "#A2E9C6", dark: "rgba(120, 230, 180, 0.16)", glow: "rgba(110, 222, 172, 0.48)", cardDark: "#389979", cardDarkTo: "#286C55", glowDark: "rgba(54,211,159,0.30)", accent: "#5BA889", border: "rgba(91, 168, 137, 0.25)" },
+  sky:      { light: "#CDE6FB", lightTo: "#A7D3F7", dark: "rgba(140, 200, 255, 0.16)", glow: "rgba(108, 178, 240, 0.48)", cardDark: "#328D9F", cardDarkTo: "#236470", glowDark: "rgba(47,190,218,0.30)", accent: "#5C8FB8", border: "rgba(92, 143, 184, 0.25)" },
+  lavender: { light: "#E0D8FA", lightTo: "#C6B7F5", dark: "rgba(180, 160, 240, 0.16)", glow: "rgba(160, 132, 240, 0.45)", cardDark: "#704DAC", cardDarkTo: "#553A82", glowDark: "rgba(138,96,210,0.30)", accent: "#7E6FB5", border: "rgba(126, 111, 181, 0.25)" },
+  peach:    { light: "#FFD8CB", lightTo: "#FFBBA6", dark: "rgba(255, 180, 130, 0.16)", glow: "rgba(255, 150, 120, 0.48)", cardDark: "#BA5936", cardDarkTo: "#8A4228", glowDark: "rgba(226,111,70,0.30)", accent: "#C68460", border: "rgba(198, 132, 96, 0.25)" },
+  sage:     { light: "#DDEAD0", lightTo: "#C2DAB0", dark: "rgba(170, 200, 140, 0.16)", glow: "rgba(150, 190, 120, 0.45)", cardDark: "#5F8E43", cardDarkTo: "#43652F", glowDark: "rgba(115,199,67,0.30)", accent: "#7A9560", border: "rgba(122, 149, 96, 0.25)" },
+  stone:    { light: "#EDEAE6", lightTo: "#DCD6CF", dark: "rgba(180, 175, 170, 0.16)", glow: "rgba(150, 140, 130, 0.38)", cardDark: "#7F7771", cardDarkTo: "#5F5954", glowDark: "rgba(174,146,122,0.30)", accent: "#7A7570", border: "rgba(122, 117, 112, 0.25)" },
 };
 
 function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", ensureValidToken, llmKeys, llmProvider }) {
@@ -17202,13 +17202,21 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
         layout
         layoutId={`note-${note.id}`}
         initial={{ opacity: 0, scale: 0.7, rotate: rotation * 3, y: 20 }}
-        animate={{ opacity: 1, scale: 1, rotate: rotation, y: 0 }}
+        // Neigung und Vergroesserung gehoeren BEIDE hierher. Standen sie halb in
+        // `style.transform` und halb in einem whileHover, schrieb Framer beim
+        // Ueberfahren das ganze transform neu und die Perspektive fiel fuer
+        // einen Bildwechsel weg: die Karte sprang, statt sich zu heben.
+        animate={{ opacity: 1, scale: isHovered ? 1.03 : 1, rotate: rotation, rotateX: tiltX, rotateY: tiltY, y: 0 }}
         exit={{ opacity: 0, scale: 0.85, rotate: rotation + 8, y: -20, filter: "blur(4px)" }}
         transition={{
           type: "spring", stiffness: 220, damping: 22,
           delay: idx * 0.04,
+          // Der Staffel-Delay gilt nur dem Auftauchen. Auf dem Hover laege er
+          // als Verzoegerung unter dem Mauszeiger.
+          scale: { type: "spring", stiffness: 320, damping: 26, delay: 0 },
+          rotateX: { duration: 0.18, ease: "easeOut", delay: 0 },
+          rotateY: { duration: 0.18, ease: "easeOut", delay: 0 },
         }}
-        whileHover={{ scale: 1.03, zIndex: 10 }}
         onMouseMove={(e) => handleCardMouseMove(e, note.id)}
         onMouseEnter={() => setHoveredId(note.id)}
         onMouseLeave={() => handleCardMouseLeave(note.id)}
@@ -17218,7 +17226,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
           gridRow: `span ${span.row}`,
           minHeight: span.row * 96,
           background: bg,
-          border: darkMode ? `1px solid rgba(255,255,255,0.06)` : "none",
+          border: "none",
           borderRadius: 22,
           padding: "20px 22px",
           cursor: "pointer",
@@ -17230,14 +17238,14 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
           // grauer Schatten daneben haelt sie am Boden, sonst schwebt sie.
           boxShadow: isHovered
             ? (darkMode
-                ? `0 30px 48px -10px ${glow}, 0 10px 22px rgba(0,0,0,0.45)`
+                ? `0 28px 44px -14px ${glow}, 0 10px 22px rgba(0,0,0,0.45)`
                 : `0 34px 52px -16px ${glow}, 0 10px 22px rgba(0,0,0,0.06)`)
             : (darkMode
-                ? `0 24px 40px -10px ${glow}, 0 4px 12px rgba(0,0,0,0.40)`
+                ? `0 22px 38px -14px ${glow}, 0 4px 12px rgba(0,0,0,0.40)`
                 : `0 26px 42px -14px ${glow}, 0 4px 12px rgba(0,0,0,0.04)`),
-          transform: `perspective(1000px) rotateX(${tiltX}deg) rotateY(${tiltY}deg)`,
-          transformStyle: "preserve-3d",
-          transition: "box-shadow 0.25s ease, transform 0.15s ease",
+          transformPerspective: 1000,
+          zIndex: isHovered ? 10 : 1,
+          transition: "box-shadow 0.25s ease",
           overflow: "hidden",
         }}
       >
