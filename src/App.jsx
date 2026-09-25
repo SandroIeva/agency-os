@@ -12152,18 +12152,18 @@ function CalendarView({ onBack, session, getProviderToken, openMeetCall, autoReL
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: ei * 0.03 }}
                         style={{
-                          padding: "6px 8px", borderRadius: 8, borderLeft: `3px solid ${e.color}`,
+                          padding: "9px 11px", borderRadius: 8, borderLeft: `3px solid ${e.color}`,
                           background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.borderFaint}`,
                         }}
                       >
-                        <div style={{ fontSize: 11, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 2 }}>{e.title}</div>
+                        <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 500, color: theme.text, marginBottom: 3 }}>{e.title}</div>
                         {e.start && !e.allDay && (
-                          <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textDim }}>
+                          <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textDim }}>
                             {new Date(e.start).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })}
                             {e.end && ` – ${new Date(e.end).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })}`}
                           </div>
                         )}
-                        {e.allDay && <div style={{ fontSize: 9, fontFamily: FONT, color: theme.textFaint }}>{(de ? "Ganztägig" : "All day")}</div>}
+                        {e.allDay && <div style={{ fontSize: 12, fontFamily: FONT, color: theme.textFaint }}>{(de ? "Ganztägig" : "All day")}</div>}
                         {e.hangoutLink && (
                           <div onClick={(ev) => { ev.stopPropagation(); openMeetCall(e.hangoutLink, e.title); }}
                             style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, fontFamily: FONT, color: "#00B894", cursor: "pointer", marginTop: 2 }}>
