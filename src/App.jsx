@@ -17284,7 +17284,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
         </div>
         {dateLabel && (
           <div style={{
-            fontSize: 14, fontFamily: FONT, flexShrink: 0,
+            fontSize: 14, fontFamily: FONT, lineHeight: 1.45, flexShrink: 0,
             color: darkMode ? "rgba(255,255,255,0.62)" : "rgba(21,21,28,0.45)",
           }}>{dateLabel}</div>
         )}
@@ -17292,7 +17292,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
           <div style={{
             fontSize: 14, fontFamily: FONT,
             color: darkMode ? "rgba(255,255,255,0.85)" : "rgba(21,21,28,0.62)",
-            lineHeight: 1.55, flex: 1,
+            lineHeight: 1.45, flex: 1,
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
             overflow: "hidden",
