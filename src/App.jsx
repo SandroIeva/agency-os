@@ -16877,15 +16877,23 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
 // ═══════════════════════════════════════════════════════════════
 // NOTES VIEW — Bento-style note grid with inline editing
 // ═══════════════════════════════════════════════════════════════
+// Eine Notiz ist ein farbiger Zettel, und die Farbe soll man sehen: satteres
+// Pastell als Verlauf, und darunter derselbe Ton als weicher Schein, so als
+// laege die Karte ein Stueck ueber dem Hintergrund.
+//
+// `light` und `dark` bleiben die Grundfarbe (die aufgeklappte Notiz faerbt sich
+// damit), `lightTo` und `darkTo` sind das untere Ende des Verlaufs, `glow` der
+// Schein. Im Dunkeln ist beides zurueckgenommen: ein Pastell auf Anthrazit
+// leuchtet sonst wie eine Lampe.
 const NOTE_COLORS = {
-  sand:     { light: "#FFF8E7", dark: "rgba(245, 220, 130, 0.12)", accent: "#D4A85A", border: "rgba(212, 168, 90, 0.25)" },
-  rose:     { light: "#FFEAEC", dark: "rgba(255, 150, 170, 0.10)", accent: "#D67885", border: "rgba(214, 120, 133, 0.25)" },
-  mint:     { light: "#E3F5EC", dark: "rgba(120, 230, 180, 0.10)", accent: "#5BA889", border: "rgba(91, 168, 137, 0.25)" },
-  sky:      { light: "#E5F1FB", dark: "rgba(140, 200, 255, 0.10)", accent: "#5C8FB8", border: "rgba(92, 143, 184, 0.25)" },
-  lavender: { light: "#EFEAFB", dark: "rgba(180, 160, 240, 0.10)", accent: "#7E6FB5", border: "rgba(126, 111, 181, 0.25)" },
-  peach:    { light: "#FCE9DD", dark: "rgba(255, 180, 130, 0.10)", accent: "#C68460", border: "rgba(198, 132, 96, 0.25)" },
-  sage:     { light: "#E8EFE3", dark: "rgba(170, 200, 140, 0.10)", accent: "#7A9560", border: "rgba(122, 149, 96, 0.25)" },
-  stone:    { light: "#EFEDEA", dark: "rgba(180, 175, 170, 0.10)", accent: "#7A7570", border: "rgba(122, 117, 112, 0.25)" },
+  sand:     { light: "#FFE7C4", lightTo: "#FFD09A", dark: "rgba(245, 200, 120, 0.16)", darkTo: "rgba(245, 190, 100, 0.09)", glow: "rgba(255, 176, 94, 0.50)",  glowDark: "rgba(245, 190, 100, 0.20)", accent: "#D4A85A", border: "rgba(212, 168, 90, 0.25)" },
+  rose:     { light: "#FFD8DC", lightTo: "#FFB9C4", dark: "rgba(255, 150, 170, 0.16)", darkTo: "rgba(255, 130, 155, 0.09)", glow: "rgba(255, 140, 160, 0.48)", glowDark: "rgba(255, 140, 160, 0.20)", accent: "#D67885", border: "rgba(214, 120, 133, 0.25)" },
+  mint:     { light: "#C6F3DF", lightTo: "#A2E9C6", dark: "rgba(120, 230, 180, 0.16)", darkTo: "rgba(100, 220, 165, 0.09)", glow: "rgba(110, 222, 172, 0.48)", glowDark: "rgba(110, 222, 172, 0.20)", accent: "#5BA889", border: "rgba(91, 168, 137, 0.25)" },
+  sky:      { light: "#CDE6FB", lightTo: "#A7D3F7", dark: "rgba(140, 200, 255, 0.16)", darkTo: "rgba(120, 185, 250, 0.09)", glow: "rgba(108, 178, 240, 0.48)", glowDark: "rgba(108, 178, 240, 0.20)", accent: "#5C8FB8", border: "rgba(92, 143, 184, 0.25)" },
+  lavender: { light: "#E0D8FA", lightTo: "#C6B7F5", dark: "rgba(180, 160, 240, 0.16)", darkTo: "rgba(165, 140, 235, 0.09)", glow: "rgba(160, 132, 240, 0.45)", glowDark: "rgba(160, 132, 240, 0.20)", accent: "#7E6FB5", border: "rgba(126, 111, 181, 0.25)" },
+  peach:    { light: "#FFD8CB", lightTo: "#FFBBA6", dark: "rgba(255, 180, 130, 0.16)", darkTo: "rgba(255, 165, 110, 0.09)", glow: "rgba(255, 150, 120, 0.48)", glowDark: "rgba(255, 150, 120, 0.20)", accent: "#C68460", border: "rgba(198, 132, 96, 0.25)" },
+  sage:     { light: "#DDEAD0", lightTo: "#C2DAB0", dark: "rgba(170, 200, 140, 0.16)", darkTo: "rgba(155, 190, 120, 0.09)", glow: "rgba(150, 190, 120, 0.45)", glowDark: "rgba(150, 190, 120, 0.20)", accent: "#7A9560", border: "rgba(122, 149, 96, 0.25)" },
+  stone:    { light: "#EDEAE6", lightTo: "#DCD6CF", dark: "rgba(180, 175, 170, 0.16)", darkTo: "rgba(165, 160, 155, 0.09)", glow: "rgba(150, 140, 130, 0.38)", glowDark: "rgba(150, 140, 130, 0.18)", accent: "#7A7570", border: "rgba(122, 117, 112, 0.25)" },
 };
 
 function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", ensureValidToken, llmKeys, llmProvider }) {
@@ -17168,9 +17176,15 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
 
   const renderCard = (note, idx) => {
     const palette = NOTE_COLORS[note.color] || NOTE_COLORS.sand;
-    const bg = darkMode ? palette.dark : palette.light;
-    const border = palette.border;
+    const bg = darkMode
+      ? `linear-gradient(150deg, ${palette.dark}, ${palette.darkTo})`
+      : `linear-gradient(150deg, ${palette.light}, ${palette.lightTo})`;
+    const glow = darkMode ? palette.glowDark : palette.glow;
     const accent = palette.accent;
+    const stamp = note.updated_at || note.created_at;
+    const dateLabel = stamp
+      ? new Date(stamp).toLocaleDateString(de ? "de-DE" : "en-GB", { day: "numeric", month: "short", year: "numeric" })
+      : "";
     const { title, body } = splitContent(note.content);
     const showColorPicker = colorPickerId === note.id;
     const span = getSpan(note.content);
@@ -17200,19 +17214,21 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
         style={{
           gridColumn: `span ${span.col}`,
           gridRow: `span ${span.row}`,
-          minHeight: span.row * 90,
+          minHeight: span.row * 96,
           background: bg,
-          border: `1px solid ${border}`,
-          borderRadius: 14,
-          padding: "16px 18px",
+          border: darkMode ? `1px solid rgba(255,255,255,0.06)` : "none",
+          borderRadius: 22,
+          padding: "20px 22px",
           cursor: "pointer",
           position: "relative",
           display: "flex",
           flexDirection: "column",
           gap: 6,
+          // Der Schein sitzt unter der Karte und traegt ihre eigene Farbe. Ein
+          // grauer Schatten daneben haelt sie am Boden, sonst schwebt sie.
           boxShadow: isHovered
-            ? (darkMode ? "0 10px 28px rgba(0,0,0,0.35)" : "0 8px 20px rgba(0,0,0,0.07)")
-            : (darkMode ? "0 2px 8px rgba(0,0,0,0.16)" : "0 1px 3px rgba(0,0,0,0.035)"),
+            ? `0 34px 52px -16px ${glow}, 0 10px 22px rgba(0,0,0,${darkMode ? 0.32 : 0.06})`
+            : `0 26px 42px -14px ${glow}, 0 4px 12px rgba(0,0,0,${darkMode ? 0.18 : 0.04})`,
           transform: `perspective(1000px) rotateX(${tiltX}deg) rotateY(${tiltY}deg)`,
           transformStyle: "preserve-3d",
           transition: "box-shadow 0.25s ease, transform 0.15s ease",
@@ -17235,9 +17251,10 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
         )}
 
         <div style={{
-          fontSize: 14, fontWeight: 600, fontFamily: FONT,
-          color: darkMode ? "#fff" : "#1a1a2e",
-          lineHeight: 1.35,
+          fontSize: 17, fontWeight: 700, fontFamily: FONT,
+          letterSpacing: "-0.2px",
+          color: darkMode ? "#fff" : "#15151c",
+          lineHeight: 1.25,
           wordBreak: "break-word",
           whiteSpace: "pre-wrap",
           overflow: "hidden",
@@ -17246,10 +17263,16 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
         }}>
           {title || <span style={{ color: darkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.28)", fontWeight: 400, fontStyle: "italic" }}>{(de ? "Leere Notiz" : "Empty note")}</span>}
         </div>
+        {dateLabel && (
+          <div style={{
+            fontSize: 12, fontFamily: FONT, flexShrink: 0,
+            color: darkMode ? "rgba(255,255,255,0.45)" : "rgba(21,21,28,0.45)",
+          }}>{dateLabel}</div>
+        )}
         {body && (
           <div style={{
             fontSize: 13, fontFamily: FONT,
-            color: darkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.65)",
+            color: darkMode ? "rgba(255,255,255,0.7)" : "rgba(21,21,28,0.62)",
             lineHeight: 1.55, flex: 1,
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
@@ -17549,9 +17572,11 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
         ) : (
           <div style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-            gridAutoRows: "90px",
-            gap: 16,
+            gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))",
+            gridAutoRows: "96px",
+            // Groesser als frueher, weil der Farbschein unter der Karte Platz
+            // braucht: bei 16px verlief er in die naechste Karte.
+            gap: 24,
             paddingBottom: 40,
           }}>
             <AnimatePresence mode="popLayout">
