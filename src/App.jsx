@@ -41318,7 +41318,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             {/* Von Pinterest geholt: das Zeichen steht hinter dem Namen, in der
                 Farbe der Schrift daneben. */}
             {activeBoard.pinterest_board_id && titleEdit === null && (
-              <span title="Pinterest" style={{ display: "flex", marginLeft: -8, flexShrink: 0 }}>
+              <span title="Pinterest" style={{ display: "flex", marginLeft: -9, flexShrink: 0 }}>
                 <PinterestMark size={16.5} color={theme.text} />
               </span>
             )}
