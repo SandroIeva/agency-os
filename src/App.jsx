@@ -17284,13 +17284,13 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
         </div>
         {dateLabel && (
           <div style={{
-            fontSize: 12, fontFamily: FONT, flexShrink: 0,
+            fontSize: 14, fontFamily: FONT, flexShrink: 0,
             color: darkMode ? "rgba(255,255,255,0.62)" : "rgba(21,21,28,0.45)",
           }}>{dateLabel}</div>
         )}
         {body && (
           <div style={{
-            fontSize: 13, fontFamily: FONT,
+            fontSize: 14, fontFamily: FONT,
             color: darkMode ? "rgba(255,255,255,0.85)" : "rgba(21,21,28,0.62)",
             lineHeight: 1.55, flex: 1,
             whiteSpace: "pre-wrap",
