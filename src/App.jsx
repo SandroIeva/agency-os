@@ -18922,10 +18922,23 @@ async function extractColors(url, count = 5) {
   // already cached a non-CORS copy of this URL (which would taint a crossOrigin load
   // and make the palette come back empty). Falls back to a direct crossOrigin load.
   let objectUrl = null;
-  try {
-    const res = await fetch(url, { mode: "cors" });
-    if (res.ok) { const blob = await res.blob(); if (blob && blob.size) objectUrl = URL.createObjectURL(blob); }
-  } catch (_) { /* fall back to direct load below */ }
+  const grab = async (u) => {
+    try {
+      const res = await fetch(u, { mode: "cors" });
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return (blob && blob.size) ? URL.createObjectURL(blob) : null;
+    } catch (_) { return null; }
+  };
+  objectUrl = await grab(url);
+  // Fremde Bildhoster schicken keine CORS-Kopfzeile, und ohne die kommt der
+  // Browser nicht an die Pixel. Pinterest ist so einer: ein importiertes Board
+  // behielt seine Bilder auf i.pinimg.com und hatte deshalb nie eine
+  // Farbpalette. Der Proxy holt die Bytes serverseitig und liefert sie unter
+  // unserer eigenen Adresse aus, wofuer er ohnehin da ist.
+  if (!objectUrl && /^https?:\/\//i.test(url) && !url.startsWith(window.location.origin)) {
+    objectUrl = await grab(`/api/img-proxy?url=${encodeURIComponent(url)}`);
+  }
   const src = objectUrl || url;
   const hex = await new Promise((resolve) => {
     const img = new Image();
@@ -39968,8 +39981,28 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     // und andere nicht. Also einmal beim Oeffnen nachholen, und nur dann:
     // steht schon eine da, bleibt sie, wie sie ist.
     if (!(board.color_palette?.length)) {
+      let rows = data || [];
+      // Bilder, die nie durch unseren Upload liefen, tragen keine Farben: ein
+      // Pinterest-Import behaelt die Adresse bei Pinterest. Die werden hier
+      // einmal nachgeholt, hoechstens zwoelf Stueck, damit das Oeffnen eines
+      // grossen Boards nicht zu einer Rechenaufgabe wird. Was nicht klappt,
+      // bleibt ohne Farben und versucht es beim naechsten Mal wieder.
+      // `type` ist hier "image", nicht "image/png": die Spalte traegt unsere
+      // eigene kurze Art und keinen MIME-Typ.
+      const missing = rows.filter(it => !(it.colors?.length) && it.url && String(it.type || "image").startsWith("image")).slice(0, 12);
+      if (missing.length) {
+        const found = await Promise.all(missing.map(async it => ({ id: it.id, colors: await extractColors(it.url, 5) })));
+        if (activeMoodboardRef.current?.boardId !== board.id) return;
+        const byId = Object.fromEntries(found.filter(f => f.colors.length).map(f => [f.id, f.colors]));
+        if (Object.keys(byId).length) {
+          rows = rows.map(it => byId[it.id] ? { ...it, colors: byId[it.id] } : it);
+          setItems(rows);
+          await Promise.all(Object.entries(byId).map(([id, colors]) =>
+            supabase.from("moodboard_items").update({ colors }).eq("id", id)));
+        }
+      }
       const freq = {};
-      (data || []).forEach(it => (it.colors || []).forEach(c => { freq[c] = (freq[c] || 0) + 1; }));
+      rows.forEach(it => (it.colors || []).forEach(c => { freq[c] = (freq[c] || 0) + 1; }));
       const palette = Object.entries(freq).sort((x, y) => y[1] - x[1]).slice(0, 8).map(([c]) => c);
       if (palette.length) {
         setActiveBoard(prev => (prev?.id === board.id ? { ...prev, color_palette: palette } : prev));
