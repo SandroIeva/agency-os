@@ -4584,16 +4584,20 @@ function KanbanBoard({ onBack, session, theme: themeIn, darkMode, t, appLanguage
                             : <span style={{ width: 18, height: 18, borderRadius: "50%", background: (p.color || "#64748B") + "30", color: p.color || "#64748B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700 }}>{(p.name || "?")[0]}</span> })),
                       ]}
                       placeholder={t("kanban.general")} theme={theme} darkMode={darkMode} align="right" minWidth={190} maxTriggerWidth={170}
+                      // Dieselbe Hoehe wie die Knoepfe in den Kopfzeilen. Ueber
+                      // triggerStyle und nicht in der Dropdown selbst, sonst
+                      // waechst jede Dropdown der App mit.
+                      triggerStyle={{ height: 42, padding: "0 14px 0 17px" }}
                     />
                   ) : taskForm.project_name ? (
-                    <span style={{ fontSize: 12.5, fontFamily: FONT, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", padding: "7px 12px", borderRadius: 999, whiteSpace: "nowrap" }}>
+                    <span style={{ fontSize: 13, fontFamily: FONT, color: theme.textSub, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", height: 42, padding: "0 17px", borderRadius: 999, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center" }}>
                       {taskForm.project_name}
                     </span>
                   ) : null}
                   <motion.div whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.9 }} onClick={resetForm}
-                    style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
+                    style={{ width: 42, height: 42, borderRadius: 12, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textDim, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                   </motion.div>
                 </div>
               </div>
