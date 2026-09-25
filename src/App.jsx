@@ -16881,19 +16881,21 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
 // Pastell als Verlauf, und darunter derselbe Ton als weicher Schein, so als
 // laege die Karte ein Stueck ueber dem Hintergrund.
 //
-// `light` und `dark` bleiben die Grundfarbe (die aufgeklappte Notiz faerbt sich
-// damit), `lightTo` und `darkTo` sind das untere Ende des Verlaufs, `glow` der
-// Schein. Im Dunkeln ist beides zurueckgenommen: ein Pastell auf Anthrazit
-// leuchtet sonst wie eine Lampe.
+// `light` und `dark` faerben die AUFGEKLAPPTE Notiz, `cardDark`/`cardDarkTo`
+// und `light`/`lightTo` die Karte im Raster, `glow` den Schein darunter.
+// Im Dunkeln sind es eigene, satte Toene statt eines durchscheinenden Pastells:
+// 10 Prozent Farbe auf Anthrazit ergab ein Braungrau, in dem alle acht Farben
+// gleich aussahen. Die aufgeklappte Notiz bleibt dort bewusst zurueckgenommen,
+// weil hinter ihr ein ganzer Text steht und nicht zwei Zeilen.
 const NOTE_COLORS = {
-  sand:     { light: "#FFE7C4", lightTo: "#FFD09A", dark: "rgba(245, 200, 120, 0.16)", darkTo: "rgba(245, 190, 100, 0.09)", glow: "rgba(255, 176, 94, 0.50)",  glowDark: "rgba(245, 190, 100, 0.20)", accent: "#D4A85A", border: "rgba(212, 168, 90, 0.25)" },
-  rose:     { light: "#FFD8DC", lightTo: "#FFB9C4", dark: "rgba(255, 150, 170, 0.16)", darkTo: "rgba(255, 130, 155, 0.09)", glow: "rgba(255, 140, 160, 0.48)", glowDark: "rgba(255, 140, 160, 0.20)", accent: "#D67885", border: "rgba(214, 120, 133, 0.25)" },
-  mint:     { light: "#C6F3DF", lightTo: "#A2E9C6", dark: "rgba(120, 230, 180, 0.16)", darkTo: "rgba(100, 220, 165, 0.09)", glow: "rgba(110, 222, 172, 0.48)", glowDark: "rgba(110, 222, 172, 0.20)", accent: "#5BA889", border: "rgba(91, 168, 137, 0.25)" },
-  sky:      { light: "#CDE6FB", lightTo: "#A7D3F7", dark: "rgba(140, 200, 255, 0.16)", darkTo: "rgba(120, 185, 250, 0.09)", glow: "rgba(108, 178, 240, 0.48)", glowDark: "rgba(108, 178, 240, 0.20)", accent: "#5C8FB8", border: "rgba(92, 143, 184, 0.25)" },
-  lavender: { light: "#E0D8FA", lightTo: "#C6B7F5", dark: "rgba(180, 160, 240, 0.16)", darkTo: "rgba(165, 140, 235, 0.09)", glow: "rgba(160, 132, 240, 0.45)", glowDark: "rgba(160, 132, 240, 0.20)", accent: "#7E6FB5", border: "rgba(126, 111, 181, 0.25)" },
-  peach:    { light: "#FFD8CB", lightTo: "#FFBBA6", dark: "rgba(255, 180, 130, 0.16)", darkTo: "rgba(255, 165, 110, 0.09)", glow: "rgba(255, 150, 120, 0.48)", glowDark: "rgba(255, 150, 120, 0.20)", accent: "#C68460", border: "rgba(198, 132, 96, 0.25)" },
-  sage:     { light: "#DDEAD0", lightTo: "#C2DAB0", dark: "rgba(170, 200, 140, 0.16)", darkTo: "rgba(155, 190, 120, 0.09)", glow: "rgba(150, 190, 120, 0.45)", glowDark: "rgba(150, 190, 120, 0.20)", accent: "#7A9560", border: "rgba(122, 149, 96, 0.25)" },
-  stone:    { light: "#EDEAE6", lightTo: "#DCD6CF", dark: "rgba(180, 175, 170, 0.16)", darkTo: "rgba(165, 160, 155, 0.09)", glow: "rgba(150, 140, 130, 0.38)", glowDark: "rgba(150, 140, 130, 0.18)", accent: "#7A7570", border: "rgba(122, 117, 112, 0.25)" },
+  sand:     { light: "#FFE7C4", lightTo: "#FFD09A", dark: "rgba(245, 200, 120, 0.16)", glow: "rgba(255, 176, 94, 0.50)",  cardDark: "#E2B628", cardDarkTo: "#B48F18", glowDark: "rgba(250,208,71,0.55)", accent: "#D4A85A", border: "rgba(212, 168, 90, 0.25)" },
+  rose:     { light: "#FFD8DC", lightTo: "#FFB9C4", dark: "rgba(255, 150, 170, 0.16)", glow: "rgba(255, 140, 160, 0.48)", cardDark: "#CD3753", cardDarkTo: "#9F283E", glowDark: "rgba(236,81,109,0.55)", accent: "#D67885", border: "rgba(214, 120, 133, 0.25)" },
+  mint:     { light: "#C6F3DF", lightTo: "#A2E9C6", dark: "rgba(120, 230, 180, 0.16)", glow: "rgba(110, 222, 172, 0.48)", cardDark: "#35B185", cardDarkTo: "#278262", glowDark: "rgba(60,226,168,0.55)", accent: "#5BA889", border: "rgba(91, 168, 137, 0.25)" },
+  sky:      { light: "#CDE6FB", lightTo: "#A7D3F7", dark: "rgba(140, 200, 255, 0.16)", glow: "rgba(108, 178, 240, 0.48)", cardDark: "#2E85D1", cardDarkTo: "#23659F", glowDark: "rgba(72,161,239,0.55)", accent: "#5C8FB8", border: "rgba(92, 143, 184, 0.25)" },
+  lavender: { light: "#E0D8FA", lightTo: "#C6B7F5", dark: "rgba(180, 160, 240, 0.16)", glow: "rgba(160, 132, 240, 0.45)", cardDark: "#7D4CCD", cardDarkTo: "#5F30AB", glowDark: "rgba(153,102,234,0.55)", accent: "#7E6FB5", border: "rgba(126, 111, 181, 0.25)" },
+  peach:    { light: "#FFD8CB", lightTo: "#FFBBA6", dark: "rgba(255, 180, 130, 0.16)", glow: "rgba(255, 150, 120, 0.48)", cardDark: "#DD773C", cardDarkTo: "#BA5921", glowDark: "rgba(246,147,90,0.55)", accent: "#C68460", border: "rgba(198, 132, 96, 0.25)" },
+  sage:     { light: "#DDEAD0", lightTo: "#C2DAB0", dark: "rgba(170, 200, 140, 0.16)", glow: "rgba(150, 190, 120, 0.45)", cardDark: "#65A540", cardDarkTo: "#4A792F", glowDark: "rgba(124,215,71,0.55)", accent: "#7A9560", border: "rgba(122, 149, 96, 0.25)" },
+  stone:    { light: "#EDEAE6", lightTo: "#DCD6CF", dark: "rgba(180, 175, 170, 0.16)", glow: "rgba(150, 140, 130, 0.38)", cardDark: "#7F7771", cardDarkTo: "#5F5954", glowDark: "rgba(176,146,120,0.55)", accent: "#7A7570", border: "rgba(122, 117, 112, 0.25)" },
 };
 
 function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", ensureValidToken, llmKeys, llmProvider }) {
@@ -17177,7 +17179,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
   const renderCard = (note, idx) => {
     const palette = NOTE_COLORS[note.color] || NOTE_COLORS.sand;
     const bg = darkMode
-      ? `linear-gradient(150deg, ${palette.dark}, ${palette.darkTo})`
+      ? `linear-gradient(150deg, ${palette.cardDark}, ${palette.cardDarkTo})`
       : `linear-gradient(150deg, ${palette.light}, ${palette.lightTo})`;
     const glow = darkMode ? palette.glowDark : palette.glow;
     const accent = palette.accent;
@@ -17227,8 +17229,12 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
           // Der Schein sitzt unter der Karte und traegt ihre eigene Farbe. Ein
           // grauer Schatten daneben haelt sie am Boden, sonst schwebt sie.
           boxShadow: isHovered
-            ? `0 34px 52px -16px ${glow}, 0 10px 22px rgba(0,0,0,${darkMode ? 0.32 : 0.06})`
-            : `0 26px 42px -14px ${glow}, 0 4px 12px rgba(0,0,0,${darkMode ? 0.18 : 0.04})`,
+            ? (darkMode
+                ? `0 30px 48px -10px ${glow}, 0 10px 22px rgba(0,0,0,0.45)`
+                : `0 34px 52px -16px ${glow}, 0 10px 22px rgba(0,0,0,0.06)`)
+            : (darkMode
+                ? `0 24px 40px -10px ${glow}, 0 4px 12px rgba(0,0,0,0.40)`
+                : `0 26px 42px -14px ${glow}, 0 4px 12px rgba(0,0,0,0.04)`),
           transform: `perspective(1000px) rotateX(${tiltX}deg) rotateY(${tiltY}deg)`,
           transformStyle: "preserve-3d",
           transition: "box-shadow 0.25s ease, transform 0.15s ease",
@@ -17266,13 +17272,13 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
         {dateLabel && (
           <div style={{
             fontSize: 12, fontFamily: FONT, flexShrink: 0,
-            color: darkMode ? "rgba(255,255,255,0.45)" : "rgba(21,21,28,0.45)",
+            color: darkMode ? "rgba(255,255,255,0.62)" : "rgba(21,21,28,0.45)",
           }}>{dateLabel}</div>
         )}
         {body && (
           <div style={{
             fontSize: 13, fontFamily: FONT,
-            color: darkMode ? "rgba(255,255,255,0.7)" : "rgba(21,21,28,0.62)",
+            color: darkMode ? "rgba(255,255,255,0.85)" : "rgba(21,21,28,0.62)",
             lineHeight: 1.55, flex: 1,
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
