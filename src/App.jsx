@@ -16910,7 +16910,7 @@ const NOTE_COLORS = {
   lavender: { light: "#E0D8FA", lightTo: "#C6B7F5", dark: "rgba(180, 160, 240, 0.16)", glow: "rgba(160, 132, 240, 0.45)", cardDark: "#A41C6C", cardDarkTo: "#74174D", glowDark: "rgba(229,34,149,0.30)", accent: "#7E6FB5", border: "rgba(126, 111, 181, 0.25)" },
   peach:    { light: "#FFD8CB", lightTo: "#FFBBA6", dark: "rgba(255, 180, 130, 0.16)", glow: "rgba(255, 150, 120, 0.48)", cardDark: "#D7800F", cardDarkTo: "#9D5E0B", glowDark: "rgba(250,168,61,0.30)", accent: "#C68460", border: "rgba(198, 132, 96, 0.25)" },
   sage:     { light: "#DDEAD0", lightTo: "#C2DAB0", dark: "rgba(170, 200, 140, 0.16)", glow: "rgba(150, 190, 120, 0.45)", cardDark: "#48822B", cardDarkTo: "#2F541C", glowDark: "rgba(103,201,54,0.30)", accent: "#7A9560", border: "rgba(122, 149, 96, 0.25)" },
-  stone:    { light: "#EDEAE6", lightTo: "#DCD6CF", dark: "rgba(180, 175, 170, 0.16)", glow: "rgba(150, 140, 130, 0.38)", cardDark: "#574F46", cardDarkTo: "#403A33", glowDark: "rgba(136,115,93,0.30)", accent: "#7A7570", border: "rgba(122, 117, 112, 0.25)" },
+  stone:    { light: "#EDEAE6", lightTo: "#DCD6CF", dark: "rgba(180, 175, 170, 0.16)", glow: "rgba(150, 140, 130, 0.20)", cardDark: "#574F46", cardDarkTo: "#403A33", glowDark: "rgba(136,115,93,0.30)", accent: "#7A7570", border: "rgba(122, 117, 112, 0.25)" },
 };
 
 function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage = "de", ensureValidToken, llmKeys, llmProvider }) {
