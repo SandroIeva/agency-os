@@ -10,7 +10,7 @@ features:
     - command: /i7-post
       url: https://app.i7os.com/api/slack
       description: Post to Threads or Instagram
-      usage_hint: the text of the post
+      usage_hint: what you want to say
       should_escape: false
     - command: /i7-task
       url: https://app.i7os.com/api/slack
