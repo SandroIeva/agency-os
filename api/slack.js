@@ -116,6 +116,8 @@ const T = {
     socialTextLabel: "Was soll unter dem Bild stehen?",
     postTextOnly: "Beitrag ohne Bild",
     postLabel: "Was soll im Beitrag stehen?",
+    statusOn: "Verbunden. Deine Workspaces:",
+    slashHelp: "*Was ich kann*\n• `/post` Beitrag auf Threads oder Instagram\n• `/aufgabe` Neue Aufgabe anlegen\n• `/notiz` Notiz aufschreiben\n• `/status` Verbindung anzeigen\n\nEin Bild an mich geschickt landet in den Assets, auf einem Moodboard oder als Social Post. Eine Adresse allein wird ein Lesezeichen.",
     fileNoBoards: "Es gibt noch kein Moodboard.",
     moodAsk: "Auf welches Moodboard?",
     moodSaved: (board, size) => `Auf "${board}" gelegt (${size}).`,
@@ -206,6 +208,8 @@ const T = {
     socialTextLabel: "What should appear under the picture?",
     postTextOnly: "Post without a picture",
     postLabel: "What should the post say?",
+    statusOn: "Connected. Your workspaces:",
+    slashHelp: "*What I can do*\n• `/post` post to Threads or Instagram\n• `/task` create a task\n• `/note` write a note\n• `/status` show the connection\n\nSend me a picture and it goes to Assets, to a moodboard, or out as a social post. A bare url becomes a bookmark.",
     fileNoBoards: "There is no moodboard yet.",
     moodAsk: "Which moodboard?",
     moodSaved: (board, size) => `Added to "${board}" (${size}).`,
@@ -703,7 +707,30 @@ export default async function handler(req) {
       json({ response_type: "ephemeral", text, ...(blocks ? { blocks } : {}) });
     if (!link?.user_id) return ephemeral(t.notConnected);
 
-    const said = params.get("text") || "";
+    // Ein eigener Slash-Befehl ist dasselbe wie "/i7os <befehl> …": der Name
+    // wird dem Text vorangestellt, und die Erkennung darunter bleibt, wie sie
+    // ist. /i7os bleibt gueltig, damit niemandem etwas wegbricht.
+    //
+    // Slack kann Befehlsnamen und Beschreibungen NICHT uebersetzen, es gibt nur
+    // einen Satz pro App. Deshalb sind die deutschen und die englischen Namen
+    // beide angemeldet und landen hier auf demselben Weg. Die ANTWORTEN sind
+    // weiterhin in der Sprache der Person, die steht an messenger_links.lang.
+    const cmdName = (params.get("command") || "").replace(/^\//, "").toLowerCase();
+    const rawSaid = params.get("text") || "";
+    const AS_SUB = { post: "post", beitrag: "post", notiz: "notiz", note: "notiz" };
+    const said = AS_SUB[cmdName] ? `${AS_SUB[cmdName]} ${rawSaid}` : rawSaid;
+
+    // /help und /status brauchen keinen Text und kommen deshalb vor allem
+    // anderen: sonst wuerde ein leerer Befehl zu einer leeren Aufgabe.
+    if (cmdName === "help" || /^\s*(help|hilfe)\b/i.test(rawSaid)) {
+      return ephemeral(t.slashHelp);
+    }
+    if (cmdName === "status") {
+      const orgs = await workspacesFor(db, link.user_id);
+      return ephemeral(orgs.length
+        ? `${t.statusOn}\n${orgs.map(o => `• ${o.name}`).join("\n")}`
+        : t.newNoWorkspace);
+    }
 
     // "notiz …" or "note …" as the first word. A subcommand rather than a
     // second slash command, which would mean a new manifest, a new scope
