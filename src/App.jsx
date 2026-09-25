@@ -17316,16 +17316,16 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
               onClick={(e) => e.stopPropagation()}
             >
               <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => togglePin(note.id)} title={note.pinned ? (de ? "Entpinnen" : "Unpin") : (de ? "Pinnen" : "Pin")}
-                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 6, color: darkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)", width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={note.pinned ? "2" : "1.6"} strokeLinecap="round" strokeLinejoin="round"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z"/></svg>
+                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, color: darkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={note.pinned ? "2" : "1.6"} strokeLinecap="round" strokeLinejoin="round"><path d="M9 4h6v5l3 3v3h-5v6l-1 1-1-1v-6H6v-3l3-3V4z"/></svg>
               </motion.button>
               <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => setColorPickerId(showColorPicker ? null : note.id)} title={(de ? "Farbe" : "Colour")}
-                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 6, lineHeight: 1, width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <div style={{ width: 14, height: 14, borderRadius: "50%", background: accent }} />
+                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, lineHeight: 1, width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ width: 12, height: 12, borderRadius: "50%", background: accent }} />
               </motion.button>
               <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }} onClick={() => setConfirmDelete(note)} title={(de ? "Löschen" : "Delete")}
-                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 6, color: darkMode ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.5)", width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, color: darkMode ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.5)", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </motion.button>
             </motion.div>
           )}
@@ -17416,7 +17416,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
               <motion.div key={chip.id} whileTap={{ scale: 0.96 }} whileHover={{ y: -1 }}
                 onClick={() => setFilterMode(chip.id)}
                 style={{
-                  padding: (chip.logo || chip.icon) ? "8px 15px 8px 11px" : "8px 15px", borderRadius: 999, cursor: "pointer",
+                  padding: (chip.logo || chip.icon) ? "10px 17px 10px 13px" : "10px 17px", borderRadius: 999, cursor: "pointer",
                   fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
                   background: active ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
                   color: active ? "#fff" : theme.textSub,
@@ -17448,7 +17448,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
           <motion.div whileTap={{ scale: 0.95 }} whileHover={{ y: -1 }}
             onClick={() => setSortMenuOpen(!sortMenuOpen)}
             style={{
-              width: 36, height: 36, borderRadius: 11, cursor: "pointer",
+              width: 40, height: 40, borderRadius: 12, cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
               color: theme.textSub, background: sortMenuOpen ? (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.035)"),
             }}
@@ -17495,21 +17495,21 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
 
         {/* Search — clean width expand, no shape morph */}
         <motion.div
-          animate={{ width: searchOpen ? 240 : 36 }}
+          animate={{ width: searchOpen ? 244 : 40 }}
           transition={{ type: "spring", stiffness: 320, damping: 28 }}
           style={{
             display: "flex", alignItems: "center",
-            height: 36,
+            height: 40,
             background: searchOpen ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.035)"),
             border: "none",
-            borderRadius: 11,
+            borderRadius: 12,
             overflow: "hidden",
           }}
         >
           <motion.div whileTap={{ scale: 0.95 }} whileHover={{ y: -1 }}
             onClick={() => { setSearchOpen(true); }}
             style={{
-              width: 36, height: 36, cursor: "pointer", flexShrink: 0,
+              width: 40, height: 40, cursor: "pointer", flexShrink: 0,
               display: "flex", alignItems: "center", justifyContent: "center",
               color: theme.textSub,
             }}
@@ -17542,7 +17542,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
           transition={{ type: "spring", stiffness: 400, damping: 22 }}
           onClick={() => createNote()}
           style={{
-            padding: "9px 16px 9px 13px", borderRadius: 999,
+            padding: "11px 18px 11px 15px", borderRadius: 999,
             background: "#23232b", border: "none",
             color: "#fff", fontSize: 12.5, fontWeight: 500, fontFamily: FONT,
             cursor: "pointer", display: "flex", alignItems: "center", gap: 7,
