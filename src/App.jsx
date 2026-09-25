@@ -41318,8 +41318,8 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
             {/* Von Pinterest geholt: das Zeichen steht hinter dem Namen, in der
                 Farbe der Schrift daneben. */}
             {activeBoard.pinterest_board_id && titleEdit === null && (
-              <span title="Pinterest" style={{ display: "flex", marginLeft: -6, flexShrink: 0 }}>
-                <PinterestMark size={15} color={theme.text} />
+              <span title="Pinterest" style={{ display: "flex", marginLeft: -8, flexShrink: 0 }}>
+                <PinterestMark size={16.5} color={theme.text} />
               </span>
             )}
           </div>
@@ -43000,11 +43000,11 @@ function MoodboardCard({ board, theme, darkMode, accent, grad, glow, onOpen, onD
       </motion.div>
       {/* Title + meta */}
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "13px 14px 14px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontFamily: FONT, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: -0.2, textShadow: "0 1px 8px rgba(0,0,0,0.4)" }}>{board.title}</div>
           {board.pinterest_board_id && (
             <span title="Pinterest" style={{ display: "flex", flexShrink: 0, filter: "drop-shadow(0 1px 6px rgba(0,0,0,0.45))" }}>
-              <PinterestMark size={14} color="#fff" />
+              <PinterestMark size={15.5} color="#fff" />
             </span>
           )}
         </div>
