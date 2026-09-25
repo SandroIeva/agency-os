@@ -40424,11 +40424,18 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
 
   // Die Palette eines Boards aus den Farben seiner Bilder. Haeufigkeit
   // entscheidet, aber jede weitere Farbe braucht Abstand zu den schon
-  // gewaehlten: sonst stehen acht Nuancen desselben Tons da, und acht fast
-  // gleiche Farben sind keine Palette.
+  // gewaehlten: sonst stehen fuenf Nuancen desselben Tons da, und fast gleiche
+  // Farben sind keine Palette. Fuenf reichen, eine Palette ist eine Auswahl.
   const boardPalette = (allItems) => {
+    // Die Farben eines Bildes stehen schon nach Dominanz sortiert, also zaehlt
+    // der Rang mit: die erste Farbe eines Bildes wiegt fuenfmal so viel wie
+    // seine fuenfte. Wuerde jede gleich zaehlen, haette ein Bild mit fuenf
+    // Nebenfarben so viel Gewicht wie eines, dessen Hauptfarbe das Board
+    // praegt.
     const freq = {};
-    (allItems || []).forEach(it => (it.colors || []).forEach(c => { freq[c] = (freq[c] || 0) + 1; }));
+    (allItems || []).forEach(it => (it.colors || []).slice(0, 5).forEach((c, i) => {
+      freq[c] = (freq[c] || 0) + (5 - i);
+    }));
     const rgb = (h) => {
       const m = /^#?([0-9a-f]{6})$/i.exec(String(h || ""));
       if (!m) return null;
@@ -40437,7 +40444,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
     };
     const out = [];
     for (const [hex] of Object.entries(freq).sort((x, y) => y[1] - x[1])) {
-      if (out.length >= 8) break;
+      if (out.length >= 5) break;
       const c = rgb(hex);
       if (!c) continue;
       if (out.every(o => Math.abs(o.c[0] - c[0]) + Math.abs(o.c[1] - c[1]) + Math.abs(o.c[2] - c[2]) > 80)) out.push({ hex, c });
@@ -41601,7 +41608,7 @@ function AssetsView({ onBack, session, userOrg, theme, darkMode, t, appLanguage,
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
                 <span style={{ fontSize: 10, fontFamily: FONT, color: theme.textDim, textTransform: "uppercase", letterSpacing: 1 }}>{t("moodboard.palette") || "Palette"}</span>
                 <div style={{ display: "flex", gap: 4 }}>
-                  {activeBoard.color_palette.slice(0, 8).map((c, i) => {
+                  {activeBoard.color_palette.slice(0, 5).map((c, i) => {
                     const on = colorFilter === c;
                     return (
                       <div key={i} title={on ? (t("moodboard.allTags") || "Alle anzeigen") : c} onClick={() => setColorFilter(f => f === c ? null : c)}
