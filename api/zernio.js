@@ -263,14 +263,23 @@ const slimAccount = (a) => ({
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   try {
-    const user = await requireUser(req);
+    // Ein geplanter Beitrag hat keine Anmeldung, weil niemand davorsitzt: er
+    // kommt von api/publish-due, angestossen von pg_cron. Der Kopf ist das
+    // Geheimnis, das nur die Datenbank und Vercel kennen, und er ersetzt NUR
+    // die Anmeldung. Die Kostenschranke (requirePaidSocial) und die Pruefung,
+    // dass ein Konto zu DIESEM Workspace gehoert, gelten unveraendert weiter.
+    // Genauso macht es api/threads.js.
+    const internal = !!process.env.PUBLISH_SECRET
+      && (req.headers["x-i7-hook-secret"] || "") === process.env.PUBLISH_SECRET;
+    const user = internal ? null : await requireUser(req);
+    const asMember = async (...args) => { if (!internal) await requireOrgMember(...args); };
     const body = await readJsonBody(req);
     const { mode, orgId } = body;
     if (!orgId) throw new HttpError(400, "Workspace is required", "missing_workspace");
 
     // ── status — connected accounts for this workspace ──
     if (mode === "status") {
-      await requireOrgMember(user.id, orgId);
+      await asMember(user?.id, orgId);
       const profileId = await ensureProfile(orgId);
       const data = await zfetch(`/accounts?profileId=${encodeURIComponent(profileId)}`);
       return res.status(200).json({
@@ -602,7 +611,7 @@ export default async function handler(req, res) {
     // ── presign — direct-upload URL for post media (client PUTs the file itself,
     //    so media bytes never pass through this function) ──
     if (mode === "presign") {
-      await requireOrgMember(user.id, orgId);
+      await asMember(user?.id, orgId);
       // Publishing bills upstream as well, and a lapsed account keeps whatever
       // it had connected — so this cannot lean on "they have no accounts".
       await requirePaidSocial(orgId);
@@ -614,7 +623,7 @@ export default async function handler(req, res) {
 
     // ── post — create/schedule/publish a post ──
     if (mode === "post") {
-      await requireOrgMember(user.id, orgId);
+      await asMember(user?.id, orgId);
       await requirePaidSocial(orgId);
       const { content, platforms, mediaItems, scheduledFor, timezone, isDraft } = body;
       if (!Array.isArray(platforms) || (!isDraft && platforms.length === 0)) {

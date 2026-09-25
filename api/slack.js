@@ -24,7 +24,7 @@ import {
   typeWanted, attachedImage, linkify, createNote, addAssetFile, humanSize,
   asLinkRequest, linkFoldersFor, createWorkspaceLink,
   moodboardsFor, addMoodboardImage,
-  socialTargetsFor, queueSocialPost, putDraft, takeDraft,
+  socialTargetsFor, queueSocialPost, putDraft, takeDraft, providerLabel,
   nextQuestion, PRIORITY_CODES, dueDateFor, timezoneOf,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
   taskFacts, moveTaskTo, handTaskTo,
@@ -99,6 +99,7 @@ const T = {
     socialNoChannel: "In diesem Workspace ist weder Instagram noch Threads verbunden.",
     socialWhich: "Auf welchen Kanal?",
     socialBoth: "Beide",
+    socialAll: "Alle",
     socialWhen: "Wann soll es raus?",
     socialNow: "Jetzt posten",
     socialIn1h: "In einer Stunde",
@@ -191,6 +192,7 @@ const T = {
     socialNoChannel: "Neither Instagram nor Threads is connected in this workspace.",
     socialWhich: "Which channel?",
     socialBoth: "Both",
+    socialAll: "All",
     socialWhen: "When should it go out?",
     socialNow: "Post now",
     socialIn1h: "In an hour",
@@ -1105,16 +1107,20 @@ export default async function handler(req) {
       // Ohne Datei ist es ein reiner Textbeitrag, und den nimmt Instagram
       // nicht. Statt ihn anzubieten und spaeter abzulehnen, steht er gar nicht
       // erst zur Wahl.
+      // Threads und LinkedIn nehmen einen Beitrag aus reinem Text, Instagram
+      // nicht. Deshalb faellt nur Instagram weg, wenn kein Bild dabei ist.
       const isText = !st.f;
       const hasIg = !isText && found.some(x => x.provider === "instagram");
       const hasTh = found.some(x => x.provider === "threads");
-      if (!hasIg && !hasTh) return replace(t.socialNoChannel);
+      const hasLi = found.some(x => x.provider === "linkedin");
+      if (!hasIg && !hasTh && !hasLi) return replace(t.socialNoChannel);
 
       if (!st.c) {
         const choices = [];
         if (hasIg) choices.push({ key: "c", label: "Instagram", set: { c: "i" } });
         if (hasTh) choices.push({ key: "c", label: "Threads", set: { c: "t" } });
-        if (hasIg && hasTh) choices.push({ key: "c", label: t.socialBoth, set: { c: "b" } });
+        if (hasLi) choices.push({ key: "c", label: "LinkedIn", set: { c: "l" } });
+        if (choices.length > 1) choices.push({ key: "c", label: choices.length > 2 ? t.socialAll : t.socialBoth, set: { c: "b" } });
         return replace(t.socialWhich, asAsset(draftBlocks(t, { ...st, chosen: org.name },
           t.socialWhich, [...choices, cancel], t.fileTitle)));
       }
@@ -1161,9 +1167,10 @@ export default async function handler(req) {
         ], t.fileTitle)));
       }
 
-      const targets = found.filter(x => st.c === "b"
+      const targets = found.filter(x => (st.c === "b" && !(isText && x.provider === "instagram"))
         || (st.c === "i" && x.provider === "instagram")
-        || (st.c === "t" && x.provider === "threads"));
+        || (st.c === "t" && x.provider === "threads")
+        || (st.c === "l" && x.provider === "linkedin"));
       if (!targets.length) return replace(t.socialNoChannel);
 
       // Feste Zeiten aus Knoepfen statt getippter Datumsangaben, gerechnet in
@@ -1209,7 +1216,7 @@ export default async function handler(req) {
           : t.newFailed);
       }
 
-      const who = targets.map(x => x.provider === "instagram" ? "Instagram" : "Threads").join(" + ");
+      const who = targets.map(x => providerLabel(x.provider)).join(" + ");
       if (st.w !== "n") {
         const whenText = new Intl.DateTimeFormat(link?.lang === "en" ? "en-GB" : "de-DE",
           { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Berlin" }).format(at);

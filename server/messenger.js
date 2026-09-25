@@ -667,14 +667,56 @@ export const takeDraft = async (db, key, userId) => {
 // Verbindungstabelle und nicht die Freischaltliste: eine Verbindung gibt es nur,
 // wenn sie erlaubt war, und wer sie hat, darf posten.
 export const socialTargetsFor = async (db, orgId) => {
-  const [ig, th] = await Promise.all([
+  const [ig, th, zn] = await Promise.all([
     db.from("instagram_connections").select("ig_user_id, username").eq("org_id", orgId),
     db.from("threads_connections").select("threads_user_id, username").eq("org_id", orgId),
+    zernioTargets(db, orgId),
   ]);
   return [
     ...(ig.data || []).map(r => ({ provider: "instagram", igUserId: r.ig_user_id, username: r.username })),
     ...(th.data || []).map(r => ({ provider: "threads", threadsUserId: r.threads_user_id, username: r.username })),
+    ...zn,
   ];
+};
+
+// LinkedIn und die anderen Kanaele, die ueber Zernio laufen.
+//
+// Gefragt wird nicht die eigene Tabelle, sondern Zernio selbst, ueber den
+// eigenen Endpunkt mit dem internen Kopf: dort leben die Konten, und eines,
+// das drueben abgemeldet wurde, darf hier nicht mehr angeboten werden.
+// `workspace_social` wird nur gelesen, um zu wissen, ob es ueberhaupt ein
+// Profil gibt - ohne eines ist nichts verbunden und der Aufruf faellt weg.
+//
+// Faellt Zernio aus, kommt eine leere Liste zurueck und nicht ein Fehler: dann
+// bietet der Bot Instagram und Threads an, statt gar nichts zu tun.
+const ZERNIO_IN_MESSENGER = new Set(["linkedin"]);
+
+// Wie ein Kanal heisst, wenn er jemandem gezeigt wird. An einer Stelle, weil
+// Telegram und Slack dieselbe Antwort geben muessen.
+export const providerLabel = (p) => ({
+  instagram: "Instagram", threads: "Threads", linkedin: "LinkedIn",
+}[p] || p);
+const zernioTargets = async (db, orgId) => {
+  const secret = process.env.PUBLISH_SECRET;
+  const appUrl = (process.env.PUBLIC_APP_URL || "https://app.i7os.com").replace(/\/$/, "");
+  if (!secret) return [];
+  const { data: link } = await db.from("workspace_social")
+    .select("zernio_profile_id").eq("org_id", orgId).maybeSingle();
+  if (!link?.zernio_profile_id) return [];
+  try {
+    const r = await fetch(`${appUrl}/api/zernio`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-i7-hook-secret": secret },
+      body: JSON.stringify({ mode: "status", orgId }),
+    });
+    if (!r.ok) return [];
+    const j = await r.json().catch(() => null);
+    return (j?.accounts || [])
+      .filter(a => a.isActive !== false && ZERNIO_IN_MESSENGER.has(a.platform))
+      .map(a => ({ provider: a.platform, accountId: a.id, username: a.username || a.displayName || "" }));
+  } catch {
+    return [];
+  }
 };
 
 // Ein Bild aus einem Messenger wird ein geplanter Beitrag, und sonst nichts.
@@ -689,9 +731,9 @@ export const socialTargetsFor = async (db, orgId) => {
 // Beitrag doppelt rausgehen kann.
 export const queueSocialPost = async (db, { userId, orgId, name, contentType, bytes, caption, targets, publishAt }) => {
   if (!userId || !orgId || !targets?.length) return { ok: false, reason: "incomplete" };
-  // Ein Beitrag ohne Bild ist bei Threads ein ganz normaler Beitrag. Instagram
-  // nimmt ihn nicht, und deshalb wird dort auch keiner angeboten, siehe die
-  // Kanalauswahl im Messenger.
+  // Ein Beitrag ohne Bild ist bei Threads und bei LinkedIn ein ganz normaler
+  // Beitrag. Instagram nimmt ihn nicht, und deshalb wird dort auch keiner
+  // angeboten, siehe die Kanalauswahl im Messenger.
   const hasMedia = !!bytes?.byteLength;
   if (!hasMedia && !String(caption || "").trim()) return { ok: false, reason: "incomplete" };
   const size = hasMedia ? bytes.byteLength : 0;

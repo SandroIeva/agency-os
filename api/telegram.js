@@ -22,7 +22,7 @@ import {
   splitDraft, workspacesFor, projectsFor, createTask, DEFAULT_TYPES, typeWanted, attachedImage, linkify, createNote, addAssetFile, humanSize,
   asLinkRequest, LINK_PREFIX, linkFoldersFor, createWorkspaceLink,
   moodboardsFor, addMoodboardImage,
-  socialTargetsFor, queueSocialPost, putDraft, takeDraft,
+  socialTargetsFor, queueSocialPost, putDraft, takeDraft, providerLabel,
   draftStep, draftDone, PRIORITY_CODES, dueDateFor, timezoneOf,
   replyTarget, describeTask, addChecklist, commentOnTask,
   mayTouchTask, orgIsReadOnly, handoverCandidates, resolveHint,
@@ -125,6 +125,7 @@ const T = {
     socialNoChannel: "In diesem Workspace ist weder Instagram noch Threads verbunden.",
     socialWhich: "Auf welchen Kanal?",
     socialBoth: "Beide",
+    socialAll: "Alle",
     socialWhen: "Wann soll es raus?",
     socialNow: "Jetzt posten",
     socialIn1h: "In einer Stunde",
@@ -223,6 +224,7 @@ const T = {
     socialNoChannel: "Neither Instagram nor Threads is connected in this workspace.",
     socialWhich: "Which channel?",
     socialBoth: "Both",
+    socialAll: "All",
     socialWhen: "When should it go out?",
     socialNow: "Post now",
     socialIn1h: "In an hour",
@@ -751,15 +753,17 @@ export default async function handler(req) {
         const found = await socialTargetsFor(db, org.id);
         if (!found.length) return answer(t.socialNoChannel, true);
         const hint = org.id.slice(0, ID_HINT);
-        // Instagram nimmt keinen Beitrag ohne Bild. Statt ihn anzubieten und
-        // spaeter abzulehnen, steht er gar nicht erst zur Wahl.
+        // Threads und LinkedIn nehmen einen Beitrag aus reinem Text, Instagram
+        // nicht. Also faellt nur Instagram weg, wenn kein Bild dabei ist.
         const hasIg = !!file && found.some(x => x.provider === "instagram");
         const hasTh = found.some(x => x.provider === "threads");
-        if (!hasIg && !hasTh) return answer(t.socialNoChannel, true);
+        const hasLi = found.some(x => x.provider === "linkedin");
+        if (!hasIg && !hasTh && !hasLi) return answer(t.socialNoChannel, true);
         const rows = [];
         if (hasIg) rows.push([{ text: "Instagram", callback_data: `l:${hint}:i` }]);
         if (hasTh) rows.push([{ text: "Threads", callback_data: `l:${hint}:t` }]);
-        if (hasIg && hasTh) rows.push([{ text: t.socialBoth, callback_data: `l:${hint}:b` }]);
+        if (hasLi) rows.push([{ text: "LinkedIn", callback_data: `l:${hint}:l` }]);
+        if (rows.length > 1) rows.push([{ text: rows.length > 2 ? t.socialAll : t.socialBoth, callback_data: `l:${hint}:b` }]);
         rows.push(cancelRow);
         await api(botToken, "editMessageText", {
           chat_id: cbChat, message_id: cb.message.message_id,
@@ -852,8 +856,14 @@ export default async function handler(req) {
         const ch = fromDraft ? fromDraft.ch : (parts[2] || "b");
         const when = parts[3] || "n";
         const found = await socialTargetsFor(db, org.id);
+        // "Alle" heisst alle, die diesen Beitrag auch nehmen: ohne Bild ist
+        // Instagram nicht dabei, sonst schlaegt genau dieses eine Ziel fehl.
+        const withMedia = !!(fromDraft ? fromDraft.fileId : file?.id);
         const targets = found.filter(x =>
-          ch === "b" || (ch === "i" && x.provider === "instagram") || (ch === "t" && x.provider === "threads"));
+          (ch === "b" && !(!withMedia && x.provider === "instagram"))
+          || (ch === "i" && x.provider === "instagram")
+          || (ch === "t" && x.provider === "threads")
+          || (ch === "l" && x.provider === "linkedin"));
         if (!targets.length) return answer(t.socialNoChannel, true);
 
         // Feste Zeiten aus Knoepfen statt getippter Datumsangaben: in einem
@@ -900,7 +910,7 @@ export default async function handler(req) {
             : t.newFailed, true);
         }
 
-        const who = targets.map(x => x.provider === "instagram" ? "Instagram" : "Threads").join(" + ");
+        const who = targets.map(x => providerLabel(x.provider)).join(" + ");
         const head = `<b>${esc(headLine(org.name, who))}</b>`;
         // Kein Hinweis mehr auf die fehlende Unterschrift: es wird jetzt
         // gefragt, wer trotzdem ohne Text postet, hat sich dafuer entschieden.

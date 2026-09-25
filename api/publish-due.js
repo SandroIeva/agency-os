@@ -77,6 +77,36 @@ export default async function handler(req) {
   const save = (id, patch) => db.from("scheduled_posts")
     .update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
 
+  // Welche Kanaele nicht bei Meta liegen, sondern bei Zernio. Eine Menge und
+  // keine Abfrage auf "linkedin", damit der naechste Kanal von dort nur hier
+  // eingetragen werden muss.
+  const ZERNIO_PROVIDERS = new Set(["linkedin", "facebook", "x", "tiktok", "youtube", "pinterest"]);
+
+  // Ein Medium aus unserem Speicher in Zernios Speicher. Signierte Adresse,
+  // Bytes holen, Platz bei Zernio erfragen, hochladen, deren Adresse behalten.
+  const toZernio = async (orgId, m) => {
+    try {
+      const { data: sign } = await db.storage.from(m.bucket || "brand-assets")
+        .createSignedUrl(m.path, 600);
+      if (!sign?.signedUrl) return { ok: false, error: "Media is gone" };
+      const file = await fetch(sign.signedUrl);
+      if (!file.ok) return { ok: false, error: `Media read ${file.status}` };
+      const bytes = await file.arrayBuffer();
+      const contentType = file.headers.get("content-type") || "application/octet-stream";
+      const filename = String(m.path).split("/").pop() || "media";
+      const pre = await call("zernio", { mode: "presign", orgId, filename, contentType, size: bytes.byteLength });
+      if (!pre.ok || !pre.j?.uploadUrl) return { ok: false, error: pre.j?.error || `Zernio presign ${pre.status}` };
+      const put = await fetch(pre.j.uploadUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: bytes });
+      if (!put.ok) return { ok: false, error: `Zernio upload ${put.status}` };
+      return { ok: true, item: {
+        type: String(m.kind || "").toUpperCase() === "VIDEO" ? "video" : "image",
+        url: pre.j.publicUrl, filename,
+      } };
+    } catch (e) {
+      return { ok: false, error: String(e?.message || e) };
+    }
+  };
+
   const done = [];
 
   for (const row of rows) {
@@ -99,9 +129,41 @@ export default async function handler(req) {
 
     let pending = false;
     for (const t of targets) {
-      const key = `${t.provider}:${t.threadsUserId || t.igUserId || ""}`;
+      const key = `${t.provider}:${t.threadsUserId || t.igUserId || t.accountId || ""}`;
       if (results.some(r => r.key === key)) continue;      // schon erledigt
       if (left() < 3000) { pending = true; break; }
+
+      // ── Was ueber Zernio geht (LinkedIn und die anderen dort) ──────────
+      //
+      // Ein Weg, nicht zwei: derselbe Endpunkt, den der Composer benutzt, nur
+      // mit dem internen Kopf statt einer Anmeldung. Zernio nimmt keine Bytes
+      // und auch keine fremde Adresse, sondern eine aus dem eigenen Speicher,
+      // also wird jedes Medium erst dorthin gelegt. Ein geplanter Beitrag ist
+      // bei Zernio ein Aufruf und kein Takt: es gibt nichts abzufragen.
+      if (ZERNIO_PROVIDERS.has(t.provider)) {
+        const zfail = (error) => results.push({ key, platform: t.provider, status: "failed", url: null, error });
+        if (!t.accountId) { zfail("No account id"); continue; }
+        let items = [];
+        let broke = null;
+        for (const m of media) {
+          const up = await toZernio(row.org_id, m);
+          if (!up.ok) { broke = up.error; break; }
+          items.push(up.item);
+        }
+        if (broke) { zfail(broke); continue; }
+        const r = await call("zernio", {
+          mode: "post", orgId: row.org_id,
+          content: row.body || undefined,
+          platforms: [{ platform: t.provider, accountId: t.accountId }],
+          mediaItems: items.length ? items : undefined,
+        });
+        const one = (r.j?.platforms || [])[0];
+        results.push({ key, platform: t.provider,
+          status: r.ok && one?.status !== "failed" ? "published" : "failed",
+          url: one?.url || null,
+          error: r.ok ? (one?.error || null) : (r.j?.error || `Zernio ${r.status}`) });
+        continue;
+      }
 
       const isThreads = t.provider === "threads";
       const what = isThreads ? "threads" : "instagram";
@@ -182,7 +244,7 @@ export default async function handler(req) {
       if (!await finish(r.j.containerId)) pending = true;
     }
 
-    const allDone = targets.every(t => results.some(r => r.key === `${t.provider}:${t.threadsUserId || t.igUserId || ""}`));
+    const allDone = targets.every(t => results.some(r => r.key === `${t.provider}:${t.threadsUserId || t.igUserId || t.accountId || ""}`));
     if (allDone && !pending) {
       const anyOk = results.some(r => r.status === "published");
       await save(row.id, {

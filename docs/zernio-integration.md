@@ -227,3 +227,29 @@ Datensatz liefert `/linkedin/profile` sein `ext.cover_url` (Banner), aber
 Das Banner kennt bei LinkedIn keine Sichtbarkeitseinstellung, das Profilfoto
 schon. Fehlt `avatar_url`, ist das die Einstellung der Person — kein Mapping-
 Fehler und mit keinem anderen Endpunkt zu umgehen.
+
+## Aus Telegram und Slack
+
+Ein Beitrag aus einem Messenger geht denselben Weg wie einer aus dem Composer,
+nur ohne Browser davor.
+
+- `socialTargetsFor` (server/messenger.js) fragt neben den Meta-Verbindungen
+  auch Zernio, über den eigenen Endpunkt mit `x-i7-hook-secret`. Gefragt wird
+  Zernio und nicht eine eigene Tabelle: dort leben die Konten, und eines, das
+  drüben abgemeldet wurde, darf hier nicht mehr zur Wahl stehen. Fällt Zernio
+  aus, kommt eine leere Liste zurück, damit Instagram und Threads weiter gehen.
+- `ZERNIO_IN_MESSENGER` sagt, welche der Zernio-Kanäle im Messenger auftauchen.
+  Derzeit nur LinkedIn: Instagram ist dort schon über den direkten Weg zu Meta
+  vertreten und stünde sonst zweimal in der Liste.
+- Veröffentlicht wird von `api/publish-due`, wie bei Meta auch. Der Zweig für
+  Zernio lädt jedes Medium erst in deren Speicher (`mode: "presign"`, dann PUT),
+  weil Zernio weder Bytes noch eine fremde Adresse annimmt, und ruft dann
+  `mode: "post"`. Einen Takt braucht es dort nicht: der Aufruf antwortet fertig.
+- `api/zernio.js` nimmt für `status`, `presign` und `post` denselben internen
+  Kopf an wie `api/threads.js`. Er ersetzt **nur** die Anmeldung. Die
+  Kostenschranke `requirePaidSocial` und die Prüfung `requireOwnAccounts`, dass
+  ein Konto zu diesem Workspace gehört, gelten unverändert.
+
+Ein Beitrag aus reinem Text ist bei LinkedIn und Threads normal, bei Instagram
+unmöglich. Deshalb fällt in der Kanalauswahl nur Instagram weg, wenn kein Bild
+dabei ist, und "Alle" heißt alle, die diesen Beitrag auch nehmen.
