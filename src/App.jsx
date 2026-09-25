@@ -16814,15 +16814,10 @@ function ChatView({ onBack, initialTab = "Team", initialConvId, onConvOpened, t,
 // ═══════════════════════════════════════════════════════════════
 // NOTES VIEW — Bento-style note grid with inline editing
 // ═══════════════════════════════════════════════════════════════
-// Die Adressen in einer Notiz. Ein Textfeld kann keinen Link darstellen, also
-// stehen sie auf der Karte unterstrichen im Text und unter dem offenen Editor
-// als eigene Zeile. Bewusst schlicht: http(s) und www, bis zum naechsten
-// Leerzeichen, und Satzzeichen am Ende gehoeren zum Satz und nicht zur Adresse.
+// Die Adressen in einer Notiz. Bewusst schlicht: http(s) und www, bis zum
+// naechsten Leerzeichen, und Satzzeichen am Ende gehoeren zum Satz und nicht
+// zur Adresse.
 const NOTE_URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"]+[^\s<>".,;:!?)\]]/gi;
-const noteUrls = (text) => {
-  const hits = String(text || "").match(NOTE_URL_RE) || [];
-  return [...new Set(hits)];
-};
 const noteHref = (u) => (/^https?:\/\//i.test(u) ? u : `https://${u}`);
 
 // Eine Notiz ist ein farbiger Zettel, und die Farbe soll man sehen: satteres
@@ -16874,6 +16869,9 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
   const saveTimersRef = useRef({});
   const rotationMapRef = useRef({}); // stable random rotation per note id
   const noteBodyRef = useRef(null);  // Enter im Titel springt hierher
+  // Die offene Notiz zeigt ihren Text, bis jemand hineinklickt. Nur so kann
+  // eine Adresse ein Link sein: ein Eingabefeld kennt nur Zeichen.
+  const [editingBody, setEditingBody] = useState(false);
 
   // Load notes
   useEffect(() => {
@@ -17326,6 +17324,14 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
       </motion.div>
     );
   };
+
+  // Eine andere Notiz faengt wieder beim Lesen an. Eine leere hat nichts zu
+  // lesen, also geht sie gleich ins Schreiben.
+  useEffect(() => {
+    if (!expandedId) { setEditingBody(false); return; }
+    const n = notes.find(x => x.id === expandedId);
+    setEditingBody(!splitContent(n?.content || "").body);
+  }, [expandedId]); // eslint-disable-line
 
   const expandedNote = expandedId ? notes.find(n => n.id === expandedId) : null;
   const expandedPalette = expandedNote ? (NOTE_COLORS[expandedNote.color] || NOTE_COLORS.sand) : null;
@@ -17794,37 +17800,46 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
                   marginBottom: 10,
                 }}
               />
-              <textarea
-                ref={noteBodyRef}
-                value={splitContent(expandedNote.content).body}
-                onChange={(e) => {
-                  const title = splitContent(expandedNote.content).title;
-                  updateContent(expandedNote.id, `${title}\n\n${e.target.value}`);
-                }}
-                placeholder={de ? "Hier weiterschreiben." : "Keep writing here."}
-                style={{
-                  flex: 1, minHeight: 200, maxHeight: "70vh",
-                  background: "transparent", border: "none", outline: "none", resize: "none",
-                  fontFamily: FONT, fontSize: 15, lineHeight: 1.6,
-                  color: darkMode ? "#fff" : "#1a1a2e",
-                  caretColor: expandedPalette.accent,
-                }}
-              />
-              {/* Die Adressen aus dem Text, zum Anklicken. Im Textfeld selbst
-                  geht das nicht: ein Eingabefeld kennt nur Zeichen. */}
-              {noteUrls(expandedNote.content).length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${expandedPalette.border}` }}>
-                  {noteUrls(expandedNote.content).map((u) => (
-                    <a key={u} href={noteHref(u)} target="_blank" rel="noreferrer noopener"
-                      style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 34, padding: "0 12px", borderRadius: 999,
-                        background: darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
-                        fontSize: 13, fontFamily: FONT, color: darkMode ? "#fff" : "#15151c",
-                        textDecoration: "underline", textUnderlineOffset: 2, maxWidth: 320,
-                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                      {u.replace(/^https?:\/\//i, "")}
-                    </a>
-                  ))}
+              {editingBody ? (
+                <textarea
+                  ref={noteBodyRef}
+                  value={splitContent(expandedNote.content).body}
+                  onChange={(e) => {
+                    const title = splitContent(expandedNote.content).title;
+                    updateContent(expandedNote.id, `${title}\n\n${e.target.value}`);
+                  }}
+                  onBlur={() => { if (splitContent(expandedNote.content).body) setEditingBody(false); }}
+                  autoFocus
+                  placeholder={de ? "Hier weiterschreiben." : "Keep writing here."}
+                  style={{
+                    flex: 1, minHeight: 200, maxHeight: "70vh",
+                    background: "transparent", border: "none", outline: "none", resize: "none",
+                    fontFamily: FONT, fontSize: 15, lineHeight: 1.6,
+                    color: darkMode ? "#fff" : "#1a1a2e",
+                    caretColor: expandedPalette.accent,
+                  }}
+                />
+              ) : (
+                <div
+                  onClick={() => setEditingBody(true)}
+                  style={{
+                    flex: 1, minHeight: 200, maxHeight: "70vh", overflowY: "auto", cursor: "text",
+                    fontFamily: FONT, fontSize: 15, lineHeight: 1.6,
+                    color: darkMode ? "#fff" : "#1a1a2e",
+                    whiteSpace: "pre-wrap", wordBreak: "break-word",
+                  }}
+                >
+                  {(() => {
+                    const body = splitContent(expandedNote.content).body;
+                    const links = body.match(NOTE_URL_RE) || [];
+                    return body.split(NOTE_URL_RE).flatMap((part, i, arr) => (
+                      i < arr.length - 1
+                        ? [part, <a key={i} href={noteHref(links[i])} target="_blank" rel="noreferrer noopener"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ color: "inherit", textDecoration: "underline", textUnderlineOffset: 2 }}>{links[i]}</a>]
+                        : [part]
+                    ));
+                  })()}
                 </div>
               )}
             </motion.div>
