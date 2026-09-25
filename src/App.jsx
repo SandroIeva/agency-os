@@ -17416,7 +17416,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
               <motion.div key={chip.id} whileTap={{ scale: 0.96 }} whileHover={{ y: -1 }}
                 onClick={() => setFilterMode(chip.id)}
                 style={{
-                  padding: (chip.logo || chip.icon) ? "10px 17px 10px 13px" : "10px 17px", borderRadius: 999, cursor: "pointer",
+                  height: 40, padding: (chip.logo || chip.icon) ? "0 17px 0 13px" : "0 17px", borderRadius: 999, cursor: "pointer",
                   fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
                   background: active ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
                   color: active ? "#fff" : theme.textSub,
@@ -17542,7 +17542,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
           transition={{ type: "spring", stiffness: 400, damping: 22 }}
           onClick={() => createNote()}
           style={{
-            padding: "11px 18px 11px 15px", borderRadius: 999,
+            height: 40, padding: "0 18px 0 15px", borderRadius: 999,
             background: "#23232b", border: "none",
             color: "#fff", fontSize: 12.5, fontWeight: 500, fontFamily: FONT,
             cursor: "pointer", display: "flex", alignItems: "center", gap: 7,
