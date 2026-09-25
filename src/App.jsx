@@ -6653,14 +6653,14 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           </div>
           )}
           {/* nav arrows */}
-          <motion.div onClick={() => navStep(-1)} whileTap={{ scale: 0.94 }} style={{ width: 28, height: 28, borderRadius: "50%", background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textSub }}>
+          <motion.div onClick={() => navStep(-1)} whileTap={{ scale: 0.94 }} style={{ width: 42, height: 42, borderRadius: "50%", background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textSub }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           </motion.div>
-          <motion.div onClick={() => navStep(1)} whileTap={{ scale: 0.94 }} style={{ width: 28, height: 28, borderRadius: "50%", background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textSub }}>
+          <motion.div onClick={() => navStep(1)} whileTap={{ scale: 0.94 }} style={{ width: 42, height: 42, borderRadius: "50%", background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textSub }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </motion.div>
           {/* Zoom switcher */}
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: 3, borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}` }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 2, height: 42, padding: 3, borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${theme.borderFaint}` }}>
             {[
               { id: "week",    label: de ? "Woche" : "Week" },
               { id: "month",   label: de ? "Monat" : "Month" },
@@ -6669,8 +6669,9 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
               return (
                 <motion.div key={z.id} onClick={() => setZoom(z.id)} whileTap={{ scale: 0.96 }}
                   style={{
-                    padding: "5px 14px", borderRadius: 999, cursor: "pointer",
-                    fontSize: 11.5, fontFamily: FONT, fontWeight: active ? 600 : 500,
+                    height: "100%", padding: "0 16px", borderRadius: 999, cursor: "pointer",
+                    display: "inline-flex", alignItems: "center",
+                    fontSize: 13, fontFamily: FONT, fontWeight: active ? 600 : 500,
                     color: active ? theme.text : theme.textDim,
                     background: active ? (darkMode ? "rgba(255,255,255,0.08)" : "#ffffff") : "transparent",
                     boxShadow: active ? (darkMode ? "0 1px 4px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.08)") : "none",
@@ -6682,7 +6683,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           </div>
           {/* Today — jumps the scroll back to today */}
           <motion.div onClick={todayAnchor} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-            style={{ padding: "6px 13px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(21,21,28,0.07)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(21,21,28,0.14)"}`, fontSize: 12, fontFamily: FONT, color: theme.text, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
+            style={{ height: 42, padding: "0 17px", borderRadius: 999, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(21,21,28,0.07)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(21,21,28,0.14)"}`, fontSize: 13, fontFamily: FONT, color: theme.text, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
             {de ? "Heute" : "Today"}
@@ -6690,7 +6691,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           {/* Settings cog */}
           <div style={{ position: "relative" }}>
             <motion.div onClick={() => setSettingsOpen(v => !v)} whileTap={{ scale: 0.94 }}
-              style={{ width: 28, height: 28, borderRadius: "50%", background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textSub }}
+              style={{ width: 42, height: 42, borderRadius: "50%", background: theme.hoverBg, border: `1px solid ${theme.borderFaint}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textSub }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
             </motion.div>
@@ -6739,7 +6740,7 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
           {/* New sprint — only with the create-sprint permission */}
           {canCreateSprints && (
           <motion.button onClick={() => { setCreateForProject(null); setCreating(true); }} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-            style={{ padding: "8px 17px 9px 11px", borderRadius: 999, background: "#23232b", border: "none", color: "#fff", fontSize: 12.5, fontFamily: FONT, fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}
+            style={{ height: 42, padding: "0 18px 0 14px", borderRadius: 999, background: "#23232b", border: "none", color: "#fff", fontSize: 13, fontFamily: FONT, fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             {de ? "Neuer Sprint" : "New sprint"}
