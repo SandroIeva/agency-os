@@ -6490,10 +6490,8 @@ function TimelineView({ onBack, session, userOrg, orgMembers = [], theme, darkMo
                 {(userOrg?.name || "?")[0]}
               </div>
             )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontFamily: FONT, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{userOrg?.name || "Workspace"}</div>
-              <div style={{ fontSize: 10, fontFamily: FONT, color: theme.textFaint, marginTop: 1 }}>{de ? "Team-Workspace" : "Team workspace"}</div>
-            </div>
+            {/* Nur das Logo. Der Name stand daneben und darunter stand, dass
+                es ein Workspace ist, was beides schon das Logo sagt. */}
           </div>
         </div>
 
