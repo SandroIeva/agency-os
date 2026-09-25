@@ -17416,7 +17416,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
               <motion.div key={chip.id} whileTap={{ scale: 0.96 }} whileHover={{ y: -1 }}
                 onClick={() => setFilterMode(chip.id)}
                 style={{
-                  height: 40, padding: (chip.logo || chip.icon) ? "0 17px 0 13px" : "0 17px", borderRadius: 999, cursor: "pointer",
+                  height: 42, padding: (chip.logo || chip.icon) ? "0 18px 0 14px" : "0 18px", borderRadius: 999, cursor: "pointer",
                   fontSize: 12.5, fontFamily: FONT, fontWeight: 500,
                   background: active ? "#15151c" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"),
                   color: active ? "#fff" : theme.textSub,
@@ -17448,7 +17448,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
           <motion.div whileTap={{ scale: 0.95 }} whileHover={{ y: -1 }}
             onClick={() => setSortMenuOpen(!sortMenuOpen)}
             style={{
-              width: 40, height: 40, borderRadius: 12, cursor: "pointer",
+              width: 42, height: 42, borderRadius: 12, cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
               color: theme.textSub, background: sortMenuOpen ? (darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.035)"),
             }}
@@ -17495,11 +17495,11 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
 
         {/* Search — clean width expand, no shape morph */}
         <motion.div
-          animate={{ width: searchOpen ? 244 : 40 }}
+          animate={{ width: searchOpen ? 246 : 42 }}
           transition={{ type: "spring", stiffness: 320, damping: 28 }}
           style={{
             display: "flex", alignItems: "center",
-            height: 40,
+            height: 42,
             background: searchOpen ? (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)") : (darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.035)"),
             border: "none",
             borderRadius: 12,
@@ -17509,7 +17509,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
           <motion.div whileTap={{ scale: 0.95 }} whileHover={{ y: -1 }}
             onClick={() => { setSearchOpen(true); }}
             style={{
-              width: 40, height: 40, cursor: "pointer", flexShrink: 0,
+              width: 42, height: 42, cursor: "pointer", flexShrink: 0,
               display: "flex", alignItems: "center", justifyContent: "center",
               color: theme.textSub,
             }}
@@ -17542,7 +17542,7 @@ function NotesView({ onBack, session, userOrg, theme, darkMode, t, appLanguage =
           transition={{ type: "spring", stiffness: 400, damping: 22 }}
           onClick={() => createNote()}
           style={{
-            height: 40, padding: "0 18px 0 15px", borderRadius: 999,
+            height: 42, padding: "0 19px 0 16px", borderRadius: 999,
             background: "#23232b", border: "none",
             color: "#fff", fontSize: 12.5, fontWeight: 500, fontFamily: FONT,
             cursor: "pointer", display: "flex", alignItems: "center", gap: 7,
